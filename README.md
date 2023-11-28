@@ -8,9 +8,9 @@ An unpolished grammar checker powered by OpenAI models and [Neovim builtin diff 
 
 I want to experiment with the newlly released [GPT Assistant API](https://platform.openai.com/docs/assistants/overview). Vim/Neovim builtin diff tool is a good way to highlight the differences between the original text and the suggested one.
 
-**Edit**: I move from GPT Assistant API back to *chat completions* API because it was easy to implement API in a non-blocking fashion.
+**Edit**: I move from GPT Assistant API back to _chat completions_ API because it was easy to implement API in a non-blocking fashion.
 
-*The detailed reasons why I decided to develop dante.nvim are explained in this [Reddit post](https://www.reddit.com/r/neovim/comments/182p87j/dantenvim_a_simple_ai_writing_assistant/).*
+_The detailed reasons why I decided to develop dante.nvim are explained in this [Reddit post](https://www.reddit.com/r/neovim/comments/182p87j/dantenvim_a_simple_ai_writing_assistant/)._
 
 ## ✨ Features
 
@@ -33,7 +33,10 @@ I want to experiment with the newlly released [GPT Assistant API](https://platfo
   opts = {
     model = "gpt-4-1106-preview", -- best model but more expensive
     temperature = 0, -- reduced creativity
-    prompt = "You are tasked as an assistant primarily responsible for rectifying errors within English text. Please amend spelling inaccuracies and augment grammar; ensure that the refined text closely adheres to the original version. Given that the text is authored in LaTeX intended for a master's thesis, please abide by the LaTeX syntax accordingly. Eschew informal expressions and choose terminology appropriate for a scientific manuscript. Provide your corrections in the form of the enhanced text only, devoid of commentary. Maintain the integrity of the original text's new lines and the spacing.", -- system prompt
+    prompt = {
+      default = "You are tasked as an assistant primarily responsible for rectifying errors within English text. Please amend spelling inaccuracies and augment grammar; ensure that the refined text closely adheres to the original version. Given that the text is authored in LaTeX intended for a master's thesis, please abide by the LaTeX syntax accordingly. Eschew informal expressions and choose terminology appropriate for a scientific manuscript. Provide your corrections in the form of the enhanced text only, devoid of commentary. Maintain the integrity of the original text's new lines and the spacing.",
+      paraphrase = "You are tasked as an assistant primarily responsible for parapharsing text within English text. Please use academic and precise language. Limit the length of the paraphrased paragraph to the same length of the original. Do not repeat words or sentences. Try to make as few adjustments as possible. Given that the text is authored in LaTeX intended for a scientific manuscript, please abide by the LaTeX syntax accordingly. Maintain the integrity of the original text's new lines and the spacing.",
+    } -- system prompt
     diffopt = { "internal", "filler", "closeoff", "algorithm:patience", "followwrap", "linematch:120" },  -- :help diffopt
   },
 
@@ -59,10 +62,12 @@ I want to experiment with the newlly released [GPT Assistant API](https://platfo
 **Normal Mode**
 
 - `:Dante` send current line to LLM.
+- `:Dante <prompts key>` send current line to LLM and use `<prompt key>` from options.
 
 **Visual Mode**
 
 - `:'<,'>Dante` send selected lines to LLM.
+- `:'<,'>Dante <prompts key>` send selected lines to LLM and use `<prompt key>` from options.
 
 Read the Neovim [documentation](https://neovim.io/doc/user/diff.html) to learn how to navigate between and edit differences.
 
