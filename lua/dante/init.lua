@@ -4,7 +4,7 @@ function dante.setup(options)
 	require("dante.config").setup(options)
 end
 
-function dante.main(lines, line1, line2)
+function dante.main(prompt, lines, line1, line2)
 	-- Request
 	local req_win = vim.api.nvim_get_current_win()
 	local req_buf = vim.api.nvim_get_current_buf()
@@ -44,7 +44,8 @@ function dante.main(lines, line1, line2)
 	vim.api.nvim_set_current_win(req_win)
 
 	-- Query
-	require("dante.assistant").query(query, line1, res_buf, res_win, req_win)
+	prompt = config.options.prompts[prompt] or "You are an helpful assistant."
+	require("dante.assistant").query(prompt, query, line1, res_buf, res_win, req_win)
 end
 
 return dante

@@ -1,11 +1,11 @@
 local config = require("dante.config")
 local assistant = {}
 
-local function encode(lines)
+local function encode(prompt, lines)
 	local messages = {
 		{
 			role = "system",
-			content = config.options.prompt,
+			content = prompt,
 		},
 		{
 			role = "user",
@@ -42,18 +42,18 @@ local function decode(res)
 	return res.choices[1].delta.content or ""
 end
 
-function assistant.query(lines, line, res_buf, res_win, req_win)
+function assistant.query(prompt, lines, line, res_buf, res_win, req_win)
 	local function on_stdout(_, ress, _)
 		for _, res in pairs(ress) do
 			local text = decode(res)
 			if text ~= "" then
 				local lines = vim.split(text, "\n", { plain = true, trimempty = false })
-				if #lines > 1 then
-					line = line + 1
-				end
 				local row = vim.api.nvim_buf_get_lines(res_buf, line - 1, line, false)
 				local col = row[#row] or ""
 				vim.api.nvim_buf_set_text(res_buf, line - 1, #col, line - 1, #col, lines)
+				if #lines > 1 then
+					line = line + 1
+				end
 			end
 		end
 	end
@@ -66,7 +66,7 @@ function assistant.query(lines, line, res_buf, res_win, req_win)
 		vim.cmd("diffthis")
 	end
 
-	local job = vim.fn.jobstart(command(encode(lines)), {
+	local job = vim.fn.jobstart(command(encode(prompt, lines)), {
 		clear_env = true,
 		env = { OPENAI_API_KEY = os.getenv(config.options.openai_api_key) },
 		on_stdout = on_stdout,

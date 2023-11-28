@@ -2,7 +2,7 @@ local M = {}
 
 local defaults = {
 	model = "gpt-3.5-turbo-1106",
-	prompt = "You are an helpful assistant.",
+	prompts = { default = "You are an helpful assistant." },
 	temperature = 0.5,
 	openai_api_key = "OPENAI_API_KEY",
 	diffopt = { "internal", "filler", "closeoff", "algorithm:patience", "followwrap", "linematch:120" },
