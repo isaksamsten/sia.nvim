@@ -38,6 +38,7 @@ _The detailed reasons why I decided to develop dante.nvim are explained in this 
       paraphrase = "You are tasked as an assistant primarily responsible for parapharsing text within English text. Please use academic and precise language. Limit the length of the paraphrased paragraph to the same length of the original. Do not repeat words or sentences. Try to make as few adjustments as possible. Given that the text is authored in LaTeX intended for a scientific manuscript, please abide by the LaTeX syntax accordingly. Maintain the integrity of the original text's new lines and the spacing.",
     } -- system prompt
     diffopt = { "internal", "filler", "closeoff", "algorithm:patience", "followwrap", "linematch:120" },  -- :help diffopt
+    wo = {"wrap", "breakindent", "linebreak", "breakindentopt", "showbreak"},
   },
 
   -- Not required but it improve upon built-in diff view with char diff
