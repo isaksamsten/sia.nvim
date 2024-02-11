@@ -46,7 +46,15 @@ function dante.main(prompt, start_line, end_line)
 	end
 
 	-- Query
-	require("dante.assistant").query(config.options.prompts[prompt], lines, res_buf, callback)
+	local ft_map = {
+		rst = "REStructured Text",
+		tex = "LaTeX",
+	}
+	local ft = vim.api.nvim_buf_get_option(req_buf, "filetype")
+	ft = ft_map[ft] or ft
+
+	local prompt_replaced = config.options.prompts[prompt]:gsub("{{filetype}}", ft)
+	require("dante.assistant").query(prompt_replaced, lines, res_buf, callback)
 end
 
 return dante
