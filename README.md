@@ -1,20 +1,29 @@
-# ✒️ Dante
+# Sia
 
-An unpolished grammar checker powered by OpenAI models and [Neovim builtin diff tool](https://neovim.io/doc/user/diff.html). Seriously, it's just a proof of concept.
+An LLM assistant for Neovim with support for
 
-![example usage](https://github.com/S1M0N38/dante.nvim/blob/main/usage.gif?raw=true)
+- [Neovim builtin diff tool](https://neovim.io/doc/user/diff.html).
+- Simple chat
+- Simple insert
 
 ## 💡 Idea
 
-I want to experiment with the newlly released [GPT Assistant API](https://platform.openai.com/docs/assistants/overview). Vim/Neovim builtin diff tool is a good way to highlight the differences between the original text and the suggested one.
-
-**Edit**: I move from GPT Assistant API back to _chat completions_ API because it was easy to implement API in a non-blocking fashion.
-
-_The detailed reasons why I decided to develop dante.nvim are explained in this [Reddit post](https://www.reddit.com/r/neovim/comments/182p87j/dantenvim_a_simple_ai_writing_assistant/)._
+The idea behind this plugin, Sia, is to enhance the writing and editing process
+within Neovim by integrating a powerful language model (LLM) to assist users in
+refining their text. It aims to provide a seamless way to interact with AI for
+tasks such as correcting grammar, improving clarity, and ensuring adherence to
+academic standards, particularly for scientific manuscripts written in LaTeX.
+By leveraging Neovim's built-in diff capabilities, Sia allows users to see the
+differences between their original text and the AI-generated suggestions,
+making it easier to understand and implement improvements. This combination of
+AI assistance and efficient text editing tools empowers users to produce
+high-quality written content more effectively.
 
 ## ✨ Features
 
 - Prompt selected line into LLM and highlight the differences with the original text.
+- Complete code, sentence
+- Chat with an LLM
 
 ## ⚡️ Requirements
 
@@ -29,18 +38,8 @@ _The detailed reasons why I decided to develop dante.nvim are explained in this 
 ```lua
 -- using lazy.nvim
 {
-  "s1m0n38/dante.nvim",
-  opts = {
-    model = "gpt-4-1106-preview", -- best model but more expensive
-    temperature = 0, -- reduced creativity
-    prompt = {
-      default = "You are tasked as an assistant primarily responsible for rectifying errors within English text. Please amend spelling inaccuracies and augment grammar; ensure that the refined text closely adheres to the original version. Given that the text is authored in LaTeX intended for a master's thesis, please abide by the LaTeX syntax accordingly. Eschew informal expressions and choose terminology appropriate for a scientific manuscript. Provide your corrections in the form of the enhanced text only, devoid of commentary. Maintain the integrity of the original text's new lines and the spacing.",
-      paraphrase = "You are tasked as an assistant primarily responsible for parapharsing text within English text. Please use academic and precise language. Limit the length of the paraphrased paragraph to the same length of the original. Do not repeat words or sentences. Try to make as few adjustments as possible. Given that the text is authored in LaTeX intended for a scientific manuscript, please abide by the LaTeX syntax accordingly. Maintain the integrity of the original text's new lines and the spacing.",
-    } -- system prompt
-    diffopt = { "internal", "filler", "closeoff", "algorithm:patience", "followwrap", "linematch:120" },  -- :help diffopt
-    wo = {"wrap", "breakindent", "linebreak", "breakindentopt", "showbreak"},
-  },
-
+  "isaksamsten/sia.nvim",
+  opts = {},
   -- Not required but it improve upon built-in diff view with char diff
   dependencies = {
     {
@@ -62,30 +61,22 @@ _The detailed reasons why I decided to develop dante.nvim are explained in this 
 
 **Normal Mode**
 
-- `:Dante` send current line to LLM.
-- `:Dante <prompts key>` send current line to LLM and use `<prompt key>` from options.
+- `:Sia [query]` send current context and query and insert the response into the buffer.
+- `:Sia [query]` if `ft=sia` send the full buffer and the query and insert the
+  response in the chat
+- `:Dante /prompt [query]` send current context and use the stored `/prompt`
+  and insert the response in the buffer.
 
 **Visual Mode**
 
-- `:'<,'>Dante` send selected lines to LLM.
-- `:'<,'>Dante <prompts key>` send selected lines to LLM and use `<prompt key>` from options.
+- `:'<,'>Dante [query]` send the selected lines and query and diff the response
+- `:'<,'>Dante /prompt [query]` send the selected lines and the stored prompt
+  and diff the response
 
 Read the Neovim [documentation](https://neovim.io/doc/user/diff.html) to learn how to navigate between and edit differences.
 
-For obtaining the best results, you should:
-
-- Carefully write your own prompt for you specific use case.
-- Avoid breaking lines at fix column (e.g. 80). Instead, use a new line when you feel it's necessary (just like writing with pen and paper) or double new line for paragraph separation.
-- Selecting smaller chunks of text focus on the details but you may miss the big picture.
-- Use a powerful model like `gpt-4` but it's more expensive and slower.
-- For text file with a lot of lines, you may want to increase the "linematch" diffopt to 300 or more. This is a temporary workaround until I find a better solution.
-
 ## 🙏 Acknowledgments
 
-This plugin was heavily inspired by:
+This plugin is based on a fork of
 
-- [jackMort/ChatGPT.nvim](https://github.com/jackMort/ChatGPT.nvim)
-- [David-Kunz/gen.nvim](https://github.com/David-Kunz/gen.nvim)
-- [Bryley/neoai.nvim](https://github.com/Bryley/neoai.nvim)
-
-This very README is a copycat of [lazy.nvim](https://github.com/folke/lazy.nvim) README.
+- [S1M0N38/dante.nvim](https://github.com/S1M0N38/dante.nvim)
