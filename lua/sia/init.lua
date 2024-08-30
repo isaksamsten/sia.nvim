@@ -187,10 +187,7 @@ function sia.main(prompt, opts)
 		vim.api.nvim_win_set_buf(res_win, res_buf)
 		vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
 		vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
-
-		for _, wo in pairs(config.options.wo) do
-			vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
-		end
+		vim.api.nvim_buf_set_option(res_buf, "buftype", "nofile")
 
 		if prompt.wo then
 			for key, value in pairs(prompt.wo) do
@@ -255,6 +252,7 @@ function sia.main(prompt, opts)
 	local ft = vim.api.nvim_buf_get_option(req_buf, "filetype")
 	local replacement = {
 		filetype = ft,
+		filepath = vim.api.nvim_buf_get_name(req_buf),
 		context = context,
 		context_suffix = context_suffix,
 		buffer = table.concat(vim.api.nvim_buf_get_lines(req_buf, 0, -1, true), "\n"),
