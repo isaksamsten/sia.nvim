@@ -1,5 +1,7 @@
 # Sia
 
+![](assets/logo.png)
+
 An LLM assistant for Neovim with support for
 
 - [Neovim builtin diff tool](https://neovim.io/doc/user/diff.html).
@@ -64,14 +66,16 @@ high-quality written content more effectively.
 - `:Sia [query]` send current context and query and insert the response into the buffer.
 - `:Sia [query]` if `ft=sia` send the full buffer and the query and insert the
   response in the chat
-- `:Dante /prompt [query]` send current context and use the stored `/prompt`
+- `:Sia /prompt [query]` send current context and use the stored `/prompt`
   and insert the response in the buffer.
 
-**Visual Mode**
+**Ranges**
 
-- `:'<,'>Dante [query]` send the selected lines and query and diff the response
-- `:'<,'>Dante /prompt [query]` send the selected lines and the stored prompt
-  and diff the response
+- `:'<,'>Sia [query]` send the selected lines and query and diff the response
+- `:'<,'>Sia /prompt [query]` send the selected lines and the stored prompt
+- `:%Sia /prompt` send the buffer and the query
+
+![](assets/demo.mov)
 
 Read the Neovim [documentation](https://neovim.io/doc/user/diff.html) to learn how to navigate between and edit differences.
 
