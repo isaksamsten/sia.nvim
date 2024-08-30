@@ -69,6 +69,9 @@ function sia.main(prompt, opts)
 
 	local on_progress, on_complete, on_start
 	local mode = prompt.mode or config.options.default.mode
+	if opts.force_insert then
+		mode = "insert"
+	end
 
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
 		on_complete = function()
@@ -100,8 +103,12 @@ function sia.main(prompt, opts)
 			})
 		end
 	elseif mode == "insert" or (mode == "auto" and opts.mode == "n") then
-		local current_row = opts.start_line
-		if opts.mode == "v" then
+		-- local current_row = opts.start_line
+		-- if opts.mode == "v" then
+		-- 	current_row = opts.end_line
+		-- end
+		local current_row = vim.api.nvim_buf_get_mark(req_buf, ".")[1]
+		if opts.mode == "v" and opts.force_insert == false then
 			current_row = opts.end_line
 		end
 

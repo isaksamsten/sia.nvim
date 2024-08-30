@@ -24,6 +24,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 			mode = "v",
 		}
 	end
+	opts.force_insert = args.bang
 	local prompt = sia.resolve_prompt(args.fargs, opts)
 	if not prompt then
 		return
@@ -39,6 +40,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 	require("sia").main(prompt, opts)
 end, {
 	range = true,
+	bang = true,
 	nargs = "+",
 	complete = function(ArgLead)
 		-- Get the current command line input and type
