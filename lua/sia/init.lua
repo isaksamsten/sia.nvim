@@ -78,10 +78,15 @@ function sia.main(prompt, opts)
 			vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
 		end
 		on_progress = function(lines)
+			if not vim.api.nvim_buf_is_valid(req_buf) then
+				return
+			end
 			local row = vim.api.nvim_buf_get_lines(req_buf, 0, -1, false)
 			local col = row[#row] or ""
 			vim.api.nvim_buf_set_text(req_buf, #row - 1, #col, #row - 1, #col, lines)
-			vim.api.nvim_win_set_cursor(req_win, { #row, #col })
+			if vim.api.nvim_win_is_valid(req_win) then
+				vim.api.nvim_win_set_cursor(req_win, { #row, #col })
+			end
 		end
 		on_start = function(job)
 			local line_count = vim.api.nvim_buf_line_count(req_buf)
@@ -102,6 +107,9 @@ function sia.main(prompt, opts)
 
 		local is_first = true
 		on_progress = function(lines)
+			if not vim.api.nvim_buf_is_valid(req_buf) then
+				return
+			end
 			-- Join all changes to simplify undo
 			if not is_first then
 				vim.api.nvim_buf_call(req_buf, function()
@@ -123,7 +131,9 @@ function sia.main(prompt, opts)
 				end
 			end
 			current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
-			vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
+			if vim.api.nvim_win_is_valid(req_win) then
+				vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
+			end
 		end
 
 		on_start = function(job)
@@ -168,10 +178,16 @@ function sia.main(prompt, opts)
 			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
 		end
 		on_progress = function(lines)
+			if not vim.api.nvim_buf_is_valid(res_buf) then
+				return
+			end
 			local row = vim.api.nvim_buf_get_lines(res_buf, 0, -1, false)
 			local col = row[#row] or ""
 			vim.api.nvim_buf_set_text(res_buf, #row - 1, #col, #row - 1, #col, lines)
-			vim.api.nvim_win_set_cursor(res_win, { #row, #col })
+
+			if vim.api.nvim_win_is_valid(res_win) then
+				vim.api.nvim_win_set_cursor(res_win, { #row, #col })
+			end
 		end
 		on_start = function(job)
 			vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
@@ -196,16 +212,24 @@ function sia.main(prompt, opts)
 		end
 
 		on_complete = function()
+			if not vim.api.nvim_buf_is_valid(res_buf) then
+				return
+			end
 			vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "" })
 			local line_count = vim.api.nvim_buf_line_count(res_buf)
-			vim.api.nvim_win_set_cursor(res_win, { line_count, 0 })
+
+			if vim.api.nvim_win_is_valid(res_win) then
+				vim.api.nvim_win_set_cursor(res_win, { line_count, 0 })
+			end
 			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
 		end
 		on_progress = function(lines)
 			local row = vim.api.nvim_buf_get_lines(res_buf, 0, -1, false)
 			local col = row[#row] or ""
 			vim.api.nvim_buf_set_text(res_buf, #row - 1, #col, #row - 1, #col, lines)
-			vim.api.nvim_win_set_cursor(res_win, { #row, #col })
+			if vim.api.nvim_win_is_valid(res_win) then
+				vim.api.nvim_win_set_cursor(res_win, { #row, #col })
+			end
 		end
 		on_start = function(job)
 			local line_count = vim.api.nvim_buf_line_count(res_buf)

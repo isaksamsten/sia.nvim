@@ -81,29 +81,6 @@ When given a task:
 		},
 	},
 	prompts = {
-		buffer = {
-			prompt = {
-				{
-					role = "system",
-					content = [[Respond to the user query directly in the appropriate
-format for {{filetype}}, ensuring your response is concise and
-directly relevant. For code files, provide code directly without
-additional comments or explanations unless requested. NEVER OUTPUT MARKDOWN
-CODEBLOCKS! Focus on providing the exact response needed
-for insertion into the text editor.]],
-				},
-				{
-					role = "system",
-					content = [[Here is the full text of the buffer:
-```{{filetype}}
-{{buffer}}
-```]],
-				},
-				{ role = "system", content = "Here is the current context: {{context}}" },
-			},
-			require_input = true,
-			mode = "auto",
-		},
 		commit = {
 			prompt = {
 				{
@@ -172,7 +149,7 @@ crafting the commit message:
 			split_cmd = "vsplit",
 			wo = { wrap = true },
 			temperature = 0.5,
-			visual = true,
+			range = true,
 		},
 		unittest = {
 			prompt = {
@@ -201,7 +178,7 @@ crafting the commit message:
 ```]],
 				},
 			},
-			visual = true,
+			range = true,
 			mode = "split",
 			split_cmd = "vsplit",
 			temperature = 0.5,

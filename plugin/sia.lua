@@ -16,16 +16,11 @@ vim.api.nvim_create_user_command("Sia", function(args)
 			mode = "n",
 		}
 	else
-		local start_pos = vim.fn.getpos("'<")
-		local end_pos = vim.fn.getpos("'>")
-		if end_pos[3] < 1000000 and config.options.warn_on_visual then
-			vim.notify("Sia only supports visual line mode", vim.log.levels.WARN)
-		end
 		opts = {
-			start_line = start_pos[2],
-			start_col = start_pos[3],
-			end_line = end_pos[2],
-			end_col = end_pos[3],
+			start_line = args.line1,
+			start_col = 0,
+			end_line = args.line2,
+			end_col = 0,
 			mode = "v",
 		}
 	end
@@ -33,8 +28,8 @@ vim.api.nvim_create_user_command("Sia", function(args)
 	if not prompt then
 		return
 	end
-	if prompt.visual == true and opts.mode ~= "v" then
-		vim.notify(args.fargs[1] .. " must be used in visual mode")
+	if prompt.range == true and opts.mode ~= "v" then
+		vim.notify(args.fargs[1] .. " must be used with a range")
 		return
 	end
 	if config._is_disabled(prompt) then
@@ -46,13 +41,51 @@ end, {
 	range = true,
 	nargs = "+",
 	complete = function(ArgLead)
+		-- Get the current command line input and type
+		local cmd_type = vim.fn.getcmdtype() -- ":" indicates Ex commands
+		local cmd_line = vim.fn.getcmdline() -- Full command line input
+
+		-- Initialize a flag to detect if the command starts with a range, accounting for leading spaces
+		local is_range = false
+
+		-- Check only for Ex commands (":")
+		if cmd_type == ":" then
+			-- Define patterns to match range forms at the start of the command line, allowing for leading spaces
+			local range_patterns = {
+				"^%s*%d+", -- Single line number (start), with optional leading spaces
+				"^%s*%d+,%d+", -- Line range (start,end), with optional leading spaces
+				"^%s*%d+[,+-]%d+", -- Line range with arithmetic (start+1, start-1)
+				"^%s*%d+,", -- Line range with open end (start,), with optional leading spaces
+				"^%s*%%", -- Whole file range (%), with optional leading spaces
+				"^%s*[$.]+", -- $, ., etc., with optional leading spaces
+				"^%s*[$.%d]+[%+%-]?%d*", -- Combined offsets (e.g., .+1, $-1)
+				"^%s*'[a-zA-Z]", -- Marks ('a, 'b), etc.
+				"^%s*[%d$%.']+,[%d$%.']+", -- Mixed patterns (e.g., ., 'a)
+				"^%s*['<>][<>]", -- Visual selection marks ('<, '>)
+				"^%s*'<[,]'?>", -- Combinations like '<,'>
+			}
+
+			-- Check if the command line starts with any of the range patterns
+			for _, pattern in ipairs(range_patterns) do
+				if cmd_line:match(pattern) then
+					is_range = true
+					break
+				end
+			end
+		end
+
 		if not vim.startswith(ArgLead, "/") then
 			return {}
 		end
 		local complete = {}
 		local term = ArgLead:sub(2)
 		for key, prompt in pairs(config.options.prompts) do
-			if vim.startswith(key, term) and not config._is_disabled(prompt) and vim.bo.ft ~= "sia" then
+			if
+				vim.startswith(key, term)
+				and (prompt.range == nil or prompt.range == is_range)
+				and not config._is_disabled(prompt)
+				and vim.bo.ft ~= "sia"
+			then
 				table.insert(complete, "/" .. key)
 			end
 		end
