@@ -75,7 +75,7 @@ high-quality written content more effectively.
 - `:'<,'>Sia /prompt [query]` send the selected lines and the stored prompt
 - `:%Sia /prompt` send the buffer and the query
 
-![](assets/demo.mov)
+![](assets/demo.webp)
 
 Read the Neovim [documentation](https://neovim.io/doc/user/diff.html) to learn how to navigate between and edit differences.
 
