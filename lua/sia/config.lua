@@ -2,17 +2,10 @@ local M = {}
 
 local defaults = {
 	warn_on_visual = true, -- warn if visual and not visual line mode
-	default = {
-		model = "gpt-4o-mini", -- default model
-		temperature = 0.5, -- default temperature
-		prefix = 1, -- prefix lines in insert
-		suffix = 0, -- suffix lines in insert
-		mode = "auto", -- auto|diff|insert|split
-		mode_prompt = {
-			chat = {
-				{
-					role = "system",
-					content = [[You are an AI programming assistant named "Sia".
+	named_prompts = {
+		chat_system = {
+			role = "system",
+			content = [[You are an AI programming assistant named "Sia".
 You are currently plugged in to the Neovim text editor on a user's machine.
 
 Your tasks include:
@@ -42,45 +35,74 @@ When given a task:
 2. Output the code in a single code block.
 3. You should always generate short suggestions for the next user turns that are relevant to the conversation.
 4. You can only give one reply for each conversation turn.]],
-				},
+		},
+		insert_system = {
+			role = "system",
+			content = [[Note that the user query is initiated from
+a text editor and that your changes will be inserted verbatim into the editor.
+The editor identifies the file as written in {{filetype}}.
+
+If possible, make sure that you only output the relevant and requested
+information. Refrain from explaining your reasoning, unless the user requests
+it, or adding unrelated text to the output. If the context pertains to code,
+identify the programming language and do not add any additional text or
+markdown formatting. If explanations are needed add them as relevant comments
+using correct syntax for the identified language.]],
+		},
+		diff_system = {
+			role = "system",
+			content = [[Note that the user query is initiated from a
+text editor and your changes will be diffed against an optional context
+provided by the user. The editor identifies the file as written in
+{{filetype}}.
+
+If possible, make sure that you only output the relevant and requested changes.
+Refrain from explaining your reasoning or adding additional unrelated text
+to the output. If the context pertains to code, identify the the programming
+language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
+		},
+	},
+	default = {
+		model = "gpt-4o-mini", -- default model
+		temperature = 0.5, -- default temperature
+		prefix = 1, -- prefix lines in insert
+		suffix = 0, -- suffix lines in insert
+		mode = "split", -- auto|diff|insert|split
+		split = {
+			cmd = "vsplit",
+			wo = { wrap = true },
+		},
+		mode_prompt = {
+			split = {
+				"chat_system",
+			},
+			chat = {
+				"chat_system",
 				{ role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
 			},
 			insert = {
 				{ role = "system", content = "You are an helpful assistant" },
 				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				{
-					role = "system",
-					content = [[Note that the user query is initiated from
-  a text editor and that your changes will be inserted verbatim into the editor.
-  The editor identifies the file as written in {{filetype}}.
-
-  If possible, make sure that you only output the relevant and requested
-  information. Refrain from explaining your reasoning, unless the user requests
-  it, or adding unrelated text to the output. If the context pertains to code,
-  identify the programming language and do not add any additional text or
-  markdown formatting. If explanations are needed add them as relevant comments
-  using correct syntax for the identified language.]],
-				},
+				"insert_system",
 			},
 			diff = {
 				{ role = "system", content = "You are an helpful assistant" },
 				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				{
-					role = "system",
-					content = [[Note that the user query is initiated from a
-  text editor and your changes will be diffed against an optional context
-  provided by the user. The editor identifies the file as written in
-  {{filetype}}.
-
-  If possible, make sure that you only output the relevant and requested changes.
-  Refrain from explaining your reasoning or adding additional unrelated text
-  to the output. If the context pertains to code, identify the the programming
-  language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
-				},
+				"diff_system",
 			},
 		},
 	},
 	prompts = {
+		ask = {
+			prompt = {
+				"chat_system",
+				{ role = "user", content = "```{{filetype}}\n{{context}}\n```" },
+			},
+			mode = "split",
+			temperature = 0.5,
+			range = true,
+			input = "require",
+		},
 		commit = {
 			prompt = {
 				{
@@ -110,7 +132,7 @@ crafting the commit message:
 					end,
 				},
 			},
-			allow_input = false,
+			input = "ignore",
 			mode = "insert",
 			enabled = function()
 				local function is_git_repo()
@@ -146,8 +168,6 @@ crafting the commit message:
 				},
 			},
 			mode = "split",
-			split_cmd = "vsplit",
-			wo = { wrap = true },
 			temperature = 0.5,
 			range = true,
 		},
@@ -166,7 +186,7 @@ crafting the commit message:
       - Edge cases
       - Error handling (if applicable)
 6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
-7. Add a heading before the tests with a suggested file name that is based on
+7. Add a markdown heading before the tests with a suggested file name that is based on
    best practices for the language in question and the user provided filename
    for where the original function reside.]],
 				},
@@ -181,7 +201,26 @@ crafting the commit message:
 			range = true,
 			mode = "split",
 			split_cmd = "vsplit",
+			wo = {},
 			temperature = 0.5,
+		},
+		doc = {
+			prompt = {
+				"insert_system",
+				{
+					role = "system",
+					content = [[You are tasked with writing documentation for functions,
+methods, classes etc written in {{filetype}}. You only ever output the
+documentation. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
+				},
+				{
+					role = "user",
+					content = "Here is the declaration: {{context}}",
+				},
+			},
+			prefix = 2,
+			suffix = 0,
+			mode = "insert",
 		},
 	},
 	openai_api_key = "OPENAI_API_KEY",

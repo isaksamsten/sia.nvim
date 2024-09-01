@@ -7,6 +7,15 @@ function sia.setup(options)
 	vim.treesitter.language.register("markdown", "sia")
 end
 
+local function replace_named_prompts(prompts)
+	for i, prompt in ipairs(prompts) do
+		if type(prompt) ~= "table" then
+			prompts[i] = vim.deepcopy(config.options.named_prompts[prompt])
+		end
+	end
+	return prompts
+end
+
 --- @return table|nil
 function sia.resolve_prompt(prompt, opts)
 	if vim.startswith(prompt[1], "/") and vim.bo.ft ~= "sia" then
@@ -25,18 +34,23 @@ function sia.resolve_prompt(prompt, opts)
 		if #prompt > 1 and not (prompt_config.input and prompt_config.input == "ignore") then
 			table.insert(prompt_config.prompt, { role = "user", content = table.concat(prompt, " ", 2) })
 		end
+		prompt_config.prompt = replace_named_prompts(prompt_config.prompt)
 		return prompt_config
 	else
-		local mode = "diff"
+		local mode = "split"
 		if vim.bo.ft == "sia" then
 			mode = "chat"
 		elseif
 			config.options.default.mode == "insert" or (config.options.default.mode == "auto" and opts.mode == "n")
 		then
 			mode = "insert"
+		elseif
+			config.options.default.mode == "diff" or (config.options.default.mode == "auto" and opts.mode == "v")
+		then
+			mode = "diff"
 		end
 
-		local mode_prompt = vim.deepcopy(config.options.default.mode_prompt[mode])
+		local mode_prompt = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode]))
 		table.insert(mode_prompt, { role = "user", content = table.concat(prompt, " ") })
 		return {
 			prompt = mode_prompt,
@@ -204,7 +218,7 @@ function sia.main(prompt, opts)
 			})
 		end
 	elseif mode == "split" then
-		vim.cmd(prompt.split_cmd or "vsplit")
+		vim.cmd(prompt.split_cmd or config.options.default.split.cmd or "vsplit")
 		local res_win = vim.api.nvim_get_current_win()
 		local res_buf = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_win_set_buf(res_win, res_buf)
@@ -212,8 +226,9 @@ function sia.main(prompt, opts)
 		vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
 		vim.api.nvim_buf_set_option(res_buf, "buftype", "nofile")
 
-		if prompt.wo then
-			for key, value in pairs(prompt.wo) do
+		local split_wo = prompt.wo or config.options.default.split.wo
+		if split_wo then
+			for key, value in pairs(split_wo) do
 				vim.api.nvim_win_set_option(res_win, key, value)
 			end
 		end
@@ -305,6 +320,7 @@ function sia.main(prompt, opts)
 	for _, step in ipairs(steps_to_remove) do
 		table.remove(prompt.prompt, step)
 	end
+	print(vim.inspect(prompt))
 	require("sia.assistant").query(prompt, on_start, on_progress, on_complete)
 end
 
