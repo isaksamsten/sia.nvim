@@ -320,7 +320,6 @@ function sia.main(prompt, opts)
 	for _, step in ipairs(steps_to_remove) do
 		table.remove(prompt.prompt, step)
 	end
-	print(vim.inspect(prompt))
 	require("sia.assistant").query(prompt, on_start, on_progress, on_complete)
 end
 
