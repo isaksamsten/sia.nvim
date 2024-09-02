@@ -2,7 +2,7 @@ local config = require("sia.config")
 local sia = require("sia")
 
 vim.api.nvim_create_user_command("Sia", function(args)
-	if #args.fargs == 0 then
+	if #args.fargs == 0 and not vim.b.sia then
 		vim.notify("No prompt")
 	end
 
@@ -25,7 +25,12 @@ vim.api.nvim_create_user_command("Sia", function(args)
 		}
 	end
 	opts.force_insert = args.bang
-	local prompt = sia.resolve_prompt(args.fargs, opts)
+	local prompt
+	if vim.b.sia then
+		prompt = sia.resolve_prompt({ vim.b.sia }, opts)
+	else
+		prompt = sia.resolve_prompt(args.fargs, opts)
+	end
 	if not prompt then
 		return
 	end
@@ -41,7 +46,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 end, {
 	range = true,
 	bang = true,
-	nargs = "+",
+	nargs = "*",
 	complete = function(ArgLead)
 		-- Get the current command line input and type
 		local cmd_type = vim.fn.getcmdtype() -- ":" indicates Ex commands
