@@ -149,14 +149,10 @@ function sia.main(prompt, opts)
 					col = col + #line
 				end
 			end
-			current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
 			if vim.api.nvim_win_is_valid(req_win) then
-				if prompt.cursor then
-					if prompt.cursor == "below" then
-						vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
-					else
-						vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
-					end
+				if prompt.cursor == nil or prompt.cursor == "follow" then
+					current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
+					vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
 				end
 			end
 		end
@@ -175,6 +171,9 @@ function sia.main(prompt, opts)
 		end
 		on_complete = function()
 			vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+			if prompt.cursor and prompt.cursor == "start" then
+				vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+			end
 		end
 	elseif mode == "diff" or (mode == "auto" and opts.mode == "v") then
 		vim.cmd("vsplit")
