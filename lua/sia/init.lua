@@ -117,10 +117,6 @@ function sia.main(prompt, opts)
 			})
 		end
 	elseif mode == "insert" or (mode == "auto" and opts.mode == "n") then
-		-- local current_row = opts.start_line
-		-- if opts.mode == "v" then
-		-- 	current_row = opts.end_line
-		-- end
 		local current_row = opts.start_line
 		if opts.mode == "v" and opts.force_insert == false then
 			current_row = opts.end_line
@@ -143,9 +139,9 @@ function sia.main(prompt, opts)
 			for i, line in ipairs(lines) do
 				if line then
 					if line == "" or line == "\n" then
+						vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
 						current_row = current_row + 1
 						col = 0
-						vim.api.nvim_buf_set_lines(req_buf, current_row - 1, current_row - 1, false, { "" })
 					end
 					vim.api.nvim_buf_set_text(req_buf, current_row - 1, col, current_row - 1, col, { line })
 					col = col + #line
@@ -153,11 +149,22 @@ function sia.main(prompt, opts)
 			end
 			current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
 			if vim.api.nvim_win_is_valid(req_win) then
-				vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
+				if prompt.cursor then
+					if prompt.cursor == "below" then
+						vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
+					else
+						vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+					end
+				end
 			end
 		end
 
 		on_start = function(job)
+			if prompt.insert and prompt.insert == "below" then
+				vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
+				current_row = current_row + 1
+				col = 0
+			end
 			vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
 				callback = function()
 					vim.fn.jobstop(job)

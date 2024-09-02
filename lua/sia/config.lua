@@ -220,6 +220,8 @@ documentation. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
 			prefix = 2,
 			suffix = 0,
 			mode = "insert",
+			insert = "below",
+			cursor = "start", -- or end
 		},
 	},
 	openai_api_key = "OPENAI_API_KEY",
