@@ -1,7 +1,6 @@
 local M = {}
 
 local defaults = {
-	warn_on_visual = true, -- warn if visual and not visual line mode
 	named_prompts = {
 		chat_system = {
 			role = "system",
