@@ -1,5 +1,4 @@
 local M = {}
-
 local defaults = {
 	named_prompts = {
 		chat_system = {
@@ -141,7 +140,11 @@ crafting the commit message:
 					end
 					local result = handle:read("*a")
 					handle:close()
-					return result:match("true") ~= nil
+					if result:match("true") then
+						local exit_code = os.execute("git diff --cached --quiet")
+						return exit_code ~= nil and exit_code ~= 0
+					end
+					return false
 				end
 				return is_git_repo()
 			end,
