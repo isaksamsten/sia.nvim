@@ -4,6 +4,7 @@ local sia = require("sia")
 vim.api.nvim_create_user_command("Sia", function(args)
 	if #args.fargs == 0 and not vim.b.sia then
 		vim.notify("No prompt")
+		return
 	end
 
 	local opts

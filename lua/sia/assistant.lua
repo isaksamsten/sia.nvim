@@ -54,6 +54,10 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 		if first_on_stdout then
 			on_start(job_id)
 			first_on_stdout = false
+			vim.api.nvim_exec_autocmds("User", {
+				pattern = "SiaStart",
+				data = prompt,
+			})
 		end
 
 		for _, response in pairs(responses) do
@@ -61,6 +65,9 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 			if structured_response.content then
 				local lines = vim.split(structured_response.content, "\n", { plain = true, trimempty = false })
 				on_progress(lines)
+				vim.api.nvim_exec_autocmds("User", {
+					pattern = "SiaProgress",
+				})
 			end
 
 			if structured_response.usage then
@@ -74,6 +81,10 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 
 	local function on_exit()
 		on_complete()
+		vim.api.nvim_exec_autocmds("User", {
+			pattern = "SiaComplete",
+			data = prompt,
+		})
 	end
 
 	vim.fn.jobstart(command(encode(prompt)), {
