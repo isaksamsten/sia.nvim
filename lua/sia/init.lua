@@ -121,7 +121,7 @@ function sia.main(prompt, opts)
 		-- if opts.mode == "v" then
 		-- 	current_row = opts.end_line
 		-- end
-		local current_row = vim.api.nvim_buf_get_mark(req_buf, ".")[1]
+		local current_row = opts.start_line
 		if opts.mode == "v" and opts.force_insert == false then
 			current_row = opts.end_line
 		end
