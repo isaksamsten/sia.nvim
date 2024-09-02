@@ -41,7 +41,9 @@ function sia.resolve_prompt(prompt, opts)
 		if vim.bo.ft == "sia" then
 			mode = "chat"
 		elseif
-			config.options.default.mode == "insert" or (config.options.default.mode == "auto" and opts.mode == "n")
+			config.options.default.mode == "insert"
+			or (config.options.default.mode == "auto" and opts.mode == "n")
+			or opts.force_insert
 		then
 			mode = "insert"
 		elseif
