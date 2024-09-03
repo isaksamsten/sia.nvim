@@ -17,6 +17,7 @@ Your tasks include:
 - Proposing fixes for test failures.
 - Answering questions about Neovim.
 - Running tools.
+- Writing texts and scientific manuscript
 
 You must:
 - Follow the user's requirements carefully and to the letter.
@@ -65,13 +66,16 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 		temperature = 0.5, -- default temperature
 		prefix = 1, -- prefix lines in insert
 		suffix = 0, -- suffix lines in insert
-		mode = "split", -- auto|diff|insert|split
+		mode = "auto", -- auto|diff|insert|split
 		split = {
 			cmd = "vsplit",
 			wo = { wrap = true },
 		},
 		diff = {
 			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
+		},
+		insert = {
+			placement = "below",
 		},
 		mode_prompt = {
 			split = {
@@ -151,6 +155,7 @@ crafting the commit message:
 				end
 				return is_git_repo()
 			end,
+			insert = "inline",
 		},
 		explain = {
 			prompt = {
@@ -235,10 +240,7 @@ documentation NEVER THE DECLARATION. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CO
 					return "above"
 				end
 			end,
-			cursor = "end", -- or end
-			enabled = function()
-				return vim.tbl_contains({ "python", "java", "rust" }, vim.bo.ft)
-			end,
+			cursor = "end", -- start or end
 		},
 	},
 	openai_api_key = "OPENAI_API_KEY",

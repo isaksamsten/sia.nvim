@@ -39,7 +39,7 @@ local function decode_stream(data)
 
 			if json.choices and #json.choices > 0 then
 				local delta = json.choices[1].delta
-				if delta.content and delta.content ~= "" then
+				if delta.content then
 					output.content = delta.content
 				end
 			end
