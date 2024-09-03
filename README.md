@@ -142,43 +142,43 @@ We can specify defaults:
 
 ```lua
 opts = {
-	default = {
-		model = "gpt-4o-mini", -- default model
-		temperature = 0.5, -- default temperature
-		prefix = 1, -- prefix lines in insert
-		suffix = 0, -- suffix lines in insert
-		mode = "auto", -- auto|diff|insert|split
-		split = {
-			cmd = "vsplit", -- command to split with
-			wo = { wrap = true }, -- window options for the new split
-		},
-		diff = { -- options for diff window
+  default = {
+    model = "gpt-4o-mini", -- default model
+    temperature = 0.5, -- default temperature
+    prefix = 1, -- prefix lines in insert
+    suffix = 0, -- suffix lines in insert
+    mode = "auto", -- auto|diff|insert|split
+    split = {
+      cmd = "vsplit", -- command to split with
+      wo = { wrap = true }, -- window options for the new split
+    },
+    diff = { -- options for diff window
       -- wo is options copied from the original buffer to the diff buffer
-			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
-		},
-		insert = { -- options for insert
-			placement = "below", -- where to place the response: below|above|inline
-		},
+      wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
+    },
+    insert = { -- options for insert
+      placement = "below", -- where to place the response: below|above|inline
+    },
     -- default prompts for the different modes
-		mode_prompt = {
-			split = {
-				"chat_system", -- use the named prompt "chat_system"
-			},
-			chat = {
-				"chat_system", -- for ongoing conversations in the split buffer
-				{ role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
-			},
-			insert = {
-				{ role = "system", content = "You are an helpful assistant" },
-				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				"insert_system",
-			},
-			diff = {
-				{ role = "system", content = "You are an helpful assistant" },
-				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				"diff_system",
-			},
-		},
+    mode_prompt = {
+      split = {
+        "chat_system", -- use the named prompt "chat_system"
+      },
+      chat = {
+        "chat_system", -- for ongoing conversations in the split buffer
+        { role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
+      },
+      insert = {
+        { role = "system", content = "You are an helpful assistant" },
+        { role = "system", content = "This is the current context: \n\n{{context}}" },
+        "insert_system",
+      },
+      diff = {
+        { role = "system", content = "You are an helpful assistant" },
+        { role = "system", content = "This is the current context: \n\n{{context}}" },
+        "diff_system",
+      },
+    },
   },
 }
 ```
@@ -191,12 +191,12 @@ We can create named prompts:
 
 ```lua
 opts = {
-	named_prompts = {
-		diff_system = {
-			role = "system",
-			content = "The content will be diffed",
-		},
-	},
+  named_prompts = {
+    diff_system = {
+      role = "system",
+      content = "The content will be diffed",
+    },
+  },
 }
 ```
 
