@@ -208,8 +208,9 @@ function sia.main(prompt, opts)
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" and not opts.force_insert then
 		strategy = chat_strategy(req_buf, req_win, prompt.prompt)
 	elseif mode == "insert" then
-		local current_row = opts.start_line
-		if opts.mode == "v" and opts.force_insert == false then
+		local cursor_position = vim.api.nvim_win_get_cursor(req_win)
+		local current_row = cursor_position[1]
+		if opts.mode == "v" then
 			current_row = opts.end_line
 		end
 
