@@ -27,7 +27,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 	end
 	opts.force_insert = args.bang
 	local prompt
-	if vim.b.sia then
+	if vim.b.sia and #args.fargs == 0 then
 		prompt = sia.resolve_prompt({ vim.b.sia }, opts)
 	else
 		prompt = sia.resolve_prompt(args.fargs, opts)
