@@ -63,11 +63,6 @@ function BufAppend:append_to_buffer(content)
 	end
 end
 
--- Usage example:
-local bufnr = vim.api.nvim_create_buf(false, true) -- Create a new buffer
-local tracker = BufAppend:new(bufnr, 0, 0) -- Initialize tracker at line 0, col 0
-tracker:append_to_buffer("Hello\nWorld") -- Use the instance method to append content
-
 --- @return table|nil
 function sia.resolve_prompt(prompt, opts)
 	if vim.startswith(prompt[1], "/") and vim.bo.ft ~= "sia" then
@@ -174,14 +169,14 @@ function sia.main(prompt, opts)
 	local req_buf = vim.api.nvim_get_current_buf()
 	local filetype = vim.bo.filetype
 
-	if prompt.context then
-		local start_line, end_line = prompt.context(req_buf, opts)
-		if start_line == nil or end_line == nil then
-			vim.notify("Couldn't capture context")
+	if prompt.context and opts.mode ~= "v" then
+		local ok, lines = prompt.context(req_buf, opts)
+		if not ok then
+			vim.notify(lines) -- lines is an error message
 			return
 		end
-		opts.start_line = start_line
-		opts.end_line = end_line
+		opts.start_line = lines.start_line
+		opts.end_line = lines.end_line
 	end
 
 	local strategy
@@ -268,7 +263,7 @@ function sia.main(prompt, opts)
 		vim.api.nvim_buf_set_lines(res_buf, 0, 0, true, before_context)
 		vim.api.nvim_win_set_cursor(res_win, { opts.start_line, 0 })
 
-		local buf_append = BufAppend:new(res_buf, opts.start_line, 0)
+		local buf_append = BufAppend:new(res_buf, opts.start_line - 1, 0)
 		strategy = {
 			on_complete = function()
 				-- Add line after the response
@@ -283,13 +278,11 @@ function sia.main(prompt, opts)
 				vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
 			end,
 			on_progress = function(content)
-				if not vim.api.nvim_buf_is_valid(res_buf) then
-					return
-				end
-				buf_append.append_to_buffer(content)
-
-				if vim.api.nvim_win_is_valid(res_win) then
-					vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
+				if vim.api.nvim_buf_is_valid(res_buf) then
+					buf_append:append_to_buffer(content)
+					if vim.api.nvim_win_is_valid(res_win) then
+						vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
+					end
 				end
 			end,
 			on_start = function(job)
@@ -323,7 +316,7 @@ function sia.main(prompt, opts)
 	end
 
 	local context, context_suffix
-	if opts.mode == "v" or opts.context ~= nil then
+	if opts.mode == "v" or prompt.context ~= nil then
 		context = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.start_line - 1, opts.end_line, true), "\n")
 	else
 		local start_line
@@ -373,6 +366,7 @@ function sia.main(prompt, opts)
 	for _, step in ipairs(steps_to_remove) do
 		table.remove(prompt.prompt, step)
 	end
+
 	require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
 end
 

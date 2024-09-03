@@ -1,16 +1,4 @@
 local M = {}
-local function get_function_under_cursor(bufnr, opts)
-	local ok, shared = pcall(require, "nvim-treesitter.textobjects.shared")
-	if ok then
-		local _, textobject =
-			shared.textobject_at_point("@function.outer", nil, nil, bufnr, { lookahead = false, lookbehind = false })
-
-		if textobject then
-			return textobject[1] + 1, textobject[3] + 1
-		end
-	end
-	return nil, nil
-end
 local defaults = {
 	named_prompts = {
 		chat_system = {
@@ -232,12 +220,12 @@ documentation NEVER THE DECLARATION. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CO
 				},
 				{
 					role = "user",
-					content = "Here is the declaration: {{context}}",
+					content = "Here is the function:\n```{{filetype}}\n{{context}}\n```",
 				},
 			},
 			prefix = 2,
 			suffix = 0,
-			context = get_function_under_cursor,
+			context = require("sia.context").treesitter("@function.outer"),
 			mode = "insert",
 			insert = function()
 				local ft = vim.bo.ft
