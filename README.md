@@ -59,6 +59,165 @@ high-quality written content more effectively.
 
 2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`.
 
+## 📦 Customize
+
+### Prompts
+
+`sia.nvim` has five predefined prompts:
+
+- `/ask` Open a split window with the current context. For example `%Sia /ask
+what does println do?` would send the current buffer as context, open the split
+  (chat) view with an answer to the question.
+- `/commit` Insert at the end of the current line a commit message describing
+  _staged_ changes.
+- `/explain` With the current range, open a split view and explain what the
+  code does.
+- `/unittest` With the current range or function under cursor, open a split
+  view and generate a unit test.
+- `/doc` With the current range or function under cursor, insert a
+  documentation comment or string above or below the declaration (depending on
+  language)
+
+We can change the behaviour of those prompts:
+
+```lua
+opts = {
+  prompts = {
+    ask = {
+      temperature = 1.0,
+      model = "gpt-4o",
+    }
+  },
+}
+```
+
+Or we can add new prompts:
+
+```lua
+opts = {
+  prompts = {
+    fix = {
+      prompt = {
+        {
+          role = "system",
+          content = [[You are tasked with fixing code written in {{filetype}} to
+improve its performance, clarity and correctness. Provide only the
+modified code. *NEVER USE MARKDOWN CODE BLOCKS!*]],
+        },
+        {
+          role = "user",
+          content = "{{context}}",
+        },
+      },
+      mode = "diff",
+      model = "gpt-4o",
+      temperature = 0.0,
+      context = function(bufnr)
+        return require("sia.context").treesitter("@function.outer")(bufnr)
+      end,
+    },
+  },
+}
+```
+
+Prompts support the following attributes:
+
+```lua
+{
+  prompt -- table with {user, content} or string (named prompt)
+  prefix -- if context is nil, the number of lines before the current line as context
+  suffix -- if context is nil, the number of lines after the current line as context
+  mode -- insert|diff|split
+  insert -- below|above|inline (if mode == split)
+  cursor -- start|end where to place the cursor after response
+  context -- function(bufnr) return true, {start_line, end_line}
+  enabled -- true|false|function() if the prompt is enabled
+  range -- true|false if the prompt requires a range
+}
+```
+
+### Defaults
+
+We can specify defaults:
+
+```lua
+opts = {
+	default = {
+		model = "gpt-4o-mini", -- default model
+		temperature = 0.5, -- default temperature
+		prefix = 1, -- prefix lines in insert
+		suffix = 0, -- suffix lines in insert
+		mode = "auto", -- auto|diff|insert|split
+		split = {
+			cmd = "vsplit", -- command to split with
+			wo = { wrap = true }, -- window options for the new split
+		},
+		diff = { -- options for diff window
+      -- wo is options copied from the original buffer to the diff buffer
+			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
+		},
+		insert = { -- options for insert
+			placement = "below", -- where to place the response: below|above|inline
+		},
+    -- default prompts for the different modes
+		mode_prompt = {
+			split = {
+				"chat_system", -- use the named prompt "chat_system"
+			},
+			chat = {
+				"chat_system", -- for ongoing conversations in the split buffer
+				{ role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
+			},
+			insert = {
+				{ role = "system", content = "You are an helpful assistant" },
+				{ role = "system", content = "This is the current context: \n\n{{context}}" },
+				"insert_system",
+			},
+			diff = {
+				{ role = "system", content = "You are an helpful assistant" },
+				{ role = "system", content = "This is the current context: \n\n{{context}}" },
+				"diff_system",
+			},
+		},
+  },
+}
+```
+
+### Named prompts
+
+Oftentimes we reuse the same conversation for multiple prompts.
+
+We can create named prompts:
+
+```lua
+opts = {
+	named_prompts = {
+		diff_system = {
+			role = "system",
+			content = "The content will be diffed",
+		},
+	},
+}
+```
+
+### Other options
+
+```lua
+opts = {
+  openai_api_key = "OPENAI_API_KEY", -- the environment variable with the API key,
+  report_usage = true, -- vim.notify the total number of tokens when request is completed
+}
+```
+
+### Autocommands
+
+`sia.nvim` emits the following autocommands:
+
+- `SiaUsageReport`: when the number of tokens are known
+- `SiaStart`: query has been submitted
+- `SiaProgress`: a response has been received
+- `SiaComplete`: the query is completed
+
 ## 🚀 Usage
 
 **Normal Mode**
@@ -71,13 +230,26 @@ high-quality written content more effectively.
 
 **Ranges**
 
+Any range is supported, for example:
+
 - `:'<,'>Sia [query]` send the selected lines and query and diff the response
 - `:'<,'>Sia /prompt [query]` send the selected lines and the stored prompt
 - `:%Sia /prompt` send the buffer and the query
 
-![](assets/demo.webp)
+### Suggested keybindings:
 
-Read the Neovim [documentation](https://neovim.io/doc/user/diff.html) to learn how to navigate between and edit differences.
+Defined in `lazy.nvim` I suggest the following keybindings (imitating
+`vim.dispatch`):
+
+```lua
+  keys = {
+    { "<LocalLeader><space>", mode = { "v", "n" }, ":Sia ", desc = ":Sia " },
+    { "<LocalLeader><cr>", mode = { "v", "n" }, ":Sia<cr>", desc = ":Sia" },
+    { "<LocalLeader>%", mode = { "n" }, ":%Sia ", desc = "%:Sia" },
+  },
+```
+
+![](assets/demo.webp)
 
 ## 🙏 Acknowledgments
 
