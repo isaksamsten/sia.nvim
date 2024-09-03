@@ -208,7 +208,7 @@ crafting the commit message:
 ```]],
 				},
 			},
-			range = true,
+			context = require("sia.context").treesitter("@function.outer"),
 			mode = "split",
 			split_cmd = "vsplit",
 			wo = {},
