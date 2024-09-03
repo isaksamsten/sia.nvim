@@ -220,7 +220,7 @@ function sia.main(prompt, opts)
 					-- Join all changes to simplify undo
 					if buf_append then
 						vim.api.nvim_buf_call(req_buf, function()
-							vim.cmd.undojoin()
+							pcall(vim.cmd.undojoin)
 						end)
 					else
 						local line = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
