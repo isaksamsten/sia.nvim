@@ -228,7 +228,7 @@ crafting the commit message:
 					role = "system",
 					content = [[You are tasked with writing documentation for functions,
 methods, classes etc written in {{filetype}}. You only ever output the
-documentation. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
+documentation NEVER THE DECLARATION. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
 				},
 				{
 					role = "user",
@@ -239,8 +239,8 @@ documentation. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
 			suffix = 0,
 			context = get_function_under_cursor,
 			mode = "insert",
-			insert = function(bufnr)
-				local ft = vim.api.nvim_buf_get_option(bufnr, "filetype")
+			insert = function()
+				local ft = vim.bo.ft
 				if ft == "python" then
 					return "below"
 				else

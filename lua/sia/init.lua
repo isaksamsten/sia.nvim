@@ -184,75 +184,71 @@ function sia.main(prompt, opts)
 		opts.end_line = end_line
 	end
 
-	local on_progress, on_complete, on_start
+	local strategy
 	local mode = prompt.mode or config.options.default.mode
 	if opts.force_insert then
 		mode = "insert"
 	end
 
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
-		local strategy = chat_strategy(req_buf, req_win, prompt.prompt)
-		on_start = strategy.on_start
-		on_progress = strategy.on_progress
-		on_complete = strategy.on_complete
+		strategy = chat_strategy(req_buf, req_win, prompt.prompt)
 	elseif mode == "insert" or (mode == "auto" and opts.mode == "n") then
 		local current_row = opts.start_line
 		if opts.mode == "v" and opts.force_insert == false then
 			current_row = opts.end_line
 		end
 
-		local is_first = true
 		local buf_append = nil
-		on_progress = function(content)
-			if not vim.api.nvim_buf_is_valid(req_buf) then
-				return
-			end
-			-- Join all changes to simplify undo
-			if not is_first then
-				vim.api.nvim_buf_call(req_buf, function()
-					vim.cmd.undojoin()
-				end)
-			else
-				buf_append = BufAppend:new(req_buf, current_row - 1, 0)
-			end
-			is_first = false
-
-			if buf_append ~= nil then
-				buf_append:append_to_buffer(content)
-			end
-			if vim.api.nvim_win_is_valid(req_win) then
-				if prompt.cursor == nil or prompt.cursor == "follow" then
-					vim.api.nvim_win_set_cursor(req_win, { buf_append.line, buf_append.col })
+		strategy = {
+			on_progress = function(content)
+				if not vim.api.nvim_buf_is_valid(req_buf) then
+					return
 				end
-			end
-		end
+				-- Join all changes to simplify undo
+				if buf_append ~= nil then
+					vim.api.nvim_buf_call(req_buf, function()
+						vim.cmd.undojoin()
+					end)
+				else
+					local line = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
+					buf_append = BufAppend:new(req_buf, current_row - 1, #line[1])
+				end
 
-		on_start = function(job)
-			local placement = prompt.insert
-			if type(placement) == "function" then
-				placement = placement(req_buf)
-			end
+				buf_append:append_to_buffer(content)
+				if vim.api.nvim_win_is_valid(req_win) then
+					if prompt.cursor == nil or prompt.cursor == "follow" then
+						vim.api.nvim_win_set_cursor(req_win, { buf_append.line, buf_append.col })
+					end
+				end
+			end,
 
-			if placement and placement == "below" then
-				vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
-				current_row = current_row + 1
-				col = 0
-			elseif placement and placement == "above" then
-				vim.api.nvim_buf_set_lines(req_buf, current_row - 1, current_row - 1, false, { "" })
-				col = 0
-			end
-			vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
-				callback = function()
-					vim.fn.jobstop(job)
-				end,
-			})
-		end
-		on_complete = function()
-			vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
-			if prompt.cursor and prompt.cursor == "start" then
-				vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
-			end
-		end
+			on_start = function(job)
+				local placement = prompt.insert
+				if type(placement) == "function" then
+					placement = placement()
+				end
+
+				if placement and placement == "below" then
+					vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
+					current_row = current_row + 1
+				elseif placement and placement == "above" then
+					vim.api.nvim_buf_set_lines(req_buf, current_row - 1, current_row - 1, false, { "" })
+				else
+					-- We're inline
+				end
+				vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
+					callback = function()
+						vim.fn.jobstop(job)
+					end,
+				})
+			end,
+			on_complete = function()
+				vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+				if prompt.cursor and prompt.cursor == "start" then
+					vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+				end
+			end,
+		}
 	elseif mode == "diff" or (mode == "auto" and opts.mode == "v") then
 		vim.cmd("vsplit")
 		local res_win = vim.api.nvim_get_current_win()
@@ -273,35 +269,37 @@ function sia.main(prompt, opts)
 		vim.api.nvim_win_set_cursor(res_win, { opts.start_line, 0 })
 
 		local buf_append = BufAppend:new(res_buf, opts.start_line, 0)
-		on_complete = function()
-			-- Add line after the response
-			vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
+		strategy = {
+			on_complete = function()
+				-- Add line after the response
+				vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
 
-			-- Calculate diff
-			vim.api.nvim_set_current_win(res_win)
-			vim.cmd("diffthis")
-			vim.api.nvim_set_current_win(req_win)
-			vim.cmd("diffthis")
+				-- Calculate diff
+				vim.api.nvim_set_current_win(res_win)
+				vim.cmd("diffthis")
+				vim.api.nvim_set_current_win(req_win)
+				vim.cmd("diffthis")
 
-			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
-		end
-		on_progress = function(content)
-			if not vim.api.nvim_buf_is_valid(res_buf) then
-				return
-			end
-			buf_append.append_to_buffer(content)
+				vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
+			end,
+			on_progress = function(content)
+				if not vim.api.nvim_buf_is_valid(res_buf) then
+					return
+				end
+				buf_append.append_to_buffer(content)
 
-			if vim.api.nvim_win_is_valid(res_win) then
-				vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
-			end
-		end
-		on_start = function(job)
-			vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
-				callback = function()
-					vim.fn.jobstop(job)
-				end,
-			})
-		end
+				if vim.api.nvim_win_is_valid(res_win) then
+					vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
+				end
+			end,
+			on_start = function(job)
+				vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
+					callback = function()
+						vim.fn.jobstop(job)
+					end,
+				})
+			end,
+		}
 	elseif mode == "split" then
 		vim.cmd(prompt.split_cmd or config.options.default.split.cmd or "vsplit")
 		local res_win = vim.api.nvim_get_current_win()
@@ -318,10 +316,7 @@ function sia.main(prompt, opts)
 			end
 		end
 
-		local strategy = chat_strategy(res_buf, res_win, prompt.prompt)
-		on_start = strategy.on_start
-		on_complete = strategy.on_complete
-		on_progress = strategy.on_progress
+		strategy = chat_strategy(res_buf, res_win, prompt.prompt)
 	else
 		vim.notify("invalid mode")
 		return
@@ -378,7 +373,7 @@ function sia.main(prompt, opts)
 	for _, step in ipairs(steps_to_remove) do
 		table.remove(prompt.prompt, step)
 	end
-	require("sia.assistant").query(prompt, on_start, on_progress, on_complete)
+	require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
 end
 
 return sia
