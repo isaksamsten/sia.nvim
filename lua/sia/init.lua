@@ -16,6 +16,58 @@ local function replace_named_prompts(prompts)
 	return prompts
 end
 
+-- Define a position tracker object
+local BufAppend = {}
+BufAppend.__index = BufAppend
+
+-- Constructor for PositionTracker
+function BufAppend:new(bufnr, line, col)
+	local obj = {
+		bufnr = bufnr, -- Buffer number
+		line = line or 0, -- Start line
+		col = col or 0, -- Start column
+	}
+	setmetatable(obj, self)
+	return obj
+end
+
+-- Method to advance the column position
+function BufAppend:advance(substring)
+	self.col = self.col + #substring
+end
+
+-- Method to handle newline and reset column position
+function BufAppend:newline()
+	self.line = self.line + 1
+	self.col = 0
+end
+
+-- Method to append content to the buffer
+function BufAppend:append_to_buffer(content)
+	local index = 1
+	while index <= #content do
+		local newline = content:find("\n", index) or (#content + 1)
+		local substring = content:sub(index, newline - 1)
+
+		if #substring > 0 then
+			vim.api.nvim_buf_set_text(self.bufnr, self.line, self.col, self.line, self.col, { substring })
+			self:advance(substring)
+		end
+
+		if newline <= #content then
+			vim.api.nvim_buf_set_lines(self.bufnr, self.line + 1, self.line + 1, false, { "" })
+			self:newline()
+		end
+
+		index = newline + 1
+	end
+end
+
+-- Usage example:
+local bufnr = vim.api.nvim_create_buf(false, true) -- Create a new buffer
+local tracker = BufAppend:new(bufnr, 0, 0) -- Initialize tracker at line 0, col 0
+tracker:append_to_buffer("Hello\nWorld") -- Use the instance method to append content
+
 --- @return table|nil
 function sia.resolve_prompt(prompt, opts)
 	if vim.startswith(prompt[1], "/") and vim.bo.ft ~= "sia" then
@@ -37,22 +89,22 @@ function sia.resolve_prompt(prompt, opts)
 		prompt_config.prompt = replace_named_prompts(prompt_config.prompt)
 		return prompt_config
 	else
-		local mode = "split"
+		local mode_prompt = "split"
 		if vim.bo.ft == "sia" then
-			mode = "chat"
+			mode_prompt = "chat"
 		elseif
 			config.options.default.mode == "insert"
 			or (config.options.default.mode == "auto" and opts.mode == "n")
 			or opts.force_insert
 		then
-			mode = "insert"
+			mode_prompt = "insert"
 		elseif
 			config.options.default.mode == "diff" or (config.options.default.mode == "auto" and opts.mode == "v")
 		then
-			mode = "diff"
+			mode_prompt = "diff"
 		end
 
-		local mode_prompt = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode]))
+		mode_prompt = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode_prompt]))
 		table.insert(mode_prompt, { role = "user", content = table.concat(prompt, " ") })
 		return {
 			prompt = mode_prompt,
@@ -77,11 +129,60 @@ local function collect_user_prompts(prompts)
 	return lines
 end
 
+local function chat_strategy(res_buf, winnr, prompt)
+	local buf_append = nil
+	return {
+		on_start = function(job)
+			vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
+				callback = function()
+					vim.fn.jobstop(job)
+				end,
+			})
+		end,
+		on_progress = function(content)
+			if buf_append == nil then
+				local line_count = vim.api.nvim_buf_line_count(res_buf)
+				vim.api.nvim_buf_set_lines(res_buf, line_count - 1, line_count, false, { "# User", "" })
+				vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, collect_user_prompts(prompt))
+				vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "# Assistant", "" })
+				line_count = vim.api.nvim_buf_line_count(res_buf)
+				buf_append = BufAppend:new(res_buf, line_count - 1, 0)
+			end
+			buf_append:append_to_buffer(content)
+			if vim.api.nvim_win_is_valid(winnr) then
+				vim.api.nvim_win_set_cursor(winnr, { buf_append.line, buf_append.col })
+			end
+		end,
+		on_complete = function()
+			if not vim.api.nvim_buf_is_valid(res_buf) then
+				return
+			end
+			vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "" })
+			local line_count = vim.api.nvim_buf_line_count(res_buf)
+
+			if vim.api.nvim_win_is_valid(winnr) then
+				vim.api.nvim_win_set_cursor(winnr, { line_count, 0 })
+			end
+			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
+		end,
+	}
+end
+
 function sia.main(prompt, opts)
 	-- Request
 	local req_win = vim.api.nvim_get_current_win()
 	local req_buf = vim.api.nvim_get_current_buf()
 	local filetype = vim.bo.filetype
+
+	if prompt.context then
+		local start_line, end_line = prompt.context(req_buf, opts)
+		if start_line == nil or end_line == nil then
+			vim.notify("Couldn't capture context")
+			return
+		end
+		opts.start_line = start_line
+		opts.end_line = end_line
+	end
 
 	local on_progress, on_complete, on_start
 	local mode = prompt.mode or config.options.default.mode
@@ -90,34 +191,10 @@ function sia.main(prompt, opts)
 	end
 
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
-		on_complete = function()
-			vim.api.nvim_buf_set_lines(req_buf, -1, -1, false, { "", "" })
-			local line_count = vim.api.nvim_buf_line_count(req_buf)
-			vim.api.nvim_win_set_cursor(req_win, { line_count, 0 })
-			vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
-		end
-		on_progress = function(lines)
-			if not vim.api.nvim_buf_is_valid(req_buf) then
-				return
-			end
-			local row = vim.api.nvim_buf_get_lines(req_buf, 0, -1, false)
-			local col = row[#row] or ""
-			vim.api.nvim_buf_set_text(req_buf, #row - 1, #col, #row - 1, #col, lines)
-			if vim.api.nvim_win_is_valid(req_win) then
-				vim.api.nvim_win_set_cursor(req_win, { #row, #col })
-			end
-		end
-		on_start = function(job)
-			local line_count = vim.api.nvim_buf_line_count(req_buf)
-			vim.api.nvim_buf_set_lines(req_buf, line_count - 1, -1, false, { "# User", "" })
-			vim.api.nvim_buf_set_lines(req_buf, -1, -1, false, collect_user_prompts(prompt.prompt))
-			vim.api.nvim_buf_set_lines(req_buf, -1, -1, false, { "", "", "# Assistant", "" })
-			vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
-				callback = function()
-					vim.fn.jobstop(job)
-				end,
-			})
-		end
+		local strategy = chat_strategy(req_buf, req_win, prompt.prompt)
+		on_start = strategy.on_start
+		on_progress = strategy.on_progress
+		on_complete = strategy.on_complete
 	elseif mode == "insert" or (mode == "auto" and opts.mode == "n") then
 		local current_row = opts.start_line
 		if opts.mode == "v" and opts.force_insert == false then
@@ -125,7 +202,8 @@ function sia.main(prompt, opts)
 		end
 
 		local is_first = true
-		on_progress = function(lines)
+		local buf_append = nil
+		on_progress = function(content)
 			if not vim.api.nvim_buf_is_valid(req_buf) then
 				return
 			end
@@ -134,33 +212,33 @@ function sia.main(prompt, opts)
 				vim.api.nvim_buf_call(req_buf, function()
 					vim.cmd.undojoin()
 				end)
+			else
+				buf_append = BufAppend:new(req_buf, current_row - 1, 0)
 			end
 			is_first = false
-			local current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
-			local col = #current[1]
-			for i, line in ipairs(lines) do
-				if line then
-					if line == "" or line == "\n" then
-						vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
-						current_row = current_row + 1
-						col = 0
-					end
-					vim.api.nvim_buf_set_text(req_buf, current_row - 1, col, current_row - 1, col, { line })
-					col = col + #line
-				end
+
+			if buf_append ~= nil then
+				buf_append:append_to_buffer(content)
 			end
 			if vim.api.nvim_win_is_valid(req_win) then
 				if prompt.cursor == nil or prompt.cursor == "follow" then
-					current = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
-					vim.api.nvim_win_set_cursor(req_win, { current_row, #current[1] })
+					vim.api.nvim_win_set_cursor(req_win, { buf_append.line, buf_append.col })
 				end
 			end
 		end
 
 		on_start = function(job)
-			if prompt.insert and prompt.insert == "below" then
+			local placement = prompt.insert
+			if type(placement) == "function" then
+				placement = placement(req_buf)
+			end
+
+			if placement and placement == "below" then
 				vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
 				current_row = current_row + 1
+				col = 0
+			elseif placement and placement == "above" then
+				vim.api.nvim_buf_set_lines(req_buf, current_row - 1, current_row - 1, false, { "" })
 				col = 0
 			end
 			vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
@@ -182,7 +260,7 @@ function sia.main(prompt, opts)
 		vim.api.nvim_win_set_buf(res_win, res_buf)
 		vim.api.nvim_buf_set_option(res_buf, "filetype", filetype)
 
-		for _, wo in pairs(config.options.wo) do
+		for _, wo in pairs(config.options.default.diff.wo or {}) do
 			vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
 		end
 
@@ -194,6 +272,7 @@ function sia.main(prompt, opts)
 		vim.api.nvim_buf_set_lines(res_buf, 0, 0, true, before_context)
 		vim.api.nvim_win_set_cursor(res_win, { opts.start_line, 0 })
 
+		local buf_append = BufAppend:new(res_buf, opts.start_line, 0)
 		on_complete = function()
 			-- Add line after the response
 			vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
@@ -206,16 +285,14 @@ function sia.main(prompt, opts)
 
 			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
 		end
-		on_progress = function(lines)
+		on_progress = function(content)
 			if not vim.api.nvim_buf_is_valid(res_buf) then
 				return
 			end
-			local row = vim.api.nvim_buf_get_lines(res_buf, 0, -1, false)
-			local col = row[#row] or ""
-			vim.api.nvim_buf_set_text(res_buf, #row - 1, #col, #row - 1, #col, lines)
+			buf_append.append_to_buffer(content)
 
 			if vim.api.nvim_win_is_valid(res_win) then
-				vim.api.nvim_win_set_cursor(res_win, { #row, #col })
+				vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
 			end
 		end
 		on_start = function(job)
@@ -241,44 +318,17 @@ function sia.main(prompt, opts)
 			end
 		end
 
-		on_complete = function()
-			if not vim.api.nvim_buf_is_valid(res_buf) then
-				return
-			end
-			vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "" })
-			local line_count = vim.api.nvim_buf_line_count(res_buf)
-
-			if vim.api.nvim_win_is_valid(res_win) then
-				vim.api.nvim_win_set_cursor(res_win, { line_count, 0 })
-			end
-			vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
-		end
-		on_progress = function(lines)
-			local row = vim.api.nvim_buf_get_lines(res_buf, 0, -1, false)
-			local col = row[#row] or ""
-			vim.api.nvim_buf_set_text(res_buf, #row - 1, #col, #row - 1, #col, lines)
-			if vim.api.nvim_win_is_valid(res_win) then
-				vim.api.nvim_win_set_cursor(res_win, { #row, #col })
-			end
-		end
-		on_start = function(job)
-			local line_count = vim.api.nvim_buf_line_count(res_buf)
-			vim.api.nvim_buf_set_lines(res_buf, line_count - 1, line_count, false, { "# User", "" })
-			vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, collect_user_prompts(prompt.prompt))
-			vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "# Assistant", "" })
-			vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
-				callback = function()
-					vim.fn.jobstop(job)
-				end,
-			})
-		end
+		local strategy = chat_strategy(res_buf, res_win, prompt.prompt)
+		on_start = strategy.on_start
+		on_complete = strategy.on_complete
+		on_progress = strategy.on_progress
 	else
 		vim.notify("invalid mode")
 		return
 	end
 
 	local context, context_suffix
-	if opts.mode == "v" then
+	if opts.mode == "v" or opts.context ~= nil then
 		context = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.start_line - 1, opts.end_line, true), "\n")
 	else
 		local start_line

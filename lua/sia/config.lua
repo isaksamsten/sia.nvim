@@ -1,4 +1,16 @@
 local M = {}
+local function get_function_under_cursor(bufnr, opts)
+	local ok, shared = pcall(require, "nvim-treesitter.textobjects.shared")
+	if ok then
+		local _, textobject =
+			shared.textobject_at_point("@function.outer", nil, nil, bufnr, { lookahead = false, lookbehind = false })
+
+		if textobject then
+			return textobject[1] + 1, textobject[3] + 1
+		end
+	end
+	return nil, nil
+end
 local defaults = {
 	named_prompts = {
 		chat_system = {
@@ -69,6 +81,9 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 		split = {
 			cmd = "vsplit",
 			wo = { wrap = true },
+		},
+		diff = {
+			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
 		},
 		mode_prompt = {
 			split = {
@@ -222,13 +237,23 @@ documentation. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
 			},
 			prefix = 2,
 			suffix = 0,
+			context = get_function_under_cursor,
 			mode = "insert",
-			insert = "below",
-			cursor = "start", -- or end
+			insert = function(bufnr)
+				local ft = vim.api.nvim_buf_get_option(bufnr, "filetype")
+				if ft == "python" then
+					return "below"
+				else
+					return "above"
+				end
+			end,
+			cursor = "end", -- or end
+			enabled = function()
+				return vim.tbl_contains({ "python", "java", "rust" }, vim.bo.ft)
+			end,
 		},
 	},
 	openai_api_key = "OPENAI_API_KEY",
-	wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
 	report_usage = true,
 }
 

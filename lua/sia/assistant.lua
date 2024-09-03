@@ -63,8 +63,7 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 		for _, response in pairs(responses) do
 			local structured_response = decode_stream(response)
 			if structured_response.content then
-				local lines = vim.split(structured_response.content, "\n", { plain = true, trimempty = false })
-				on_progress(lines)
+				on_progress(structured_response.content)
 				vim.api.nvim_exec_autocmds("User", {
 					pattern = "SiaProgress",
 				})
