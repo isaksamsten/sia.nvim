@@ -83,7 +83,13 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 			},
 			chat = {
 				"chat_system",
-				{ role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
+				{
+					role = "system",
+					content = function()
+						return "This is the ongoing conversation: \n"
+							.. table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
+					end,
+				},
 			},
 			insert = {
 				{ role = "system", content = "You are an helpful assistant" },

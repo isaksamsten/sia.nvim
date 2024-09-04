@@ -7,6 +7,14 @@ function sia.setup(options)
 	vim.treesitter.language.register("markdown", "sia")
 end
 
+---
+--- Replaces string prompts with their corresponding named prompt tables.
+---
+--- This function iterates over a list of prompts and replaces any string prompts
+--- with their corresponding named prompt tables as defined in the configuration.
+---
+--- @param prompts table A list of prompts, where each prompt can be either a string or a table.
+--- @return table The modified list of prompts, with string prompts replaced by their corresponding named prompt tables.
 local function replace_named_prompts(prompts)
 	for i, prompt in ipairs(prompts) do
 		if type(prompt) ~= "table" then
@@ -29,35 +37,45 @@ function BufAppend:new(bufnr, line, col)
 	return obj
 end
 
-function BufAppend:advance(substring)
+function BufAppend:append_substring(substring)
 	vim.api.nvim_buf_set_text(self.bufnr, self.line, self.col, self.line, self.col, { substring })
 	self.col = self.col + #substring
 end
 
-function BufAppend:newline()
+function BufAppend:append_newline()
 	vim.api.nvim_buf_set_lines(self.bufnr, self.line + 1, self.line + 1, false, { "" })
 	self.line = self.line + 1
 	self.col = 0
 end
 
+--- Appends content to the buffer, processing each line separately-- Advances
+--- the buffer for each substring found between newlines.
+--- Calls `advance` for each substring and `newline` for each newline character.
+--- @param content The string content to append to the buffer.
 function BufAppend:append_to_buffer(content)
 	local index = 1
 	while index <= #content do
 		local newline = content:find("\n", index) or (#content + 1)
 		local substring = content:sub(index, newline - 1)
 		if #substring > 0 then
-			self:advance(substring)
+			self:append_substring(substring)
 		end
 
 		if newline <= #content then
-			self:newline()
+			self:append_newline()
 		end
 
 		index = newline + 1
 	end
 end
 
---- @return table|nil
+--- Resolves a given prompt based on configuration options and context.
+--- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
+--- based on the current file type and provided options.
+---
+--- @param prompt table: A table containing the prompt to resolve. The first element can be a named prompt.
+--- @param opts table: A table containing options that can influence the prompt resolution.
+--- @return table|nil: Returns a table containing the resolved prompt configuration or nil if the prompt could not be resolved.
 function sia.resolve_prompt(prompt, opts)
 	-- We have a named prompt
 	if vim.startswith(prompt[1], "/") and vim.bo.ft ~= "sia" then
@@ -134,6 +152,17 @@ local function collect_user_prompts(prompts)
 	return lines
 end
 
+---
+--- Creates a chat strategy for handling asynchronous job events and updating a buffer with the chat content.
+---
+--- @param res_buf number The buffer number where the chat content will be appended.
+--- @param winnr number The window number where the buffer is displayed.
+--- @param prompt string The initial prompt or message to start the chat.
+---
+--- @return table A table containing functions to handle the start, progress, and completion of the job.
+---  - table.on_start function A function to be called when the job starts.
+---  - table.on_progress function A function to be called with content updates during the job's progress.
+---  - table.on_complete function A function to be called when the job is complete.
 local function chat_strategy(res_buf, winnr, prompt)
 	local buf_append = nil
 	return {
@@ -176,6 +205,17 @@ local function chat_strategy(res_buf, winnr, prompt)
 	}
 end
 
+---
+--- Resolves the placement start position for a window.
+---
+--- This function determines the starting line and placement type for a given window based on the provided options.
+--- The placement can be specified directly or through a function or table.
+---
+--- @param win number: The window ID.
+--- @param insert table|nil: A table containing options, or nil.
+--- @param opts table: A table containing additional options. Must include `start_line`, `end_line`, and `mode`.
+--- @return number, string: The starting line and placement type.
+---
 local function resolve_placement_start(win, insert, opts)
 	local placement = insert and insert.placement or config.options.default.insert.placement
 	if type(placement) == "function" then
@@ -208,7 +248,6 @@ local function resolve_placement_start(win, insert, opts)
 end
 
 function sia.main(prompt, opts)
-	-- Request
 	local req_win = vim.api.nvim_get_current_win()
 	local req_buf = vim.api.nvim_get_current_buf()
 	local filetype = vim.bo.filetype
@@ -363,8 +402,8 @@ function sia.main(prompt, opts)
 
 	if vim.api.nvim_buf_is_valid(req_buf) then
 		local context, context_suffix
-		-- If the user has given a range or a context
-		-- get that context.
+		-- If the user has given a range or a context get the context delineated by
+		-- the range or the context
 		if opts.mode == "v" or prompt.context ~= nil then
 			context = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.start_line - 1, opts.end_line, true), "\n")
 		else
@@ -399,13 +438,12 @@ function sia.main(prompt, opts)
 			filepath = vim.api.nvim_buf_get_name(req_buf),
 			context = context,
 			context_suffix = context_suffix,
-			buffer = table.concat(vim.api.nvim_buf_get_lines(req_buf, 0, -1, true), "\n"),
 		}
 
 		local steps_to_remove = {}
 		for i, step in ipairs(prompt.prompt) do
 			if type(step.content) == "function" then
-				step.content = step.content(ft)
+				step.content = step.content()
 			end
 			step.content = step.content:gsub("{{(.-)}}", function(key)
 				return replacement[key] or key
@@ -418,7 +456,6 @@ function sia.main(prompt, opts)
 		for _, step in ipairs(steps_to_remove) do
 			table.remove(prompt.prompt, step)
 		end
-
 		require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
 	end
 end

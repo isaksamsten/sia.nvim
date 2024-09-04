@@ -1,6 +1,13 @@
 local config = require("sia.config")
 local assistant = {}
 
+--- Encodes the given prompt into a JSON string.
+---
+--- @param prompt table: A table containing the details of the prompt.
+---  - model string: (Optional) The model to use. Defaults to the configured default model.
+---  - temperature number: (Optional) The temperature setting. Defaults to the configured default temperature.
+---  - prompt table: The messages to be included in the prompt.
+--- @return string prompt A JSON-encoded string representing the prompt.
 local function encode(prompt)
 	local json = vim.json.encode({
 		model = prompt.model or config.options.default.model,
@@ -26,7 +33,11 @@ local function command(req)
 	return "curl " .. table.concat(args, " ")
 end
 
---- @return table
+--- Decodes a JSON-encoded stream and extracts specific information.
+---
+--- @param data The JSON-encoded string to decode. It should be a non-empty string.
+--- @return A table containing extracted information. The table may contain the
+--- keys 'usage' and 'content' if they are present in the decoded JSON.
 local function decode_stream(data)
 	local output = {}
 	if data and data ~= "" then
@@ -48,6 +59,13 @@ local function decode_stream(data)
 	return output
 end
 
+--- Executes a query and handles its progress and completion through callbacks.
+---
+--- @param prompt string: The query prompt to be sent.
+--- @param on_start function: Callback function to be executed when the query starts. Receives the job ID as an argument.
+--- @param on_progress: Callback function to be executed when there's progress in the query. Receives the content of the response as an argument.
+--- @param on_complete function: Callback function to be executed when the query completes.
+--- @return nil: This function does not return a value.
 function assistant.query(prompt, on_start, on_progress, on_complete)
 	local first_on_stdout = true
 	local function on_stdout(job_id, responses, _)
