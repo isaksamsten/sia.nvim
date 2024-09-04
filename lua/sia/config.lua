@@ -202,7 +202,7 @@ crafting the commit message:
       - Edge cases
       - Error handling (if applicable)
 6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
-7. Add a markdown heading before the tests with a suggested file name that is based on
+7. Add a markdown heading before the tests code fences with a suggested file name that is based on
    best practices for the language in question and the user provided filename
    for where the original function reside.]],
 				},
