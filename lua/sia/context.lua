@@ -3,17 +3,18 @@ local M = {}
 function M.treesitter(query)
 	local function get_textobject_under_cursor(bufnr, opts)
 		local ok, shared = pcall(require, "nvim-treesitter.textobjects.shared")
-		if ok then
-			local _, textobject =
-				shared.textobject_at_point(query, nil, nil, bufnr, { lookahead = false, lookbehind = false })
-
-			if textobject then
-				return true, { start_line = textobject[1] + 1, end_line = textobject[3] + 1 }
-			end
-			return false, "Couldn't capture " .. query
+		if not ok then
+			return false, "nvim-treesitter.textobjects is unavailable"
 		end
-		return false, "nvim-treesitter.textobjects is unavailiable"
+
+		local _, pos = shared.textobject_at_point(query, nil, nil, bufnr, { lookahead = false, lookbehind = false })
+		if pos then
+			return true, { start_line = pos[1] + 1, end_line = pos[3] + 1 }
+		end
+
+		return false, "Couldn't capture " .. query
 	end
+
 	return get_textobject_under_cursor
 end
 
