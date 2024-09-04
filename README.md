@@ -193,7 +193,7 @@ If range:
 
 - `placement == {"above", "cursor"}` then the response is inserted above the
   current cursor position.
-- `placement == {"above", "end"}` then the response is insert just be for the
+- `placement == {"above", "end"}` then the response is insert just before the
   end of the range.
 - `placement == {"below", "start"}` then the response is inserted just below
   the start of the range.
@@ -231,6 +231,22 @@ opts = {
 }
 ```
 
+The prompt can then be reused:
+
+````lua
+opts = {
+  prompts = {
+    my_prompt = {
+      prompt = {
+        "diff_system",
+       { role="user", content="Do something" }
+     }
+    }
+  }
+}
+```
+
+
 ### Other options
 
 ```lua
@@ -238,7 +254,7 @@ opts = {
   openai_api_key = "OPENAI_API_KEY", -- the environment variable with the API key,
   report_usage = true, -- vim.notify the total number of tokens when request is completed
 }
-```
+````
 
 ### Autocommands
 
