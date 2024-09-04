@@ -145,6 +145,7 @@ Prompts support the following attributes:
   context -- function() return true, {start_line, end_line}
   enabled -- true|false|function() if the prompt is enabled
   range -- true|false if the prompt requires a range
+  use_mode_prompt -- true|false (defaults to true if not set) include the named_prompts [mode]_system as the first system prompt in the request
 }
 ```
 

@@ -1,7 +1,7 @@
 local M = {}
 local defaults = {
 	named_prompts = {
-		chat_system = {
+		split_system = {
 			role = "system",
 			content = [[You are an AI programming assistant named "Sia".
 You are currently plugged in to the Neovim text editor on a user's machine.
@@ -45,8 +45,9 @@ If possible, make sure that you only output the relevant and requested
 information. Refrain from explaining your reasoning, unless the user requests
 it, or adding unrelated text to the output. If the context pertains to code,
 identify the programming language and do not add any additional text or
-markdown formatting. If explanations are needed add them as relevant comments
-using correct syntax for the identified language.]],
+markdown formatting. Adding code fences or markdown code blocks is an error. If
+explanations are needed add them as relevant comments using correct syntax for
+the identified language.]],
 		},
 		diff_system = {
 			role = "system",
@@ -78,11 +79,8 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 			placement = "cursor",
 		},
 		mode_prompt = {
-			split = {
-				"chat_system",
-			},
+			split = {},
 			chat = {
-				"chat_system",
 				{
 					role = "system",
 					content = function()
@@ -94,19 +92,16 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 			insert = {
 				{ role = "system", content = "You are an helpful assistant" },
 				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				"insert_system",
 			},
 			diff = {
 				{ role = "system", content = "You are an helpful assistant" },
 				{ role = "system", content = "This is the current context: \n\n{{context}}" },
-				"diff_system",
 			},
 		},
 	},
 	prompts = {
 		ask = {
 			prompt = {
-				"chat_system",
 				{ role = "user", content = "```{{filetype}}\n{{context}}\n```" },
 			},
 			mode = "split",

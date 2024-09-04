@@ -7,7 +7,6 @@ function sia.setup(options)
 	vim.treesitter.language.register("markdown", "sia")
 end
 
----
 --- Replaces string prompts with their corresponding named prompt tables.
 ---
 --- This function iterates over a list of prompts and replaces any string prompts
@@ -276,8 +275,22 @@ function sia.main(prompt, opts)
 	end
 
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" and not opts.force_insert then
+		if
+			prompt.use_mode_promt ~= false
+			and config.options.named_prompts
+			and config.options.named_prompts.split_system
+		then
+			table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
+		end
 		strategy = chat_strategy(req_buf, req_win, prompt.prompt)
 	elseif mode == "insert" then
+		if
+			prompt.use_mode_promt ~= false
+			and config.options.named_prompts
+			and config.options.named_prompts.insert_system
+		then
+			table.insert(prompt.prompt, 1, config.options.named_prompts.insert_system)
+		end
 		local current_line, placement = resolve_placement_start(req_win, prompt.insert, opts)
 
 		local buf_append = nil
@@ -327,6 +340,14 @@ function sia.main(prompt, opts)
 			end,
 		}
 	elseif mode == "diff" or (mode == "auto" and opts.mode == "v") then
+		if
+			prompt.use_mode_promt ~= false
+			and config.options.named_prompts
+			and config.options.named_prompts.diff_system
+		then
+			table.insert(prompt.prompt, 1, config.options.named_prompts.diff_system)
+		end
+
 		vim.cmd("vsplit")
 		local res_win = vim.api.nvim_get_current_win()
 		local res_buf = vim.api.nvim_create_buf(false, true)
@@ -379,6 +400,14 @@ function sia.main(prompt, opts)
 			end,
 		}
 	elseif mode == "split" or (mode == "auto" and opts.mode == "n") then
+		if
+			prompt.use_mode_promt ~= false
+			and config.options.named_prompts
+			and config.options.named_prompts.split_system -- does not exist by default
+		then
+			table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
+		end
+
 		local res_win
 		local res_buf
 		local function open_and_visible_sia_buffer()
