@@ -220,9 +220,22 @@ crafting the commit message:
 				"insert_system",
 				{
 					role = "system",
-					content = [[You are tasked with writing documentation for functions,
-methods, classes etc written in {{filetype}}. You only ever output the
-documentation NEVER THE DECLARATION. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CODE BLOCKS]],
+					content = [[You are tasked with writing documentation for functions, methods, and classes written in {{filetype}}. Your documentation must adhere to the {{language}} conventions (e.g., JSDoc for JavaScript, docstrings for Python, Javadoc for Java), including appropriate tags and formatting.
+
+**Requirements:**
+1. Follow the language-specific documentation style strictly (e.g., use `/** ... */` for JavaScript, `""" ... """` for Python).
+2. Only output the documentation text; never output the function declaration, implementation, or any code examples.
+3. Include all relevant sections, such as:
+   - A clear description of the function's purpose.
+   - Detailed parameter explanations using the appropriate tags (e.g., `@param` for JSDoc).
+   - Return value descriptions using language-specific tags (e.g., `@return`).
+4. Avoid including any code snippets, including function signatures or suggested implementations.
+5. Never under any circumstance include markdown code fences surrounding the documentation. Failure to adhere strictly to this format will result in an incorrect response.
+6. If the user request a specific format, follow that format but remember to strictly adhere to the rules! Non compliance is an error!
+
+**Important**: Double-check that your response strictly follows the language's
+documentation style and contains only the requested documentation text. If any
+code is included, the response is incorrect.]],
 				},
 				{
 					role = "user",
