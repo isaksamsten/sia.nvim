@@ -39,7 +39,10 @@ vim.api.nvim_create_user_command("Sia", function(args)
 		vim.notify(args.fargs[1] .. " must be used with a range")
 		return
 	end
-	if config._is_disabled(prompt) then
+
+	local is_range = opts.mode == "v"
+	local is_range_valid = prompt.range == nil or (prompt.range == is_range and opts.force_insert ~= is_range)
+	if config._is_disabled(prompt) or not is_range_valid then
 		vim.notify(args.fargs[1] .. " is not enabled")
 		return
 	end
@@ -55,6 +58,7 @@ end, {
 
 		-- Initialize a flag to detect if the command starts with a range, accounting for leading spaces
 		local is_range = false
+		local has_bang = false
 
 		-- Check only for Ex commands (":")
 		if cmd_type == ":" then
@@ -80,6 +84,9 @@ end, {
 					break
 				end
 			end
+			if cmd_line:match(".-%w+!%s+.*") then
+				has_bang = true
+			end
 		end
 
 		if not vim.startswith(ArgLead, "/") then
@@ -88,13 +95,10 @@ end, {
 		local complete = {}
 		local term = ArgLead:sub(2)
 		for key, prompt in pairs(config.options.prompts) do
-			if
-				vim.startswith(key, term)
-				and (prompt.range == nil or prompt.range == is_range)
-				and not config._is_disabled(prompt)
-				and vim.bo.ft ~= "sia"
-			then
-				table.insert(complete, "/" .. key)
+			if vim.startswith(key, term) and not config._is_disabled(prompt) and vim.bo.ft ~= "sia" then
+				if prompt.range == nil or (prompt.range == is_range and has_bang ~= is_range) then
+					table.insert(complete, "/" .. key)
+				end
 			end
 		end
 		return complete
