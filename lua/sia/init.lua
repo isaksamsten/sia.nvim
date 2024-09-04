@@ -187,7 +187,7 @@ local function chat_strategy(res_buf, winnr, prompt)
 				end
 				buf_append:append_to_buffer(content)
 				if vim.api.nvim_win_is_valid(winnr) then
-					vim.api.nvim_win_set_cursor(winnr, { buf_append.line, buf_append.col })
+					vim.api.nvim_win_set_cursor(winnr, { buf_append.line + 1, buf_append.col })
 				end
 			end
 		end,
@@ -366,7 +366,7 @@ function sia.main(prompt, opts)
 				if vim.api.nvim_buf_is_valid(res_buf) then
 					buf_append:append_to_buffer(content)
 					if vim.api.nvim_win_is_valid(res_win) then
-						vim.api.nvim_win_set_cursor(res_win, { buf_append.line, buf_append.col })
+						vim.api.nvim_win_set_cursor(res_win, { buf_append.line + 1, buf_append.col })
 					end
 				end
 			end,
