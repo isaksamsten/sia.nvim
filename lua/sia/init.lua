@@ -116,10 +116,10 @@ function sia.resolve_prompt(prompt, opts)
 			mode_prompt = "diff"
 		end
 
-		mode_prompt = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode_prompt]))
-		table.insert(mode_prompt, { role = "user", content = table.concat(prompt, " ") })
+		local mode_prompt_table = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode_prompt]))
+		table.insert(mode_prompt_table, { role = "user", content = table.concat(prompt, " ") })
 		return {
-			prompt = mode_prompt,
+			prompt = mode_prompt_table,
 			prefix = config.options.default.prefix,
 			suffix = config.options.default.suffix,
 			temperature = config.options.default.temperature,
@@ -333,7 +333,7 @@ function sia.main(prompt, opts)
 		vim.api.nvim_win_set_buf(res_win, res_buf)
 		vim.api.nvim_buf_set_option(res_buf, "filetype", filetype)
 
-		for _, wo in pairs(config.options.default.diff.wo or {}) do
+		for _, wo in pairs(prompt.diff and prompt.diff.wo or config.options.default.diff.wo or {}) do
 			vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
 		end
 
@@ -379,18 +379,45 @@ function sia.main(prompt, opts)
 			end,
 		}
 	elseif mode == "split" or (mode == "auto" and opts.mode == "n") then
-		vim.cmd(prompt.split_cmd or config.options.default.split.cmd or "vsplit")
-		local res_win = vim.api.nvim_get_current_win()
-		local res_buf = vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_win_set_buf(res_win, res_buf)
-		vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
-		vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
-		vim.api.nvim_buf_set_option(res_buf, "buftype", "nofile")
-
-		local split_wo = prompt.wo or config.options.default.split.wo
-		if split_wo then
-			for key, value in pairs(split_wo) do
-				vim.api.nvim_win_set_option(res_win, key, value)
+		local res_win
+		local res_buf
+		local function open_and_visible_sia_buffer()
+			local buffers = vim.api.nvim_list_bufs()
+			for _, buf in ipairs(buffers) do
+				if vim.api.nvim_buf_is_loaded(buf) then
+					local ft = vim.api.nvim_buf_get_option(buf, "filetype")
+					if ft == "sia" then
+						return buf
+					end
+				end
+			end
+			return nil -- No visible buffer with ft=sia found
+		end
+		local function get_window_for_buffer(buf)
+			local windows = vim.api.nvim_tabpage_list_wins(0) -- Get windows in current tab
+			for _, win in ipairs(windows) do
+				if vim.api.nvim_win_get_buf(win) == buf then
+					return win -- Return the window associated with the buffer
+				end
+			end
+			return nil -- No window associated with the buffer found
+		end
+		res_buf = open_and_visible_sia_buffer()
+		if prompt.split and prompt.split.reuse and res_buf then
+			res_win = get_window_for_buffer(res_buf)
+		else
+			vim.cmd(prompt.split and prompt.split.cmd or config.options.default.split.cmd or "vsplit")
+			res_win = vim.api.nvim_get_current_win()
+			res_buf = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_win_set_buf(res_win, res_buf)
+			vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
+			vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
+			vim.api.nvim_buf_set_option(res_buf, "buftype", "nofile")
+			local split_wo = prompt.wo or config.options.default.split.wo
+			if split_wo then
+				for key, value in pairs(split_wo) do
+					vim.api.nvim_win_set_option(res_win, key, value)
+				end
 			end
 		end
 

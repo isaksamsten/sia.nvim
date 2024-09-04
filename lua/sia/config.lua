@@ -110,6 +110,9 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 				{ role = "user", content = "```{{filetype}}\n{{context}}\n```" },
 			},
 			mode = "split",
+			split = {
+				reuse = true,
+			},
 			temperature = 0.5,
 			range = true,
 			input = "require",
@@ -186,6 +189,9 @@ crafting the commit message:
 			mode = "split",
 			temperature = 0.5,
 			range = true,
+			split = {
+				reuse = true,
+			},
 		},
 		unittest = {
 			prompt = {
@@ -216,7 +222,9 @@ crafting the commit message:
 			},
 			context = require("sia.context").treesitter("@function.outer"),
 			mode = "split",
-			split_cmd = "vsplit",
+			split = {
+				cmd = "vsplit",
+			},
 			insert = { placement = { "below", "end" } },
 			wo = {},
 			temperature = 0.5,

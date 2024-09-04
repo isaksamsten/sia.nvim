@@ -132,7 +132,15 @@ Prompts support the following attributes:
     -- if a range is given, below|above means below or above end of range
     -- otherwise below|above means below or above start of cursor
     placement -- function()|below|above|cursor|{below|above, cursor|start|end}
-  },
+  }
+  split = {
+    reuse -- true|false to reuse open split
+    cmd -- cmd to split e.g., vsplit
+    wo -- window options for the new split
+  }
+  diff = {
+    wo -- window options to transfer from the old window to the new
+  }
   cursor -- start|end where to place the cursor after response
   context -- function() return true, {start_line, end_line}
   enabled -- true|false|function() if the prompt is enabled
