@@ -128,9 +128,13 @@ Prompts support the following attributes:
   prefix -- if context is nil, the number of lines before the current line as context
   suffix -- if context is nil, the number of lines after the current line as context
   mode -- insert|diff|split
-  insert -- below|above|inline (if mode == split)
+  insert = {
+    -- if a range is given, below|above means below or above end of range
+    -- otherwise below|above means below or above start of cursor
+    placement -- function()|below|above|cursor|{below|above, cursor|start|end}
+  },
   cursor -- start|end where to place the cursor after response
-  context -- function(bufnr) return true, {start_line, end_line}
+  context -- function() return true, {start_line, end_line}
   enabled -- true|false|function() if the prompt is enabled
   range -- true|false if the prompt requires a range
 }
@@ -157,7 +161,7 @@ opts = {
       wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
     },
     insert = { -- options for insert
-      placement = "below", -- where to place the response: below|above|inline
+      placement = "below",
     },
     -- default prompts for the different modes
     mode_prompt = {
@@ -182,6 +186,33 @@ opts = {
   },
 }
 ```
+
+#### Insert prompt placement
+
+If range:
+
+- `placement == {"above", "cursor"}` then the response is inserted above the
+  current cursor position.
+- `placement == {"above", "end"}` then the response is insert just be for the
+  end of the range.
+- `placement == {"below", "start"}` then the response is inserted just below
+  the start of the range.
+- `placement == "below"` then the response is inserted just below the _end_ of
+  the range.
+- `placement == "above"` then the response is inserted just above the _start_
+  of the range.
+
+If no range:
+
+- `placement == "above"` then the response in inserted just above the cursor.
+- `placement == "below"` then the response is inserted just below the cursor.
+- `placement == {"above", "start"}` then the response is inserted just above
+  the start of the current _context_ (as defined by the `context` parameter,
+  e.g., a treesitter capture)
+- `placement == {"above", "end"}` then the response is inserted just above
+  the end of the current _context_ (as defined by the `context` parameter,
+  e.g., a treesitter capture)
+- The same applies to `{"below", "start"}` and `{"below", "end"`}.
 
 ### Named prompts
 

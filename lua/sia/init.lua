@@ -176,6 +176,37 @@ local function chat_strategy(res_buf, winnr, prompt)
 	}
 end
 
+local function resolve_placement_start(win, insert, opts)
+	local placement = insert and insert.placement or config.options.default.insert.placement
+	if type(placement) == "function" then
+		placement = placement()
+	end
+
+	if type(placement) == "table" then
+		if placement[2] == "cursor" then
+			return vim.api.nvim_win_get_cursor(win)[1], placement[1]
+		elseif placement[2] == "start" then
+			return opts.start_line, placement[1]
+		else
+			return opts.end_line, placement[1]
+		end
+	else
+		if placement == "cursor" then
+			return vim.api.nvim_win_get_cursor(win)[1], placement
+		else
+			if opts.mode == "v" then
+				if placement == "above" then
+					return opts.start_line, placement
+				else
+					return opts.end_line, placement
+				end
+			else
+				return opts.start_line, placement
+			end
+		end
+	end
+end
+
 function sia.main(prompt, opts)
 	-- Request
 	local req_win = vim.api.nvim_get_current_win()
@@ -208,11 +239,7 @@ function sia.main(prompt, opts)
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" and not opts.force_insert then
 		strategy = chat_strategy(req_buf, req_win, prompt.prompt)
 	elseif mode == "insert" then
-		local cursor_position = vim.api.nvim_win_get_cursor(req_win)
-		local current_row = cursor_position[1]
-		if opts.mode == "v" then
-			current_row = opts.end_line
-		end
+		local current_line, placement = resolve_placement_start(req_win, prompt.insert, opts)
 
 		local buf_append = nil
 		strategy = {
@@ -224,8 +251,8 @@ function sia.main(prompt, opts)
 							pcall(vim.cmd.undojoin)
 						end)
 					else
-						local line = vim.api.nvim_buf_get_lines(req_buf, current_row - 1, current_row, false)
-						buf_append = BufAppend:new(req_buf, current_row - 1, #line[1])
+						local line = vim.api.nvim_buf_get_lines(req_buf, current_line - 1, current_line, false)
+						buf_append = BufAppend:new(req_buf, current_line - 1, #line[1])
 					end
 
 					buf_append:append_to_buffer(content)
@@ -234,16 +261,11 @@ function sia.main(prompt, opts)
 
 			on_start = function(job)
 				if vim.api.nvim_buf_is_valid(req_buf) then
-					local placement = prompt.insert or config.options.default.insert.placement
-					if type(placement) == "function" then
-						placement = placement()
-					end
-
 					if placement and placement == "below" then
-						vim.api.nvim_buf_set_lines(req_buf, current_row, current_row, false, { "" })
-						current_row = current_row + 1
+						vim.api.nvim_buf_set_lines(req_buf, current_line, current_line, false, { "" })
+						current_line = current_line + 1
 					elseif placement and placement == "above" then
-						vim.api.nvim_buf_set_lines(req_buf, current_row - 1, current_row - 1, false, { "" })
+						vim.api.nvim_buf_set_lines(req_buf, current_line - 1, current_line - 1, false, { "" })
 					else
 						-- Add to end of line
 					end

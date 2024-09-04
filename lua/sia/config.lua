@@ -75,7 +75,7 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
 		},
 		insert = {
-			placement = "below",
+			placement = "cursor",
 		},
 		mode_prompt = {
 			split = {
@@ -155,7 +155,7 @@ crafting the commit message:
 				end
 				return is_git_repo()
 			end,
-			insert = "inline",
+			insert = { placement = "cursor" },
 		},
 		explain = {
 			prompt = {
@@ -211,6 +211,7 @@ crafting the commit message:
 			context = require("sia.context").treesitter("@function.outer"),
 			mode = "split",
 			split_cmd = "vsplit",
+			insert = { placement = { "below", "end" } },
 			wo = {},
 			temperature = 0.5,
 		},
@@ -232,14 +233,16 @@ documentation NEVER THE DECLARATION. NEVER SURROUND YOUR ANSWER WITH MARKDOWN CO
 			suffix = 0,
 			context = require("sia.context").treesitter("@function.outer"),
 			mode = "insert",
-			insert = function()
-				local ft = vim.bo.ft
-				if ft == "python" then
-					return "below"
-				else
-					return "above"
-				end
-			end,
+			insert = {
+				placement = function()
+					local ft = vim.bo.ft
+					if ft == "python" then
+						return { "below", "start" }
+					else
+						return { "above", "start" }
+					end
+				end,
+			},
 			cursor = "end", -- start or end
 		},
 	},
