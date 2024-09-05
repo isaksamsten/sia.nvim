@@ -434,6 +434,11 @@ function sia.main(prompt, opts)
 		res_buf = open_and_visible_sia_buffer()
 		if prompt.split and prompt.split.reuse and res_buf then
 			res_win = get_window_for_buffer(res_buf)
+			if not res_win then
+				vim.cmd(prompt.split and prompt.split.cmd or config.options.default.split.cmd or "vsplit")
+				res_win = vim.api.nvim_get_current_win()
+				vim.api.nvim_win_set_buf(res_win, res_buf)
+			end
 		else
 			vim.cmd(prompt.split and prompt.split.cmd or config.options.default.split.cmd or "vsplit")
 			res_win = vim.api.nvim_get_current_win()
