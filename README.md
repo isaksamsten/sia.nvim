@@ -305,6 +305,24 @@ Defined in `lazy.nvim` I suggest the following keybindings (imitating
   },
 ```
 
+We can also bind visual and operator mode bindings to
+
+- `<Plug>(sia-append)` append the current selection or operator mode selection
+  to the current split or create a new.
+- `<Plug>(sia-execute)` execute the default prompt (`vim.g.sia`) with
+  selection or operator mode selection.
+
+```lua
+keys = {
+  { "ga", mode = { "n", "x" }, "<Plug>(sia-append)" },
+  { "gx", mode = { "n", "x" }, "<Plug>(sia-execute)" },
+}
+```
+
+Then we can send the current paragraph to the default prompt with `gxip` or
+append the current method (assuming `treesitter-textobjects`) to the ongoing
+chat with `gaim`.
+
 ![](assets/demo.webp)
 
 ## 🙏 Acknowledgments

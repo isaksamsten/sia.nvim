@@ -2,9 +2,126 @@ local config = require("sia.config")
 
 local sia = {}
 
+local function existing_sia_buffer()
+	local buffers = vim.api.nvim_list_bufs()
+	for _, buf in ipairs(buffers) do
+		if vim.api.nvim_buf_is_loaded(buf) then
+			local ft = vim.api.nvim_buf_get_option(buf, "filetype")
+			if ft == "sia" then
+				return buf
+			end
+		end
+	end
+	return nil
+end
+
+local function get_window_for_buffer(buf)
+	local windows = vim.api.nvim_tabpage_list_wins(0)
+	for _, win in ipairs(windows) do
+		if vim.api.nvim_win_get_buf(win) == buf then
+			return win
+		end
+	end
+	return nil
+end
+
+local function get_position(type)
+	local start_pos, end_pos
+	if type == nil or type == "line" then
+		start_pos = vim.fn.getpos("'[")
+		end_pos = vim.fn.getpos("']")
+	else
+		start_pos = vim.fn.getpos("'<")
+		end_pos = vim.fn.getpos("'>")
+	end
+	return start_pos, end_pos
+end
+
+function _G.__sia_add_context(type)
+	local start_pos, end_pos = get_position(type)
+	local start_line = start_pos[2]
+	local end_line = end_pos[2]
+	local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+	local filetype = vim.bo.ft
+	local buf = existing_sia_buffer()
+	local win
+	if buf then
+		local win = get_window_for_buffer(buf)
+		if win == nil then
+			vim.cmd(config.options.default.split.cmd or "vsplit")
+			local res_win = vim.api.nvim_get_current_win()
+			vim.api.nvim_win_set_buf(res_win, buf)
+		end
+	else
+		vim.cmd(config.options.default.split.cmd or "vsplit")
+		win = vim.api.nvim_get_current_win()
+		buf = vim.api.nvim_create_buf(false, true)
+		vim.api.nvim_win_set_buf(win, buf)
+		vim.api.nvim_buf_set_option(buf, "filetype", "sia")
+		vim.api.nvim_buf_set_option(buf, "syntax", "markdown")
+		vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# User", "" })
+		local split_wo = config.options.default.split.wo
+		if split_wo then
+			for key, value in pairs(split_wo) do
+				vim.api.nvim_win_set_option(win, key, value)
+			end
+		end
+	end
+	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```" .. filetype, "" })
+	vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
+	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```", "", "" })
+end
+
+function _G.__sia_execute(type)
+	local start_pos, end_pos = get_position(type)
+	local start_line = start_pos[2]
+	local end_line = end_pos[2]
+
+	local opts = {
+		start_line = start_line,
+		end_line = end_line,
+		mode = "v",
+	}
+	local prompt
+	if vim.b.sia then
+		prompt = sia.resolve_prompt({ vim.b.sia }, opts)
+	end
+
+	if prompt and not config._is_disabled(prompt) then
+		sia.main(prompt, opts)
+	else
+		vim.notify("Promt is unavailiable")
+	end
+end
+
 function sia.setup(options)
-	require("sia.config").setup(options)
+	config.setup(options)
 	vim.treesitter.language.register("markdown", "sia")
+	vim.api.nvim_set_keymap(
+		"n",
+		"<Plug>(sia-append)",
+		":set opfunc=v:lua.__sia_add_context<CR>g@",
+		{ noremap = true, silent = true }
+	)
+	vim.api.nvim_set_keymap(
+		"x",
+		"<Plug>(sia-append)",
+		":<C-U>lua __sia_add_context(vim.fn.visualmode())<CR>",
+		{ noremap = true, silent = true }
+	)
+	vim.api.nvim_set_keymap(
+		"n",
+		"<Plug>(sia-execute)",
+		":set opfunc=v:lua.__sia_execute<CR>g@",
+		{ noremap = true, silent = true }
+	)
+	vim.api.nvim_set_keymap(
+		"x",
+		"<Plug>(sia-execute)",
+		":<C-U>lua __sia_execute(vim.fn.visualmode())<CR>",
+		{ noremap = true, silent = true }
+	)
 end
 
 --- Replaces string prompts with their corresponding named prompt tables.
@@ -409,29 +526,7 @@ function sia.main(prompt, opts)
 		end
 
 		local res_win
-		local res_buf
-		local function open_and_visible_sia_buffer()
-			local buffers = vim.api.nvim_list_bufs()
-			for _, buf in ipairs(buffers) do
-				if vim.api.nvim_buf_is_loaded(buf) then
-					local ft = vim.api.nvim_buf_get_option(buf, "filetype")
-					if ft == "sia" then
-						return buf
-					end
-				end
-			end
-			return nil -- No visible buffer with ft=sia found
-		end
-		local function get_window_for_buffer(buf)
-			local windows = vim.api.nvim_tabpage_list_wins(0) -- Get windows in current tab
-			for _, win in ipairs(windows) do
-				if vim.api.nvim_win_get_buf(win) == buf then
-					return win -- Return the window associated with the buffer
-				end
-			end
-			return nil -- No window associated with the buffer found
-		end
-		res_buf = open_and_visible_sia_buffer()
+		local res_buf = existing_sia_buffer()
 		if prompt.split and prompt.split.reuse and res_buf then
 			res_win = get_window_for_buffer(res_buf)
 			if not res_win then
