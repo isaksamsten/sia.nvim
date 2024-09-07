@@ -77,6 +77,11 @@ function _G.__sia_execute(type)
 	local start_pos, end_pos = get_position(type)
 	local start_line = start_pos[2]
 	local end_line = end_pos[2]
+	if start_line == 0 or end_line == 0 then
+		vim.notify("Empty selection")
+		_G.__sia_execute_prompt = nil -- reset
+		return
+	end
 
 	local opts = {
 		start_line = start_line,
@@ -84,15 +89,29 @@ function _G.__sia_execute(type)
 		mode = "v",
 	}
 	local prompt
-	if vim.b.sia then
+	if _G.__sia_execute_prompt and vim.b.sia then
 		prompt = sia.resolve_prompt({ vim.b.sia }, opts)
+	elseif _G.__sia_execute_prompt then
+		prompt = sia.resolve_prompt({ _G.__sia_execute_prompt }, opts)
 	end
+	_G.__sia_execute_prompt = nil -- reset
 
 	if prompt and not config._is_disabled(prompt) then
 		sia.main(prompt, opts)
 	else
-		vim.notify("Promt is unavailiable")
+		vim.notify("Prompt is unavailable")
 	end
+end
+
+function sia.execute_op_with_prompt(prompt)
+	_G.__sia_execute_prompt = prompt
+	vim.cmd("set opfunc=v:lua.__sia_execute")
+	return "g@"
+end
+
+function sia.execute_visual_with_prompt(prompt, type)
+	_G.__sia_execute_prompt = prompt
+	_G.__sia_execute(type)
 end
 
 function sia.setup(options)
@@ -122,6 +141,22 @@ function sia.setup(options)
 		":<C-U>lua __sia_execute(vim.fn.visualmode())<CR>",
 		{ noremap = true, silent = true }
 	)
+
+	for prompt, _ in pairs(config.options.prompts) do
+		print(prompt)
+		vim.api.nvim_set_keymap(
+			"n",
+			"<Plug>(sia-execute-" .. prompt .. ")",
+			'v:lua.require("sia").execute_op_with_prompt("/' .. prompt .. '")',
+			{ noremap = true, silent = true, expr = true }
+		)
+		vim.api.nvim_set_keymap(
+			"x",
+			"<Plug>(sia-execute-" .. prompt .. ")",
+			":<C-U>lua require('sia').execute_visual_with_prompt('/" .. prompt .. "', vim.fn.visualmode())<CR>",
+			{ noremap = true, silent = true }
+		)
+	end
 end
 
 --- Replaces string prompts with their corresponding named prompt tables.
@@ -254,7 +289,7 @@ end
 ---
 --- @param prompts A table containing prompts, where each prompt is expected to
 --- have a 'role' and 'content' field.
---- @return A table containing lines of text extracted from user prompts.
+--- @return table table containing lines of text extracted from user prompts.
 --- Each line corresponds to a line in the content of the user prompts.
 local function collect_user_prompts(prompts)
 	local lines = {}
@@ -273,9 +308,9 @@ end
 ---
 --- @param res_buf number The buffer number where the chat content will be appended.
 --- @param winnr number The window number where the buffer is displayed.
---- @param prompt string The initial prompt or message to start the chat.
+--- @param prompt table The initial prompt or message to start the chat.
 ---
---- @return table A table containing functions to handle the start, progress, and completion of the job.
+--- @return table table containing functions to handle the start, progress, and completion of the job.
 ---  - table.on_start function A function to be called when the job starts.
 ---  - table.on_progress function A function to be called with content updates during the job's progress.
 ---  - table.on_complete function A function to be called when the job is complete.
@@ -292,7 +327,7 @@ local function chat_strategy(res_buf, winnr, prompt)
 			end
 		end,
 		on_progress = function(content)
-			if vim.api.nvim_buf_is_valid(res_buf) then
+			if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
 				if buf_append == nil then
 					local line_count = vim.api.nvim_buf_line_count(res_buf)
 					vim.api.nvim_buf_set_lines(res_buf, line_count - 1, line_count, false, { "# User", "" })
@@ -308,7 +343,7 @@ local function chat_strategy(res_buf, winnr, prompt)
 			end
 		end,
 		on_complete = function()
-			if vim.api.nvim_buf_is_valid(res_buf) then
+			if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
 				vim.api.nvim_buf_set_lines(res_buf, -1, -1, false, { "", "" })
 				local line_count = vim.api.nvim_buf_line_count(res_buf)
 
@@ -413,7 +448,7 @@ function sia.main(prompt, opts)
 		local buf_append = nil
 		strategy = {
 			on_progress = function(content)
-				if vim.api.nvim_buf_is_valid(req_buf) then
+				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
 					-- Join all changes to simplify undo
 					if buf_append then
 						vim.api.nvim_buf_call(req_buf, function()
@@ -429,7 +464,7 @@ function sia.main(prompt, opts)
 			end,
 
 			on_start = function(job)
-				if vim.api.nvim_buf_is_valid(req_buf) then
+				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
 					if placement and placement == "below" then
 						vim.api.nvim_buf_set_lines(req_buf, current_line, current_line, false, { "" })
 						current_line = current_line + 1
@@ -486,7 +521,7 @@ function sia.main(prompt, opts)
 		local buf_append = BufAppend:new(res_buf, opts.start_line - 1, 0)
 		strategy = {
 			on_complete = function()
-				if vim.api.nvim_buf_is_valid(res_buf) then
+				if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
 					-- Add line after the response
 					vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
 
@@ -501,7 +536,7 @@ function sia.main(prompt, opts)
 				end
 			end,
 			on_progress = function(content)
-				if vim.api.nvim_buf_is_valid(res_buf) then
+				if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
 					buf_append:append_to_buffer(content)
 					if vim.api.nvim_win_is_valid(res_win) then
 						vim.api.nvim_win_set_cursor(res_win, { buf_append.line + 1, buf_append.col })
@@ -556,7 +591,7 @@ function sia.main(prompt, opts)
 		return
 	end
 
-	if vim.api.nvim_buf_is_valid(req_buf) then
+	if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
 		local context, context_suffix
 		-- If the user has given a range or a context get the context delineated by
 		-- the range or the context

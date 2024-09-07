@@ -314,14 +314,24 @@ We can also bind visual and operator mode bindings to
 
 ```lua
 keys = {
-  { "ga", mode = { "n", "x" }, "<Plug>(sia-append)" },
-  { "gx", mode = { "n", "x" }, "<Plug>(sia-execute)" },
+  { "gza", mode = { "n", "x" }, "<Plug>(sia-append)" },
+  { "gzz", mode = { "n", "x" }, "<Plug>(sia-execute)" },
 }
 ```
 
-Then we can send the current paragraph to the default prompt with `gxip` or
+Then we can send the current paragraph to the default prompt with `gzzip` or
 append the current method (assuming `treesitter-textobjects`) to the ongoing
-chat with `gaim`.
+chat with `gzaim`.
+
+Sia also creates Plug bindings for all promps under
+`<Plug>(sia-execute-<PROMPT>)`, e.g., `<Plug>(sia-execute-explain)` for the
+default prompt `/explain`.
+
+```lua
+keys = {
+  { "gze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
+}
+```
 
 ![](assets/demo.webp)
 
