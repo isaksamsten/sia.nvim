@@ -143,7 +143,6 @@ function sia.setup(options)
 	)
 
 	for prompt, _ in pairs(config.options.prompts) do
-		print(prompt)
 		vim.api.nvim_set_keymap(
 			"n",
 			"<Plug>(sia-execute-" .. prompt .. ")",
