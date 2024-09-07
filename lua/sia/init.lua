@@ -68,6 +68,7 @@ function _G.__sia_add_context(type)
 			end
 		end
 	end
+	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "# User", "" })
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```" .. filetype, "" })
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```", "", "" })
