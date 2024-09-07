@@ -89,7 +89,7 @@ function _G.__sia_execute(type)
 		mode = "v",
 	}
 	local prompt
-	if _G.__sia_execute_prompt and vim.b.sia then
+	if _G.__sia_execute_prompt == nil and vim.b.sia then
 		prompt = sia.resolve_prompt({ vim.b.sia }, opts)
 	elseif _G.__sia_execute_prompt then
 		prompt = sia.resolve_prompt({ _G.__sia_execute_prompt }, opts)
