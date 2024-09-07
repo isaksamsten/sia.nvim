@@ -79,7 +79,7 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 			placement = "cursor",
 		},
 		mode_prompt = {
-			split = {},
+			split = { { role = "user", content = "{{context}}" } },
 			chat = {
 				{
 					role = "system",
