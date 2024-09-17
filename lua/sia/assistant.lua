@@ -4,21 +4,19 @@ local assistant = {}
 --- Encodes the given prompt into a JSON string.
 ---
 --- @param prompt table: A table containing the details of the prompt.
----  - model string: (Optional) The model to use. Defaults to the configured default model.
----  - temperature number: (Optional) The temperature setting. Defaults to the configured default temperature.
----  - prompt table: The messages to be included in the prompt.
+--- @param stream boolean|nil: stream the response or not
 --- @return string prompt A JSON-encoded string representing the prompt.
-local function encode(prompt)
-	local json = vim.json.encode({
+local function encode(prompt, stream)
+	local data = {
 		model = prompt.model or config.options.default.model,
 		temperature = prompt.temperature or config.options.default.temperature,
-		stream = true,
-		stream_options = {
-			include_usage = true,
-		},
 		messages = prompt.prompt,
-	})
-	return json
+	}
+	if stream == nil or stream == true then
+		data.stream = true
+		data.stream_options = { include_usage = true }
+	end
+	return vim.json.encode(data)
 end
 
 local function command(req)
@@ -35,8 +33,8 @@ end
 
 --- Decodes a JSON-encoded stream and extracts specific information.
 ---
---- @param data The JSON-encoded string to decode. It should be a non-empty string.
---- @return A table containing extracted information. The table may contain the
+--- @param data string The JSON-encoded string to decode. It should be a non-empty string.
+--- @return table response containing extracted information. The table may contain the
 --- keys 'usage' and 'content' if they are present in the decoded JSON.
 local function decode_stream(data)
 	local output = {}
@@ -61,9 +59,9 @@ end
 
 --- Executes a query and handles its progress and completion through callbacks.
 ---
---- @param prompt string: The query prompt to be sent.
+--- @param prompt table: The query prompt to be sent.
 --- @param on_start function: Callback function to be executed when the query starts. Receives the job ID as an argument.
---- @param on_progress: Callback function to be executed when there's progress in the query. Receives the content of the response as an argument.
+--- @param on_progress function: Callback function to be executed when there's progress in the query. Receives the content of the response as an argument.
 --- @param on_complete function: Callback function to be executed when the query completes.
 --- @return nil: This function does not return a value.
 function assistant.query(prompt, on_start, on_progress, on_complete)
@@ -105,6 +103,28 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 	end
 
 	vim.fn.jobstart(command(encode(prompt)), {
+		clear_env = true,
+		env = { OPENAI_API_KEY = os.getenv(config.options.openai_api_key) },
+		on_stdout = on_stdout,
+		on_exit = on_exit,
+	})
+end
+
+function assistant.simple_query(query, on_content)
+	local on_stdout = function(_, data, _)
+		if data and data ~= nil then
+			data = table.concat(data, " ")
+			if data ~= "" then
+				local ok, json = pcall(vim.json.decode, data, { luanil = { object = true } })
+				if ok and json and json.choices and #json.choices > 0 then
+					on_content(json.choices[1].message.content)
+				end
+			end
+		end
+	end
+	local on_exit = function() end
+	local prompt = { prompt = query }
+	vim.fn.jobstart(command(encode(prompt, false)), {
 		clear_env = true,
 		env = { OPENAI_API_KEY = os.getenv(config.options.openai_api_key) },
 		on_stdout = on_stdout,

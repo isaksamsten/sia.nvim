@@ -71,6 +71,7 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 		split = {
 			cmd = "vsplit",
 			wo = { wrap = true },
+			reuse = true,
 		},
 		diff = {
 			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
