@@ -30,7 +30,7 @@ local function attach_keybinding(bufnr, opts)
 	vim.keymap.set("n", "gr", function()
 		local lines = vim.api.nvim_buf_get_lines(bufnr, opts.start_block, opts.end_block - 1, false)
 		local source_line_count = #lines
-		local end_range = math.max(opts.end_range, opts.start_range + source_line_count)
+		local end_range = math.min(opts.end_range, opts.start_range + source_line_count)
 		vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, end_range, false, lines)
 		flash_highlight(
 			opts.buf,
