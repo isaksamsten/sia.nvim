@@ -22,7 +22,6 @@ local function flash_highlight(bufnr, start_line, end_line, timeout, hl_group)
 	)
 end
 
--- Example usage: flash highlight from line 10 to 20
 local code_blocks = {}
 
 local function attach_keybinding(bufnr, opts)
@@ -63,16 +62,6 @@ function M.check_if_in_code_block(bufnr)
 		end
 	end
 	remove_keybinding(bufnr)
-	-- local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
-	-- local orig_buf, start_range, end_range = string.match(line, "^%s*```.+%s+(%d+)%s+range:(%d+),(%d+)")
-	-- if orig_buf and start_range and end_range then
-	-- 	attach_keybinding(
-	-- 		bufnr,
-	-- 		{ start_row = row, buf = tonumber(orig_buf), range = { tonumber(start_range), tonumber(end_range) } }
-	-- 	)
-	-- else
-	-- 	remove_keybinding(bufnr)
-	-- end
 end
 
 function M.detect_code_blocks(buf)

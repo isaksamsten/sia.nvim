@@ -116,6 +116,7 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
 - The annotation should never appear on the line **after** the filetype marker.
 - **Always preserve** indentation in the code.
+- **Never output numbered lines**
 
 For example, if `[buffer]=2`, the format should appear as follows:
 
@@ -191,6 +192,7 @@ Double-check the format to ensure it is followed exactly in all code responses. 
 - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
 - The annotation should never appear on the line **after** the filetype marker.
 - **Always preserve** indentation in the code.
+- **Never output numbered lines**
 
 For example, if `[buffer]=2`, the format should appear as follows:
 
@@ -198,8 +200,9 @@ For example, if `[buffer]=2`, the format should appear as follows:
 a = 10
 b = 11
 c = 20
+```
 
-        ]],
+Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
 				},
 				{
 					role = "user",
