@@ -41,13 +41,12 @@ When given a task:
 a text editor and that your changes will be inserted verbatim into the editor.
 The editor identifies the file as written in {{filetype}}.
 
-If possible, make sure that you only output the relevant and requested
-information. Refrain from explaining your reasoning, unless the user requests
-it, or adding unrelated text to the output. If the context pertains to code,
-identify the programming language and do not add any additional text or
-markdown formatting. Adding code fences or markdown code blocks is an error. If
-explanations are needed add them as relevant comments using correct syntax for
-the identified language.]],
+1. If possible, make sure that you only output the relevant and requested information.
+2. Refrain from explaining your reasoning, unless the user requests it, or adding unrelated text to the output.
+3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
+4. Adding code fences or markdown code blocks is an error.
+5. If explanations are needed add them as relevant comments using correct syntax for the identified language.
+6. **Always preserve** indentation for code. ]],
 		},
 		diff_system = {
 			role = "system",
@@ -56,10 +55,13 @@ text editor and your changes will be diffed against an optional context
 provided by the user. The editor identifies the file as written in
 {{filetype}}.
 
-If possible, make sure that you only output the relevant and requested changes.
-Refrain from explaining your reasoning or adding additional unrelated text
-to the output. If the context pertains to code, identify the the programming
-language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
+1. If possible, make sure that you only output the relevant and requested changes.
+2. Refrain from explaining your reasoning or adding additional unrelated text to the output.
+3. If the context pertains to code, identify the the programming
+language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
+4. Adding code fences or markdown code blocks is an error.
+5. **Always preserve** indentation for code.
+]],
 		},
 	},
 	default = {
@@ -71,13 +73,16 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 		split = {
 			cmd = "vsplit",
 			wo = { wrap = true },
-			reuse = true,
 		},
 		diff = {
 			wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
 		},
 		insert = {
 			placement = "cursor",
+		},
+		replace = {
+			highlight = "Visual",
+			timeout = 300,
 		},
 		mode_prompt = {
 			split = { { role = "user", content = "{{context}}" } },
@@ -101,17 +106,127 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!]],
 		},
 	},
 	prompts = {
-		ask = {
+		diagnostic = {
 			prompt = {
-				{ role = "user", content = "```{{filetype}}\n{{context}}\n```" },
+				{
+					role = "system",
+					content = [[You are an expert coder and helpful assistant specializing in code diagnostics, including debugging warning and error messages. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
+
+- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+- The annotation should never appear on the line **after** the filetype marker.
+- **Always preserve** indentation in the code.
+
+For example, if `[buffer]=2`, the format should appear as follows:
+
+```lua 2 range:1,3
+a = 10
+b = 11
+c = 20
+```
+
+Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
+				},
+				{
+					role = "user",
+					content = function(opts)
+						local diagnostics =
+							require("sia.context").get_diagnostics(opts.start_line, opts.end_line, opts.buf)
+						local concatenated_diagnostics = ""
+						for i, diagnostic in ipairs(diagnostics) do
+							concatenated_diagnostics = concatenated_diagnostics
+								.. i
+								.. ". Issue "
+								.. i
+								.. "\n  - Location: Line "
+								.. diagnostic.line_number
+								.. "\n  - Severity: "
+								.. diagnostic.severity
+								.. "\n  - Message: "
+								.. diagnostic.message
+								.. "\n"
+						end
+						return string.format(
+							[[The programming language is %s. The buffer is: %s. This is a list of the diagnostic messages:
+%s
+]],
+							opts.ft,
+							opts.buf,
+							concatenated_diagnostics
+						)
+					end,
+				},
+				{
+					role = "user",
+					content = function(opts)
+						local code = require("sia.context").get_code(
+							opts.start_line,
+							opts.end_line,
+							{ bufnr = opts.buf, show_line_numbers = true }
+						)
+						return string.format(
+							[[This is the code, for context:
+```%s
+%s
+```
+]],
+							opts.ft,
+							code
+						)
+					end,
+				},
 			},
 			mode = "split",
-			split = {
-				reuse = true,
+			range = true,
+			model = "gpt-4o",
+			use_mode_prompt = false,
+		},
+		ask = {
+			prompt = {
+				{
+					role = "system",
+					content = [[You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
+
+- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+- The annotation should never appear on the line **after** the filetype marker.
+- **Always preserve** indentation in the code.
+
+For example, if `[buffer]=2`, the format should appear as follows:
+
+```lua 2 range:1,3
+a = 10
+b = 11
+c = 20
+
+        ]],
+				},
+				{
+					role = "user",
+					content = function(opts)
+						local code = require("sia.context").get_code(
+							opts.start_line,
+							opts.end_line,
+							{ bufnr = opts.buf, show_line_numbers = true }
+						)
+						return string.format(
+							[[This is the context provided in buffer %s:
+```%s
+%s
+```
+]],
+							opts.buf,
+							opts.ft,
+							code
+						)
+					end,
+				},
 			},
+			mode = "split",
 			temperature = 0.5,
 			range = true,
 			input = "require",
+			use_mode_prompt = false,
 		},
 		commit = {
 			prompt = {
@@ -185,9 +300,6 @@ crafting the commit message:
 			mode = "split",
 			temperature = 0.5,
 			range = true,
-			split = {
-				reuse = true,
-			},
 		},
 		unittest = {
 			prompt = {
@@ -242,6 +354,7 @@ crafting the commit message:
 4. Avoid including any code snippets, including function signatures or suggested implementations.
 5. Never under any circumstance include markdown code fences surrounding the documentation. Failure to adhere strictly to this format will result in an incorrect response.
 6. If the user request a specific format, follow that format but remember to strictly adhere to the rules! Non compliance is an error!
+7. If the user gives you a class, struct etc, only provide documentation for the class, struct and NOT for the functions/methods. Non compliance is an error!
 
 **Important**: Double-check that your response strictly follows the language's
 documentation style and contains only the requested documentation text. If any
@@ -249,12 +362,12 @@ code is included, the response is incorrect.]],
 				},
 				{
 					role = "user",
-					content = "Here is the function:\n```{{filetype}}\n{{context}}\n```",
+					content = "Here is the function/class/method/struct:\n```{{filetype}}\n{{context}}\n```",
 				},
 			},
 			prefix = 2,
 			suffix = 0,
-			context = require("sia.context").treesitter("@function.outer"),
+			context = require("sia.context").treesitter({ "@function.outer", "@class.outer" }),
 			mode = "insert",
 			insert = {
 				placement = function()

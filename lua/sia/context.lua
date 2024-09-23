@@ -15,7 +15,20 @@ function M.treesitter(query)
 		return false, "Couldn't capture " .. query
 	end
 
-	return get_textobject_under_cursor
+	if type(query) == "string" then
+		return get_textobject_under_cursor
+	else
+		local function get_first_textobject_under_cursor(bufnr, opts)
+			for _, q in ipairs(query) do
+				local ok, ret = M.treesitter(q)(bufnr, opts)
+				if ok then
+					return ok, ret
+				end
+			end
+			return false, "Couldn't capture group"
+		end
+		return get_first_textobject_under_cursor
+	end
 end
 
 function M.paragraph(bufnr, opts)
@@ -29,4 +42,48 @@ function M.paragraph(bufnr, opts)
 	end
 end
 
+function M.get_code(start_line, end_line, opts)
+	local lines = {}
+	for line_num = start_line, end_line do
+		local line
+		if opts and opts.show_line_numbers then
+			line = string.format("%d: %s", line_num, vim.fn.getbufoneline(opts.bufnr or 0, line_num))
+		else
+			line = string.format("%s", vim.fn.getbufoneline(opts.bufnr or 0, line_num))
+		end
+		table.insert(lines, line)
+	end
+
+	return table.concat(lines, "\n")
+end
+
+function M.get_diagnostics(start_line, end_line, bufnr, opts)
+	if end_line == nil then
+		end_line = start_line
+	end
+
+	opts = opts or {}
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+	local diagnostics = {}
+
+	for line_num = start_line, end_line do
+		local line_diagnostics = vim.diagnostic.get(bufnr, {
+			lnum = line_num - 1,
+			severity = { min = opts.min_severity or vim.diagnostic.severity.HINT },
+		})
+
+		if next(line_diagnostics) ~= nil then
+			for _, diagnostic in ipairs(line_diagnostics) do
+				table.insert(diagnostics, {
+					line_number = line_num,
+					message = diagnostic.message,
+					severity = vim.diagnostic.severity[diagnostic.severity],
+				})
+			end
+		end
+	end
+
+	return diagnostics
+end
 return M

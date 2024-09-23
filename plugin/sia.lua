@@ -45,6 +45,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 	end
 
 	local is_range = opts.mode == "v"
+	-- TODO: fixme
 	local is_range_valid = prompt.range == nil or (prompt.range == is_range and opts.force_insert ~= is_range)
 	if config._is_disabled(prompt) or not is_range_valid then
 		vim.notify(args.fargs[1] .. " is not enabled")

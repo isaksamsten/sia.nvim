@@ -180,6 +180,26 @@ function sia.setup(options)
 			{ noremap = true, silent = true }
 		)
 	end
+
+	local augroup_id = vim.api.nvim_create_augroup("SiaDetectCodeBlock", { clear = true })
+
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		group = augroup_id,
+		pattern = "*",
+		callback = function(args)
+			if vim.bo.filetype == "sia" then
+				require("sia.blocks").check_if_in_code_block(args.buf)
+			end
+		end,
+	})
+	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+		pattern = "*",
+		callback = function(args)
+			if vim.bo[args.buf].filetype == "sia" then
+				require("sia.blocks").remove_code_blocks(args.buf)
+			end
+		end,
+	})
 end
 
 --- Replaces string prompts with their corresponding named prompt tables.
@@ -342,6 +362,13 @@ end
 ---  - table.on_progress function A function to be called with content updates during the job's progress.
 ---  - table.on_complete function A function to be called when the job is complete.
 local function chat_strategy(buf, winnr, prompt)
+	if prompt.use_mode_prompt == false then
+		local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, buf, "sia_system_prompt")
+		if not ok then
+			system_prompt = prompt.prompt[1]
+			vim.api.nvim_buf_set_var(buf, "sia_system_prompt", system_prompt)
+		end
+	end
 	local buf_append = nil
 	return {
 		on_start = function(job)
@@ -359,7 +386,7 @@ local function chat_strategy(buf, winnr, prompt)
 				if buf_append == nil then
 					local line_count = vim.api.nvim_buf_line_count(buf)
 					vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, { "# User", "" })
-					vim.api.nvim_buf_set_lines(buf, -1, -1, false, collect_user_prompts(prompt))
+					vim.api.nvim_buf_set_lines(buf, -1, -1, false, collect_user_prompts(prompt.prompt))
 					vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "# Assistant", "" })
 					line_count = vim.api.nvim_buf_line_count(buf)
 					buf_append = BufAppend:new(buf, line_count - 1, 0)
@@ -381,11 +408,15 @@ local function chat_strategy(buf, winnr, prompt)
 				vim.api.nvim_buf_del_keymap(buf, "n", "x")
 				vim.api.nvim_buf_set_option(buf, "modifiable", false)
 				require("sia.assistant").simple_query({
-					{ role = "system", content = "Summarize with 3 words suitable for a buffer name in neovim" },
+					{
+						role = "system",
+						content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three words. Only output the name, nothing else.",
+					},
 					{ role = "user", content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, true), "\n") },
 				}, function(content)
 					pcall(vim.api.nvim_buf_set_name, buf, "Sia: [" .. content:lower():gsub("%s+", "-") .. "]")
 				end)
+				require("sia.blocks").detect_code_blocks(buf)
 			end
 		end,
 	}
@@ -462,17 +493,22 @@ function sia.main(prompt, opts)
 	end
 
 	if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" and not opts.force_insert then
+		local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "sia_system_prompt")
+		if ok then
+			table.insert(prompt.prompt, 1, system_prompt)
+		end
 		if
-			prompt.use_mode_promt ~= false
+			not ok
+			and prompt.use_mode_prompt ~= false
 			and config.options.named_prompts
 			and config.options.named_prompts.split_system
 		then
 			table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
 		end
-		strategy = chat_strategy(req_buf, req_win, prompt.prompt)
+		strategy = chat_strategy(req_buf, req_win, prompt)
 	elseif mode == "insert" then
 		if
-			prompt.use_mode_promt ~= false
+			prompt.use_mode_prompt ~= false
 			and config.options.named_prompts
 			and config.options.named_prompts.insert_system
 		then
@@ -528,7 +564,7 @@ function sia.main(prompt, opts)
 		}
 	elseif mode == "diff" or (mode == "auto" and opts.mode == "v") then
 		if
-			prompt.use_mode_promt ~= false
+			prompt.use_mode_prompt ~= false
 			and config.options.named_prompts
 			and config.options.named_prompts.diff_system
 		then
@@ -588,34 +624,22 @@ function sia.main(prompt, opts)
 			end,
 		}
 	elseif mode == "split" or (mode == "auto" and opts.mode == "n") then
+		local res_win, res_buf = make_sia_split()
+		local split_wo = prompt.wo or config.options.default.split.wo
+		if split_wo then
+			for key, value in pairs(split_wo) do
+				vim.api.nvim_win_set_option(res_win, key, value)
+			end
+		end
+
 		if
-			prompt.use_mode_promt ~= false
+			prompt.use_mode_prompt ~= false
 			and config.options.named_prompts
-			and config.options.named_prompts.split_system -- does not exist by default
+			and config.options.named_prompts.split_system
 		then
 			table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
 		end
-
-		local res_buf, res_win = get_current_visible_sia_buffer()
-		if (config.options.default.split.reuse or (prompt.split and prompt.split.reuse)) and res_buf and res_win then
-			local history_prompt =
-				{ role = "system", content = table.concat(vim.api.nvim_buf_get_lines(res_buf, 0, -1, true), "\n") }
-			if #prompt.prompt < 2 then
-				table.insert(prompt.prompt, history_prompt)
-			else
-				table.insert(prompt.prompt, #prompt.prompt - 1, history_prompt)
-			end
-		else
-			res_win, res_buf = make_sia_split()
-			local split_wo = prompt.wo or config.options.default.split.wo
-			if split_wo then
-				for key, value in pairs(split_wo) do
-					vim.api.nvim_win_set_option(res_win, key, value)
-				end
-			end
-		end
-
-		strategy = chat_strategy(res_buf, res_win, prompt.prompt)
+		strategy = chat_strategy(res_buf, res_win, prompt)
 	else
 		vim.notify("invalid mode")
 		return
@@ -660,11 +684,14 @@ function sia.main(prompt, opts)
 			context = context,
 			context_suffix = context_suffix,
 		}
-
+		opts.buf = req_buf
+		opts.ft = filetype
+		opts.filepath = replacement.filepath
+		opts.context = context
 		local steps_to_remove = {}
 		for i, step in ipairs(prompt.prompt) do
 			if type(step.content) == "function" then
-				step.content = step.content()
+				step.content = step.content(opts)
 			end
 			step.content = step.content:gsub("{{(.-)}}", function(key)
 				return replacement[key] or key
