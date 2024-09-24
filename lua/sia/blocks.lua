@@ -24,30 +24,73 @@ end
 
 local code_blocks = {}
 
-local function attach_keybinding(bufnr, opts)
-	-- Replace
-	vim.keymap.set("n", "gr", function()
-		local lines = vim.api.nvim_buf_get_lines(bufnr, opts.start_block, opts.end_block - 1, false)
+local function select_other_buffer(current_buf, callback)
+	local other = {}
+	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+	for _, win in ipairs(tab_wins) do
+		local buf = vim.api.nvim_win_get_buf(win)
+		if buf ~= current_buf and vim.api.nvim_buf_is_loaded(buf) then
+			local name = vim.api.nvim_buf_get_name(buf)
+			if not name:match("^Sia:") then
+				table.insert(other, { buf = buf, win = win, name = name })
+			end
+		end
+	end
+	if #other == 0 then
+		return
+	elseif #other == 1 then
+		callback(other[1])
+	else
+		vim.ui.select(other, {
+			format_item = function(item)
+				return item.name
+			end,
+		}, function(choice)
+			callback(choice)
+		end)
+	end
+end
+
+local function attach_keybinding(buf, opts)
+	vim.keymap.set("n", config.default.replace.map.replace, function()
+		local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
 		local source_line_count = #lines
-		local end_range = math.min(opts.end_range, opts.start_range + source_line_count)
-		vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, end_range, false, lines)
-		flash_highlight(
-			opts.buf,
-			opts.start_range - 1,
-			opts.start_range + source_line_count - 1,
-			config.default.replace.timeout,
-			config.default.replace.highlight
-		)
-	end, { buffer = bufnr, noremap = false, silent = true })
-	vim.keymap.set("n", "gd", function() end, { buffer = bufnr, noremap = false, silent = true })
+		if opts.end_range and opts.start_range and opts.buf then
+			local end_range = math.min(opts.end_range, opts.start_range + source_line_count)
+			vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, end_range, false, lines)
+			flash_highlight(
+				opts.buf,
+				opts.start_range - 1,
+				opts.start_range + source_line_count - 1,
+				config.default.replace.timeout,
+				config.default.replace.highlight
+			)
+		else
+			select_other_buffer(buf, function(other)
+				if other then
+					local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
+					if start_range == 1 then
+						start_range = 0
+					end
+					vim.api.nvim_buf_set_lines(other.buf, start_range, start_range, false, lines)
+					flash_highlight(
+						other.buf,
+						start_range,
+						start_range + source_line_count,
+						config.default.replace.timeout,
+						config.default.replace.highlight
+					)
+				else
+					vim.notify("No destination selected")
+				end
+			end)
+		end
+	end, { buffer = buf, noremap = false, silent = true })
 end
 
 local function remove_keybinding(bufnr)
 	pcall(function()
-		vim.api.nvim_buf_del_keymap(bufnr, "n", "gr")
-	end)
-	pcall(function()
-		vim.api.nvim_buf_del_keymap(bufnr, "n", "gd")
+		vim.api.nvim_buf_del_keymap(bufnr, "n", config.default.replace.map.replace)
 	end)
 end
 
@@ -76,6 +119,10 @@ function M.detect_code_blocks(buf)
 					start_range = tonumber(start_range),
 					end_range = tonumber(end_range),
 					buf = tonumber(orig_buf),
+				}
+			elseif string.match(line, "^%s*```%w+%s*$") then
+				current_code_block = {
+					start_block = i,
 				}
 			end
 		else

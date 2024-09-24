@@ -81,8 +81,9 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 			placement = "cursor",
 		},
 		replace = {
-			highlight = "Visual",
+			highlight = "DiffAdd",
 			timeout = 300,
+			map = { replace = "gr" },
 		},
 		mode_prompt = {
 			split = { { role = "user", content = "{{context}}" } },
