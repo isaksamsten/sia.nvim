@@ -26,6 +26,8 @@ local ignore_ft = {
 	"harpoon",
 	"outline",
 	"sia",
+	"neotest-summary",
+	"neotest-output-panel",
 }
 
 local function flash_highlight(bufnr, start_line, end_line, timeout, hl_group)
