@@ -76,7 +76,13 @@ function _G.__sia_add_context(type)
 	local start_pos, end_pos = get_position(type)
 	local start_line = start_pos[2]
 	local end_line = end_pos[2]
-	local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+	local req_buf = vim.api.nvim_get_current_buf()
+	local lines = require("sia.context").get_code(
+		start_line,
+		end_line,
+		{ bufnr = req_buf, show_line_numbers = true, return_table = true }
+	)
+
 	local filetype = vim.bo.ft
 	local buf, win = get_current_visible_sia_buffer()
 	if not buf or not win then
@@ -91,7 +97,7 @@ function _G.__sia_add_context(type)
 
 	vim.api.nvim_buf_set_option(buf, "modifiable", true)
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "# User", "" })
-	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```" .. filetype, "" })
+	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```" .. filetype .. " " .. req_buf })
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
 	vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```", "", "" })
 	vim.api.nvim_buf_set_option(buf, "modifiable", false)
@@ -193,6 +199,7 @@ function sia.setup(options)
 		end,
 	})
 	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+		group = augroup_id,
 		pattern = "*",
 		callback = function(args)
 			if vim.bo[args.buf].filetype == "sia" then

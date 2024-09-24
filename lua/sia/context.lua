@@ -54,7 +54,11 @@ function M.get_code(start_line, end_line, opts)
 		table.insert(lines, line)
 	end
 
-	return table.concat(lines, "\n")
+	if opts and opts.return_table == true then
+		return lines
+	else
+		return table.concat(lines, "\n")
+	end
 end
 
 function M.get_diagnostics(start_line, end_line, bufnr, opts)

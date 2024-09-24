@@ -29,6 +29,30 @@ You must:
 - Avoid wrapping the whole response in triple backticks.
 - Only return relevant code.
 
+You should:
+- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+- The annotation should never appear on the line **after** the filetype marker.
+- **Always preserve** indentation in the code.
+- **Never output numbered lines**
+
+For example, if `[buffer]=2`, and the following context is provided:
+
+```lua
+1: a = 10
+2: b = 11
+```
+
+the format should appear as follows:
+
+```lua 2 replace-range:1,2
+a = 10
+b = 11
+c = 12
+```
+
+Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
+
 When given a task:
 1. Think step-by-step and describe your plan for what to build in pseudocode, written out in great detail.
 2. Output the code in a single code block.
@@ -113,18 +137,25 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 					role = "system",
 					content = [[You are an expert coder and helpful assistant specializing in code diagnostics, including debugging warning and error messages. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
 
-- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
 - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
 - The annotation should never appear on the line **after** the filetype marker.
 - **Always preserve** indentation in the code.
 - **Never output numbered lines**
 
-For example, if `[buffer]=2`, the format should appear as follows:
+For example, if `[buffer]=2`, and the following context is provided:
 
-```lua 2 range:1,3
+```lua
+1: a = 10
+2: b = 11
+```
+
+the format should appear as follows:
+
+```lua 2 replace-range:1,2
 a = 10
 b = 11
-c = 20
+c = 12
 ```
 
 Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
@@ -189,18 +220,25 @@ Double-check the format to ensure it is followed exactly in all code responses. 
 					role = "system",
 					content = [[You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
 
-- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
 - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
 - The annotation should never appear on the line **after** the filetype marker.
 - **Always preserve** indentation in the code.
 - **Never output numbered lines**
 
-For example, if `[buffer]=2`, the format should appear as follows:
+For example, if `[buffer]=2`, and the following context is provided:
 
-```lua 2 range:1,3
+```lua
+1: a = 10
+2: b = 11
+```
+
+the format should appear as follows:
+
+```lua 2 replace-range:1,2
 a = 10
 b = 11
-c = 20
+c = 12
 ```
 
 Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
@@ -215,10 +253,10 @@ Double-check the format to ensure it is followed exactly in all code responses. 
 						)
 						return string.format(
 							[[This is the context provided in buffer %s:
-```%s
-%s
-```
-]],
+  ```%s
+  %s
+  ```
+  ]],
 							opts.buf,
 							opts.ft,
 							code
@@ -237,19 +275,19 @@ Double-check the format to ensure it is followed exactly in all code responses. 
 				{
 					role = "system",
 					content = [[You are an AI assistant tasked with generating concise,
-informative, and context-aware git commit messages based on code
-diffs. Your goal is to provide commit messages that clearly describe
-the purpose and impact of the changes. Consider the following when
-crafting the commit message:
+  informative, and context-aware git commit messages based on code
+  diffs. Your goal is to provide commit messages that clearly describe
+  the purpose and impact of the changes. Consider the following when
+  crafting the commit message:
 
-1. **Summarize the change**: Clearly describe what was changed, added, removed,
-   or fixed.
-2. **Explain why**: If relevant, include the reason or motivation behind the
-   change.
-3. **Keep it concise**: The commit message should be brief but informative,
-   typically under 50 characters for the subject line.
-4. **Use an imperative tone**: Write the commit message as a command, e.g.,
-   "Fix typo in README," "Add unit tests for validation logic." ]],
+  1. **Summarize the change**: Clearly describe what was changed, added, removed,
+    or fixed.
+  2. **Explain why**: If relevant, include the reason or motivation behind the
+    change.
+  3. **Keep it concise**: The commit message should be brief but informative,
+    typically under 50 characters for the subject line.
+  4. **Use an imperative tone**: Write the commit message as a command, e.g.,
+    "Fix typo in README," "Add unit tests for validation logic." ]],
 				},
 				{
 					role = "user",
@@ -287,18 +325,18 @@ crafting the commit message:
 					role = "system",
 					content = [[When asked to explain code, follow these steps:
 
-1. Identify the programming language.
-2. Describe the purpose of the code and reference core concepts from the programming language.
-3. Explain each function or significant block of code, including parameters and return values.
-4. Highlight any specific functions or methods used and their roles.
-5. Provide context on how the code fits into a larger application if applicable.]],
+  1. Identify the programming language.
+  2. Describe the purpose of the code and reference core concepts from the programming language.
+  3. Explain each function or significant block of code, including parameters and return values.
+  4. Highlight any specific functions or methods used and their roles.
+  5. Provide context on how the code fits into a larger application if applicable.]],
 				},
 				{
 					role = "user",
 					content = [[Explain the following code:
-```{{filetype}}
-{{context}}
-```]],
+  ```{{filetype}}
+  {{context}}
+  ```]],
 				},
 			},
 			mode = "split",
@@ -311,33 +349,44 @@ crafting the commit message:
 					role = "system",
 					content = [[When generating unit tests, follow these steps:
 
-1. Identify the programming language.
-2. Identify the purpose of the function or module to be tested.
-3. List the edge cases and typical use cases that should be covered in the tests and share the plan with the user.
-4. Generate unit tests using an appropriate testing framework for the identified programming language.
-5. Ensure the tests cover:
-      - Normal cases
-      - Edge cases
-      - Error handling (if applicable)
-6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
-7. Add a markdown heading before the tests code fences with a suggested file name that is based on
-   best practices for the language in question and the user provided filename
-   for where the original function reside.]],
+  1. Identify the programming language.
+  2. Identify the purpose of the function or module to be tested.
+  3. List the edge cases and typical use cases that should be covered in the tests and share the plan with the user.
+  4. Generate unit tests using an appropriate testing framework for the identified programming language.
+  5. Ensure the tests cover:
+        - Normal cases
+        - Edge cases
+        - Error handling (if applicable)
+  6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.]],
 				},
 				{
 					role = "user",
-					content = [[Generate tests for the following code found in {{filepath}}:
-```{{filetype}}
-{{context}}
-```]],
+					content = function(opts)
+						local code = require("sia.context").get_code(
+							opts.start_line,
+							opts.end_line,
+							{ bufnr = opts.buf, show_line_numbers = false }
+						)
+						return string.format(
+							[[This is the context provided in buffer %s:
+  ```%s
+  %s
+  ```
+  ]],
+							opts.buf,
+							opts.ft,
+							code
+						)
+					end,
 				},
 			},
 			context = require("sia.context").treesitter("@function.outer"),
+			use_mode_prompt = false,
 			mode = "split",
 			split = {
 				cmd = "vsplit",
 			},
-			insert = { placement = { "below", "end" } },
+			range = true,
 			wo = {},
 			temperature = 0.5,
 		},

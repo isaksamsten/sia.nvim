@@ -56,8 +56,7 @@ local function attach_keybinding(buf, opts)
 		local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
 		local source_line_count = #lines
 		if opts.end_range and opts.start_range and opts.buf then
-			local end_range = math.min(opts.end_range, opts.start_range + source_line_count)
-			vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, end_range, false, lines)
+			vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, opts.end_range, false, lines)
 			flash_highlight(
 				opts.buf,
 				opts.start_range - 1,
@@ -108,11 +107,13 @@ function M.check_if_in_code_block(bufnr)
 end
 
 function M.detect_code_blocks(buf)
+	M.remove_code_blocks(buf)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local current_code_block = nil
 	for i, line in ipairs(lines) do
 		if current_code_block == nil then
-			local orig_buf, start_range, end_range = string.match(line, "^%s*```.+%s+(%d+)%s+range:(%d+),(%d+)")
+			local orig_buf, start_range, end_range =
+				string.match(line, "^%s*```.+%s+(%d+)%s+replace%-range:(%d+),(%d+)")
 			if orig_buf and start_range and end_range then
 				current_code_block = {
 					start_block = i,
