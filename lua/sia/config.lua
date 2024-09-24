@@ -107,7 +107,7 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 		replace = {
 			highlight = "DiffAdd",
 			timeout = 300,
-			map = { replace = "gr" },
+			map = { replace = "gr", insert = "ga" },
 		},
 		mode_prompt = {
 			split = { { role = "user", content = "{{context}}" } },

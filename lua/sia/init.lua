@@ -1,16 +1,7 @@
 local config = require("sia.config")
+local utils = require("sia.utils")
 
 local sia = {}
-
-local function get_window_for_buffer(buf)
-	local windows = vim.api.nvim_tabpage_list_wins(0)
-	for _, win in ipairs(windows) do
-		if vim.api.nvim_win_get_buf(win) == buf then
-			return win
-		end
-	end
-	return nil
-end
 
 local function get_current_visible_sia_buffer()
 	local buffers = vim.api.nvim_list_bufs()
@@ -21,7 +12,7 @@ local function get_current_visible_sia_buffer()
 		if vim.api.nvim_buf_is_loaded(current_buf) then
 			local ft = vim.api.nvim_buf_get_option(current_buf, "filetype")
 			if ft == "sia" then
-				win = get_window_for_buffer(current_buf)
+				win = utils.get_window_for_buffer(current_buf)
 				buf = current_buf
 				count = count + 1
 			end
@@ -32,20 +23,6 @@ local function get_current_visible_sia_buffer()
 	else
 		return nil, nil
 	end
-end
-
-local function count_sia_buffers()
-	local count = 0
-	local buffers = vim.api.nvim_list_bufs()
-	for _, buf in ipairs(buffers) do
-		if vim.api.nvim_buf_is_loaded(buf) then
-			local ft = vim.api.nvim_buf_get_option(buf, "filetype")
-			if ft == "sia" then
-				count = count + 1
-			end
-		end
-	end
-	return count
 end
 
 local function get_position(type)
@@ -68,7 +45,7 @@ local function make_sia_split(prompt)
 	vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
 	vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
 	vim.api.nvim_buf_set_option(res_buf, "buftype", "nowrite")
-	vim.api.nvim_buf_set_name(res_buf, "Sia: " .. count_sia_buffers())
+	vim.api.nvim_buf_set_name(res_buf, "*sia*")
 	return res_win, res_buf
 end
 
@@ -417,11 +394,11 @@ local function chat_strategy(buf, winnr, prompt)
 				require("sia.assistant").simple_query({
 					{
 						role = "system",
-						content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three words. Only output the name, nothing else.",
+						content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three to five words. Only output the name, nothing else.",
 					},
 					{ role = "user", content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, true), "\n") },
 				}, function(content)
-					pcall(vim.api.nvim_buf_set_name, buf, "Sia: [" .. content:lower():gsub("%s+", "-") .. "]")
+					pcall(vim.api.nvim_buf_set_name, buf, "*sia* " .. content:lower():gsub("%s+", "-"))
 				end)
 				require("sia.blocks").detect_code_blocks(buf)
 			end
