@@ -115,7 +115,7 @@ local function attach_keybinding(buf, opts)
 		end
 	end
 
-	vim.keymap.set("n", config.default.replace.map.insert, function()
+	vim.keymap.set("n", config.default.replace.map.insert or "ga", function()
 		local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
 		local source_line_count = #lines
 		if opts.buf and vim.api.nvim_buf_is_loaded(opts.buf) then

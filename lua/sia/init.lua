@@ -528,9 +528,13 @@ function sia.main(prompt, opts)
 
 			on_start = function(job)
 				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-					print(vim.inspect(opts))
 					vim.api.nvim_buf_set_lines(req_buf, opts.start_line - 1, opts.end_line, false, { "" })
 					vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
+						callback = function()
+							vim.fn.jobstop(job)
+						end,
+					})
+					vim.api.nvim_buf_set_keymap(req_buf, "i", "<c-x>", "", {
 						callback = function()
 							vim.fn.jobstop(job)
 						end,
@@ -540,6 +544,7 @@ function sia.main(prompt, opts)
 			on_complete = function()
 				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
 					vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+					vim.api.nvim_buf_del_keymap(req_buf, "i", "<c-x>")
 					if prompt.cursor and prompt.cursor == "start" then
 						vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
 					elseif buf_append then
