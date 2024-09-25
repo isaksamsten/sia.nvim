@@ -1,12 +1,9 @@
-# Sia
+<p align="center">
+<img src="https://raw.githubusercontent.com/isaksamsten/sia.nvim/refs/heads/main/assets/logo.png?raw=true" alt="Logo" width="200px">
+</p>
+<h1 align="center">sia.nvim</h1>
 
-![](assets/logo.png)
-
-An LLM assistant for Neovim with support for
-
-- [Neovim builtin diff tool](https://neovim.io/doc/user/diff.html).
-- Simple chat
-- Simple insert
+An LLM assistant for Neovim.
 
 ## 💡 Idea
 
@@ -23,9 +20,35 @@ high-quality written content more effectively.
 
 ## ✨ Features
 
-- Prompt selected line into LLM and highlight the differences with the original text.
-- Complete code, sentence
-- Chat with an LLM
+Prompt selected line into LLM and highlight the differences with the original text.
+
+
+https://github.com/user-attachments/assets/559fbaa8-e5fd-4bc1-a6bf-54e62632dc5d
+
+
+
+https://github.com/user-attachments/assets/16718940-272a-4c08-bc0a-1562d6d031c5
+
+
+Ask questions about code
+
+
+https://github.com/user-attachments/assets/cd187b9e-1188-48ba-b63d-d5faff674a39
+
+
+Help with diagnostics
+
+
+https://github.com/user-attachments/assets/1729b076-3789-46e7-8b4e-e656207b4c56
+
+
+Explain code (here with operator pending mode binding to explain the current method).
+
+
+https://github.com/user-attachments/assets/a3a8b830-1f1b-4d4b-aa31-c2292e26085e
+
+(Note that `sia.nvim` automatically tries to give chat buffers a relevant name)
+
 
 ## ⚡️ Requirements
 
