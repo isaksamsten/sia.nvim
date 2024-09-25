@@ -31,32 +31,6 @@ local function command(req)
 	return "curl " .. table.concat(args, " ")
 end
 
---- Decodes a JSON-encoded stream and extracts specific information.
----
---- @param data string The JSON-encoded string to decode. It should be a non-empty string.
---- @return table response containing extracted information. The table may contain the
---- keys 'usage' and 'content' if they are present in the decoded JSON.
-local function decode_stream(data)
-	local output = {}
-	if data and data ~= "" then
-		local data_mod = data:sub(7)
-		local ok, json = pcall(vim.json.decode, data_mod, { luanil = { object = true } })
-		if ok then
-			if json.usage then
-				output.usage = json.usage
-			end
-
-			if json.choices and #json.choices > 0 then
-				local delta = json.choices[1].delta
-				if delta.content then
-					output.content = delta.content
-				end
-			end
-		end
-	end
-	return output
-end
-
 --- Executes a query and handles its progress and completion through callbacks.
 ---
 --- @param prompt table: The query prompt to be sent.
@@ -66,6 +40,7 @@ end
 --- @return nil: This function does not return a value.
 function assistant.query(prompt, on_start, on_progress, on_complete)
 	local first_on_stdout = true
+	local incomplete = nil
 	local function on_stdout(job_id, responses, _)
 		if first_on_stdout then
 			on_start(job_id)
@@ -76,20 +51,35 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
 			})
 		end
 
-		for _, response in pairs(responses) do
-			local structured_response = decode_stream(response)
-			if structured_response.content then
-				on_progress(structured_response.content)
-				vim.api.nvim_exec_autocmds("User", {
-					pattern = "SiaProgress",
-				})
-			end
-
-			if structured_response.usage then
-				vim.api.nvim_exec_autocmds("User", {
-					pattern = "SiaUsageReport",
-					data = structured_response.usage,
-				})
+		for _, resp in pairs(responses) do
+			if resp and resp ~= "" then
+				if incomplete then
+					resp = incomplete .. resp
+					incomplete = nil
+				end
+				resp = string.match(resp, "^data: (.+)$")
+				if resp and resp ~= "[DONE]" then
+					local status, obj = pcall(vim.json.decode, resp, { luanil = { object = true } })
+					if not status then
+						incomplete = "data: " .. resp
+					else
+						if obj.usage then
+							vim.api.nvim_exec_autocmds("User", {
+								pattern = "SiaUsageReport",
+								data = obj.usage,
+							})
+						end
+						if obj.choices and #obj.choices > 0 then
+							local delta = obj.choices[1].delta
+							if delta and delta.content then
+								on_progress(delta.content)
+								vim.api.nvim_exec_autocmds("User", {
+									pattern = "SiaProgress",
+								})
+							end
+						end
+					end
+				end
 			end
 		end
 	end
