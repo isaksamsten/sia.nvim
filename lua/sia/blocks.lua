@@ -85,7 +85,7 @@ end
 
 local function attach_keybinding(buf, opts)
 	vim.api.nvim_buf_clear_namespace(buf, ns_bind_id, 0, -1)
-	local virt_text = "Press `ga` to insert"
+	local virt_text = string.format("Press `%s` to insert", config.default.replace.map.replace)
 	if opts.start_range and opts.end_range and opts.buf then
 		vim.keymap.set("n", config.default.replace.map.replace, function()
 			local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
@@ -105,7 +105,9 @@ local function attach_keybinding(buf, opts)
 			local full_path = vim.api.nvim_buf_get_name(opts.buf)
 			local file_name = vim.fn.fnamemodify(full_path, ":t")
 			virt_text = string.format(
-				"Press `ga` to insert or `gr` to replace line %s to %s in %s",
+				"Press `%s` to insert or `%s` to replace line %s to %s in %s",
+				config.default.replace.map.insert,
+				config.default.replace.map.replace,
 				opts.start_range,
 				opts.end_range,
 				file_name
