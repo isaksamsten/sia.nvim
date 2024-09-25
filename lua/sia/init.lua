@@ -684,6 +684,9 @@ function M.main(prompt, opts)
     for _, step in ipairs(steps_to_remove) do
       table.remove(prompt.prompt, step)
     end
+    if config.options.debug then
+      print(vim.inspect(prompt))
+    end
     require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
   end
 end

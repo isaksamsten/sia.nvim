@@ -201,28 +201,55 @@ let result = sum(3, 5);]],
           role = "system",
           content = [[You are an expert coder and helpful assistant specializing in code diagnostics, including debugging warning and error messages. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
 
-- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-- The annotation should never appear on the line **after** the filetype marker.
-- **Always preserve** indentation in the code.
-- **Never output numbered lines**
+1. Guidelines for formatting the answer
+  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+  - The annotation should never appear on the line **after** the filetype marker.
+  - **Always preserve** indentation in the code.
+  - **Never output numbered lines**
 
-For example, if `[buffer]=2`, and the following context is provided:
+  For example, if `[buffer]=2`, and the following context is provided:
 
-```lua
-1: a = 10
-2: b = 11
-```
+  ```lua
+  1: a = 10
+  2: b = 11
+  ```
 
-the format should appear as follows:
+  add attribute c with value 12
 
-```lua 2 replace-range:1,2
-a = 10
-b = 11
-c = 12
-```
+  the response should appear as follows:
 
-Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
+  ```lua 2 replace-range:1,2
+  a = 10
+  b = 11
+  c = 12
+  ```
+
+  Double-check the format to ensure it is followed exactly in all code responses.
+  The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
+
+3. Crucial guidelines for line numbers:
+  - Always ensure that the replace range is correct and encompasses all code that needs to be replaced
+  - Double check that the replace range is correct
+  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
+  - Count EVERY line, including empty lines and comments lines, comments. Do not be lazy!
+  - Use the same number for start and end lines for single-line changes.
+  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
+  - Double-check that your line numbers align perfectly with the original code structure.
+
+4. Final check:
+  - Review all suggestions, ensuring each line number is correct, especially the [start-line] and [end-line].
+  - Confirm that no unrelated code is accidentally modified or deleted.
+  - Verify that the [start-line] and [end-line] correctly include all intended lines for replacement.
+  - Perform a final alignment check to ensure your line numbers haven't shifted, especially the [start-line].
+  - Double-check that your line numbers align perfectly with the original code structure.
+  - DO NOT return the complete modified code with applied changes!
+
+Remember that ACCURATE line numbers are CRITICAL. The range [start-line] to [end-line] must include ALL LINES to be replaced.
+Double-check ALL RANGES before finalizing your response, and MAKE SURE THAT [start-line] hasn't been shifted down.
+ENSURE line numbers MATCH the original code structure and indentation ARE PRESERVED.
+REMEMBER to correctly account for indentation
+]],
         },
         {
           role = "user",
@@ -294,28 +321,54 @@ Double-check the format to ensure it is followed exactly in all code responses. 
           role = "system",
           content = [[You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
 
-- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-- The annotation should never appear on the line **after** the filetype marker.
-- **Always preserve** indentation in the code.
-- **Never output numbered lines**
+1. Guidelines for formatting the answer
+  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+  - The annotation should never appear on the line **after** the filetype marker.
+  - **Always preserve** indentation in the code.
+  - **Never output numbered lines**
 
-For example, if `[buffer]=2`, and the following context is provided:
+  For example, if `[buffer]=2`, and the following context is provided:
 
-```lua
-1: a = 10
-2: b = 11
-```
+  ```lua
+  1: a = 10
+  2: b = 11
+  ```
 
-the format should appear as follows:
+  add attribute c with value 12
 
-```lua 2 replace-range:1,2
-a = 10
-b = 11
-c = 12
-```
+  the response should appear as follows:
 
-Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
+  ```lua 2 replace-range:1,2
+  a = 10
+  b = 11
+  c = 12
+  ```
+
+  Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
+
+3. Crucial guidelines for line numbers:
+  - Always ensure that the replace range is correct and encompasses all code that needs to be replaced
+  - Double check that the replace range is correct
+  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
+  - Count EVERY line, including empty lines and comments lines, comments. Do not be lazy!
+  - Use the same number for start and end lines for single-line changes.
+  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
+  - Double-check that your line numbers align perfectly with the original code structure.
+
+4. Final check:
+  - Review all suggestions, ensuring each line number is correct, especially the [start-line] and [end-line].
+  - Confirm that no unrelated code is accidentally modified or deleted.
+  - Verify that the [start-line] and [end-line] correctly include all intended lines for replacement.
+  - Perform a final alignment check to ensure your line numbers haven't shifted, especially the [start-line].
+  - Double-check that your line numbers align perfectly with the original code structure.
+  - DO NOT return the complete modified code with applied changes!
+
+Remember that ACCURATE line numbers are CRITICAL. The range [start-line] to [end-line] must include ALL LINES to be replaced.
+Double-check ALL RANGES before finalizing your response, and MAKE SURE THAT [start-line] hasn't been shifted down.
+ENSURE line numbers MATCH the original code structure and indentation ARE PRESERVED.
+REMEMBER to correctly account for indentation
+]],
         },
         {
           role = "user",
@@ -350,7 +403,8 @@ Double-check the format to ensure it is followed exactly in all code responses. 
         },
       },
       mode = "split",
-      temperature = 0.5,
+      model = "gpt-4o",
+      temperature = 0.0,
       range = true,
       input = "require",
       use_mode_prompt = false,
@@ -522,6 +576,7 @@ code is included, the response is incorrect.]],
   },
   openai_api_key = "OPENAI_API_KEY",
   report_usage = true,
+  debug = false,
 }
 
 M.options = {}
