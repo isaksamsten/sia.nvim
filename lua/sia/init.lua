@@ -184,6 +184,17 @@ function sia.setup(options)
 			end
 		end,
 	})
+	if config.options.report_usage == true then
+		vim.api.nvim_create_autocmd("User", {
+			pattern = "SiaUsageReport",
+			callback = function(args)
+				local data = args.data
+				if data then
+					vim.notify("Total tokens: " .. data.total_tokens)
+				end
+			end,
+		})
+	end
 end
 
 --- Replaces string prompts with their corresponding named prompt tables.
@@ -490,6 +501,53 @@ function sia.main(prompt, opts)
 			table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
 		end
 		strategy = chat_strategy(req_buf, req_win, prompt)
+	elseif mode == "replace" then
+		if
+			prompt.use_mode_prompt ~= false
+			and config.options.named_prompts
+			and config.options.named_prompts.insert_system
+		then
+			table.insert(prompt.prompt, 1, config.options.named_prompts.insert_system)
+		end
+		local buf_append = nil
+		strategy = {
+			on_progress = function(content)
+				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+					-- Join all changes to simplify undo
+					if buf_append then
+						vim.api.nvim_buf_call(req_buf, function()
+							pcall(vim.cmd.undojoin)
+						end)
+					else
+						buf_append = BufAppend:new(req_buf, opts.start_line - 1, 0)
+					end
+
+					buf_append:append_to_buffer(content)
+				end
+			end,
+
+			on_start = function(job)
+				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+					print(vim.inspect(opts))
+					vim.api.nvim_buf_set_lines(req_buf, opts.start_line - 1, opts.end_line, false, { "" })
+					vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
+						callback = function()
+							vim.fn.jobstop(job)
+						end,
+					})
+				end
+			end,
+			on_complete = function()
+				if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
+					vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+					if prompt.cursor and prompt.cursor == "start" then
+						vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+					elseif buf_append then
+						vim.api.nvim_win_set_cursor(req_win, { buf_append.line + 1, buf_append.col })
+					end
+				end
+			end,
+		}
 	elseif mode == "insert" then
 		if
 			prompt.use_mode_prompt ~= false

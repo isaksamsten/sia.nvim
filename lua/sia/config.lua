@@ -85,6 +85,8 @@ provided by the user. The editor identifies the file as written in
 language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 4. Adding code fences or markdown code blocks is an error.
 5. **Always preserve** indentation for code.
+
+Double-check your response and never include code-fances!
 ]],
 		},
 	},
@@ -131,6 +133,68 @@ language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 		},
 	},
 	prompts = {
+		replace = {
+			prompt = {
+				{
+					role = "system",
+					content = [[You are an AI code assistant tasked with converting natural language instructions into working code. The user will provide:
+
+1. **Filetype:** The programming language or file format they want to use.
+2. **Context:** A function signature, partial code, or a short natural language instruction or pseudocode specifying the desired behavior.
+
+Your job is to:
+- **Infer the user's intent** based on the context.
+- **Generate only code** — no explanations, comments, or code fences.
+- **Guess the appropriate indentation** and code structure based on the provided context.
+- Ensure the output is syntactically correct and aligned with the specified filetype.
+- Never generate
+
+### Example Input:
+**Filetype:** Python
+**Context:**
+```python
+def range_inclusive(start, end):
+    return range(start, end + 1)
+
+my_range = range from 1 to 10
+```
+
+### Example Output:
+my_range = range_inclusive(1, 10)
+
+### Example Input:
+**Filetype:** JavaScript
+**Context:**
+```javascript
+function sum(a, b) {
+    return a + b;
+
+let result = add 3 and 5
+```
+
+### Example Output:
+let result = sum(3, 5);]],
+				},
+				{
+					role = "user",
+					content = function(opts)
+						return string.format(
+							"This is the current buffer, written in %s\n\n%s",
+							opts.ft,
+							table.concat(vim.api.nvim_buf_get_lines(opts.buf, 0, -1, false), "\n")
+						)
+					end,
+				},
+				{
+					role = "user",
+					content = "{{context}}",
+				},
+			},
+			mode = "replace",
+			use_mode_prompt = false,
+			prefix = 1,
+			suffix = 0,
+		},
 		diagnostic = {
 			prompt = {
 				{
@@ -192,22 +256,33 @@ Double-check the format to ensure it is followed exactly in all code responses. 
 				{
 					role = "user",
 					content = function(opts)
-						local code = require("sia.context").get_code(
-							opts.start_line,
-							opts.end_line,
-							{ bufnr = opts.buf, show_line_numbers = true }
-						)
 						return string.format(
-							[[This is the code, for context:
-```%s
-%s
-```
-]],
+							"This is the complete buffer (%d):\n```%s\n%s\n```",
+							opts.buf,
 							opts.ft,
-							code
+							require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
 						)
 					end,
 				},
+				-- 				{
+				-- 					role = "user",
+				-- 					content = function(opts)
+				-- 						local code = require("sia.context").get_code(
+				-- 							opts.start_line,
+				-- 							opts.end_line,
+				-- 							{ bufnr = opts.buf, show_line_numbers = true }
+				-- 						)
+				-- 						return string.format(
+				-- 							[[This is the code, for context:
+				-- ```%s
+				-- %s
+				-- ```
+				-- ]],
+				-- 							opts.ft,
+				-- 							code
+				-- 						)
+				-- 					end,
+				-- 				},
 			},
 			mode = "split",
 			range = true,
@@ -242,6 +317,17 @@ c = 12
 ```
 
 Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.]],
+				},
+				{
+					role = "user",
+					content = function(opts)
+						return string.format(
+							"This is the complete buffer (%d):\n```%s\n%s\n```",
+							opts.buf,
+							opts.ft,
+							require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
+						)
+					end,
 				},
 				{
 					role = "user",

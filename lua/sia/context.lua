@@ -44,6 +44,9 @@ end
 
 function M.get_code(start_line, end_line, opts)
 	local lines = {}
+	if end_line == -1 then
+		end_line = vim.api.nvim_buf_line_count(opts and opts.bufnr or 0)
+	end
 	for line_num = start_line, end_line do
 		local line
 		if opts and opts.show_line_numbers then

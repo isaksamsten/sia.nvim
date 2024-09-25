@@ -127,7 +127,7 @@ Prompts support the following attributes:
   prompt -- table with {user, content} or string (named prompt)
   prefix -- if context is nil, the number of lines before the current line as context
   suffix -- if context is nil, the number of lines after the current line as context
-  mode -- insert|diff|split
+  mode -- insert|diff|split|replace
   insert = {
     -- if a range is given, below|above means below or above end of range
     -- otherwise below|above means below or above start of cursor
