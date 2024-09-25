@@ -85,17 +85,27 @@ end
 
 local function attach_keybinding(buf, opts)
   vim.api.nvim_buf_clear_namespace(buf, ns_bind_id, 0, -1)
-  local virt_text = string.format("Press `%s` to insert", config.default.replace.map.replace)
+  local virt_text = string.format(
+    "Press `%s` or `%s` to insert above or below",
+    config.default.replace.map.insert_above,
+    config.default.replace.map.insert_below
+  )
   if opts.start_range and opts.end_range and opts.buf then
-    vim.keymap.set("n", config.default.replace.map.replace, function()
+    vim.keymap.set("n", config.default.replace.map.replace or "gr", function()
       local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
       local source_line_count = #lines
       if vim.api.nvim_buf_is_loaded(opts.buf) then
-        vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, opts.end_range, false, lines)
+        local start_range = opts.start_range - 1
+        local end_range = opts.end_range
+        if opts.start_range == vim.api.nvim_buf_line_count(opts.buf) then
+          start_range = start_range + 1
+          end_range = end_range + 1
+        end
+        vim.api.nvim_buf_set_lines(opts.buf, start_range, opts.end_range, false, lines)
         flash_highlight(
           opts.buf,
-          opts.start_range - 1,
-          opts.start_range + source_line_count - 1,
+          start_range,
+          start_range + source_line_count - 1,
           config.default.replace.timeout,
           config.default.replace.highlight
         )
@@ -105,31 +115,30 @@ local function attach_keybinding(buf, opts)
       local full_path = vim.api.nvim_buf_get_name(opts.buf)
       local file_name = vim.fn.fnamemodify(full_path, ":t")
       virt_text = string.format(
-        "Press `%s` to insert or `%s` to replace line %s to %s in %s",
-        config.default.replace.map.insert,
+        "Press `%s` to replace line %s to %s in %s, `%s` to insert above, or `%s` to insert below",
         config.default.replace.map.replace,
         opts.start_range,
         opts.end_range,
-        file_name
+        file_name,
+        config.default.replace.map.insert_above,
+        config.default.replace.map.insert_below
       )
     end
   end
 
-  vim.keymap.set("n", config.default.replace.map.insert or "ga", function()
+  vim.keymap.set("n", config.default.replace.map.insert_above or "ga", function()
     local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
     local source_line_count = #lines
     if opts.buf and vim.api.nvim_buf_is_loaded(opts.buf) then
       local win = utils.get_window_for_buffer(opts.buf)
       if win then
         local start_range, _ = unpack(vim.api.nvim_win_get_cursor(win))
-        if start_range == 1 then
-          start_range = 0
-        end
+        start_range = start_range - 1
         vim.api.nvim_buf_set_lines(opts.buf, start_range, start_range, false, lines)
         flash_highlight(
           opts.buf,
           start_range,
-          start_range + source_line_count,
+          start_range + source_line_count - 1,
           config.default.replace.timeout,
           config.default.replace.highlight
         )
@@ -141,9 +150,41 @@ local function attach_keybinding(buf, opts)
     select_other_buffer(buf, function(other)
       if other then
         local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
-        if start_range == 1 then
-          start_range = 0
-        end
+        start_range = start_range - 1
+        vim.api.nvim_buf_set_lines(other.buf, start_range, start_range, false, lines)
+        flash_highlight(
+          other.buf,
+          start_range,
+          start_range + source_line_count - 1,
+          config.default.replace.timeout,
+          config.default.replace.highlight
+        )
+      end
+    end)
+  end, { buffer = buf, noremap = false, silent = true })
+  vim.keymap.set("n", config.default.replace.map.insert_below or "gb", function()
+    local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
+    local source_line_count = #lines
+    if opts.buf and vim.api.nvim_buf_is_loaded(opts.buf) then
+      local win = utils.get_window_for_buffer(opts.buf)
+      if win then
+        local start_range, _ = unpack(vim.api.nvim_win_get_cursor(win))
+        vim.api.nvim_buf_set_lines(opts.buf, start_range, start_range, false, lines)
+        flash_highlight(
+          opts.buf,
+          start_range,
+          start_range + source_line_count - 1,
+          config.default.replace.timeout,
+          config.default.replace.highlight
+        )
+        return
+      end
+    end
+
+    -- if the LLM generated bad destination buffer or if no buffer was provided.
+    select_other_buffer(buf, function(other)
+      if other then
+        local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
         vim.api.nvim_buf_set_lines(other.buf, start_range, start_range, false, lines)
         flash_highlight(
           other.buf,
@@ -157,6 +198,7 @@ local function attach_keybinding(buf, opts)
   end, { buffer = buf, noremap = false, silent = true })
   vim.api.nvim_buf_set_extmark(buf, ns_bind_id, opts.start_block - 1, 0, {
     virt_text = { { virt_text, "Comment" } },
+    virt_text_pos = "overlay",
   })
 end
 

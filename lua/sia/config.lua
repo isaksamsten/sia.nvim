@@ -1,63 +1,129 @@
 local M = {}
 local defaults = {
   named_prompts = {
+    chat_system = {
+      role = "system",
+      content = "You are an helpful assistant",
+    },
     split_system = {
       role = "system",
-      content = [[You are an AI programming assistant named "Sia".
-You are currently plugged in to the Neovim text editor on a user's machine.
+      content = [[You are an AI programming assistant named "Sia". You are currently plugged in to the Neovim text editor on a user's machine.
 
-Your tasks include:
-- Answering general programming questions.
-- Explaining how the code in a Neovim buffer works.
-- Reviewing the selected code in a Neovim buffer.
-- Generating unit tests for the selected code.
-- Proposing fixes for problems in the selected code.
-- Scaffolding code for a new workspace.
-- Finding relevant code to the user's query.
-- Proposing fixes for test failures.
-- Answering questions about Neovim.
-- Running tools.
-- Writing texts and scientific manuscript
+You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
 
-You must:
-- Follow the user's requirements carefully and to the letter.
-- Keep your answers short and impersonal, especially if the user responds with context outside of your tasks.
-- Minimize other prose.
-- Use Markdown formatting in your answers.
-- Include the programming language name at the start of the Markdown code blocks.
-- Avoid line numbers in code blocks.
-- Avoid wrapping the whole response in triple backticks.
-- Only return relevant code.
+1. Guidelines for formatting the answer
+  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
+  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
+  - The annotation should never appear on the line **after** the filetype marker.
+  - **Always preserve** indentation in the code.
+  - **Never output numbered lines**
 
-You should:
-- After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start],[end]`, where `[start]` and `[end]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-- Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-- The annotation should never appear on the line **after** the filetype marker.
-- **Always preserve** indentation in the code.
-- **Never output numbered lines**
+  For example, if `[buffer]=2`, and the following context is provided:
 
-For example, if `[buffer]=2`, and the following context is provided:
+  ```lua
+  1: a = 10
+  2: b = 11
+  ```
 
-```lua
-1: a = 10
-2: b = 11
+  add attribute c with value 12
+
+  the response should appear as follows:
+
+  ```lua 2 replace-range:1,2
+  a = 10
+  b = 11
+  c = 12
+  ```
+
+  Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
+
+3. Crucial guidelines for line numbers:
+  - Always ensure that the replace range is correct and encompasses all code that needs to be replaced
+  - Double check that the replace range is correct
+  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
+  - Count EVERY line, including empty lines and comments lines, comments. Do not be lazy!
+  - Use the same number for start and end lines for single-line changes.
+  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
+  - Double-check that your line numbers align perfectly with the original code structure.
+
+4. Final check:
+  - Review all suggestions, ensuring each line number is correct, especially the [start-line] and [end-line].
+  - Confirm that no unrelated code is accidentally modified or deleted.
+  - Verify that the [start-line] and [end-line] correctly include all intended lines for replacement.
+  - Perform a final alignment check to ensure your line numbers haven't shifted, especially the [start-line].
+  - Double-check that your line numbers align perfectly with the original code structure.
+  - DO NOT return the complete modified code with applied changes!
+
+Remember that ACCURATE line numbers are CRITICAL. The range [start-line] to [end-line] must include ALL LINES to be replaced.
+Double-check ALL RANGES before finalizing your response, and MAKE SURE THAT [start-line] hasn't been shifted down.
+ENSURE line numbers MATCH the original code structure and indentation ARE PRESERVED.
+REMEMBER to correctly account for indentation
+]],
+    },
+    current_buffer_line_number = {
+      role = "user",
+      content = function(opts)
+        return string.format(
+          "This is the complete buffer (%d):\n```%s\n%s\n```",
+          opts.buf,
+          opts.ft,
+          require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
+        )
+      end,
+    },
+    current_buffer = {
+      role = "user",
+      content = function(opts)
+        return string.format(
+          "This is the complete buffer written in %s:\n%s",
+          opts.ft,
+          require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = false })
+        )
+      end,
+    },
+    current_context_line_number = {
+      role = "user",
+      content = function(opts)
+        if opts.mode == "v" then
+          local code = require("sia.context").get_code(
+            opts.start_line,
+            opts.end_line,
+            { bufnr = opts.buf, show_line_numbers = true }
+          )
+          return string.format(
+            [[This is the context provided in buffer %s:
+```%s
+%s
 ```
-
-the format should appear as follows:
-
-```lua 2 replace-range:1,2
-a = 10
-b = 11
-c = 12
-```
-
-Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
-
-When given a task:
-1. Think step-by-step and describe your plan for what to build in pseudocode, written out in great detail.
-2. Output the code in a single code block.
-3. You should always generate short suggestions for the next user turns that are relevant to the conversation.
-4. You can only give one reply for each conversation turn.]],
+  ]],
+            opts.buf,
+            opts.ft,
+            code
+          )
+        else
+          return "" -- filtered
+        end
+      end,
+    },
+    current_context = {
+      role = "user",
+      content = function(opts)
+        if opts.mode == "v" then
+          local code = require("sia.context").get_code(
+            opts.start_line,
+            opts.end_line,
+            { bufnr = opts.buf, show_line_numbers = false }
+          )
+          return string.format(
+            [[This is the provided context written in %s:
+%s]],
+            opts.ft,
+            code
+          )
+        else
+          return ""
+        end
+      end,
     },
     insert_system = {
       role = "system",
@@ -70,7 +136,11 @@ The editor identifies the file as written in {{filetype}}.
 3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
 4. Adding code fences or markdown code blocks is an error.
 5. If explanations are needed add them as relevant comments using correct syntax for the identified language.
-6. **Always preserve** indentation for code. ]],
+6. **Always preserve** indentation for code.
+7. Never include the full provided context in your response. Only output the relevant requested information.
+8. Never include code fences when outputting code.
+
+]],
     },
     diff_system = {
       role = "system",
@@ -85,8 +155,11 @@ provided by the user. The editor identifies the file as written in
 language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
 4. Adding code fences or markdown code blocks is an error.
 5. **Always preserve** indentation for code.
+6. Never include line numbers.
 
-Double-check your response and never include code-fances!
+Double-check your response and never include code-fances or line numbers!
+Remember to never include line numbers. Don't be lazy!
+Remember to never include code fences. Dont't be lazy!
 ]],
     },
   },
@@ -95,7 +168,6 @@ Double-check your response and never include code-fances!
     temperature = 0.5, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
-    mode = "auto", -- auto|diff|insert|split
     split = {
       cmd = "vsplit",
       wo = { wrap = true },
@@ -109,11 +181,11 @@ Double-check your response and never include code-fances!
     replace = {
       highlight = "DiffAdd",
       timeout = 300,
-      map = { replace = "gr", insert = "ga" },
+      map = { replace = "gr", insert_above = "ga", insert_below = "gb" },
     },
     mode_prompt = {
-      split = { { role = "user", content = "{{context}}" } },
-      chat = {
+      split = { "split_system", "current_context_line_number" },
+      chat = { -- it will automatically include the system buffer from the conversation initiating the request.
         {
           role = "system",
           content = function()
@@ -123,17 +195,18 @@ Double-check your response and never include code-fances!
         },
       },
       insert = {
-        { role = "system", content = "You are an helpful assistant" },
-        { role = "system", content = "This is the current context: \n\n{{context}}" },
+        "insert_system",
+        "current_buffer",
+        "current_context",
       },
       diff = {
-        { role = "system", content = "You are an helpful assistant" },
-        { role = "system", content = "This is the current context: \n\n{{context}}" },
+        "diff_system",
+        "current_context",
       },
     },
   },
   prompts = {
-    replace = {
+    codify = {
       prompt = {
         {
           role = "system",
@@ -191,66 +264,12 @@ let result = sum(3, 5);]],
         },
       },
       mode = "replace",
-      use_mode_prompt = false,
       prefix = 1,
       suffix = 0,
     },
     diagnostic = {
       prompt = {
-        {
-          role = "system",
-          content = [[You are an expert coder and helpful assistant specializing in code diagnostics, including debugging warning and error messages. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
-
-1. Guidelines for formatting the answer
-  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-  - The annotation should never appear on the line **after** the filetype marker.
-  - **Always preserve** indentation in the code.
-  - **Never output numbered lines**
-
-  For example, if `[buffer]=2`, and the following context is provided:
-
-  ```lua
-  1: a = 10
-  2: b = 11
-  ```
-
-  add attribute c with value 12
-
-  the response should appear as follows:
-
-  ```lua 2 replace-range:1,2
-  a = 10
-  b = 11
-  c = 12
-  ```
-
-  Double-check the format to ensure it is followed exactly in all code responses.
-  The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
-
-3. Crucial guidelines for line numbers:
-  - Always ensure that the replace range is correct and encompasses all code that needs to be replaced
-  - Double check that the replace range is correct
-  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
-  - Count EVERY line, including empty lines and comments lines, comments. Do not be lazy!
-  - Use the same number for start and end lines for single-line changes.
-  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
-  - Double-check that your line numbers align perfectly with the original code structure.
-
-4. Final check:
-  - Review all suggestions, ensuring each line number is correct, especially the [start-line] and [end-line].
-  - Confirm that no unrelated code is accidentally modified or deleted.
-  - Verify that the [start-line] and [end-line] correctly include all intended lines for replacement.
-  - Perform a final alignment check to ensure your line numbers haven't shifted, especially the [start-line].
-  - Double-check that your line numbers align perfectly with the original code structure.
-  - DO NOT return the complete modified code with applied changes!
-
-Remember that ACCURATE line numbers are CRITICAL. The range [start-line] to [end-line] must include ALL LINES to be replaced.
-Double-check ALL RANGES before finalizing your response, and MAKE SURE THAT [start-line] hasn't been shifted down.
-ENSURE line numbers MATCH the original code structure and indentation ARE PRESERVED.
-REMEMBER to correctly account for indentation
-]],
-        },
+        "split_system",
         {
           role = "user",
           content = function(opts)
@@ -290,124 +309,10 @@ REMEMBER to correctly account for indentation
             )
           end,
         },
-        -- 				{
-        -- 					role = "user",
-        -- 					content = function(opts)
-        -- 						local code = require("sia.context").get_code(
-        -- 							opts.start_line,
-        -- 							opts.end_line,
-        -- 							{ bufnr = opts.buf, show_line_numbers = true }
-        -- 						)
-        -- 						return string.format(
-        -- 							[[This is the code, for context:
-        -- ```%s
-        -- %s
-        -- ```
-        -- ]],
-        -- 							opts.ft,
-        -- 							code
-        -- 						)
-        -- 					end,
-        -- 				},
       },
       mode = "split",
       range = true,
       model = "gpt-4o",
-      use_mode_prompt = false,
-    },
-    ask = {
-      prompt = {
-        {
-          role = "system",
-          content = [[You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
-
-1. Guidelines for formatting the answer
-  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-  - The annotation should never appear on the line **after** the filetype marker.
-  - **Always preserve** indentation in the code.
-  - **Never output numbered lines**
-
-  For example, if `[buffer]=2`, and the following context is provided:
-
-  ```lua
-  1: a = 10
-  2: b = 11
-  ```
-
-  add attribute c with value 12
-
-  the response should appear as follows:
-
-  ```lua 2 replace-range:1,2
-  a = 10
-  b = 11
-  c = 12
-  ```
-
-  Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
-
-3. Crucial guidelines for line numbers:
-  - Always ensure that the replace range is correct and encompasses all code that needs to be replaced
-  - Double check that the replace range is correct
-  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
-  - Count EVERY line, including empty lines and comments lines, comments. Do not be lazy!
-  - Use the same number for start and end lines for single-line changes.
-  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
-  - Double-check that your line numbers align perfectly with the original code structure.
-
-4. Final check:
-  - Review all suggestions, ensuring each line number is correct, especially the [start-line] and [end-line].
-  - Confirm that no unrelated code is accidentally modified or deleted.
-  - Verify that the [start-line] and [end-line] correctly include all intended lines for replacement.
-  - Perform a final alignment check to ensure your line numbers haven't shifted, especially the [start-line].
-  - Double-check that your line numbers align perfectly with the original code structure.
-  - DO NOT return the complete modified code with applied changes!
-
-Remember that ACCURATE line numbers are CRITICAL. The range [start-line] to [end-line] must include ALL LINES to be replaced.
-Double-check ALL RANGES before finalizing your response, and MAKE SURE THAT [start-line] hasn't been shifted down.
-ENSURE line numbers MATCH the original code structure and indentation ARE PRESERVED.
-REMEMBER to correctly account for indentation
-]],
-        },
-        {
-          role = "user",
-          content = function(opts)
-            return string.format(
-              "This is the complete buffer (%d):\n```%s\n%s\n```",
-              opts.buf,
-              opts.ft,
-              require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
-            )
-          end,
-        },
-        {
-          role = "user",
-          content = function(opts)
-            local code = require("sia.context").get_code(
-              opts.start_line,
-              opts.end_line,
-              { bufnr = opts.buf, show_line_numbers = true }
-            )
-            return string.format(
-              [[This is the context provided in buffer %s:
-  ```%s
-  %s
-  ```
-  ]],
-              opts.buf,
-              opts.ft,
-              code
-            )
-          end,
-        },
-      },
-      mode = "split",
-      model = "gpt-4o",
-      temperature = 0.0,
-      range = true,
-      input = "require",
-      use_mode_prompt = false,
     },
     commit = {
       prompt = {
@@ -473,9 +378,9 @@ REMEMBER to correctly account for indentation
         {
           role = "user",
           content = [[Explain the following code:
-  ```{{filetype}}
-  {{context}}
-  ```]],
+```{{filetype}}
+{{context}}
+```]],
         },
       },
       mode = "split",

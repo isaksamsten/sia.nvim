@@ -225,22 +225,21 @@ function M.resolve_prompt(prompt, opts)
     return prompt_config
   else -- We have an ad-hoc prompt
     -- Default to split that is to open the response in a new buffer
-    local mode_prompt = "split"
+    local mode_prompt
     local prefix = false
     local suffix = false
 
     -- If the current filetype is sia, then we are in chat
     if vim.bo.ft == "sia" then
       mode_prompt = "chat"
-    -- If bang use insert
-    elseif config.options.default.mode == "insert" or opts.force_insert then
+    elseif opts.bang and opts.mode == "n" then
       mode_prompt = "insert"
       prefix = config.options.default.prefix
       suffix = config.options.default.suffix
-    elseif -- in range mode we use diff
-      config.options.default.mode == "diff" or (config.options.default.mode == "auto" and opts.mode == "v")
-    then
+    elseif opts.bang and opts.mode == "v" then
       mode_prompt = "diff"
+    else
+      mode_prompt = "split"
     end
 
     local mode_prompt_table = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode_prompt]))
@@ -291,12 +290,11 @@ end
 ---  - table.on_progress function A function to be called with content updates during the job's progress.
 ---  - table.on_complete function A function to be called when the job is complete.
 local function chat_strategy(buf, winnr, prompt)
-  if prompt.use_mode_prompt == false then
-    local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, buf, "sia_system_prompt")
-    if not ok then
-      system_prompt = prompt.prompt[1]
-      vim.api.nvim_buf_set_var(buf, "sia_system_prompt", system_prompt)
-    end
+  local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, buf, "sia_system_prompt")
+  if not ok then
+    -- TODO: collect all system prompts
+    system_prompt = prompt.prompt[1]
+    vim.api.nvim_buf_set_var(buf, "sia_system_prompt", system_prompt)
   end
   local buf_append = nil
   return {
@@ -414,35 +412,27 @@ function M.main(prompt, opts)
   end
 
   local strategy
-  local mode = prompt.mode or config.options.default.mode
+  local mode = prompt.mode
 
   -- If the user has used a bang, we always use insert mode
-  if opts.force_insert then
-    mode = "insert"
+  if not mode then
+    if opts.bang and opts.mode == "n" then
+      mode = "insert"
+    elseif opts.bang and opts.mode == "v" then
+      mode = "diff"
+    else
+      mode = "split"
+    end
   end
 
-  if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" and not opts.force_insert then
+  -- Request initiated from *sia*-buffer this is a chat message
+  if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
     local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "sia_system_prompt")
     if ok then
       table.insert(prompt.prompt, 1, system_prompt)
     end
-    if
-      not ok
-      and prompt.use_mode_prompt ~= false
-      and config.options.named_prompts
-      and config.options.named_prompts.split_system
-    then
-      table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
-    end
     strategy = chat_strategy(req_buf, req_win, prompt)
   elseif mode == "replace" then
-    if
-      prompt.use_mode_prompt ~= false
-      and config.options.named_prompts
-      and config.options.named_prompts.insert_system
-    then
-      table.insert(prompt.prompt, 1, config.options.named_prompts.insert_system)
-    end
     local buf_append = nil
     strategy = {
       on_progress = function(content)
@@ -488,13 +478,6 @@ function M.main(prompt, opts)
       end,
     }
   elseif mode == "insert" then
-    if
-      prompt.use_mode_prompt ~= false
-      and config.options.named_prompts
-      and config.options.named_prompts.insert_system
-    then
-      table.insert(prompt.prompt, 1, config.options.named_prompts.insert_system)
-    end
     local current_line, placement = resolve_placement_start(req_win, prompt.insert, opts)
 
     local buf_append = nil
@@ -543,15 +526,7 @@ function M.main(prompt, opts)
         end
       end,
     }
-  elseif mode == "diff" or (mode == "auto" and opts.mode == "v") then
-    if
-      prompt.use_mode_prompt ~= false
-      and config.options.named_prompts
-      and config.options.named_prompts.diff_system
-    then
-      table.insert(prompt.prompt, 1, config.options.named_prompts.diff_system)
-    end
-
+  elseif mode == "diff" then
     vim.cmd("vsplit")
     local res_win = vim.api.nvim_get_current_win()
     local res_buf = vim.api.nvim_create_buf(false, true)
@@ -604,7 +579,7 @@ function M.main(prompt, opts)
         })
       end,
     }
-  elseif mode == "split" or (mode == "auto" and opts.mode == "n") then
+  elseif mode == "split" then
     local res_win, res_buf = make_sia_split()
     local split_wo = prompt.wo or config.options.default.split.wo
     if split_wo then
@@ -613,13 +588,6 @@ function M.main(prompt, opts)
       end
     end
 
-    if
-      prompt.use_mode_prompt ~= false
-      and config.options.named_prompts
-      and config.options.named_prompts.split_system
-    then
-      table.insert(prompt.prompt, 1, config.options.named_prompts.split_system)
-    end
     strategy = chat_strategy(res_buf, res_win, prompt)
   else
     vim.notify("invalid mode")
