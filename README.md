@@ -49,6 +49,12 @@ https://github.com/user-attachments/assets/a3a8b830-1f1b-4d4b-aa31-c2292e26085e
 
 (Note that `sia.nvim` automatically tries to give chat buffers a relevant name)
 
+Add new functionality
+
+
+https://github.com/user-attachments/assets/e06faca2-58ab-42da-a2e6-77eee126c495
+
+
 
 ## ⚡️ Requirements
 
