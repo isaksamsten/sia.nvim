@@ -265,7 +265,7 @@ opts = {
 
 The prompt can then be reused:
 
-````lua
+```lua
 opts = {
   prompts = {
     my_prompt = {
@@ -286,7 +286,7 @@ opts = {
   openai_api_key = "OPENAI_API_KEY", -- the environment variable with the API key,
   report_usage = true, -- vim.notify the total number of tokens when request is completed
 }
-````
+```
 
 ### Autocommands
 
