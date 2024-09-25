@@ -332,7 +332,7 @@ We can also bind visual and operator mode bindings to
 
 - `<Plug>(sia-append)` append the current selection or operator mode selection
   to the current split or create a new.
-- `<Plug>(sia-execute)` execute the default prompt (`vim.g.sia`) with
+- `<Plug>(sia-execute)` execute the default prompt (`vim.b.sia`) with
   selection or operator mode selection.
 
 ```lua
