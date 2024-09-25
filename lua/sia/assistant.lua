@@ -84,11 +84,11 @@ function assistant.query(prompt, on_start, on_progress, on_complete)
     end
   end
 
-  local function on_exit()
+  local function on_exit(_, error_code, _)
     on_complete()
     vim.api.nvim_exec_autocmds("User", {
       pattern = "SiaComplete",
-      data = prompt,
+      data = { prompt = prompt, error_code = error_code },
     })
   end
 

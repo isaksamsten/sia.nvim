@@ -242,16 +242,12 @@ function M.resolve_prompt(prompt, opts)
       mode_prompt = "split"
     end
 
-    local mode_prompt_table = replace_named_prompts(vim.deepcopy(config.options.default.mode_prompt[mode_prompt]))
-    table.insert(mode_prompt_table, { role = "user", content = table.concat(prompt, " ") })
-    return {
-      prompt = mode_prompt_table,
-      prefix = prefix,
-      suffix = suffix,
-      temperature = config.options.default.temperature,
-      model = config.options.default.model,
-      mode = config.options.default.mode,
-    }
+    mode_prompt = vim.deepcopy(config.options.default.mode_prompt[mode_prompt])
+    mode_prompt.prompt = replace_named_prompts(mode_prompt.prompt)
+    table.insert(mode_prompt.prompt, { role = "user", content = table.concat(prompt, " ") })
+    mode_prompt.prefix = prefix
+    mode_prompt.suffix = suffix
+    return mode_prompt
   end
 end
 
@@ -290,11 +286,9 @@ end
 ---  - table.on_progress function A function to be called with content updates during the job's progress.
 ---  - table.on_complete function A function to be called when the job is complete.
 local function chat_strategy(buf, winnr, prompt)
-  local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, buf, "sia_system_prompt")
+  local ok, _ = pcall(vim.api.nvim_buf_get_var, buf, "_sia_prompt")
   if not ok then
-    -- TODO: collect all system prompts
-    system_prompt = prompt.prompt[1]
-    vim.api.nvim_buf_set_var(buf, "sia_system_prompt", system_prompt)
+    vim.api.nvim_buf_set_var(buf, "_sia_prompt", prompt)
   end
   local buf_append = nil
   return {
@@ -427,9 +421,17 @@ function M.main(prompt, opts)
 
   -- Request initiated from *sia*-buffer this is a chat message
   if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
-    local ok, system_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "sia_system_prompt")
+    local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "_sia_prompt")
     if ok then
-      table.insert(prompt.prompt, 1, system_prompt)
+      if #buffer_prompt.prompt > 1 then
+        table.insert(prompt.prompt, 1, buffer_prompt.prompt[1])
+      end
+      if buffer_prompt.temperature and type(buffer_prompt.temperature) == "table" then
+        prompt.temperature = buffer_prompt.temperature[false]
+      elseif buffer_prompt.temperature then
+        prompt.temperature = buffer_prompt.temperature
+      end
+      prompt.model = buffer_prompt.model
     end
     strategy = chat_strategy(req_buf, req_win, prompt)
   elseif mode == "replace" then
