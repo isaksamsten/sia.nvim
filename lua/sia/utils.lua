@@ -92,4 +92,9 @@ function M.filter_hidden(content)
   return filter
 end
 
+function M.get_filename(buf, query)
+  local full_path = vim.api.nvim_buf_get_name(buf)
+  return vim.fn.fnamemodify(full_path, query or ":t")
+end
+
 return M

@@ -33,30 +33,39 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   local req_buf = vim.api.nvim_get_current_buf()
-  local lines = require("sia.context").get_code(
-    start_line,
-    end_line,
-    { bufnr = req_buf, show_line_numbers = true, return_table = true }
-  )
 
   local filetype = vim.bo.ft
   local buf, win = utils.get_current_visible_sia_buffer()
-  if not buf or not win then
-    win, buf = make_sia_split(nil)
-    local split_wo = config.options.default.split.wo
-    if split_wo then
-      for key, value in pairs(split_wo) do
-        vim.api.nvim_win_set_option(win, key, value)
-      end
+  if buf and win then
+    local opts = {
+      buf = req_buf,
+      mode = "v",
+      ft = filetype,
+      start_line = start_line,
+      end_line = end_line,
+      context_is_buffer = end_line == vim.api.nvim_buf_line_count(req_buf),
+    }
+    local step = require("sia.context").current_context_line_number()
+    local content_fn = step.content
+    step.content = function()
+      return content_fn(opts)
     end
+    local hidden_fn = step.hidden
+    step.hidden = function()
+      return hidden_fn(opts)
+    end
+    local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, buf, "_sia_prompt")
+    if ok then
+      table.insert(buffer_prompt.prompt, step)
+      vim.api.nvim_buf_set_var(buf, "_sia_prompt", buffer_prompt)
+    end
+    vim.api.nvim_buf_set_option(buf, "modifiable", true)
+    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "# User", "" })
+    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```hidden", step.hidden(), "```", "" })
+    vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  else
+    vim.notify("Can't determine *sia* buffer")
   end
-
-  vim.api.nvim_buf_set_option(buf, "modifiable", true)
-  vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "# User", "" })
-  vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```" .. filetype .. " " .. req_buf })
-  vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
-  vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```", "", "" })
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
 end
 
 function _G.__sia_execute(type)
@@ -672,7 +681,7 @@ function M.main(prompt, opts)
     local steps_to_remove = {}
     for i, step in ipairs(prompt.prompt) do
       if type(step.content) == "function" then
-        step.content = step.content(opts)
+        step.content = step.content()
       end
       step.content = step.content:gsub("{{(.-)}}", function(key)
         return replacement[key] or key

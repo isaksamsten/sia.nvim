@@ -1,10 +1,6 @@
 local config = require("sia.config")
 local sia = require("sia")
 
--- vim.api.nvim_create_user_command("SiaAdd", function(args)
---
--- end)
-
 vim.api.nvim_create_user_command("Sia", function(args)
   if #args.fargs == 0 and not vim.b.sia then
     vim.notify("No prompt")
@@ -46,7 +42,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 
   local is_range = opts.mode == "v"
   -- TODO: fixme
-  local is_range_valid = prompt.range == nil or (prompt.range == is_range and opts.bang ~= is_range)
+  local is_range_valid = prompt.range == nil or prompt.range == is_range
   if config._is_disabled(prompt) or not is_range_valid then
     vim.notify(args.fargs[1] .. " is not enabled")
     return
@@ -101,7 +97,7 @@ end, {
     local term = ArgLead:sub(2)
     for key, prompt in pairs(config.options.prompts) do
       if vim.startswith(key, term) and not config._is_disabled(prompt) and vim.bo.ft ~= "sia" then
-        if prompt.range == nil or (prompt.range == is_range and has_bang ~= is_range) then
+        if prompt.range == nil or (prompt.range == is_range) then
           table.insert(complete, "/" .. key)
         end
       end

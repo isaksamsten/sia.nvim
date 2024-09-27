@@ -93,4 +93,46 @@ function M.get_diagnostics(start_line, end_line, bufnr, opts)
 
   return diagnostics
 end
+
+function M.current_context_line_number()
+  return {
+    role = "user",
+    hidden = function(opts)
+      local end_line = opts.end_line
+      if opts.context_is_buffer then
+        end_line = vim.api.nvim_buf_line_count(opts.buf)
+      end
+      return string.format(
+        "Lines %d to %d in %s",
+        opts.start_line,
+        end_line,
+        require("sia.utils").get_filename(opts.buf)
+      )
+    end,
+    reuse = true,
+    content = function(opts)
+      if opts.mode == "v" then
+        local end_line = opts.end_line
+        if opts.context_is_buffer then
+          end_line = -1
+        end
+        local code =
+          require("sia.context").get_code(opts.start_line, end_line, { bufnr = opts.buf, show_line_numbers = true })
+        return string.format(
+          [[This is the context provided in buffer %s:
+```%s
+%s
+```
+  ]],
+          opts.buf,
+          opts.ft,
+          code
+        )
+      else
+        return "" -- filtered
+      end
+    end,
+  }
+end
+
 return M

@@ -8,178 +8,26 @@ local defaults = {
     split_system = {
       role = "system",
       reuse = true,
-      content = [[You are an AI programming assistant named "Sia". You are currently plugged in to the Neovim text editor on a user's machine.
+      content = [[You are an AI assistant named "Sia" integrated with Neovim. Provide code snippets with precise annotations in fenced blocks, following these guidelines:
 
-You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
+- Include `[buffer] replace-range:[start-line],[end-line]` right after the language identifier in the code block.
+- Always preserve indentation, and avoid outputting numbered lines.
+- Replace ranges must accurately reflect the lines being modified, including comments or closing brackets.
+- Double-check start-line and end-line accuracy, ensuring the range covers the exact lines of change without overwriting other content.
 
-1. Guidelines for formatting the answer
-  - After the filetype marker in the fenced code block (e.g., ` ```python `), include the annotation `[buffer] replace-range:[start-line],[end]`, where `[start-line]` and `[end-line]` represent the starting and ending line numbers, and `[buffer]` corresponds to the user-supplied buffer number.
-  - Ensure that the annotation appears **immediately after** the filetype marker on the same line, with no line breaks or new lines following the language identifier.
-  - The annotation should never appear on the line **after** the filetype marker.
-  - **Always preserve** indentation in the code. Analyze the indentation level of surrounding code before making any changes and align new code to match it.
-  - **Never output numbered lines**
+Example (user provides buffer 2):
 
-  ## Example
+```python 2 replace-range:5,5
+   self.b = b
+   self.c = None
+```
 
-  ### Query
-  The following context in buffer 2:
-
-  ```lua
-  1: a = 10
-  2: b = 11
-  ```
-
-  add attribute c with value 12
-
-  ### Response
-  ```lua 2 replace-range:1,2
-  a = 10
-  b = 11
-  c = 12
-  ```
-
-  ### Query
-  The following context in buffer 2:
-
-  ```python
-  1. class A:
-  2.     def __init__(self, a, b):
-  3.         self.a = a
-  4.         # TODO: fix me!
-  5.         self.b = b
-  ```
-
-  Add a new attribute to class A called c not initialized in the construct but set to None
-
-  ### Response
-  ```python 2 replace-range:5,5
-           self.b = b
-           self.c = None
-  ```
-
-  Double-check the format to ensure it is followed exactly in all code responses. The annotation must always be included on the same line as the filetype marker to comply with the formatting requirements.
-
-3. Crucial guidelines for line numbers:
-  - Always ensure that the replace range is correct and encompasses ONLY the code that needs to be replaced
-  - Double check that the replace range is correct and encompasses ONLY the code that needs to be replaced
-  - Double check that the [end-line] is INCLUSIVE and included in the replacement!  Don't be lazy!
-  - The range [start-line],[end-line] is INCLUSIVE. Both [start-line] and [end-line] are included in the replacement.
-  - Count EVERY line, including empty lines and comments lines, comments in the original code. Do not be lazy!
-  - For multi-line changes, ensure the range covers ALL affected lines, from first to last.
-  - Remember to include COMMENTS when counting lines that need to be replaced!
-  - Double-check that your line numbers align perfectly with the original code structure.
-
-5. Generic Guidelines for Start-line and End-line Corrections:
-
-  1. **Start-line accuracy**:
-    - When inserting or modifying attributes, members, or elements inside a structured block (like classes, structs, or functions), always place the **start-line** at the precise location where the new item is introduced.
-    - If the modification involves adding an item **before a closing bracket or another existing member**, the start-line should be the line **right before** the closing bracket, ensuring no unrelated elements are moved or replaced prematurely.
-    - Remember that the start-line should be the exact position where the result will be inserted. Remember to double check that repetitions won't occur!
-
-  2. **Block boundary adjustments**:
-    - When adding or modifying fields within a structure (e.g., structs or classes), the start-line should precisely target where the new field should be added. For attributes added **before a closing bracket** (`}`), the start-line should be the line of the **closing bracket** itself, as the bracket is being pushed down by the new content.
-    - The `end-line` should include any necessary bracket or structure that marks the block’s end.
-
-  3. **Final position validation**:
-    - After the initial analysis, **revisit the chosen start-line** to ensure it doesn’t prematurely overwrite or shift existing elements unless it’s intended. This helps prevent mistakes where the start of the modification might accidentally replace content that should remain.
-
-  ### Example Revision for Start-line and End-line:
-
-  Given the initial Rust code:
-
-  ```rust
-  12: /// State of the damage tracking for the [`Display`].
-  13: ///
-  14: /// [`Display`]: crate::display::Display
-  15: #[derive(Debug)]
-  16: pub struct DamageTracker {
-  17:     /// Position of the previously drawn Vi cursor.
-  18:     pub old_vi_cursor: Option<Point<usize>>,
-  19:     /// The location of the old selection.
-  20:     pub old_selection: Option<SelectionRange>,
-  21:     /// Highlight damage submitted for the compositor.
-  22:     pub debug: bool,
-  23:
-  24:     /// The damage for the frames.
-  25:     frames: [FrameDamage; 2],
-  26:     screen_lines: usize,
-  27:     columns: usize,
-  28: }
-  ```
-
-  If the query is **"Add an attribute `rows` to DamageTracker"**, the response should correctly start the change right before the closing `}` on line 28:
-
-  Correct response:
-  ```rust 2 replace-range:28,28
-      rows: usize,
-  }
-  ```
-
-  ### Strategy Summary:
-  - The **start-line** should be where the new attribute begins, right before the closing bracket in this case (line 28).
-  - The **end-line** should include the closing bracket, but no unnecessary previous lines (like `columns` in this example) should be overwritten.
-
-5. Final Check
-
-  1. **Comprehensive block inclusion**:
-    - When modifying any **block of code** (functions, loops, conditionals, multi-line statements), ensure the replacement range includes **all lines that form the block**, including closing elements like `}`, `)`, or `]`, as well as any final statements or comments that belong to the structure.
-    - **Visually inspect** the code to ensure that the closing structure (brackets, comments, etc.) is always captured within the [end-line].
-
-  2. **Inclusive end-line strategy**:
-    - For any block of code (function, method, loop, etc.), always ensure that the **last element**—whether it’s a closing brace, semicolon, or any other terminal character—is captured in the `end-line`.
-    - Ensure that **multi-line constructs** like conditionals, loops, or comments are fully accounted for by including the last logical line in the range. Even if it appears the edit concludes, always check if there's a closing structure.
-
-  3. **General rule of inclusion**:
-    - Treat the last logical element (like a closing `}` or `)`, or the final semicolon) as part of the block you are replacing, and include that line in the replacement.
-    - Avoid leaving any part of a code block unclosed by ensuring the `end-line` includes all lines that complete the logical structure.
-
-  4. **Holistic view of ranges**:
-    - **Inspect the whole block** when calculating the range. Don't stop after finding the first replacement—ensure the range **encompasses all lines that belong to the intended code structure**.
-    - For multi-line blocks, review the code to check for **both opening and closing components** and make sure they are both within the same range.
-
-  5. **End-line adjustment check**:
-    - After selecting the lines to be replaced, **recheck** the `end-line` to ensure no trailing elements of the block are excluded.
-    - When in doubt, **err on the side of inclusion** and extend the range to cover any potentially omitted line-ending constructs, such as comments or closing syntax elements.
-
-  ### Example Scenario:
-  Given this code block:
-
-  ```rust
-  66: /// Check if two given [`glutin::surface::Rect`] overlap.
-  67: fn rects_overlap(lhs: Rect, rhs: Rect) -> bool {
-  68:     !(
-  69:         // `lhs` is left of `rhs`.
-  70:         lhs.x + lhs.width < rhs.x
-  71:         // `lhs` is right of `rhs`.
-  72:         || rhs.x + rhs.width < lhs.x
-  73:         // `lhs` is below `rhs`.
-  74:         || lhs.y + lhs.height < rhs.y
-  75:         // `lhs` is above `rhs`.
-  76:         || rhs.y + rhs.height < lhs.y
-  77:     )
-  78: }
-  ```
-
-  When simplifying this, ensure the closing `}` is included in the range. The correct response should be:
-
-  ```rust 2 replace-range:67,78
-  fn rects_overlap(lhs: Rect, rhs: Rect) -> bool {
-      lhs.x < rhs.x + rhs.width
-          && rhs.x < lhs.x + lhs.width
-          && lhs.y < rhs.y + rhs.height
-          && rhs.y < lhs.y + lhs.height
-  }
-  ```
-
-  ### Additional Tips:
-  - Apply these guidelines **for any language** or structure that uses similar syntax (functions, loops, conditionals).
-  - Always ensure that **start-line** to **end-line** covers the full intended modification without omitting key components at the end of the block.
-]],
+Ensure all responses adhere to this format.]],
     },
     current_buffer_line_number = {
       role = "user",
       hidden = function(opts)
-        return string.format("Buffer %s", opts.buf)
+        return string.format("Buffer %s", require("sia.utils").get_filename(opts.buf))
       end,
       reuse = true,
       content = function(opts)
@@ -205,39 +53,7 @@ You are an expert coder and writer and helpful assistant. When providing solutio
         )
       end,
     },
-    current_context_line_number = {
-      role = "user",
-      hidden = function(opts)
-        local end_line = opts.end_line
-        if opts.context_is_buffer then
-          end_line = vim.api.nvim_buf_line_count(opts.buf)
-        end
-        return string.format("Lines %d to %d in %s", opts.start_line, end_line, opts.buf)
-      end,
-      reuse = true,
-      content = function(opts)
-        if opts.mode == "v" then
-          local end_line = opts.end_line
-          if opts.context_is_buffer then
-            end_line = -1
-          end
-          local code =
-            require("sia.context").get_code(opts.start_line, end_line, { bufnr = opts.buf, show_line_numbers = true })
-          return string.format(
-            [[This is the context provided in buffer %s:
-```%s
-%s
-```
-  ]],
-            opts.buf,
-            opts.ft,
-            code
-          )
-        else
-          return "" -- filtered
-        end
-      end,
-    },
+    current_context_line_number = require("sia.context").current_context_line_number(),
     current_context = {
       role = "user",
       hidden = function(opts)
@@ -245,7 +61,12 @@ You are an expert coder and writer and helpful assistant. When providing solutio
         if opts.context_is_buffer then
           end_line = vim.api.nvim_buf_line_count(opts.buf)
         end
-        return string.format("Lines %d to %d in %s", opts.start_line, end_line, opts.buf)
+        return string.format(
+          "Lines %d to %d in %s",
+          opts.start_line,
+          end_line,
+          require("sia.utils").get_filename(opts.buf)
+        )
       end,
       reuse = true,
       content = function(opts)
@@ -325,7 +146,11 @@ Remember to never include code fences. Dont't be lazy!
       map = { replace = "gr", insert_above = "ga", insert_below = "gb" },
     },
     mode_prompt = {
-      split = { model = "gpt-4o", temperature = 0.0, prompt = { "split_system", "current_context_line_number" } },
+      split = {
+        model = "gpt-4o-2024-08-06",
+        temperature = 0.0,
+        prompt = { "split_system", "current_context_line_number" },
+      },
       chat = {
         -- reuse model and temperature from the initiating prompt
         prompt = { -- it will automatically include the system buffer from the conversation initiating the request.
@@ -346,7 +171,7 @@ Remember to never include code fences. Dont't be lazy!
         },
       },
       diff = {
-        model = "gpt-4o",
+        model = "gpt-4o-2024-08-06",
         prompt = {
           "diff_system",
           "current_context",
@@ -422,7 +247,14 @@ let result = sum(3, 5);]],
         {
           role = "user",
           reuse = true,
-          hidden = true,
+          hidden = function(opts)
+            return string.format(
+              "Diagnostics on line %d to %d in %s",
+              opts.start_line,
+              opts.end_line,
+              require("sia.utils").get_filename(opts.buf)
+            )
+          end,
           content = function(opts)
             local diagnostics = require("sia.context").get_diagnostics(opts.start_line, opts.end_line, opts.buf)
             local concatenated_diagnostics = ""
@@ -453,7 +285,7 @@ let result = sum(3, 5);]],
       },
       mode = "split",
       range = true,
-      model = "gpt-4o",
+      model = "gpt-4o-2024-08-06",
     },
     commit = {
       prompt = {
@@ -618,11 +450,10 @@ function M.setup(options)
 end
 
 function M._is_disabled(prompt)
-  if prompt.enabled ~= nil and (prompt.enabled == false or (type(prompt.enabled) and not prompt.enabled())) then
+  if prompt.enabled == false or (type(prompt.enabled) == "function" and not prompt.enabled()) then
     return true
-  else
-    return false
   end
+  return false
 end
 
 return M

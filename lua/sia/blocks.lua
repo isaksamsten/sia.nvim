@@ -106,14 +106,12 @@ local function attach_keybinding(buf, opts)
       end
     end, { buffer = buf, noremap = false, silent = true })
     if vim.api.nvim_buf_is_loaded(opts.buf) then
-      local full_path = vim.api.nvim_buf_get_name(opts.buf)
-      local file_name = vim.fn.fnamemodify(full_path, ":t")
       virt_text = string.format(
         "Press `%s` to replace line %s to %s in %s, `%s` to insert above, or `%s` to insert below",
         config.default.replace.map.replace,
         opts.start_range,
         opts.end_range,
-        file_name,
+        utils.get_filename(opts.buf),
         config.default.replace.map.insert_above,
         config.default.replace.map.insert_below
       )
