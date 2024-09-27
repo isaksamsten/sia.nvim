@@ -7,6 +7,7 @@ local defaults = {
     },
     split_system = {
       role = "system",
+      reuse = true,
       content = [[You are an AI programming assistant named "Sia". You are currently plugged in to the Neovim text editor on a user's machine.
 
 You are an expert coder and writer and helpful assistant. When providing solutions, ensure that code snippets are presented in fenced code blocks with the appropriate language identifier and follow the exact annotation format below:
@@ -177,6 +178,10 @@ You are an expert coder and writer and helpful assistant. When providing solutio
     },
     current_buffer_line_number = {
       role = "user",
+      hidden = function(opts)
+        return string.format("Buffer %s", opts.buf)
+      end,
+      reuse = true,
       content = function(opts)
         return string.format(
           "This is the complete buffer (%d):\n```%s\n%s\n```",
@@ -188,6 +193,10 @@ You are an expert coder and writer and helpful assistant. When providing solutio
     },
     current_buffer = {
       role = "user",
+      hidden = function(opts)
+        return string.format("Buffer %s", opts.buf)
+      end,
+      reuse = true,
       content = function(opts)
         return string.format(
           "This is the complete buffer written in %s:\n%s",
@@ -198,13 +207,22 @@ You are an expert coder and writer and helpful assistant. When providing solutio
     },
     current_context_line_number = {
       role = "user",
+      hidden = function(opts)
+        local end_line = opts.end_line
+        if opts.context_is_buffer then
+          end_line = vim.api.nvim_buf_line_count(opts.buf)
+        end
+        return string.format("Lines %d to %d in %s", opts.start_line, end_line, opts.buf)
+      end,
+      reuse = true,
       content = function(opts)
         if opts.mode == "v" then
-          local code = require("sia.context").get_code(
-            opts.start_line,
-            opts.end_line,
-            { bufnr = opts.buf, show_line_numbers = true }
-          )
+          local end_line = opts.end_line
+          if opts.context_is_buffer then
+            end_line = -1
+          end
+          local code =
+            require("sia.context").get_code(opts.start_line, end_line, { bufnr = opts.buf, show_line_numbers = true })
           return string.format(
             [[This is the context provided in buffer %s:
 ```%s
@@ -222,6 +240,14 @@ You are an expert coder and writer and helpful assistant. When providing solutio
     },
     current_context = {
       role = "user",
+      hidden = function(opts)
+        local end_line = opts.end_line
+        if opts.context_is_buffer then
+          end_line = vim.api.nvim_buf_line_count(opts.buf)
+        end
+        return string.format("Lines %d to %d in %s", opts.start_line, end_line, opts.buf)
+      end,
+      reuse = true,
       content = function(opts)
         if opts.mode == "v" then
           local code = require("sia.context").get_code(
@@ -307,7 +333,7 @@ Remember to never include code fences. Dont't be lazy!
             role = "system",
             content = function()
               return "This is the ongoing conversation: \n"
-                .. table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
+                .. table.concat(require("sia.utils").filter_hidden(vim.api.nvim_buf_get_lines(0, 0, -1, true)), "\n")
             end,
           },
         },
@@ -395,6 +421,8 @@ let result = sum(3, 5);]],
         "split_system",
         {
           role = "user",
+          reuse = true,
+          hidden = true,
           content = function(opts)
             local diagnostics = require("sia.context").get_diagnostics(opts.start_line, opts.end_line, opts.buf)
             local concatenated_diagnostics = ""
@@ -421,17 +449,7 @@ let result = sum(3, 5);]],
             )
           end,
         },
-        {
-          role = "user",
-          content = function(opts)
-            return string.format(
-              "This is the complete buffer (%d):\n```%s\n%s\n```",
-              opts.buf,
-              opts.ft,
-              require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
-            )
-          end,
-        },
+        "current_context_line_number",
       },
       mode = "split",
       range = true,
@@ -498,13 +516,7 @@ let result = sum(3, 5);]],
   4. Highlight any specific functions or methods used and their roles.
   5. Provide context on how the code fits into a larger application if applicable.]],
         },
-        {
-          role = "user",
-          content = [[Explain the following code:
-```{{filetype}}
-{{context}}
-```]],
-        },
+        "current_context_line_number",
       },
       mode = "split",
       temperature = 0.5,
@@ -526,26 +538,7 @@ let result = sum(3, 5);]],
         - Error handling (if applicable)
   6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.]],
         },
-        {
-          role = "user",
-          content = function(opts)
-            local code = require("sia.context").get_code(
-              opts.start_line,
-              opts.end_line,
-              { bufnr = opts.buf, show_line_numbers = false }
-            )
-            return string.format(
-              [[This is the context provided in buffer %s:
-  ```%s
-  %s
-  ```
-  ]],
-              opts.buf,
-              opts.ft,
-              code
-            )
-          end,
-        },
+        "current_context",
       },
       context = require("sia.context").treesitter("@function.outer"),
       use_mode_prompt = false,

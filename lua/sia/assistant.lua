@@ -1,6 +1,14 @@
 local config = require("sia.config")
 local assistant = {}
 
+local function sanitize_prompt(prompt)
+  local out = {}
+  for i, step in ipairs(prompt) do
+    out[i] = { role = step.role, content = step.content }
+  end
+  return out
+end
+
 --- Encodes the given prompt into a JSON string.
 ---
 --- @param prompt table: A table containing the details of the prompt.
@@ -10,7 +18,7 @@ local function encode(prompt, stream)
   local data = {
     model = prompt.model or config.options.default.model,
     temperature = prompt.temperature or config.options.default.temperature,
-    messages = prompt.prompt,
+    messages = sanitize_prompt(prompt.prompt),
   }
   if stream == nil or stream == true then
     data.stream = true

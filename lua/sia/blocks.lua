@@ -95,17 +95,11 @@ local function attach_keybinding(buf, opts)
       local lines = vim.api.nvim_buf_get_lines(buf, opts.start_block, opts.end_block - 1, false)
       local source_line_count = #lines
       if vim.api.nvim_buf_is_loaded(opts.buf) then
-        local start_range = opts.start_range - 1
-        local end_range = opts.end_range
-        if opts.start_range == vim.api.nvim_buf_line_count(opts.buf) then
-          start_range = start_range + 1
-          end_range = end_range + 1
-        end
-        vim.api.nvim_buf_set_lines(opts.buf, start_range, opts.end_range, false, lines)
+        vim.api.nvim_buf_set_lines(opts.buf, opts.start_range - 1, opts.end_range, false, lines)
         flash_highlight(
           opts.buf,
-          start_range,
-          start_range + source_line_count - 1,
+          opts.start_range,
+          opts.start_range + source_line_count - 1,
           config.default.replace.timeout,
           config.default.replace.highlight
         )
@@ -231,18 +225,22 @@ function M.detect_code_blocks(buf)
   local current_code_block = nil
   for i, line in ipairs(lines) do
     if current_code_block == nil then
-      local orig_buf, start_range, end_range = string.match(line, "^%s*```.+%s+(%d+)%s+replace%-range:(%d+),(%d+)")
-      if orig_buf and start_range and end_range then
+      local ft, orig_buf, start_range, end_range =
+        string.match(line, "^%s*```(.+)%s+(%d+)%s+replace%-range:(%d+),(%d+)")
+      if ft ~= "hidden" and orig_buf and start_range and end_range then
         current_code_block = {
           start_block = i,
           start_range = tonumber(start_range),
           end_range = tonumber(end_range),
           buf = tonumber(orig_buf),
         }
-      elseif string.match(line, "^%s*```%w+%s*$") then
-        current_code_block = {
-          start_block = i,
-        }
+      else
+        local ft = string.match(line, "^%s*```(%w+)%s*$")
+        if ft and ft ~= "hidden" then
+          current_code_block = {
+            start_block = i,
+          }
+        end
       end
     else
       if string.match(line, "^%s*```%s*$") then

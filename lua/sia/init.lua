@@ -266,8 +266,14 @@ local function collect_user_prompts(prompts)
   local lines = {}
   for _, prompt in ipairs(prompts) do
     if prompt.role == "user" then
-      for _, line in ipairs(vim.split(prompt.content, "\n", { plain = true, trimempty = false })) do
-        table.insert(lines, line)
+      if prompt.hidden == nil or prompt.hidden == false or type(prompt.hidden) == "function" then
+        local content = prompt.content
+        if type(prompt.hidden) == "function" then
+          content = string.format("```hidden\n%s\n```", prompt.hidden())
+        end
+        for _, line in ipairs(vim.split(content, "\n", { plain = true, trimempty = false })) do
+          table.insert(lines, line)
+        end
       end
     end
   end
@@ -390,213 +396,25 @@ function M.main(prompt, opts)
   local req_buf = vim.api.nvim_get_current_buf()
   local filetype = vim.bo.filetype
 
-  -- First we try to establish the context of the request
-  -- If prompt.context is a function we try to execute it
-  -- and use the returned start and end lines.
-  --
-  -- Ignored if the use has already supplied a range.
-  if prompt.context and opts.mode ~= "v" then
-    local ok, lines = prompt.context(req_buf, opts)
-    if not ok then
-      vim.notify(lines) -- lines is an error message
-      return
-    end
-    opts.start_line = lines.start_line
-    opts.end_line = lines.end_line
-  end
-
-  local strategy
-  local mode = prompt.mode
-
-  -- If the user has used a bang, we always use insert mode
-  if not mode then
-    if opts.bang and opts.mode == "n" then
-      mode = "insert"
-    elseif opts.bang and opts.mode == "v" then
-      mode = "diff"
-    else
-      mode = "split"
-    end
-  end
-
-  -- Request initiated from *sia*-buffer this is a chat message
-  if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
-    local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "_sia_prompt")
-    if ok then
-      if #buffer_prompt.prompt > 1 then
-        table.insert(prompt.prompt, 1, buffer_prompt.prompt[1])
-      end
-      if buffer_prompt.temperature and type(buffer_prompt.temperature) == "table" then
-        prompt.temperature = buffer_prompt.temperature[false]
-      elseif buffer_prompt.temperature then
-        prompt.temperature = buffer_prompt.temperature
-      end
-      prompt.model = buffer_prompt.model
-    end
-    strategy = chat_strategy(req_buf, req_win, prompt)
-  elseif mode == "replace" then
-    local buf_append = nil
-    strategy = {
-      on_progress = function(content)
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-          -- Join all changes to simplify undo
-          if buf_append then
-            vim.api.nvim_buf_call(req_buf, function()
-              pcall(vim.cmd.undojoin)
-            end)
-          else
-            buf_append = BufAppend:new(req_buf, opts.start_line - 1, 0)
-          end
-
-          buf_append:append_to_buffer(content)
-        end
-      end,
-
-      on_start = function(job)
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-          vim.api.nvim_buf_set_lines(req_buf, opts.start_line - 1, opts.end_line, false, { "" })
-          vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
-            callback = function()
-              vim.fn.jobstop(job)
-            end,
-          })
-          vim.api.nvim_buf_set_keymap(req_buf, "i", "<c-x>", "", {
-            callback = function()
-              vim.fn.jobstop(job)
-            end,
-          })
-        end
-      end,
-      on_complete = function()
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
-          vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
-          vim.api.nvim_buf_del_keymap(req_buf, "i", "<c-x>")
-          if prompt.cursor and prompt.cursor == "start" then
-            vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
-          elseif buf_append then
-            vim.api.nvim_win_set_cursor(req_win, { buf_append.line + 1, buf_append.col })
-          end
-        end
-      end,
-    }
-  elseif mode == "insert" then
-    local current_line, placement = resolve_placement_start(req_win, prompt.insert, opts)
-
-    local buf_append = nil
-    strategy = {
-      on_progress = function(content)
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-          -- Join all changes to simplify undo
-          if buf_append then
-            vim.api.nvim_buf_call(req_buf, function()
-              pcall(vim.cmd.undojoin)
-            end)
-          else
-            local line = vim.api.nvim_buf_get_lines(req_buf, current_line - 1, current_line, false)
-            buf_append = BufAppend:new(req_buf, current_line - 1, #line[1])
-          end
-
-          buf_append:append_to_buffer(content)
-        end
-      end,
-
-      on_start = function(job)
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-          if placement and placement == "below" then
-            vim.api.nvim_buf_set_lines(req_buf, current_line, current_line, false, { "" })
-            current_line = current_line + 1
-          elseif placement and placement == "above" then
-            vim.api.nvim_buf_set_lines(req_buf, current_line - 1, current_line - 1, false, { "" })
-          else
-            -- Add to end of line
-          end
-          vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
-            callback = function()
-              vim.fn.jobstop(job)
-            end,
-          })
-        end
-      end,
-      on_complete = function()
-        if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
-          vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
-          if prompt.cursor and prompt.cursor == "start" then
-            vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
-          elseif buf_append then
-            vim.api.nvim_win_set_cursor(req_win, { buf_append.line + 1, buf_append.col })
-          end
-        end
-      end,
-    }
-  elseif mode == "diff" then
-    vim.cmd("vsplit")
-    local res_win = vim.api.nvim_get_current_win()
-    local res_buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_win_set_buf(res_win, res_buf)
-    vim.api.nvim_buf_set_option(res_buf, "filetype", filetype)
-
-    for _, wo in pairs(prompt.diff and prompt.diff.wo or config.options.default.diff.wo or {}) do
-      vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
-    end
-
-    -- Partition request buffer
-    local before_context = vim.api.nvim_buf_get_lines(req_buf, 0, opts.start_line - 1, true)
-    local after_context = vim.api.nvim_buf_get_lines(req_buf, opts.end_line, -1, true)
-
-    -- Add line before the response
-    vim.api.nvim_buf_set_lines(res_buf, 0, 0, true, before_context)
-    vim.api.nvim_win_set_cursor(res_win, { opts.start_line, 0 })
-
-    local buf_append = BufAppend:new(res_buf, opts.start_line - 1, 0)
-    strategy = {
-      on_complete = function()
-        if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
-          -- Add line after the response
-          vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
-
-          if vim.api.nvim_win_is_valid(res_win) and vim.api.nvim_win_is_valid(req_win) then
-            vim.api.nvim_set_current_win(res_win)
-            vim.cmd("diffthis")
-            vim.api.nvim_set_current_win(req_win)
-            vim.cmd("diffthis")
-          end
-
-          vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
-          vim.api.nvim_buf_set_option(res_buf, "modifiable", false)
-        end
-      end,
-      on_progress = function(content)
-        if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
-          buf_append:append_to_buffer(content)
-          if vim.api.nvim_win_is_valid(res_win) then
-            vim.api.nvim_win_set_cursor(res_win, { buf_append.line + 1, buf_append.col })
-          end
-        end
-      end,
-      on_start = function(job)
-        vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
-          callback = function()
-            vim.fn.jobstop(job)
-          end,
-        })
-      end,
-    }
-  elseif mode == "split" then
-    local res_win, res_buf = make_sia_split()
-    local split_wo = prompt.wo or config.options.default.split.wo
-    if split_wo then
-      for key, value in pairs(split_wo) do
-        vim.api.nvim_win_set_option(res_win, key, value)
-      end
-    end
-
-    strategy = chat_strategy(res_buf, res_win, prompt)
-  else
-    vim.notify("invalid mode")
-    return
-  end
-
   if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+    -- First we try to establish the context of the request
+    -- If prompt.context is a function we try to execute it
+    -- and use the returned start and end lines.
+    --
+    -- Ignored if the use has already supplied a range.
+    if prompt.context and opts.mode ~= "v" then
+      local ok, lines = prompt.context(req_buf, opts)
+      if not ok then
+        vim.notify(lines) -- lines is an error message
+        return
+      end
+      opts.start_line = lines.start_line
+      opts.end_line = lines.end_line
+    end
+    if opts.start_line == 1 and opts.end_line == vim.api.nvim_buf_line_count(req_buf) then
+      opts.context_is_buffer = true
+    end
+
     local context, context_suffix
     -- If the user has given a range or a context get the context delineated by
     -- the range or the context
@@ -638,6 +456,219 @@ function M.main(prompt, opts)
     opts.ft = filetype
     opts.filepath = replacement.filepath
     opts.context = context
+
+    -- Memoize functions
+    for _, step in ipairs(prompt.prompt) do
+      if type(step.content) == "function" then
+        local content = step.content
+        step.content = function()
+          return content(opts)
+        end
+        if step.hidden and type(step.hidden) == "function" then
+          local hidden = step.hidden
+          step.hidden = function()
+            return hidden(opts)
+          end
+        end
+      end
+    end
+
+    local strategy
+    local mode = prompt.mode
+
+    -- If the user has used a bang, we always use insert mode
+    if not mode then
+      if opts.bang and opts.mode == "n" then
+        mode = "insert"
+      elseif opts.bang and opts.mode == "v" then
+        mode = "diff"
+      else
+        mode = "split"
+      end
+    end
+
+    -- Request initiated from *sia*-buffer this is a chat message
+    if vim.api.nvim_buf_get_option(req_buf, "filetype") == "sia" then
+      local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, req_buf, "_sia_prompt")
+      if ok then
+        if #buffer_prompt.prompt > 1 then
+          for i = #buffer_prompt.prompt, 1, -1 do
+            local item = buffer_prompt.prompt[i]
+            if item.reuse then
+              table.insert(prompt.prompt, 1, item)
+            end
+          end
+        end
+        if buffer_prompt.temperature and type(buffer_prompt.temperature) == "table" then
+          prompt.temperature = buffer_prompt.temperature[false]
+        elseif buffer_prompt.temperature then
+          prompt.temperature = buffer_prompt.temperature
+        end
+        prompt.model = buffer_prompt.model
+      end
+      strategy = chat_strategy(req_buf, req_win, prompt)
+    elseif mode == "replace" then
+      local buf_append = nil
+      strategy = {
+        on_progress = function(content)
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+            -- Join all changes to simplify undo
+            if buf_append then
+              vim.api.nvim_buf_call(req_buf, function()
+                pcall(vim.cmd.undojoin)
+              end)
+            else
+              buf_append = BufAppend:new(req_buf, opts.start_line - 1, 0)
+            end
+
+            buf_append:append_to_buffer(content)
+          end
+        end,
+
+        on_start = function(job)
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+            vim.api.nvim_buf_set_lines(req_buf, opts.start_line - 1, opts.end_line, false, { "" })
+            vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
+              callback = function()
+                vim.fn.jobstop(job)
+              end,
+            })
+            vim.api.nvim_buf_set_keymap(req_buf, "i", "<c-x>", "", {
+              callback = function()
+                vim.fn.jobstop(job)
+              end,
+            })
+          end
+        end,
+        on_complete = function()
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
+            vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+            vim.api.nvim_buf_del_keymap(req_buf, "i", "<c-x>")
+            if prompt.cursor and prompt.cursor == "start" then
+              vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+            elseif buf_append then
+              vim.api.nvim_win_set_cursor(req_win, { buf_append.line + 1, buf_append.col })
+            end
+          end
+        end,
+      }
+    elseif mode == "insert" then
+      local current_line, placement = resolve_placement_start(req_win, prompt.insert, opts)
+
+      local buf_append = nil
+      strategy = {
+        on_progress = function(content)
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+            -- Join all changes to simplify undo
+            if buf_append then
+              vim.api.nvim_buf_call(req_buf, function()
+                pcall(vim.cmd.undojoin)
+              end)
+            else
+              local line = vim.api.nvim_buf_get_lines(req_buf, current_line - 1, current_line, false)
+              buf_append = BufAppend:new(req_buf, current_line - 1, #line[1])
+            end
+
+            buf_append:append_to_buffer(content)
+          end
+        end,
+
+        on_start = function(job)
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
+            if placement and placement == "below" then
+              vim.api.nvim_buf_set_lines(req_buf, current_line, current_line, false, { "" })
+              current_line = current_line + 1
+            elseif placement and placement == "above" then
+              vim.api.nvim_buf_set_lines(req_buf, current_line - 1, current_line - 1, false, { "" })
+            else
+              -- Add to end of line
+            end
+            vim.api.nvim_buf_set_keymap(req_buf, "n", "x", "", {
+              callback = function()
+                vim.fn.jobstop(job)
+              end,
+            })
+          end
+        end,
+        on_complete = function()
+          if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_win_is_valid(req_win) then
+            vim.api.nvim_buf_del_keymap(req_buf, "n", "x")
+            if prompt.cursor and prompt.cursor == "start" then
+              vim.api.nvim_win_set_cursor(req_win, { opts.start_line, 0 })
+            elseif buf_append then
+              vim.api.nvim_win_set_cursor(req_win, { buf_append.line + 1, buf_append.col })
+            end
+          end
+        end,
+      }
+    elseif mode == "diff" then
+      vim.cmd("vsplit")
+      local res_win = vim.api.nvim_get_current_win()
+      local res_buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_win_set_buf(res_win, res_buf)
+      vim.api.nvim_buf_set_option(res_buf, "filetype", filetype)
+
+      for _, wo in pairs(prompt.diff and prompt.diff.wo or config.options.default.diff.wo or {}) do
+        vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
+      end
+
+      -- Partition request buffer
+      local before_context = vim.api.nvim_buf_get_lines(req_buf, 0, opts.start_line - 1, true)
+      local after_context = vim.api.nvim_buf_get_lines(req_buf, opts.end_line, -1, true)
+
+      -- Add line before the response
+      vim.api.nvim_buf_set_lines(res_buf, 0, 0, true, before_context)
+      vim.api.nvim_win_set_cursor(res_win, { opts.start_line, 0 })
+
+      local buf_append = BufAppend:new(res_buf, opts.start_line - 1, 0)
+      strategy = {
+        on_complete = function()
+          if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
+            -- Add line after the response
+            vim.api.nvim_buf_set_lines(res_buf, -1, -1, true, after_context)
+
+            if vim.api.nvim_win_is_valid(res_win) and vim.api.nvim_win_is_valid(req_win) then
+              vim.api.nvim_set_current_win(res_win)
+              vim.cmd("diffthis")
+              vim.api.nvim_set_current_win(req_win)
+              vim.cmd("diffthis")
+            end
+
+            vim.api.nvim_buf_del_keymap(res_buf, "n", "x")
+            vim.api.nvim_buf_set_option(res_buf, "modifiable", false)
+          end
+        end,
+        on_progress = function(content)
+          if vim.api.nvim_buf_is_valid(res_buf) and vim.api.nvim_buf_is_loaded(res_buf) then
+            buf_append:append_to_buffer(content)
+            if vim.api.nvim_win_is_valid(res_win) then
+              vim.api.nvim_win_set_cursor(res_win, { buf_append.line + 1, buf_append.col })
+            end
+          end
+        end,
+        on_start = function(job)
+          vim.api.nvim_buf_set_keymap(res_buf, "n", "x", "", {
+            callback = function()
+              vim.fn.jobstop(job)
+            end,
+          })
+        end,
+      }
+    elseif mode == "split" then
+      local res_win, res_buf = make_sia_split()
+      local split_wo = prompt.wo or config.options.default.split.wo
+      if split_wo then
+        for key, value in pairs(split_wo) do
+          vim.api.nvim_win_set_option(res_win, key, value)
+        end
+      end
+
+      strategy = chat_strategy(res_buf, res_win, prompt)
+    else
+      vim.notify("invalid mode")
+      return
+    end
+
     local steps_to_remove = {}
     for i, step in ipairs(prompt.prompt) do
       if type(step.content) == "function" then

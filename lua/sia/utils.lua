@@ -76,4 +76,20 @@ function M.get_window_for_buffer(buf)
   return nil
 end
 
+function M.filter_hidden(content)
+  local filter = {}
+  local is_hidden = false
+  for _, line in ipairs(content) do
+    if string.match(line, "%s*```hidden%s*") then
+      is_hidden = true
+    elseif is_hidden and string.match(line, "%s*```%s*") then
+      is_hidden = false
+    end
+    if not is_hidden then
+      table.insert(filter, line)
+    end
+  end
+  return filter
+end
+
 return M
