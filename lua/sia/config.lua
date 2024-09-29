@@ -1,5 +1,10 @@
 local M = {}
 local defaults = {
+  models = {
+    ["gpt-4o"] = { "openai", "gpt-4o-2024-08-06" },
+    ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
+    copilot = { "copilot", "gpt-4o-2024-05-13" },
+  },
   named_prompts = {
     chat_system = {
       role = "system",
@@ -8,12 +13,14 @@ local defaults = {
     split_system = {
       role = "system",
       reuse = true,
-      content = [[You are an AI assistant named "Sia" integrated with Neovim. Provide code snippets with precise annotations in fenced blocks, following these guidelines:
+      content = [[You are an AI assistant named "Sia" integrated with Neovim.
+
+Provide code snippets with precise annotations in fenced blocks, following these guidelines:
 
 - Include `[buffer] replace-range:[start-line],[end-line]` right after the language identifier in the code block.
 - Always preserve indentation, and avoid outputting numbered lines.
 - Replace ranges must accurately reflect the lines being modified, including comments or closing brackets.
-- Double-check start-line and end-line accuracy, ensuring the range covers the exact lines of change without overwriting other content.
+- Double-check start-line and end-line accuracy, ensuring the range covers the exact lines of change without overwriting or deleting other content.
 
 Example (user provides buffer 2):
 
@@ -106,28 +113,20 @@ The editor identifies the file as written in {{filetype}}.
     },
     diff_system = {
       role = "system",
-      content = [[Note that the user query is initiated from a
-text editor and your changes will be diffed against an optional context
-provided by the user. The editor identifies the file as written in
-{{filetype}}.
+      content = [[The user query is initiated from a text editor, and the response should never include code fences or line numbers.
 
-1. If possible, make sure that you only output the relevant and requested changes.
-2. Refrain from explaining your reasoning or adding additional unrelated text to the output.
-3. If the context pertains to code, identify the the programming
-language and DO NOT ADD ANY ADDITIONAL TEXT OR MARKDOWN FORMATTING!
-4. Adding code fences or markdown code blocks is an error.
-5. **Always preserve** indentation for code.
-6. Never include line numbers.
+Guidelines:
 
-Double-check your response and never include code-fances or line numbers!
-Remember to never include line numbers. Don't be lazy!
-Remember to never include code fences. Dont't be lazy!
-]],
+	1.	Only output the requested changes.
+	2.	Never include code fences (```) or line numbers in the output.
+	3.	Always preserve the original indentation for code.
+	4.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
     },
   },
   default = {
-    model = "gpt-4o-mini", -- default model
-    temperature = 0.5, -- default temperature
+    -- model = "gpt-4o-mini", -- default model
+    model = "copilot",
+    temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
     split = {
@@ -147,7 +146,7 @@ Remember to never include code fences. Dont't be lazy!
     },
     mode_prompt = {
       split = {
-        model = "gpt-4o-2024-08-06",
+        model = "gpt-4o",
         temperature = 0.0,
         prompt = { "split_system", "current_context_line_number" },
       },
@@ -171,7 +170,7 @@ Remember to never include code fences. Dont't be lazy!
         },
       },
       diff = {
-        model = "gpt-4o-2024-08-06",
+        model = "gpt-4o",
         prompt = {
           "diff_system",
           "current_context",
@@ -180,67 +179,6 @@ Remember to never include code fences. Dont't be lazy!
     },
   },
   prompts = {
-    codify = {
-      prompt = {
-        {
-          role = "system",
-          content = [[You are an AI code assistant tasked with converting natural language instructions into working code. The user will provide:
-
-1. **Filetype:** The programming language or file format they want to use.
-2. **Context:** A function signature, partial code, or a short natural language instruction or pseudocode specifying the desired behavior.
-
-Your job is to:
-- **Infer the user's intent** based on the context.
-- **Generate only code** — no explanations, comments, or code fences.
-- **Guess the appropriate indentation** and code structure based on the provided context.
-- Ensure the output is syntactically correct and aligned with the specified filetype.
-- Never generate
-
-### Example Input:
-**Filetype:** Python
-**Context:**
-```python
-def range_inclusive(start, end):
-    return range(start, end + 1)
-
-my_range = range from 1 to 10
-```
-
-### Example Output:
-my_range = range_inclusive(1, 10)
-
-### Example Input:
-**Filetype:** JavaScript
-**Context:**
-```javascript
-function sum(a, b) {
-    return a + b;
-
-let result = add 3 and 5
-```
-
-### Example Output:
-let result = sum(3, 5);]],
-        },
-        {
-          role = "user",
-          content = function(opts)
-            return string.format(
-              "This is the current buffer, written in %s\n\n%s",
-              opts.ft,
-              table.concat(vim.api.nvim_buf_get_lines(opts.buf, 0, -1, false), "\n")
-            )
-          end,
-        },
-        {
-          role = "user",
-          content = "{{context}}",
-        },
-      },
-      mode = "replace",
-      prefix = 1,
-      suffix = 0,
-    },
     diagnostic = {
       prompt = {
         "split_system",
@@ -285,7 +223,7 @@ let result = sum(3, 5);]],
       },
       mode = "split",
       range = true,
-      model = "gpt-4o-2024-08-06",
+      model = "gpt-4o",
     },
     commit = {
       prompt = {
@@ -427,7 +365,6 @@ code is included, the response is incorrect.]],
       cursor = "end", -- start or end
     },
   },
-  openai_api_key = "OPENAI_API_KEY",
   report_usage = true,
   debug = false,
 }

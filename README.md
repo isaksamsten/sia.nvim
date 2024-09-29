@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">sia.nvim</h1>
 
-An LLM assistant for Neovim.
+An LLM assistant for Neovim with support for OpenAI and Copilot.
 
 ## 💡 Idea
 
@@ -125,6 +125,11 @@ Or we can add new prompts:
 
 ```lua
 opts = {
+  models = {
+    ["gpt-4o"] = { "openai", "gpt-4o-2024-08-06" },
+    ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
+    copilot = { "copilot", "gpt-4o-2024-05-13" },
+  },
   prompts = {
     fix = {
       prompt = {

@@ -24,7 +24,10 @@ local function make_sia_split(prompt)
   vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
   vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
   vim.api.nvim_buf_set_option(res_buf, "buftype", "nowrite")
-  vim.api.nvim_buf_set_name(res_buf, "*sia*")
+  local status, _ = pcall(vim.api.nvim_buf_set_name, res_buf, "*sia*")
+  if not status then
+    vim.api.nvim_buf_set_name(res_buf, "*sia* " .. math.random(1, 1000))
+  end
   return res_win, res_buf
 end
 
@@ -152,10 +155,11 @@ function M.setup(options)
     )
   end
 
-  local augroup_id = vim.api.nvim_create_augroup("SiaDetectCodeBlock", { clear = true })
+  local blocks_augroup = vim.api.nvim_create_augroup("SiaDetectCodeBlock", { clear = true })
+  local blocks_augroup = vim.api.nvim_create_augroup("SiaOnTyping", { clear = true })
 
   vim.api.nvim_create_autocmd("CursorMoved", {
-    group = augroup_id,
+    group = blocks_augroup,
     pattern = "*",
     callback = function(args)
       if vim.bo.filetype == "sia" then
@@ -164,7 +168,7 @@ function M.setup(options)
     end,
   })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-    group = augroup_id,
+    group = blocks_augroup,
     pattern = "*",
     callback = function(args)
       if vim.bo[args.buf].filetype == "sia" then
@@ -343,16 +347,18 @@ local function chat_strategy(buf, winnr, prompt)
         end
         vim.api.nvim_buf_del_keymap(buf, "n", "x")
         vim.api.nvim_buf_set_option(buf, "modifiable", false)
-        require("sia.assistant").simple_query({
-          {
-            role = "system",
-            content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three to five words. Only output the name, nothing else.",
-          },
-          { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, true), "\n") },
-        }, function(content)
-          pcall(vim.api.nvim_buf_set_name, buf, "*sia* " .. content:lower():gsub("%s+", "-"))
+        vim.schedule(function()
+          require("sia.assistant").simple_query({
+            {
+              role = "system",
+              content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three to five words. Only output the name, nothing else.",
+            },
+            { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, true), "\n") },
+          }, function(content)
+            pcall(vim.api.nvim_buf_set_name, buf, "*sia* " .. content:lower():gsub("%s+", "-"))
+          end)
+          require("sia.blocks").detect_code_blocks(buf)
         end)
-        require("sia.blocks").detect_code_blocks(buf)
       end
     end,
   }
@@ -400,87 +406,105 @@ local function resolve_placement_start(win, insert, opts)
   end
 end
 
+local function finalize_prompt(prompt, replacement)
+  local steps_to_remove = {}
+  for i, step in ipairs(prompt.prompt) do
+    if type(step.content) == "function" then
+      step.content = step.content()
+    end
+    step.content = step.content:gsub("{{(.-)}}", function(key)
+      return replacement[key] or key
+    end)
+    if step.content == "" then
+      table.insert(steps_to_remove, i)
+    end
+  end
+
+  for _, step in ipairs(steps_to_remove) do
+    table.remove(prompt.prompt, step)
+  end
+end
+
+local function prepare_prompt(req_buf, prompt, opts)
+  -- First we try to establish the context of the request
+  -- If prompt.context is a function we try to execute it
+  -- and use the returned start and end lines.
+  --
+  -- Ignored if the use has already supplied a range.
+  if prompt.context and opts.mode ~= "v" then
+    local ok, lines = prompt.context(req_buf, opts)
+    if not ok then
+      vim.notify(lines) -- lines is an error message
+      return
+    end
+    opts.start_line = lines.start_line
+    opts.end_line = lines.end_line
+  end
+  if opts.start_line == 1 and opts.end_line == vim.api.nvim_buf_line_count(req_buf) then
+    opts.context_is_buffer = true
+  end
+
+  local context, context_suffix
+  -- If the user has given a range or a context get the context delineated by
+  -- the range or the context
+  if opts.mode == "v" or prompt.context ~= nil then
+    context = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.start_line - 1, opts.end_line, true), "\n")
+  else
+    -- Otherwise, we use the context surrounding the current line given by
+    -- prefix and suffix
+    local start_line
+    if prompt.prefix and prompt.prefix ~= false then
+      start_line = math.max(0, opts.start_line - prompt.prefix)
+    else
+      start_line = opts.start_line - (config.options.default.prefix or 1)
+    end
+    if prompt.prefix ~= false then
+      context = table.concat(vim.api.nvim_buf_get_lines(req_buf, start_line, opts.start_line, true), "\n")
+    else
+      context = ""
+    end
+
+    local suffix = prompt.suffix or config.options.suffix
+    if suffix and suffix > 0 then
+      local line_count = vim.api.nvim_buf_line_count(req_buf)
+      local end_line = math.min(line_count, opts.end_line + prompt.suffix)
+      context_suffix = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.end_line - 1, end_line, true), "\n")
+    else
+      context_suffix = ""
+    end
+  end
+
+  local ft = vim.api.nvim_buf_get_option(req_buf, "filetype")
+  opts.context = context
+  opts.context_suffix = context_suffix
+  opts.buf = req_buf
+  opts.ft = ft
+  opts.filepath = vim.api.nvim_buf_get_name(req_buf)
+
+  -- Memoize functions
+  for _, step in ipairs(prompt.prompt) do
+    if type(step.content) == "function" then
+      local content = step.content
+      step.content = function()
+        return content(opts)
+      end
+      if step.hidden and type(step.hidden) == "function" then
+        local hidden = step.hidden
+        step.hidden = function()
+          return hidden(opts)
+        end
+      end
+    end
+  end
+end
+
 function M.main(prompt, opts)
   local req_win = vim.api.nvim_get_current_win()
   local req_buf = vim.api.nvim_get_current_buf()
-  local filetype = vim.bo.filetype
 
   if vim.api.nvim_buf_is_valid(req_buf) and vim.api.nvim_buf_is_loaded(req_buf) then
-    -- First we try to establish the context of the request
-    -- If prompt.context is a function we try to execute it
-    -- and use the returned start and end lines.
-    --
-    -- Ignored if the use has already supplied a range.
-    if prompt.context and opts.mode ~= "v" then
-      local ok, lines = prompt.context(req_buf, opts)
-      if not ok then
-        vim.notify(lines) -- lines is an error message
-        return
-      end
-      opts.start_line = lines.start_line
-      opts.end_line = lines.end_line
-    end
-    if opts.start_line == 1 and opts.end_line == vim.api.nvim_buf_line_count(req_buf) then
-      opts.context_is_buffer = true
-    end
-
-    local context, context_suffix
-    -- If the user has given a range or a context get the context delineated by
-    -- the range or the context
-    if opts.mode == "v" or prompt.context ~= nil then
-      context = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.start_line - 1, opts.end_line, true), "\n")
-    else
-      -- Otherwise, we use the context surrounding the current line given by
-      -- prefix and suffix
-      local start_line
-      if prompt.prefix and prompt.prefix ~= false then
-        start_line = math.max(0, opts.start_line - prompt.prefix)
-      else
-        start_line = opts.start_line - (config.options.default.prefix or 1)
-      end
-      if prompt.prefix ~= false then
-        context = table.concat(vim.api.nvim_buf_get_lines(req_buf, start_line, opts.start_line, true), "\n")
-      else
-        context = ""
-      end
-
-      local suffix = prompt.suffix or config.options.suffix
-      if suffix and suffix > 0 then
-        local line_count = vim.api.nvim_buf_line_count(req_buf)
-        local end_line = math.min(line_count, opts.end_line + prompt.suffix)
-        context_suffix = table.concat(vim.api.nvim_buf_get_lines(req_buf, opts.end_line - 1, end_line, true), "\n")
-      else
-        context_suffix = ""
-      end
-    end
-
-    local ft = vim.api.nvim_buf_get_option(req_buf, "filetype")
-    local replacement = {
-      filetype = ft,
-      filepath = vim.api.nvim_buf_get_name(req_buf),
-      context = context,
-      context_suffix = context_suffix,
-    }
-    opts.buf = req_buf
-    opts.ft = filetype
-    opts.filepath = replacement.filepath
-    opts.context = context
-
-    -- Memoize functions
-    for _, step in ipairs(prompt.prompt) do
-      if type(step.content) == "function" then
-        local content = step.content
-        step.content = function()
-          return content(opts)
-        end
-        if step.hidden and type(step.hidden) == "function" then
-          local hidden = step.hidden
-          step.hidden = function()
-            return hidden(opts)
-          end
-        end
-      end
-    end
+    -- modifies the prompt and opts
+    prepare_prompt(req_buf, prompt, opts)
 
     local strategy
     local mode = prompt.mode
@@ -615,7 +639,7 @@ function M.main(prompt, opts)
       local res_win = vim.api.nvim_get_current_win()
       local res_buf = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_win_set_buf(res_win, res_buf)
-      vim.api.nvim_buf_set_option(res_buf, "filetype", filetype)
+      vim.api.nvim_buf_set_option(res_buf, "filetype", opts.ft)
 
       for _, wo in pairs(prompt.diff and prompt.diff.wo or config.options.default.diff.wo or {}) do
         vim.api.nvim_win_set_option(res_win, wo, vim.api.nvim_win_get_option(req_win, wo))
@@ -678,26 +702,18 @@ function M.main(prompt, opts)
       return
     end
 
-    local steps_to_remove = {}
-    for i, step in ipairs(prompt.prompt) do
-      if type(step.content) == "function" then
-        step.content = step.content()
-      end
-      step.content = step.content:gsub("{{(.-)}}", function(key)
-        return replacement[key] or key
-      end)
-      if step.content == "" then
-        table.insert(steps_to_remove, i)
-      end
-    end
-
-    for _, step in ipairs(steps_to_remove) do
-      table.remove(prompt.prompt, step)
-    end
+    finalize_prompt(prompt, {
+      filetype = opts.ft,
+      filepath = opts.filepath,
+      context = opts.context,
+      context_suffix = opts.context_suffix,
+    })
     if config.options.debug then
       print(vim.inspect(prompt))
     end
-    require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
+    vim.schedule(function()
+      require("sia.assistant").query(prompt, strategy.on_start, strategy.on_progress, strategy.on_complete)
+    end)
   end
 end
 
