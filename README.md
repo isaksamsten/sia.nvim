@@ -22,28 +22,19 @@ high-quality written content more effectively.
 
 Prompt selected line into LLM and highlight the differences with the original text.
 
-
 https://github.com/user-attachments/assets/559fbaa8-e5fd-4bc1-a6bf-54e62632dc5d
-
-
 
 https://github.com/user-attachments/assets/16718940-272a-4c08-bc0a-1562d6d031c5
 
-
 Ask questions about code
-
 
 https://github.com/user-attachments/assets/cd187b9e-1188-48ba-b63d-d5faff674a39
 
-
 Help with diagnostics
-
 
 https://github.com/user-attachments/assets/1729b076-3789-46e7-8b4e-e656207b4c56
 
-
 Explain code (here with operator pending mode binding to explain the current method).
-
 
 https://github.com/user-attachments/assets/a3a8b830-1f1b-4d4b-aa31-c2292e26085e
 
@@ -51,10 +42,7 @@ https://github.com/user-attachments/assets/a3a8b830-1f1b-4d4b-aa31-c2292e26085e
 
 Add new functionality
 
-
 https://github.com/user-attachments/assets/e06faca2-58ab-42da-a2e6-77eee126c495
-
-
 
 ## ⚡️ Requirements
 
@@ -94,18 +82,18 @@ https://github.com/user-attachments/assets/e06faca2-58ab-42da-a2e6-77eee126c495
 
 `sia.nvim` has six predefined prompts:
 
-- `Sia: /commit` Insert at the end of the current line a commit message describing
+- `:Sia /commit` Insert at the end of the current line a commit message describing
   _staged_ changes.
-- `Sia: /explain` With the current range, open a split view and explain what the
+- `:Sia /explain` With the current range, open a split view and explain what the
   code does.
-- `Sia: /unittest` With the current range or function under cursor, open a split
+- `:Sia /unittest` With the current range or function under cursor, open a split
   view and generate a unit test.
-- `Sia: /doc` With the current range or function under cursor, insert a
+- `:Sia /doc` With the current range or function under cursor, insert a
   documentation comment or string above or below the declaration (depending on
   language)
-- `Sia: /codify` Replace the current context (range or current line) with the LLMs
+- `:Sia /codify` Replace the current context (range or current line) with the LLMs
   interpretation of intent. Sends the full buffer as context.
-- `Sia: /diagnostics` sends a list of diagnostic messages in the current range and
+- `:Sia /diagnostics` sends a list of diagnostic messages in the current range and
   the full buffer, prompting the LLM to fix the issues.
 
 We can change the behaviour of those prompts:
@@ -206,26 +194,6 @@ opts = {
     },
     insert = { -- options for insert
       placement = "below",
-    },
-    -- default prompts for the different modes
-    mode_prompt = {
-      split = {
-        "chat_system", -- use the named prompt "chat_system"
-      },
-      chat = {
-        "chat_system", -- for ongoing conversations in the split buffer
-        { role = "system", content = "This is the ongoing conversation: \n{{buffer}}" },
-      },
-      insert = {
-        { role = "system", content = "You are an helpful assistant" },
-        { role = "system", content = "This is the current context: \n\n{{context}}" },
-        "insert_system",
-      },
-      diff = {
-        { role = "system", content = "You are an helpful assistant" },
-        { role = "system", content = "This is the current context: \n\n{{context}}" },
-        "diff_system",
-      },
     },
   },
 }

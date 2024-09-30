@@ -4,6 +4,35 @@ local BufAppend = utils.BufAppend
 
 local M = {}
 
+local BufferTracker = {}
+BufferTracker._open_buffers = {}
+
+function BufferTracker.add(buf, win)
+  table.insert(BufferTracker._open_buffers, { buf = buf, win = win })
+end
+
+function BufferTracker.pop()
+  return table.remove(BufferTracker._open_buffers)
+end
+
+function BufferTracker.last()
+  return BufferTracker._open_buffers[#BufferTracker._open_buffers]
+end
+
+function BufferTracker.remove(buf)
+  for i, open in ipairs(BufferTracker._open_buffers) do
+    if open.buf == buf then
+      table.remove(BufferTracker._open_buffers, i)
+      return true
+    end
+  end
+  return false
+end
+
+function BufferTracker.count()
+  return #BufferTracker._open_buffers
+end
+
 local function get_position(type)
   local start_pos, end_pos
   if type == nil or type == "line" then
@@ -18,56 +47,52 @@ end
 
 local function make_sia_split(prompt)
   vim.cmd(prompt and prompt.split and prompt.split.cmd or config.options.default.split.cmd or "vsplit")
-  local res_win = vim.api.nvim_get_current_win()
-  local res_buf = vim.api.nvim_create_buf(true, true)
-  vim.api.nvim_win_set_buf(res_win, res_buf)
-  vim.api.nvim_buf_set_option(res_buf, "filetype", "sia")
-  vim.api.nvim_buf_set_option(res_buf, "syntax", "markdown")
-  vim.api.nvim_buf_set_option(res_buf, "buftype", "nowrite")
-  local status, _ = pcall(vim.api.nvim_buf_set_name, res_buf, "*sia*")
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_create_buf(true, true)
+  vim.api.nvim_win_set_buf(win, buf)
+  vim.api.nvim_buf_set_option(buf, "filetype", "sia")
+  vim.api.nvim_buf_set_option(buf, "syntax", "markdown")
+  vim.api.nvim_buf_set_option(buf, "buftype", "nowrite")
+  local status, _ = pcall(vim.api.nvim_buf_set_name, buf, "*sia*")
   if not status then
-    vim.api.nvim_buf_set_name(res_buf, "*sia* " .. math.random(1, 1000))
+    vim.api.nvim_buf_set_name(buf, "*sia* " .. BufferTracker.count())
   end
-  return res_win, res_buf
+  BufferTracker.add(buf, win)
+  return win, buf
+end
+
+function _G.__sia_add_buffer()
+  local status = utils.add_message(nil, require("sia.messages").current_buffer(true), {
+    buf = vim.api.nvim_get_current_buf(),
+    mode = "n",
+    ft = vim.bo.ft,
+    start_line = 1,
+    end_line = -1,
+    context_is_buffer = true,
+  })
+  if not status then
+    vim.notify("Can't determine *sia* buffer")
+  end
 end
 
 function _G.__sia_add_context(type)
   local start_pos, end_pos = get_position(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
-  local req_buf = vim.api.nvim_get_current_buf()
+  if start_line > 0 then
+    local req_buf = vim.api.nvim_get_current_buf()
 
-  local filetype = vim.bo.ft
-  local buf, win = utils.get_current_visible_sia_buffer()
-  if buf and win then
-    local opts = {
+    local status = utils.add_message(nil, require("sia.messages").current_context(true), {
       buf = req_buf,
       mode = "v",
-      ft = filetype,
+      ft = vim.bo.ft,
       start_line = start_line,
       end_line = end_line,
       context_is_buffer = end_line == vim.api.nvim_buf_line_count(req_buf),
-    }
-    local step = require("sia.context").current_context_line_number()
-    local content_fn = step.content
-    step.content = function()
-      return content_fn(opts)
+    })
+    if not status then
+      vim.notify("Can't determine *sia* buffer")
     end
-    local hidden_fn = step.hidden
-    step.hidden = function()
-      return hidden_fn(opts)
-    end
-    local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, buf, "_sia_prompt")
-    if ok then
-      table.insert(buffer_prompt.prompt, step)
-      vim.api.nvim_buf_set_var(buf, "_sia_prompt", buffer_prompt)
-    end
-    vim.api.nvim_buf_set_option(buf, "modifiable", true)
-    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "# User", "" })
-    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "```hidden", step.hidden(), "```", "" })
-    vim.api.nvim_buf_set_option(buf, "modifiable", false)
-  else
-    vim.notify("Can't determine *sia* buffer")
   end
 end
 
@@ -115,6 +140,27 @@ end
 function M.setup(options)
   config.setup(options)
   vim.treesitter.language.register("markdown", "sia")
+  vim.keymap.set("n", "<Plug>(sia-toggle)", function()
+    local last = BufferTracker.last()
+    if last and vim.api.nvim_buf_is_valid(last.buf) then
+      if not vim.api.nvim_win_is_valid(last.win) then
+        vim.cmd(config.options.default.split.cmd)
+        local win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(win, last.buf)
+        last.win = win
+      else
+        if #vim.api.nvim_list_wins() > 1 then
+          vim.api.nvim_win_close(last.win, true)
+        end
+      end
+    end
+  end, { noremap = true, silent = true })
+  vim.api.nvim_set_keymap(
+    "n",
+    "<Plug>(sia-append-buffer)",
+    ":lua __sia_add_buffer()<CR>",
+    { noremap = true, silent = true }
+  )
   vim.api.nvim_set_keymap(
     "n",
     "<Plug>(sia-append)",
@@ -173,6 +219,7 @@ function M.setup(options)
     callback = function(args)
       if vim.bo[args.buf].filetype == "sia" then
         require("sia.blocks").remove_code_blocks(args.buf)
+        BufferTracker.remove(args.buf)
       end
     end,
   })
@@ -279,13 +326,21 @@ local function collect_user_prompts(prompts)
   local lines = {}
   for _, prompt in ipairs(prompts) do
     if prompt.role == "user" then
-      if prompt.hidden == nil or prompt.hidden == false or type(prompt.hidden) == "function" then
+      if prompt.hidden == nil or prompt.hidden == false then
+        -- local content = nil
+        -- if type(prompt.hidden) == "function" then
+        --   local hidden_text = prompt.hidden()
+        --   if hidden_text ~= nil and hidden_text ~= "" then
+        --     content = string.format("```hidden\n%s\n```", hidden_text)
+        --   end
+        -- else
+        --   content = prompt.content
+        -- end
         local content = prompt.content
-        if type(prompt.hidden) == "function" then
-          content = string.format("```hidden\n%s\n```", prompt.hidden())
-        end
-        for _, line in ipairs(vim.split(content, "\n", { plain = true, trimempty = false })) do
-          table.insert(lines, line)
+        if content then
+          for _, line in ipairs(vim.split(content, "\n", { plain = true, trimempty = false })) do
+            table.insert(lines, line)
+          end
         end
       end
     end
@@ -325,7 +380,7 @@ local function chat_strategy(buf, winnr, prompt)
       if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
         if buf_append == nil then
           local line_count = vim.api.nvim_buf_line_count(buf)
-          vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, { "# User", "" })
+          vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, { "# User" })
           vim.api.nvim_buf_set_lines(buf, -1, -1, false, collect_user_prompts(prompt.prompt))
           vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "# Assistant", "" })
           line_count = vim.api.nvim_buf_line_count(buf)
@@ -339,6 +394,7 @@ local function chat_strategy(buf, winnr, prompt)
     end,
     on_complete = function()
       if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+        utils.add_hidden_prompts(buf, prompt.prompt)
         vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "" })
         local line_count = vim.api.nvim_buf_line_count(buf)
 

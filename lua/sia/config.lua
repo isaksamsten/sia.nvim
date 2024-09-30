@@ -1,21 +1,18 @@
 local M = {}
 local defaults = {
   models = {
-    ["gpt-4o"] = { "openai", "gpt-4o-2024-08-06" },
+    ["gpt-4o"] = { "openai", "gpt-4o" },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
-    copilot = { "copilot", "gpt-4o-2024-05-13" },
+    copilot = { "copilot", "gpt-4o" },
   },
   named_prompts = {
-    chat_system = {
-      role = "system",
-      content = "You are an helpful assistant",
-    },
     split_system = {
       role = "system",
       reuse = true,
       content = [[You are an AI assistant named "Sia" integrated with Neovim.
 
-Provide code snippets with precise annotations in fenced blocks, following these guidelines:
+If the user provides a code context with line numbers and a buffer number, then provide code snippets with precise annotations in fenced blocks,
+following these guidelines:
 
 - Include `[buffer] replace-range:[start-line],[end-line]` right after the language identifier in the code block.
 - Always preserve indentation, and avoid outputting numbered lines.
@@ -24,108 +21,43 @@ Provide code snippets with precise annotations in fenced blocks, following these
 
 Example (user provides buffer 2):
 
-```python 2 replace-range:5,5
+```python 2 replace-range:5,6
    self.b = b
    self.c = None
-```
-
-Ensure all responses adhere to this format.]],
+```]],
     },
-    current_buffer_line_number = {
-      role = "user",
-      hidden = function(opts)
-        return string.format("Buffer %s", require("sia.utils").get_filename(opts.buf))
-      end,
-      reuse = true,
-      content = function(opts)
-        return string.format(
-          "This is the complete buffer (%d):\n```%s\n%s\n```",
-          opts.buf,
-          opts.ft,
-          require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = true })
-        )
-      end,
-    },
-    current_buffer = {
-      role = "user",
-      hidden = function(opts)
-        return string.format("Buffer %s", opts.buf)
-      end,
-      reuse = true,
-      content = function(opts)
-        return string.format(
-          "This is the complete buffer written in %s:\n%s",
-          opts.ft,
-          require("sia.context").get_code(1, -1, { bufnr = opts.buf, show_line_numbers = false })
-        )
-      end,
-    },
-    current_context_line_number = require("sia.context").current_context_line_number(),
-    current_context = {
-      role = "user",
-      hidden = function(opts)
-        local end_line = opts.end_line
-        if opts.context_is_buffer then
-          end_line = vim.api.nvim_buf_line_count(opts.buf)
-        end
-        return string.format(
-          "Lines %d to %d in %s",
-          opts.start_line,
-          end_line,
-          require("sia.utils").get_filename(opts.buf)
-        )
-      end,
-      reuse = true,
-      content = function(opts)
-        if opts.mode == "v" then
-          local code = require("sia.context").get_code(
-            opts.start_line,
-            opts.end_line,
-            { bufnr = opts.buf, show_line_numbers = false }
-          )
-          return string.format(
-            [[This is the provided context written in %s:
-%s]],
-            opts.ft,
-            code
-          )
-        else
-          return ""
-        end
-      end,
-    },
+    current_buffer_line_number = require("sia.messages").current_buffer(true),
+    current_buffer = require("sia.messages").current_buffer(false),
+    current_context_line_number = require("sia.messages").current_context(true),
+    current_context = require("sia.messages").current_context(false),
     insert_system = {
       role = "system",
-      content = [[Note that the user query is initiated from
-a text editor and that your changes will be inserted verbatim into the editor.
-The editor identifies the file as written in {{filetype}}.
+      content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
 
 1. If possible, make sure that you only output the relevant and requested information.
 2. Refrain from explaining your reasoning, unless the user requests it, or adding unrelated text to the output.
 3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
-4. Adding code fences or markdown code blocks is an error.
-5. If explanations are needed add them as relevant comments using correct syntax for the identified language.
-6. **Always preserve** indentation for code.
-7. Never include the full provided context in your response. Only output the relevant requested information.
-8. Never include code fences when outputting code.
-
-]],
+4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
+5. **Always preserve** indentation for code.
+6. Never include the full provided context in your response. Only output the relevant requested information.
+7. **Do not include code fences** (e.g., triple backticks ``` or any other code delimiters) or any markdown formatting when outputting code. Output the code directly, without surrounding it with code fences or additional formatting.]],
     },
     diff_system = {
       role = "system",
-      content = [[The user query is initiated from a text editor, and the response should never include code fences or line numbers.
+      content = [[The user query is initiated from a text editor and will automatically be diffed against the input.
 
 Guidelines:
 
 	1.	Only output the requested changes.
-	2.	Never include code fences (```) or line numbers in the output.
-	3.	Always preserve the original indentation for code.
-	4.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
+	2.	**Never** include code fences (```) or line numbers in your output unless they are required for the specific context (e.g., editing a Markdown file that uses code fences).
+	3.	**Never surround your complete answer with code fences, under any circumstances, unless the user explicitly asks for them.**
+  4.	Always preserve the original indentation for code.
+	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
     },
   },
   default = {
-    -- model = "gpt-4o-mini", -- default model
-    model = "copilot",
+    model = "gpt-4o-mini", -- default model
+    -- model = "copilot",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -147,7 +79,7 @@ Guidelines:
     mode_prompt = {
       split = {
         model = "gpt-4o",
-        temperature = 0.0,
+        temperature = 0.2,
         prompt = { "split_system", "current_context_line_number" },
       },
       chat = {
@@ -163,6 +95,7 @@ Guidelines:
         },
       },
       insert = {
+        temperature = 0.2,
         prompt = {
           "insert_system",
           "current_buffer",
@@ -171,8 +104,10 @@ Guidelines:
       },
       diff = {
         model = "gpt-4o",
+        temperature = 0.2,
         prompt = {
           "diff_system",
+          "current_buffer",
           "current_context",
         },
       },

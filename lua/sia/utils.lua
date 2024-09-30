@@ -1,5 +1,7 @@
 local M = {}
 
+local ns_context = vim.api.nvim_create_namespace("sia_context")
+
 M.BufAppend = {}
 M.BufAppend.__index = M.BufAppend
 
@@ -45,6 +47,55 @@ function M.BufAppend:append_to_buffer(content)
   end
 end
 
+function M.add_hidden_prompts(buf, prompt)
+  vim.api.nvim_buf_clear_namespace(buf, ns_context, 0, -1)
+  local lines = {}
+  for i, step in ipairs(prompt) do
+    if step.role == "user" then
+      if type(step.hidden) == "function" then
+        table.insert(lines, { { "[x] " .. step.hidden(), "DiagnosticVirtualTextInfo" } })
+      end
+    end
+  end
+  print(vim.inspect(lines))
+  vim.api.nvim_buf_set_extmark(buf, ns_context, 0, 0, {
+    virt_lines = lines,
+    virt_lines_above = true,
+  })
+end
+
+function M.add_message(buf, step, opts)
+  local win
+  if buf then
+    win = M.get_window_for_buffer(buf)
+  else
+    buf, win = M.get_current_visible_sia_buffer()
+  end
+
+  if buf and win then
+    local content_fn = step.content
+    step.content = function()
+      return content_fn(opts)
+    end
+    local hidden_fn = step.hidden
+    step.hidden = function()
+      return hidden_fn(opts)
+    end
+    local ok, buffer_prompt = pcall(vim.api.nvim_buf_get_var, buf, "_sia_prompt")
+    if ok then
+      table.insert(buffer_prompt.prompt, step)
+      vim.api.nvim_buf_set_var(buf, "_sia_prompt", buffer_prompt)
+      vim.api.nvim_buf_set_extmark(buf, ns_context, vim.api.nvim_buf_line_count(buf) - 1, 0, {
+        virt_text = { { step.hidden(), "DiagnosticVirtualTextInfo" } },
+        virt_text_pos = "overlay",
+      })
+    end
+    return true
+  else
+    return false
+  end
+end
+
 function M.get_current_visible_sia_buffer()
   local buffers = vim.api.nvim_list_bufs()
   local buf = nil
@@ -66,6 +117,7 @@ function M.get_current_visible_sia_buffer()
     return nil, nil
   end
 end
+
 function M.get_window_for_buffer(buf)
   local windows = vim.api.nvim_tabpage_list_wins(0)
   for _, win in ipairs(windows) do
@@ -97,4 +149,55 @@ function M.get_filename(buf, query)
   return vim.fn.fnamemodify(full_path, query or ":t")
 end
 
+function M.get_code(start_line, end_line, opts)
+  local lines = {}
+  if end_line == -1 then
+    end_line = vim.api.nvim_buf_line_count(opts and opts.bufnr or 0)
+  end
+  for line_num = start_line, end_line do
+    local line
+    if opts and opts.show_line_numbers then
+      line = string.format("%d: %s", line_num, vim.fn.getbufoneline(opts.bufnr or 0, line_num))
+    else
+      line = string.format("%s", vim.fn.getbufoneline(opts.bufnr or 0, line_num))
+    end
+    table.insert(lines, line)
+  end
+
+  if opts and opts.return_table == true then
+    return lines
+  else
+    return table.concat(lines, "\n")
+  end
+end
+
+function M.get_diagnostics(start_line, end_line, bufnr, opts)
+  if end_line == nil then
+    end_line = start_line
+  end
+
+  opts = opts or {}
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+  local diagnostics = {}
+
+  for line_num = start_line, end_line do
+    local line_diagnostics = vim.diagnostic.get(bufnr, {
+      lnum = line_num - 1,
+      severity = { min = opts.min_severity or vim.diagnostic.severity.HINT },
+    })
+
+    if next(line_diagnostics) ~= nil then
+      for _, diagnostic in ipairs(line_diagnostics) do
+        table.insert(diagnostics, {
+          line_number = line_num,
+          message = diagnostic.message,
+          severity = vim.diagnostic.severity[diagnostic.severity],
+        })
+      end
+    end
+  end
+
+  return diagnostics
+end
 return M
