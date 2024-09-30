@@ -4,6 +4,8 @@ local BufAppend = utils.BufAppend
 
 local M = {}
 
+-- TODO: Keep track of all sia-buffers variables and attached contexts instead of relying on buffer-variables.
+-- 1.
 local BufferTracker = {}
 BufferTracker._open_buffers = {}
 

@@ -5,13 +5,14 @@ function M.current_buffer(show_line_numbers)
   return {
     role = "user",
     hidden = function(opts)
-      return string.format("Include %s in the conversation.", utils.get_filename(opts.buf))
+      return string.format("%s is included in the conversation.", utils.get_filename(opts.buf))
     end,
     reuse = true,
     content = function(opts)
       return string.format(
-        "This is the complete buffer (%d) written in %s:\n%s",
+        "This is the complete buffer %d (%s) written in %s:\n%s",
         opts.buf,
+        utils.get_filename(opts.buf),
         opts.ft,
         utils.get_code(1, -1, { bufnr = opts.buf, show_line_numbers = show_line_numbers })
       )
@@ -29,7 +30,7 @@ function M.current_context(show_line_numbers)
           end_line = vim.api.nvim_buf_line_count(opts.buf)
         end
         return string.format(
-          "Include lines %d to %d from %s in the conversation",
+          "Lines %d to %d from %s is included in the conversation",
           opts.start_line,
           end_line,
           utils.get_filename(opts.buf)
@@ -44,8 +45,10 @@ function M.current_context(show_line_numbers)
         local code =
           utils.get_code(opts.start_line, opts.end_line, { bufnr = opts.buf, show_line_numbers = show_line_numbers })
         return string.format(
-          [[This is the provided context written in %s:
+          [[The provided context from buffer %d (%s) is written in %s:
 %s]],
+          opts.buf,
+          utils.get_filename(opts.buf),
           opts.ft,
           code
         )

@@ -53,11 +53,13 @@ function M.add_hidden_prompts(buf, prompt)
   for i, step in ipairs(prompt) do
     if step.role == "user" then
       if type(step.hidden) == "function" then
-        table.insert(lines, { { "[x] " .. step.hidden(), "DiagnosticVirtualTextInfo" } })
+        local content = step.hidden()
+        if content ~= nil then
+          table.insert(lines, { { "- " .. step.hidden(), "DiagnosticVirtualTextInfo" } })
+        end
       end
     end
   end
-  print(vim.inspect(lines))
   vim.api.nvim_buf_set_extmark(buf, ns_context, 0, 0, {
     virt_lines = lines,
     virt_lines_above = true,
