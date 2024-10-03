@@ -1,14 +1,86 @@
 local M = {}
+local providers = require("sia.provider")
+
+--- @alias sia.config.Role "user"|"system"|"assistant"
+--- @alias Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
+--- @alias sia.config.ActionInput "require"|"ignore"
+--- @alias sia.config.ActionMode "split"|"diff"|"insert"
+
+--- @class sia.config.Insert
+--- @field placement (fun():Placement)|Placement
+--- @field cursor ("start"|"end")?
+
+--- @class sia.config.Diff
+--- @field wo [string]?
+--- @field cmd "vsplit"|"split"?
+
+--- @class sia.config.Split
+--- @field cmd "vsplit"|"split"?
+--- @field wo table<string, any>?
+
+--- @class sia.config.Replace
+--- @field highlight string
+--- @field timeout number?
+
+--- @class sia.config.Instruction
+--- @field role sia.config.Role
+--- @field persistent boolean?
+--- @field information ((fun(ctx: Context):string)|string)?
+--- @field content (fun(ctx: Context):string)|string|string[]
+
+--- @class sia.config.Action
+--- @field instructions [string|sia.config.Instruction]
+--- @field model string?
+--- @field temperature number?
+--- @field input sia.config.ActionInput?
+--- @field mode sia.config.ActionMode?
+--- @field enabled (fun():boolean)|boolean?
+--- @field capture nil|(fun(arg: sia.ActionArgument):[number, number])
+--- @field range boolean?
+--- @field insert sia.config.Insert?
+--- @field diff sia.config.Diff?
+--- @field split sia.config.Split?
+
+--- @class sia.config.Defaults
+--- @field model string
+--- @field temperature number
+--- @field actions table<"diff"|"split"|"insert", sia.config.Action>
+--- @field split sia.config.Split
+--- @field replace sia.config.Replace
+--- @field diff sia.config.Diff
+--- @field insert sia.config.Insert
+
+--- @alias sia.config.Models table<string, [string, string]>
+
+--- @class sia.config.Provider
+--- @field base_url string
+--- @field api_key fun():string?
+
+--- @class sia.config.Options
+--- @field models sia.config.Models
+--- @field instructions table<string, sia.config.Instruction>
+--- @field defaults sia.config.Defaults
+--- @field actions table<string, sia.config.Action>
+--- @field providers table<string, sia.config.Provider>
+--- @field debug boolean?
+--- @field report_usage boolean?
+M.options = {}
+
+--- @type sia.config.Options
 local defaults = {
+  providers = {
+    openai = providers.openai,
+    copilot = providers.copilot,
+  },
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o" },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
     copilot = { "copilot", "gpt-4o" },
   },
-  named_prompts = {
+  instructions = {
     split_system = {
       role = "system",
-      reuse = true,
+      persistent = true,
       content = [[You are an AI assistant named "Sia" integrated with Neovim.
 
 If the user provides a code context with line numbers and a buffer number, then provide code snippets with precise annotations in fenced blocks,
@@ -55,9 +127,9 @@ Guidelines:
 	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
     },
   },
-  default = {
+  --- @type sia.config.Defaults
+  defaults = {
     model = "gpt-4o-mini", -- default model
-    -- model = "copilot",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -66,6 +138,7 @@ Guidelines:
       wo = { wrap = true },
     },
     diff = {
+      cmd = "vsplit",
       wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
     },
     insert = {
@@ -74,38 +147,27 @@ Guidelines:
     replace = {
       highlight = "DiffAdd",
       timeout = 300,
-      map = { replace = "gr", insert_above = "ga", insert_below = "gb" },
     },
-    mode_prompt = {
+    actions = {
       split = {
         model = "gpt-4o",
+        mode = "split",
         temperature = 0.2,
-        prompt = { "split_system", "current_context_line_number" },
-      },
-      chat = {
-        -- reuse model and temperature from the initiating prompt
-        prompt = { -- it will automatically include the system buffer from the conversation initiating the request.
-          {
-            role = "system",
-            content = function()
-              return "This is the ongoing conversation: \n"
-                .. table.concat(require("sia.utils").filter_hidden(vim.api.nvim_buf_get_lines(0, 0, -1, true)), "\n")
-            end,
-          },
-        },
+        instructions = { "split_system", "current_context_line_number" },
       },
       insert = {
+        mode = "insert",
         temperature = 0.2,
-        prompt = {
+        instructions = {
           "insert_system",
           "current_buffer",
-          "current_context",
         },
       },
       diff = {
+        mode = "diff",
         model = "gpt-4o",
         temperature = 0.2,
-        prompt = {
+        instructions = {
           "diff_system",
           "current_buffer",
           "current_context",
@@ -113,23 +175,21 @@ Guidelines:
       },
     },
   },
-  prompts = {
+  --- @type table<string, sia.config.Action>
+  actions = {
     diagnostic = {
-      prompt = {
+      instructions = {
         "split_system",
         {
           role = "user",
-          reuse = true,
-          hidden = function(opts)
-            return string.format(
-              "Diagnostics on line %d to %d in %s",
-              opts.start_line,
-              opts.end_line,
-              require("sia.utils").get_filename(opts.buf)
-            )
+          persistent = true,
+          --- @param opts Context
+          information = function(opts)
+            return string.format("Diagnostics on line %d to %d", opts.pos[1], opts.pos[2])
           end,
           content = function(opts)
-            local diagnostics = require("sia.context").get_diagnostics(opts.start_line, opts.end_line, opts.buf)
+            local start_line, end_line = opts.pos[1], opts.pos[2]
+            local diagnostics = require("sia.utils").get_diagnostics(start_line, end_line, { buf = opts.buf })
             local concatenated_diagnostics = ""
             for i, diagnostic in ipairs(diagnostics) do
               concatenated_diagnostics = concatenated_diagnostics
@@ -144,11 +204,15 @@ Guidelines:
                 .. diagnostic.message
                 .. "\n"
             end
+            if concatenated_diagnostics == "" then
+              return "No diagnostics found."
+            end
+
             return string.format(
               [[The programming language is %s. The buffer is: %s. This is a list of the diagnostic messages:
 %s
 ]],
-              opts.ft,
+              vim.bo[opts.buf].ft,
               opts.buf,
               concatenated_diagnostics
             )
@@ -161,7 +225,7 @@ Guidelines:
       model = "gpt-4o",
     },
     commit = {
-      prompt = {
+      instructions = {
         {
           role = "system",
           content = [[You are an AI assistant tasked with generating concise,
@@ -210,7 +274,7 @@ Guidelines:
       insert = { placement = "cursor" },
     },
     explain = {
-      prompt = {
+      instructions = {
         {
           role = "system",
           content = [[When asked to explain code, follow these steps:
@@ -228,7 +292,7 @@ Guidelines:
       range = true,
     },
     unittest = {
-      prompt = {
+      instructions = {
         {
           role = "system",
           content = [[When generating unit tests, follow these steps:
@@ -245,8 +309,7 @@ Guidelines:
         },
         "current_context",
       },
-      context = require("sia.context").treesitter("@function.outer"),
-      use_mode_prompt = false,
+      capture = require("sia.capture").treesitter("@function.outer"),
       mode = "split",
       split = {
         cmd = "vsplit",
@@ -256,7 +319,7 @@ Guidelines:
       temperature = 0.5,
     },
     doc = {
-      prompt = {
+      instructions = {
         "insert_system",
         {
           role = "system",
@@ -285,7 +348,7 @@ code is included, the response is incorrect.]],
       },
       prefix = 2,
       suffix = 0,
-      context = require("sia.context").treesitter({ "@function.outer", "@class.outer" }),
+      capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
       mode = "insert",
       insert = {
         placement = function()
@@ -304,28 +367,8 @@ code is included, the response is incorrect.]],
   debug = false,
 }
 
-M.options = {}
-
 function M.setup(options)
   M.options = vim.tbl_deep_extend("force", {}, defaults, options or {})
-  if M.options.report_usage == true then
-    vim.api.nvim_create_autocmd("User", {
-      pattern = "SiaUsageReport",
-      callback = function(args)
-        local data = args.data
-        if data then
-          vim.notify("Total tokens: " .. data.total_tokens)
-        end
-      end,
-    })
-  end
-end
-
-function M._is_disabled(prompt)
-  if prompt.enabled == false or (type(prompt.enabled) == "function" and not prompt.enabled()) then
-    return true
-  end
-  return false
 end
 
 return M

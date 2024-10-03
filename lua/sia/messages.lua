@@ -7,14 +7,15 @@ function M.current_buffer(show_line_numbers)
     hidden = function(opts)
       return string.format("%s is included in the conversation.", utils.get_filename(opts.buf))
     end,
-    reuse = true,
+    persistent = true,
+    --- @param opts sia.Context
     content = function(opts)
       return string.format(
         "This is the complete buffer %d (%s) written in %s:\n%s",
         opts.buf,
         utils.get_filename(opts.buf),
-        opts.ft,
-        utils.get_code(1, -1, { bufnr = opts.buf, show_line_numbers = show_line_numbers })
+        vim.bo[opts.buf].ft,
+        utils.get_code(1, -1, { buf = opts.buf, show_line_numbers = show_line_numbers })
       )
     end,
   }
@@ -39,21 +40,22 @@ function M.current_context(show_line_numbers)
         return nil
       end
     end,
-    reuse = true,
+    persistent = true,
+    --- @param opts sia.Context
     content = function(opts)
-      if opts.mode == "v" or opts.bang then
-        local code =
-          utils.get_code(opts.start_line, opts.end_line, { bufnr = opts.buf, show_line_numbers = show_line_numbers })
+      if opts.pos then
+        local start_line, end_line = opts.pos[1], opts.pos[2]
+        local code = utils.get_code(start_line, end_line, { buf = opts.buf, show_line_numbers = show_line_numbers })
         return string.format(
-          [[The provided context from buffer %d (%s) is written in %s:
-%s]],
+          [[The provided context from buffer %d (%s):
+```%s
+%s
+```]],
           opts.buf,
           utils.get_filename(opts.buf),
-          opts.ft,
+          vim.bo[opts.buf].ft,
           code
         )
-      else
-        return "The context is written in " .. opts.ft
       end
     end,
   }

@@ -136,7 +136,7 @@ modified code. *NEVER USE MARKDOWN CODE BLOCKS!*]],
       model = "gpt-4o",
       temperature = 0.0,
       context = function(bufnr)
-        return require("sia.context").treesitter("@function.outer")(bufnr)
+        return require("sia.capture").treesitter("@function.outer")(bufnr)
       end,
     },
   },
@@ -157,7 +157,6 @@ Prompts support the following attributes:
     placement -- function()|below|above|cursor|{below|above, cursor|start|end}
   }
   split = {
-    reuse -- true|false to reuse open split
     cmd -- cmd to split e.g., vsplit
     wo -- window options for the new split
   }
