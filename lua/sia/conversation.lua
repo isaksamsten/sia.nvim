@@ -19,57 +19,64 @@
 --- @field cursor integer[]
 
 --- @class sia.Message
+--- @field id table?
 --- @field role "user"|"assistant"|"system"
---- @field content string[]|string|(fun(ctx:sia.Context):string?)
+--- @field content string[]|string|(fun(ctx:sia.Context?):string)
 --- @field persistent boolean?
---- @field information ((fun(ctx: sia.Context):string)|string)?
---- @field context sia.Context
+--- @field description ((fun(ctx: sia.Context?):string)|string)?
+--- @field context sia.Context?
 local Message = {}
 Message.__index = Message
 
 --- @param instruction sia.config.Instruction
---- @param args sia.ActionArgument
+--- @param args sia.ActionArgument?
 --- @return sia.Message
 function Message:from_table(instruction, args)
   local obj = setmetatable({}, self)
-  args = args or {}
+  if instruction.id then
+    obj.id = instruction.id(args)
+  end
   obj.role = instruction.role
   obj.content = instruction.content
-  obj.information = instruction.information
+  obj.description = instruction.description
   obj.persistent = instruction.persistent
-  obj.context = {
-    buf = args.buf,
-    win = args.win,
-    mode = args.mode,
-    bang = args.bang,
-    cursor = args.cursor,
-    pos = { args.start_line, args.end_line },
-  }
+  if args then
+    obj.context = {
+      buf = args.buf,
+      win = args.win,
+      mode = args.mode,
+      bang = args.bang,
+      cursor = args.cursor,
+      pos = { args.start_line, args.end_line },
+    }
+  end
   return obj
 end
 
 --- Create a new message from a stored instruction
 --- @param str string|string[]
---- @param args sia.ActionArgument
+--- @param args sia.ActionArgument?
 --- @return sia.Message?
 function Message:from_string(str, args)
   if type(str) == "string" then
-    local step = require("sia.config").options.instructions[str]
-    if step then
-      return Message:from_table(step, args)
+    local instruction = require("sia.config").options.instructions[str]
+    if instruction and (not instruction.available or instruction.available(args)) then
+      return Message:from_table(instruction, args)
     end
   end
 end
 
 --- Create a new message from an Instruction or a stored instruction.
 --- @param instruction sia.config.Instruction|string
---- @param args sia.ActionArgument
+--- @param args sia.ActionArgument?
 --- @return sia.Message?
 function Message:new(instruction, args)
   if type(instruction) == "string" then
     return Message:from_string(instruction, args)
   else
-    return Message:from_table(instruction, args)
+    if not instruction.available or instruction.available(args) then
+      return Message:from_table(instruction, args)
+    end
   end
 end
 
@@ -113,50 +120,16 @@ function Message:get_content()
   return content
 end
 
---- @return string?
-function Message:get_information()
-  if type(self.information) == "function" then
-    return self.information(self.context)
+--- @return string
+function Message:get_description()
+  if type(self.description) == "function" then
+    return self.description(self.context)
   else
-    local information = self.information
-    --- @cast information string?
-    return information
+    local description = self.description
+    --- @cast description string?
+    return description or "[No name]"
   end
 end
-
--- --- @param buf number
--- function Message:render(buf)
---   if self.role == "assistant" or self.role == "system" or self.persistent then
---     return
---   end
---
---   --- @type string[]?
---   local content
---   if type(self.content) == "function" then
---     local tmp = self.content(self.context)
---     if tmp then
---       content = vim.split(tmp, "\n", { trimempty = true })
---     end
---   elseif type(self.content) == "table" then
---     local tmp = self.content
---     --- @cast tmp string[]
---     content = tmp
---   else
---     local tmp = self.content
---     --- @cast tmp string
---     content = vim.split(tmp, "\n", { trimempty = true })
---   end
---
---   if content then
---     local line = vim.api.nvim_buf_line_count(buf)
---     if line == 1 then
---       vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { "# User" })
---     else
---       vim.api.nvim_buf_set_lines(buf, line, line, false, { "", "# User" })
---     end
---     vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
---   end
--- end
 
 --- @class sia.Conversation
 --- @field messages sia.Message[]
@@ -177,27 +150,57 @@ function Conversation:new(action, args)
   obj.model = action.model
   obj.temperature = action.temperature
   obj.mode = action.mode
-  if args then
-    obj.context = {
-      buf = args.buf,
-      win = args.win,
-      mode = args.mode,
-      bang = args.bang,
-      pos = { args.start_line, args.end_line },
-      cursor = args.cursor,
-    }
-  end
+  obj.context = {
+    buf = args.buf,
+    win = args.win,
+    mode = args.mode,
+    bang = args.bang,
+    pos = { args.start_line, args.end_line },
+    cursor = args.cursor,
+  }
   obj.messages = {}
-  for i, message in ipairs(action.instructions or {}) do -- Empty initial conversation...
-    obj.messages[i] = Message:new(message, args)
+  for a, instruction in ipairs(action.instructions or {}) do
+    print("Conversation " .. a)
+    local message = Message:new(instruction, args)
+    if message then
+      print("Message " .. a)
+      table.insert(obj.messages, message)
+    end
   end
 
   return obj
 end
 
+--- @return boolean
+function Conversation:contains_message(message)
+  if message.id then
+    for _, other in ipairs(self.messages) do
+      if other.id and vim.deep_equal(other.id, message.id) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 --- @param message sia.Message a context message
+--- @return boolean
 function Conversation:add_message(message)
-  table.insert(self.messages, message)
+  if not self:contains_message(message) then
+    table.insert(self.messages, message)
+    return true
+  end
+  return false
+end
+
+--- @param instruction sia.config.Instruction
+--- @param args sia.ActionArgument?
+--- @return boolean
+function Conversation:add_instruction(instruction, args)
+  if not instruction.available or instruction.available(args) then
+    return self:add_message(Message:from_table(instruction, args))
+  end
+  return false
 end
 
 --- @return sia.Message message

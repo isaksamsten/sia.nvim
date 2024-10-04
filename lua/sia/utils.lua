@@ -160,39 +160,84 @@ local ignore_ft = {
   "neotest-output-panel",
 }
 
+--- @alias sia.utils.BufArgs { buf: integer, win: integer?, name: string }
+--- @alias sia.utils.BufOnSelect fun(item: sia.utils.BufArgs, single: boolean?):nil
+--- @alias sia.utils.BufFormat fun(item: sia.utils.BufArgs):string?
+
 --- @param current_buf integer
---- @param callback fun(item: { buf: integer, win: integer, name: string }):nil
+--- @param callback sia.utils.BufOnSelect
 function M.select_other_buffer(current_buf, callback)
-  local other = {}
-  local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-  for _, win in ipairs(tab_wins) do
-    local buf = vim.api.nvim_win_get_buf(win)
+  M.select_buffer({
+    filter = function(buf)
+      return buf ~= current_buf
+        and vim.api.nvim_buf_is_loaded(buf)
+        and not vim.list_contains(ignore_ft, vim.bo[buf].filetype)
+    end,
+    source = "tab",
+    on_select = callback,
+  })
+end
+
+--- @param tab integer
+--- @return { buf: integer, win: integer? }
+local function get_bufs_tabpage(tab)
+  local buffers = {}
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+    table.insert(buffers, { buf = vim.api.nvim_win_get_buf(win), win = win })
+  end
+  return buffers
+end
+
+--- @return { buf: integer }
+local function get_bufs_all()
+  local buffers = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    table.insert(buffers, { buf = buf })
+  end
+  return buffers
+end
+
+--- @param args { filter: (fun(buf:integer):boolean), on_select: sia.utils.BufOnSelect, format_name: sia.utils.BufFormat?, on_nothing: (fun():nil), source:("tab"|"all"|{buf: integer}[])? }
+function M.select_buffer(args)
+  local buffers = {}
+  --- @type {buf: integer, win: integer?}
+  local buffer_source = {}
+  if args.source == nil or type(args.source) == "string" then
+    if args.source == "tab" then
+      buffer_source = get_bufs_tabpage(0)
+    else
+      buffer_source = get_bufs_all()
+    end
+  else
+    local source = args.source
+    --- @cast source {buf: integer?}
+    buffer_source = source
+  end
+
+  for _, buf in ipairs(buffer_source) do
+    --- @cast buf { buf: integer, win: integer? }
     if
-      buf ~= current_buf
-      and vim.api.nvim_buf_is_loaded(buf)
-      and not vim.tbl_contains(other, function(v)
-        return v.buf == buf
-      end, { predicate = true })
+      args.filter == nil
+      or args.filter(buf.buf)
+        and not vim.tbl_contains(buffers, function(v)
+          return v.buf == buf
+        end, { predicate = true })
     then
-      local ft = vim.bo[buf].filetype
-      if not vim.list_contains(ignore_ft, ft) then
-        local name = vim.api.nvim_buf_get_name(buf)
-        table.insert(other, { buf = buf, win = win, name = name })
-      end
+      table.insert(buffers, { buf = buf.buf, win = buf.win, name = vim.api.nvim_buf_get_name(buf.buf) })
     end
   end
-  if #other == 0 then
-    return
-  elseif #other == 1 then
-    callback(other[1])
+  if #buffers == 0 then
+    args.on_nothing()
+  elseif #buffers == 1 then
+    args.on_select(buffers[1], true)
   else
-    vim.ui.select(other, {
+    vim.ui.select(buffers, {
       format_item = function(item)
-        return item.name
+        return args.format_name and args.format_name(item) or item.name
       end,
     }, function(choice)
       if choice then
-        callback(choice)
+        args.on_select(choice)
       end
     end)
   end

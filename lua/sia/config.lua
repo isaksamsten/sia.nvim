@@ -2,12 +2,12 @@ local M = {}
 local providers = require("sia.provider")
 
 --- @alias sia.config.Role "user"|"system"|"assistant"
---- @alias Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
+--- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
 --- @alias sia.config.ActionMode "split"|"diff"|"insert"
 
 --- @class sia.config.Insert
---- @field placement (fun():Placement)|Placement
+--- @field placement (fun():sia.config.Placement)|sia.config.Placement
 --- @field cursor ("start"|"end")?
 
 --- @class sia.config.Diff
@@ -23,10 +23,12 @@ local providers = require("sia.provider")
 --- @field timeout number?
 
 --- @class sia.config.Instruction
+--- @field id (fun(ctx:sia.ActionArgument?):table?)|nil
 --- @field role sia.config.Role
 --- @field persistent boolean?
---- @field information ((fun(ctx: Context):string)|string)?
---- @field content (fun(ctx: Context):string)|string|string[]
+--- @field available (fun(ctx:sia.ActionArgument?):boolean)?
+--- @field description ((fun(ctx:sia.Context?):string)|string)?
+--- @field content (fun(ctx: sia.Context?):string)|string|string[]
 
 --- @class sia.config.Action
 --- @field instructions [string|sia.config.Instruction]
@@ -98,10 +100,10 @@ Example (user provides buffer 2):
    self.c = None
 ```]],
     },
-    current_buffer_line_number = require("sia.messages").current_buffer(true),
-    current_buffer = require("sia.messages").current_buffer(false),
-    current_context_line_number = require("sia.messages").current_context(true),
-    current_context = require("sia.messages").current_context(false),
+    current_buffer_line_number = require("sia.instructions").current_buffer(true),
+    current_buffer = require("sia.instructions").current_buffer(false),
+    current_context_line_number = require("sia.instructions").current_context(true),
+    current_context = require("sia.instructions").current_context(false),
     insert_system = {
       role = "system",
       content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
@@ -175,16 +177,17 @@ Guidelines:
       },
     },
   },
-  --- @type table<string, sia.config.Action>
   actions = {
     diagnostic = {
       instructions = {
         "split_system",
         {
           role = "user",
+          id = function(ctx)
+            return { "diagnostics", ctx.buf, ctx.start_line, ctx.end_line }
+          end,
           persistent = true,
-          --- @param opts Context
-          information = function(opts)
+          description = function(opts)
             return string.format("Diagnostics on line %d to %d", opts.pos[1], opts.pos[2])
           end,
           content = function(opts)

@@ -15,17 +15,46 @@ local function get_position(type)
   return start_pos, end_pos
 end
 
+--- @param callback fun(strategy: sia.SplitStrategy):boolean
+M.add_instruction = function(callback)
+  --- @type {buf: integer, win: integer? }[]
+  local buffers = SplitStrategy.visible()
+
+  if #buffers == 0 then
+    buffers = SplitStrategy.all()
+  end
+
+  utils.select_buffer({
+    on_select = function(buffer)
+      local strategy = SplitStrategy.by_buf(buffer.buf)
+      if strategy then
+        if callback(strategy) then
+          vim.notify(string.format("Adding context to %s", strategy.name))
+        else
+          vim.notify(string.format("Context already exists %s", strategy.name))
+        end
+      end
+    end,
+    format_name = function(buf)
+      local strategy = SplitStrategy.by_buf(buf.buf)
+      if strategy then
+        return strategy.name
+      end
+    end,
+    on_nothing = function()
+      vim.notify("No *sia* buffers")
+    end,
+    source = buffers,
+  })
+end
+
 function _G.__sia_add_buffer()
-  local last = SplitStrategy.last()
-  if last then
-    last.conversation:add_message(Message:from_table(require("sia.messages").current_buffer(true), {
+  M.add_instruction(function(strategy)
+    return strategy.conversation:add_instruction(require("sia.instructions").current_buffer(true), {
       buf = vim.api.nvim_get_current_buf(),
       cursor = vim.api.nvim_win_get_cursor(0),
-    }))
-    vim.notify(string.format("Adding context to %s", last:get_name()))
-  else
-    vim.notify("Can't determine *sia* buffer")
-  end
+    })
+  end)
 end
 
 function _G.__sia_add_context(type)
@@ -33,19 +62,15 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line > 0 then
-    local last = SplitStrategy.last()
-    if last then
-      last.conversation:add_message(Message:from_table(require("sia.messages").current_buffer(true), {
+    M.add_instruction(function(strategy)
+      return strategy.conversation:add_instruction(require("sia.instructions").current_context(true), {
         buf = vim.api.nvim_get_current_buf(),
         cursor = vim.api.nvim_win_get_cursor(0),
         start_line = start_line,
         end_line = end_line,
         mode = "v",
-      }))
-      vim.notify(string.format("Adding context to %s", last:get_name()))
-    else
-      vim.notify("Can't determine *sia* buffer")
-    end
+      })
+    end)
   end
 end
 
@@ -109,6 +134,109 @@ function M.setup()
     end
   end, { noremap = true, silent = true })
 
+  vim.keymap.set({ "n", "v" }, "<Plug>(sia-paste-block-above)", function()
+    local start_pos, end_pos = vim.fn.getpos("'<")[2], vim.fn.getpos("'>")[2]
+    local mode = vim.fn.mode()
+    if mode ~= "V" and mode ~= "n" then
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+      vim.defer_fn(function()
+        vim.notify("Can only paste in visual line mode or normal mode")
+      end, 100)
+      return
+    end
+    utils.select_buffer({
+      on_select = function(args)
+        local split = SplitStrategy.by_buf(args.buf)
+        if split then
+          local line = vim.api.nvim_win_get_cursor(0)[1]
+          require("sia.blocks").select_block(split.blocks, function(block)
+            if mode == "n" then
+              require("sia.blocks").insert_block_above(
+                vim.api.nvim_get_current_buf(),
+                line,
+                block,
+                config.options.defaults.replace
+              )
+            else
+              require("sia.blocks").insert_block_at(
+                vim.api.nvim_get_current_buf(),
+                start_pos,
+                end_pos,
+                block,
+                config.options.defaults.replace
+              )
+              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+            end
+          end)
+        end
+      end,
+      format_name = function(item)
+        return SplitStrategy.by_buf(item.buf).name
+      end,
+      on_nothing = function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+        vim.defer_fn(function()
+          vim.notify("No visible *sia*")
+        end, 100)
+      end,
+      source = SplitStrategy.visible(),
+    })
+  end, { noremap = true, silent = true })
+
+  vim.keymap.set({ "n", "v" }, "<plug>(sia-paste-block)", function()
+    local start_pos, end_pos = vim.fn.getpos("'<")[2], vim.fn.getpos("'>")[2]
+    local mode = vim.fn.mode()
+    if mode ~= "V" and mode ~= "n" then
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+      vim.defer_fn(function()
+        vim.notify("Can only paste in visual line mode or normal mode")
+      end, 100)
+      return
+    end
+    utils.select_buffer({
+      on_select = function(args)
+        local split = SplitStrategy.by_buf(args.buf)
+        if split then
+          local line = vim.api.nvim_win_get_cursor(0)[1]
+          require("sia.blocks").select_block(split.blocks, function(block)
+            if mode == "n" then
+              require("sia.blocks").insert_block_below(
+                vim.api.nvim_get_current_buf(),
+                line,
+                block,
+                config.options.defaults.replace
+              )
+            else
+              require("sia.blocks").insert_block_at(
+                vim.api.nvim_get_current_buf(),
+                start_pos,
+                end_pos,
+                block,
+                config.options.defaults.replace
+              )
+              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+            end
+          end)
+        end
+      end,
+      format_name = function(item)
+        return SplitStrategy.by_buf(item.buf).name
+      end,
+      on_nothing = function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+        vim.defer_fn(function()
+          vim.notify("No visible *sia*")
+        end, 100)
+      end,
+      source = SplitStrategy.visible(),
+    })
+  end, { noremap = true, silent = true })
+
+  vim.keymap.set("v", "<Plug>(sia-replace-block-here)", function()
+    local start_pos, end_pos = vim.fn.getpos("'<"), vim.fn.getpos("'>")
+    print(start_pos, end_pos)
+  end)
+
   vim.keymap.set("n", "<Plug>(sia-replace-block)", function()
     local split = SplitStrategy.by_buf()
     if split then
@@ -143,38 +271,42 @@ function M.setup()
   end, { noremap = true, silent = true })
 
   vim.keymap.set("n", "<Plug>(sia-show-context)", function()
-    local split = SplitStrategy.by_buf()
-    if split then
-      local contexts, _ = split.conversation:get_context_messages()
-      local items = {}
-      for _, message in ipairs(contexts) do
-        table.insert(items, {
-          bufnr = message.context.buf,
-          filename = utils.get_filename(message.context.buf, ":."),
-          lnum = message.context.pos[1],
-          text = message:get_information()
-            or string.format("Line %d to %d", message.context.pos[1], message.context.pos[2]),
-        })
+    vim.schedule(function()
+      local split = SplitStrategy.by_buf()
+      if split then
+        local contexts, _ = split.conversation:get_context_messages()
+        local items = {}
+        for _, message in ipairs(contexts) do
+          if message.context then
+            table.insert(items, {
+              bufnr = message.context.buf,
+              filename = utils.get_filename(message.context.buf, ":."),
+              lnum = message.context.pos[1],
+              text = string.format("lines %d-%d", message.context.pos[1], message.context.pos[2]),
+            })
+          end
+        end
+        if #items > 0 then
+          vim.fn.setqflist(items, "r")
+          vim.cmd("copen")
+        end
       end
-      vim.fn.setqflist(items, "r")
-      vim.cmd("copen")
-    end
+    end)
   end, { noremap = true, silent = true })
 
   vim.keymap.set("n", "<Plug>(sia-delete-context)", function()
     local split = SplitStrategy.by_buf()
     if split then
       local contexts, mappings = split.conversation:get_context_messages()
+      if #contexts == 0 then
+        vim.notify("No contexts available")
+        return
+      end
       vim.ui.select(contexts, {
         prompt = "Delete context",
         --- @param message sia.Message
         format_item = function(message)
-          return string.format(
-            '"%s" line %d to %d',
-            utils.get_filename(message.context.buf, ":."),
-            message.context.pos[1],
-            message.context.pos[2]
-          )
+          return message:get_description()
         end,
         --- @param idx integer?
       }, function(_, idx)
@@ -189,15 +321,15 @@ function M.setup()
     local split = SplitStrategy.by_buf()
     if split then
       local contexts, mappings = split.conversation:get_context_messages()
+      if #contexts == 0 then
+        vim.notify("No contexts available")
+        return
+      end
       vim.ui.select(contexts, {
         prompt = "Peek context",
         --- @param message sia.Message
         format_item = function(message)
-          return string.format(
-            '"%s" %s',
-            utils.get_filename(message.context.buf, ":."),
-            message:get_information() or string.format("line %d to %d", message.context.pos[1], message.context.pos[2])
-          )
+          return message:get_description()
         end,
         --- @param item sia.Message?
         --- @param idx integer
@@ -216,11 +348,7 @@ function M.setup()
               width = vim.api.nvim_win_get_width(0) - 1,
               height = math.floor(vim.o.lines * 0.2),
               border = "single",
-              title = string.format(
-                "%s %s",
-                utils.get_filename(item.context.buf),
-                item:get_information() or string.format("line %d to %d", item.context.pos[1], item.context.pos[2])
-              ),
+              title = item:get_description(),
               title_pos = "center",
             })
             vim.wo[win].wrap = true

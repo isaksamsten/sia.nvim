@@ -19,14 +19,15 @@ function Writer:new(buf, line, column)
     line = line or 0,
     column = column or 0,
   }
-  obj.cache = { "" }
+  obj.cache = {}
+  obj.cache[line] = ""
   setmetatable(obj, self)
   return obj
 end
 
 function Writer:append_substring(substring)
   vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
-  self.cache[#self.cache] = self.cache[#self.cache] .. substring
+  self.cache[self.line] = self.cache[self.line] .. substring
   self.column = self.column + #substring
 end
 
@@ -34,7 +35,7 @@ function Writer:append_newline()
   vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   self.line = self.line + 1
   self.column = 0
-  self.cache[#self.cache + 1] = ""
+  self.cache[self.line] = ""
 end
 
 --- @param content string The string content to append to the buffer.
@@ -98,6 +99,7 @@ end
 --- @field blocks sia.Block[] code blocks identified in the conversation
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field conversation sia.Conversation the (ongoing) conversation
+--- @field name string
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = {}
 SplitStrategy.__index = SplitStrategy
@@ -124,31 +126,30 @@ function SplitStrategy:new(conversation, options)
   vim.bo[buf].ft = "sia"
   vim.bo[buf].syntax = "markdown"
   vim.bo[buf].buftype = "nowrite"
-  if SplitStrategy.count() == 0 then
-    vim.api.nvim_buf_set_name(buf, "*sia*")
-  else
-    vim.api.nvim_buf_set_name(buf, "*sia* " .. SplitStrategy.count())
-  end
-
   local obj = setmetatable({}, self)
   obj.buf = buf
   obj._writer = nil
   obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
+
+  if SplitStrategy.count() == 0 then
+    obj.name = "*sia*"
+  else
+    obj.name = "*sia " .. SplitStrategy.count() .. "*"
+  end
+  vim.api.nvim_buf_set_name(buf, obj.name)
+
   SplitStrategy._buffers[obj.buf] = obj
   SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
   obj.canvas = ChatCanvas:new(obj.buf)
   obj.canvas:render_messages(vim.list_slice(obj.conversation.messages, 1, #obj.conversation.messages - 1))
-  obj:_set_keymap()
-
   return obj
 end
 
-function SplitStrategy:_set_keymap() end
-
 function SplitStrategy:on_start(job)
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+    vim.bo[self.buf].modifiable = true
     self.canvas:render_messages({ self.conversation:last_message() })
     if self.canvas:line_count() == 1 then
       self.canvas:render_last({ "# Sia", "" })
@@ -158,7 +159,6 @@ function SplitStrategy:on_start(job)
     set_abort_keymap(self.buf, job)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
 
-    vim.bo[self.buf].modifiable = true
     self._writer = Writer:new(self.buf, line_count - 1, 0)
   end
 end
@@ -179,11 +179,14 @@ end
 function SplitStrategy:on_complete()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = false
-    self.conversation:add_message(
-      Message:from_table(
-        { role = "assistant", content = self._writer.cache },
-        { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-      )
+    local content = {}
+    for _, line in ipairs(self._writer.cache) do
+      content[#content + 1] = line
+    end
+
+    self.conversation:add_instruction(
+      { role = "assistant", content = content },
+      { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
     )
 
     local blocks = block.parse_blocks(self.buf, self._writer.cache)
@@ -201,21 +204,18 @@ name in neovim using three to five words. Only output the name, nothing else.]],
         },
         { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
       },
-    }, function(content)
-      pcall(vim.api.nvim_buf_set_name, self.buf, "*sia* " .. content:lower():gsub("%s+", "-"))
+    }, function(resp)
+      self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+      pcall(vim.api.nvim_buf_set_name, self.buf, "*sia* " .. resp:lower():gsub("%s+", "-"))
     end)
   end
-end
-
-function SplitStrategy:get_name()
-  return vim.api.nvim_buf_get_name(self.buf)
 end
 
 --- @param line integer
 --- @return sia.Block? block
 function SplitStrategy:find_block(line)
   for _, b in ipairs(self.blocks) do
-    if b.source.pos[1] <= line and line <= b.source.pos[2] then
+    if b.source.pos[1] <= line - 1 and line - 1 <= b.source.pos[2] then
       return b
     end
   end
@@ -243,6 +243,31 @@ end
 --- @return sia.SplitStrategy?
 function SplitStrategy.last()
   return SplitStrategy.by_order(#SplitStrategy._order)
+end
+
+--- @return {buf: integer, win: integer}[]
+function SplitStrategy.visible()
+  local visible = {}
+  for buf, _ in pairs(SplitStrategy._buffers) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_is_valid(buf) then
+      local win = vim.fn.bufwinnr(buf)
+      if win ~= -1 then
+        table.insert(visible, { buf = buf, win = win })
+      end
+    end
+  end
+  return visible
+end
+
+--- @return {buf: integer }[]
+function SplitStrategy.all()
+  local all = {}
+  for buf, _ in pairs(SplitStrategy._buffers) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+      table.insert(all, { buf = buf })
+    end
+  end
+  return all
 end
 
 --- @param buf integer the buffer number
@@ -288,6 +313,7 @@ end
 
 --- @param job number
 function DiffStrategy:on_start(job)
+  vim.bo[self.buf].modifiable = true
   set_abort_keymap(self.buf, job)
   vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
   for _, wo in ipairs(self._options.wo) do

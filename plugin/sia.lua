@@ -19,7 +19,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if args.count == -1 then
     opts.mode = "n"
   else
-    opts.mode = "n"
+    opts.mode = "v"
   end
 
   local action

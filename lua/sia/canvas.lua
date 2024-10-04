@@ -1,15 +1,5 @@
 local M = {}
 
---- @param buf integer
---- @param callback fun(buf:integer):nil
-local function as_modifiable_buf(buf, callback)
-  if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
-    vim.bo.modifiable = true
-    callback(buf)
-    vim.bo.modifiable = false
-  end
-end
-
 --- @class sia.Canvas
 local Canvas = {}
 
@@ -37,43 +27,39 @@ end
 
 --- @param messages sia.Message[]
 function ChatCanvas:render_messages(messages)
-  as_modifiable_buf(self.buf, function(buf)
-    for _, message in ipairs(messages) do
-      if message.role ~= "system" and not message.persistent then
-        local content = message:get_content()
-        if content then
-          local line = vim.api.nvim_buf_line_count(buf)
-          local heading = "# User"
-          if message.role == "assistant" then
-            heading = "# Sia"
-          end
-          if line == 1 then
-            vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { heading })
-          else
-            vim.api.nvim_buf_set_lines(buf, line, line, false, { "", heading })
-          end
-          vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
+  local buf = self.buf
+  for _, message in ipairs(messages) do
+    if message.role ~= "system" and not message.persistent then
+      local content = message:get_content()
+      if content then
+        local line = vim.api.nvim_buf_line_count(buf)
+        local heading = "# User"
+        if message.role == "assistant" then
+          heading = "# Sia"
         end
+        if line == 1 then
+          vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { heading })
+        else
+          vim.api.nvim_buf_set_lines(buf, line, line, false, { "", heading })
+        end
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
       end
     end
-  end)
+  end
 end
 
 --- @param content string[]
 function ChatCanvas:render_last(content)
-  as_modifiable_buf(self.buf, function(buf)
-    if self:line_count() == 1 then
-      vim.api.nvim_buf_set_lines(buf, 0, 0, false, content)
-    else
-      vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
-    end
-  end)
+  local buf = self.buf
+  if self:line_count() == 1 then
+    vim.api.nvim_buf_set_lines(buf, 0, 0, false, content)
+  else
+    vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
+  end
 end
 
 function ChatCanvas:clear()
-  as_modifiable_buf(self.buf, function(buf)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-  end)
+  vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
 end
 
 function ChatCanvas:line_count()
