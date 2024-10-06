@@ -347,6 +347,7 @@ function DiffStrategy:on_complete()
     vim.bo[self.buf].modifiable = false
   end
 end
+
 --- @return sia.Query
 function DiffStrategy:get_query()
   return self.conversation:to_query()
