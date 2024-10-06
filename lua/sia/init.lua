@@ -3,7 +3,6 @@ local Conversation = require("sia.conversation").Conversation
 local SplitStrategy = require("sia.strategy").SplitStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
 local InsertStrategy = require("sia.strategy").InsertStrategy
-local Message = require("sia.conversation").Message
 
 local M = {}
 
@@ -13,7 +12,6 @@ function M.setup(options)
   vim.treesitter.language.register("markdown", "sia")
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
-
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup,
     pattern = "*",
@@ -45,29 +43,25 @@ function M.main(action, opts)
     if vim.bo[opts.buf].filetype == "sia" then
       strategy = SplitStrategy.by_buf(opts.buf)
       if strategy then
-        strategy:extend(Message:new(action.instructions[#action.instructions], opts))
+        local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
+        strategy:add_instruction(last_instruction, opts)
       end
     else
       local conversation = Conversation:new(action, opts)
       if conversation.mode == "diff" then
-        strategy =
-          DiffStrategy:new(conversation, vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {}))
+        local options = vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
+        strategy = DiffStrategy:new(conversation, options)
       elseif conversation.mode == "insert" then
-        strategy = InsertStrategy:new(
-          conversation,
-          vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
-        )
+        local options = vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
+        strategy = InsertStrategy:new(conversation, options)
       else
-        strategy = SplitStrategy:new(
-          conversation,
-          vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
-        )
+        local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
+        strategy = SplitStrategy:new(conversation, options)
       end
     end
 
-    if strategy then
-      require("sia.assistant").execute_strategy(strategy)
-    end
+    --- @cast strategy sia.Strategy
+    require("sia.assistant").execute_strategy(strategy)
   end
 end
 

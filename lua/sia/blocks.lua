@@ -30,6 +30,8 @@ local function flash_highlight(bufnr, pos, timeout, hl_group)
   )
 end
 
+--- @param blocks sia.Block[]
+--- @param callback fun(block: sia.Block, single: boolean?):nil
 function M.select_block(blocks, callback)
   if #blocks == 1 then
     callback(blocks[1], true)
@@ -39,7 +41,7 @@ function M.select_block(blocks, callback)
         return table.concat(item.code, " ", 1, 3) .. "..."
       end,
     }, function(block)
-      callback(block, true)
+      callback(block)
     end)
   end
 end

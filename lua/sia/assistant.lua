@@ -47,6 +47,7 @@ local function call_provider(query, opts)
   table.insert(args, "--url " .. provider.base_url)
   table.insert(args, "--data " .. vim.fn.shellescape(vim.json.encode(data)))
   local command = "curl " .. table.concat(args, " ")
+
   vim.fn.jobstart(command, {
     clear_env = true,
     env = {
@@ -62,6 +63,10 @@ function M.execute_strategy(strategy)
   local query = strategy:get_query()
   local first_on_stdout = true
   local incomplete = nil
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "SiaInit",
+    data = strategy,
+  })
   call_provider(query, {
     on_stdout = function(job_id, responses, _)
       if first_on_stdout then

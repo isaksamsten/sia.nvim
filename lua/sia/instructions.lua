@@ -39,7 +39,6 @@ function M.current_context(show_line_numbers)
       return string.format("%s lines %d-%d", utils.get_filename(opts.buf, ":."), opts.pos[1], opts.pos[2])
     end,
     available = function(opts)
-      print(vim.inspect(opts))
       return opts and opts.mode == "v"
     end,
     persistent = true,
@@ -58,6 +57,23 @@ function M.current_context(show_line_numbers)
           code
         )
       end
+    end,
+  }
+end
+
+function M.verbatim()
+  return {
+    role = "user",
+    persisetent = true,
+    id = function(ctx)
+      return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.start_line, ctx.end_line }
+    end,
+    description = function(opts)
+      return string.format("%s verbatim lines %d-%d", utils.get_filename(opts.buf, ":."), opts.pos[1], opts.pos[2])
+    end,
+    content = function(opts)
+      local start_line, end_line = opts.pos[1], opts.pos[2]
+      return table.concat(vim.api.nvim_buf_get_lines(opts.buf, start_line - 1, end_line, false), "\n")
     end,
   }
 end

@@ -160,10 +160,8 @@ function Conversation:new(action, args)
   }
   obj.messages = {}
   for a, instruction in ipairs(action.instructions or {}) do
-    print("Conversation " .. a)
     local message = Message:new(instruction, args)
     if message then
-      print("Message " .. a)
       table.insert(obj.messages, message)
     end
   end

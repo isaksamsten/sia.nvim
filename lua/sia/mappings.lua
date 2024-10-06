@@ -1,5 +1,4 @@
 local SplitStrategy = require("sia.strategy").SplitStrategy
-local Message = require("sia.conversation").Message
 local utils = require("sia.utils")
 local M = {}
 
@@ -79,7 +78,6 @@ function _G.__sia_execute(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line == 0 or end_line == 0 then
-    vim.notify("Empty selection")
     _G.__sia_execute_action = nil -- reset
     return
   end
@@ -90,6 +88,7 @@ function _G.__sia_execute(type)
     end_line = end_line,
     mode = "v",
     buf = vim.api.nvim_get_current_buf(),
+    win = vim.api.nvim_get_current_win(),
     cursor = vim.api.nvim_win_get_cursor(0),
   }
   local action
@@ -231,11 +230,6 @@ function M.setup()
       source = SplitStrategy.visible(),
     })
   end, { noremap = true, silent = true })
-
-  vim.keymap.set("v", "<Plug>(sia-replace-block-here)", function()
-    local start_pos, end_pos = vim.fn.getpos("'<"), vim.fn.getpos("'>")
-    print(start_pos, end_pos)
-  end)
 
   vim.keymap.set("n", "<Plug>(sia-replace-block)", function()
     local split = SplitStrategy.by_buf()

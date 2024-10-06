@@ -169,11 +169,10 @@ function SplitStrategy:on_progress(content)
   end
 end
 
---- @param message sia.Message?
-function SplitStrategy:extend(message)
-  if message then
-    self.conversation:add_message(message)
-  end
+--- @param instruction sia.config.Instruction
+--- @param args sia.ActionArgument
+function SplitStrategy:add_instruction(instruction, args)
+  self.conversation:add_instruction(instruction, args)
 end
 
 function SplitStrategy:on_complete()
@@ -326,6 +325,7 @@ function DiffStrategy:on_start(job)
   self._writer = Writer:new(self.buf, context.pos[1] - 1, 0)
 end
 
+--- @param content string
 function DiffStrategy:on_progress(content)
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)

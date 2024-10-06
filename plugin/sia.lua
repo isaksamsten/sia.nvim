@@ -96,7 +96,7 @@ end, {
     local complete = {}
     local term = ArgLead:sub(2)
     for key, prompt in pairs(config.options.actions) do
-      if vim.startswith(key, term) and not config.is_action_disabled(prompt) and vim.bo.ft ~= "sia" then
+      if vim.startswith(key, term) and not utils.is_action_disabled(prompt) and vim.bo.ft ~= "sia" then
         if prompt.range == nil or (prompt.range == is_range) then
           table.insert(complete, "/" .. key)
         end
