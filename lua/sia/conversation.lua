@@ -21,6 +21,7 @@
 --- @class sia.Message
 --- @field id table?
 --- @field role "user"|"assistant"|"system"
+--- @field hide boolean?
 --- @field content string[]|string|(fun(ctx:sia.Context?):string)
 --- @field persistent boolean?
 --- @field description ((fun(ctx: sia.Context?):string)|string)?
@@ -37,6 +38,7 @@ function Message:from_table(instruction, args)
     obj.id = instruction.id(args)
   end
   obj.role = instruction.role
+  obj.hide = instruction.hide
   obj.content = instruction.content
   obj.description = instruction.description
   obj.persistent = instruction.persistent

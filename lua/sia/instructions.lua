@@ -1,6 +1,75 @@
 local utils = require("sia.utils")
 local M = {}
 
+--- @param file string
+local function ensure_file_is_loaded(file)
+  local bufnr = vim.fn.bufnr(file)
+  print(bufnr, file)
+  if bufnr == -1 or not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    local status, err = pcall(function()
+      bufnr = vim.fn.bufadd(file)
+      vim.fn.bufload(bufnr)
+      print("loaded ", file, "into", bufnr)
+    end)
+    if not status then
+      vim.notify(err)
+      return nil
+    end
+  end
+
+  return bufnr
+end
+
+--- @return sia.config.Instruction
+function M.current_args()
+  --- @type sia.config.Instruction
+  return {
+    role = "user",
+    id = function(ctx)
+      return { vim.fn.argv() }
+    end,
+    available = function(opts)
+      return vim.fn.argc() > 0 -- and all files exist
+    end,
+    persistent = true,
+    description = function(opts)
+      if vim.fn.argc() > 0 then
+        local argv = vim.fn.argv() --[[@as string[] ]]
+        return table.concat(argv, " ")
+      end
+      return vim.fn.argv() --[[@as string ]]
+    end,
+    content = function(ctx)
+      local content = {}
+      --- @type string[]
+      local args
+      if vim.fn.argc() == 1 then
+        local arg = vim.fn.argv() --[[@as string ]]
+        args = { arg }
+      else
+        args = vim.fn.argv() --[[@as string[] ]]
+      end
+
+      for _, arg in ipairs(args) do
+        local buf = ensure_file_is_loaded(arg)
+        if buf then
+          print(vim.api.nvim_buf_is_valid(buf), vim.api.nvim_buf_is_loaded(buf), buf, arg)
+          table.insert(
+            content,
+            string.format(
+              "%s\n```%s\n%s\n```",
+              arg,
+              vim.bo[buf].ft,
+              utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
+            )
+          )
+        end
+      end
+      return table.concat(content, "\n")
+    end,
+  }
+end
+
 --- @param show_line_numbers boolean?
 --- @return sia.config.Instruction
 function M.current_buffer(show_line_numbers)

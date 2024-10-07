@@ -53,6 +53,9 @@ function M.get_action_mode(opts)
   elseif opts.bang and opts.mode == "v" then
     return "diff"
   else
+    if vim.fn.argc() > 0 then
+      return "edit"
+    end
     return "split"
   end
 end

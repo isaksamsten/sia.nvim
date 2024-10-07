@@ -3,6 +3,7 @@ local Conversation = require("sia.conversation").Conversation
 local SplitStrategy = require("sia.strategy").SplitStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
 local InsertStrategy = require("sia.strategy").InsertStrategy
+-- local EditStrategy = require("sia.strategy").EditStrategy
 
 local M = {}
 
@@ -54,6 +55,9 @@ function M.main(action, opts)
       elseif conversation.mode == "insert" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
         strategy = InsertStrategy:new(conversation, options)
+      elseif conversation.mode == "edit" then
+        -- local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
+        -- strategy = EditStrategy:new(conversation, {})
       else
         local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
         strategy = SplitStrategy:new(conversation, options)

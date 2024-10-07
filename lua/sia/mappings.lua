@@ -237,7 +237,7 @@ function M.setup()
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
       if block then
-        require("sia.blocks").replace_block(block, config.options.defaults.replace)
+        require("sia.blocks").replace_block(split.block_parser, block, config.options.defaults.replace)
       end
     end
   end, { noremap = true, silent = true })

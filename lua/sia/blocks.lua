@@ -1,6 +1,6 @@
 --- @class sia.Block
 --- @field source {buf: integer, pos: [integer, integer] }
---- @field target {buf: integer?, pos: [integer?,integer?]}?
+--- @field tag string?
 --- @field code string[]
 
 local M = {}
@@ -86,16 +86,12 @@ function M.parse_blocks(source, response)
 
   for i, line in pairs(response) do
     if block == nil then
-      local target, target_start, target_end = string.match(line, "^%s*```.+%s+(%d+)%s+replace%-range:(%d+),(%d+)")
-      if target and target_start and target_end then
+      local tag = string.match(line, "^%s*```.+%s+(.*)")
+
+      if tag ~= nil then
         block = {
           source = { buf = source, pos = { i } },
-          target = { buf = tonumber(target), pos = { tonumber(target_start), tonumber(target_end) } },
-          code = {},
-        }
-      elseif string.match(line, "^%s*```%w+%s*$") then
-        block = {
-          source = { source = source, pos = { i } },
+          tag = tag,
           code = {},
         }
       end
@@ -112,20 +108,26 @@ function M.parse_blocks(source, response)
   return blocks
 end
 
+--- @param parser fun(b:sia.Block):fun(sia.config.Replace):nil
 --- @param block sia.Block
 --- @param replace sia.config.Replace
-function M.replace_block(block, replace)
+function M.replace_block(parser, block, replace)
   if block.code then
-    if block.target.buf and vim.api.nvim_buf_is_loaded(block.target.buf) then
-      local source_line_count = #block.code
-      vim.api.nvim_buf_set_lines(block.target.buf, block.target.pos[1] - 1, block.target.pos[2], false, block.code)
-      flash_highlight(
-        block.target.buf,
-        { block.target.pos[1] - 1, block.target.pos[1] + source_line_count - 2 },
-        replace.timeout,
-        replace.highlight
-      )
+    local action = parser(block)
+    if action then
+      action(replace)
     end
+
+    -- if block.target.buf and vim.api.nvim_buf_is_loaded(block.target.buf) then
+    --   local source_line_count = #block.code
+    --   vim.api.nvim_buf_set_lines(block.target.buf, block.target.pos[1] - 1, block.target.pos[2], false, block.code)
+    --   flash_highlight(
+    --     block.target.buf,
+    --     { block.target.pos[1] - 1, block.target.pos[1] + source_line_count - 2 },
+    --     replace.timeout,
+    --     replace.highlight
+    --   )
+    -- end
   end
 end
 
@@ -135,24 +137,6 @@ end
 function M.insert_block(block, replace, padding)
   if block.code then
     local source_line_count = #block.code
-    if block.target and block.target.buf and vim.api.nvim_buf_is_loaded(block.target.buf) then
-      local win = utils.get_window_for_buffer(block.target.buf)
-      if win then
-        local start_range, _ = unpack(vim.api.nvim_win_get_cursor(win))
-        if padding then
-          start_range = start_range - padding
-        end
-        vim.api.nvim_buf_set_lines(block.target.buf, start_range, start_range, false, block.code)
-        flash_highlight(
-          block.target.buf,
-          { start_range, start_range + source_line_count - 1 },
-          replace.timeout,
-          replace.highlight
-        )
-        return
-      end
-    end
-
     -- if the LLM generated bad destination buffer or if no buffer was provided.
     utils.select_other_buffer(block.source.buf, function(other)
       local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
@@ -169,5 +153,90 @@ function M.insert_block(block, replace, padding)
     end)
   end
 end
+
+local SEARCH = 1
+local REPLACE = 2
+local NONE = 3
+
+--- @param b sia.Block
+--- @return sia.BlockEdit?
+local function search_replace_action(b)
+  local file = string.match(b.tag, "file:(.+)")
+  local buf = vim.fn.bufnr(file)
+  local search = {}
+  local replace = {}
+
+  local state = NONE
+
+  for _, line in pairs(b.code) do
+    if state == NONE then
+      if string.match(line, "^<<<<<<?<?<?<?%s+SEARCH%s*$") then
+        state = SEARCH
+      else
+        goto continue
+      end
+    else
+      if state == SEARCH then
+        if string.match(line, "^======?=?=?=?%s*$") then
+          state = REPLACE
+        else
+          search[#search + 1] = line
+        end
+      elseif state == REPLACE then
+        if string.match(line, "^>>>>>>?>?>?>?>%s+REPLACE%s*$") then
+          break
+        else
+          replace[#replace + 1] = line
+        end
+      end
+    end
+    ::continue::
+  end
+
+  if vim.api.nvim_buf_is_loaded(buf) then
+    local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local pos = {}
+    for i, line in pairs(content) do
+      if line == search[1] then
+        local found = true
+        pos[1] = i
+        if #search > #content - i + 1 then
+          found = false
+          break
+        end
+
+        for j = 2, #search do
+          if content[i + j - 1] ~= search[j] then
+            found = false
+            break
+          end
+        end
+        if found then
+          pos[2] = i + #search - 1
+          break
+        end
+      end
+    end
+
+    if pos[1] and pos[2] then
+      vim.api.nvim_buf_set_lines(buf, pos[1] - 1, pos[2], false, replace)
+      return { buf = buf, pos = pos }
+    end
+  end
+  return nil
+end
+
+--- @alias sia.BlockEdit {buf: integer, pos: [integer, integer]}
+--- @alias sia.BlockAction fun(block: sia.Block):sia.BlockEdit?)
+--- @alias sia.BlockActionConfig { automatic: boolean, manual: boolean, execute: sia.BlockAction }
+
+--- @type table<string, sia.BlockActionConfig>
+M.actions = {
+  ["search_replace"] = {
+    automatic = true,
+    manual = false,
+    execute = search_replace_action,
+  },
+}
 
 return M

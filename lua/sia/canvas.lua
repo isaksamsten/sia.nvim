@@ -29,7 +29,7 @@ end
 function ChatCanvas:render_messages(messages)
   local buf = self.buf
   for _, message in ipairs(messages) do
-    if message.role ~= "system" and not message.persistent then
+    if message.role ~= "system" and not message.persistent and not message.hide == true then
       local content = message:get_content()
       if content then
         local line = vim.api.nvim_buf_line_count(buf)

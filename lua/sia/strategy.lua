@@ -9,22 +9,29 @@ local assistant = require("sia.assistant")
 --- @field buf number
 --- @field line number
 --- @field column number
+--- @field show (fun(s: string):boolean)?
 --- @field cache string[]
 local Writer = {}
 Writer.__index = Writer
 
-function Writer:new(buf, line, column)
+--- @param buf integer
+--- @param line integer
+--- @param column integer
+--- @param show (fun(s: string):boolean)?
+function Writer:new(buf, line, column, show)
   local obj = {
     buf = buf,
     line = line or 0,
     column = column or 0,
+    cache = {},
+    show = show,
   }
-  obj.cache = {}
   obj.cache[line] = ""
   setmetatable(obj, self)
   return obj
 end
 
+--- @param substring string
 function Writer:append_substring(substring)
   vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
   self.cache[self.line] = self.cache[self.line] .. substring
@@ -100,6 +107,7 @@ end
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field conversation sia.Conversation the (ongoing) conversation
 --- @field name string
+--- @field block_action sia.BlockActionConfig
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = {}
 SplitStrategy.__index = SplitStrategy
@@ -132,6 +140,7 @@ function SplitStrategy:new(conversation, options)
   obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
+  obj.block_action = block.actions[options.block_action]
 
   if SplitStrategy.count() == 0 then
     obj.name = "*sia*"
@@ -177,9 +186,10 @@ end
 
 function SplitStrategy:on_complete()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+    local edits = {}
     vim.bo[self.buf].modifiable = false
     local content = {}
-    for _, line in ipairs(self._writer.cache) do
+    for _, line in pairs(self._writer.cache) do
       content[#content + 1] = line
     end
 
@@ -191,6 +201,21 @@ function SplitStrategy:on_complete()
     local blocks = block.parse_blocks(self.buf, self._writer.cache)
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
+      if self.block_action and self.block_action.automatic then
+        local edit = self.block_action.execute(b)
+        if edit then
+          edits[#edits + 1] = {
+            bufnr = edit.buf,
+            filename = vim.api.nvim_buf_get_name(edit.buf),
+            lnum = edit.pos[1],
+          }
+        end
+      end
+    end
+
+    if #edits > 1 then
+      vim.fn.setqflist(edits, "r")
+      vim.cmd("copen")
     end
 
     self._writer = nil
