@@ -4,7 +4,7 @@ local providers = require("sia.provider")
 --- @alias sia.config.Role "user"|"system"|"assistant"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
---- @alias sia.config.ActionMode "split"|"diff"|"insert"|"edit"
+--- @alias sia.config.ActionMode "split"|"diff"|"insert"
 
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
@@ -27,7 +27,7 @@ local providers = require("sia.provider")
 --- @field id (fun(ctx:sia.ActionArgument?):table?)|nil
 --- @field role sia.config.Role
 --- @field persistent boolean?
---- @field available (fun(ctx:sia.ActionArgument?):boolean)?
+--- @field available (fun(ctx:sia.Context?):boolean)?
 --- @field hide boolean?
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content (fun(ctx: sia.Context?):string)|string|string[]
@@ -153,12 +153,6 @@ Guidelines:
       timeout = 300,
     },
     actions = {
-      split = {
-        model = "gpt-4o",
-        mode = "split",
-        temperature = 0.2,
-        instructions = { "split_system", "current_context_line_number" },
-      },
       insert = {
         mode = "insert",
         temperature = 0.2,
@@ -178,9 +172,10 @@ Guidelines:
         },
       },
       --- @type sia.config.Action
-      edit = {
+      split = {
         model = "gpt-4o",
         mode = "split",
+        temperature = 0.1,
         split = {
           block_action = "search_replace",
         },
@@ -239,8 +234,6 @@ If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
 - A new file path, including dir name if needed
 - An empty `SEARCH` section
 - The new file's contents in the `REPLACE` section
-
-To rename files which have been added to the chat, use shell commands at the end of your response.
 
 ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!]],
           },
@@ -329,6 +322,7 @@ from hello import hello
 ```]],
           },
           require("sia.instructions").current_args(),
+          "current_context",
         },
       },
     },

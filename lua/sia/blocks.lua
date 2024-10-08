@@ -108,26 +108,15 @@ function M.parse_blocks(source, response)
   return blocks
 end
 
---- @param parser fun(b:sia.Block):fun(sia.config.Replace):nil
+--- @param action sia.BlockAction
 --- @param block sia.Block
 --- @param replace sia.config.Replace
-function M.replace_block(parser, block, replace)
+function M.replace_block(action, block, replace)
   if block.code then
-    local action = parser(block)
-    if action then
-      action(replace)
+    local edit = action.execute(block)
+    if edit then
+      flash_highlight(edit.buf, { edit.replace[1] - 1, edit.replace[2] - 1 }, replace.timeout, replace.highlight)
     end
-
-    -- if block.target.buf and vim.api.nvim_buf_is_loaded(block.target.buf) then
-    --   local source_line_count = #block.code
-    --   vim.api.nvim_buf_set_lines(block.target.buf, block.target.pos[1] - 1, block.target.pos[2], false, block.code)
-    --   flash_highlight(
-    --     block.target.buf,
-    --     { block.target.pos[1] - 1, block.target.pos[1] + source_line_count - 2 },
-    --     replace.timeout,
-    --     replace.highlight
-    --   )
-    -- end
   end
 end
 
@@ -158,11 +147,62 @@ local SEARCH = 1
 local REPLACE = 2
 local NONE = 3
 
+--- Finds the exact match of sequence of lines from search in content.
+--- @param content string[] The haystack
+--- @param search string[] The needle
+--- @return [integer, integer]? pos The start and end line indices of the match
+local function find_exact_match(content, search)
+  local pos = {}
+  for i, line in pairs(content) do
+    if line == search[1] then
+      local found = true
+      pos[1] = i
+      if #search > #content - i + 1 then
+        found = false
+        break
+      end
+
+      for j = 2, #search do
+        if content[i + j - 1] ~= search[j] then
+          found = false
+          break
+        end
+      end
+      if found then
+        pos[2] = i + #search
+        break
+      end
+    end
+  end
+  if #pos == 2 then
+    return pos
+  else
+    return nil
+  end
+end
+
+local function find_deindented_match(content, search)
+  local search_trim = {}
+  for i, line in pairs(search) do
+    search_trim[i] = line:gsub("^%s*", "")
+  end
+
+  local content_trim = {}
+  for i, line in pairs(content) do
+    content_trim[i] = line:gsub("^%s*", "")
+  end
+  return find_exact_match(content_trim, search_trim)
+end
+
 --- @param b sia.Block
 --- @return sia.BlockEdit?
 local function search_replace_action(b)
-  local file = string.match(b.tag, "file:(.+)")
-  local buf = vim.fn.bufnr(file)
+  local file = vim.fn.fnamemodify(string.match(b.tag, "file:(.+)"), ":p")
+  local buf = utils.ensure_file_is_loaded(file)
+  if not buf then
+    return nil
+  end
+
   local search = {}
   local replace = {}
 
@@ -195,47 +235,52 @@ local function search_replace_action(b)
 
   if vim.api.nvim_buf_is_loaded(buf) then
     local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local pos = {}
-    for i, line in pairs(content) do
-      if line == search[1] then
-        local found = true
-        pos[1] = i
-        if #search > #content - i + 1 then
-          found = false
-          break
-        end
-
-        for j = 2, #search do
-          if content[i + j - 1] ~= search[j] then
-            found = false
-            break
-          end
-        end
-        if found then
-          pos[2] = i + #search - 1
-          break
-        end
+    local pos
+    -- An empty search should only match an empty file/buffer
+    if #search == 0 and #content == 1 and content[1] == "" then
+      pos = { 1, 1 }
+    else
+      pos = find_exact_match(content, search)
+      if not pos then
+        pos = find_deindented_match(content, search)
       end
     end
 
-    if pos[1] and pos[2] then
-      vim.api.nvim_buf_set_lines(buf, pos[1] - 1, pos[2], false, replace)
-      return { buf = buf, pos = pos }
+    if pos then
+      return {
+        buf = buf,
+        search = { pos = pos, content = search },
+        replace = { pos = { pos[1], pos[1] + #replace }, content = replace },
+      }
     end
   end
   return nil
 end
 
---- @alias sia.BlockEdit {buf: integer, pos: [integer, integer]}
---- @alias sia.BlockAction fun(block: sia.Block):sia.BlockEdit?)
---- @alias sia.BlockActionConfig { automatic: boolean, manual: boolean, execute: sia.BlockAction }
+--- @alias sia.BlockEdit {buf: integer, search: { pos: [integer, integer], content:string[]}, replace: {pos: [integer, integer], content: string[]}}
+--- @alias sia.BlockAction { automatic: boolean, manual: boolean, execute_edit: (fun(edit: sia.BlockEdit):nil), find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
 
---- @type table<string, sia.BlockActionConfig>
+--- @type table<string, sia.BlockAction>
 M.actions = {
   ["search_replace"] = {
     automatic = true,
     manual = false,
-    execute = search_replace_action,
+    find_edit = search_replace_action,
+    --- @type
+    execute_edit = function(ctx)
+      local content = { "<<<<<<< User" }
+      for _, line in ipairs(ctx.search.content) do
+        content[#content + 1] = line
+      end
+      content[#content + 1] = "======="
+      for _, line in ipairs(ctx.replace.content) do
+        content[#content + 1] = line
+      end
+      content[#content + 1] = ">>>>>>> Sia"
+
+      vim.api.nvim_buf_set_lines(ctx.buf, ctx.search.pos[1] - 1, ctx.search.pos[2] - 1, false, content)
+      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = ctx.buf } })
+    end,
   },
 }
 

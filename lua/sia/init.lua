@@ -9,7 +9,17 @@ local M = {}
 
 function M.setup(options)
   config.setup(options)
+  require("sia.markers").setup()
   require("sia.mappings").setup()
+
+  vim.api.nvim_create_user_command("SiaAccept", function()
+    require("sia.markers").accept(vim.api.nvim_get_current_buf())
+  end, {})
+
+  vim.api.nvim_create_user_command("SiaReject", function()
+    require("sia.markers").reject(vim.api.nvim_get_current_buf())
+  end, {})
+
   vim.treesitter.language.register("markdown", "sia")
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
@@ -55,9 +65,6 @@ function M.main(action, opts)
       elseif conversation.mode == "insert" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
         strategy = InsertStrategy:new(conversation, options)
-      elseif conversation.mode == "edit" then
-        -- local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
-        -- strategy = EditStrategy:new(conversation, {})
       else
         local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
         strategy = SplitStrategy:new(conversation, options)

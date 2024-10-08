@@ -24,6 +24,7 @@
 --- @field hide boolean?
 --- @field content string[]|string|(fun(ctx:sia.Context?):string)
 --- @field persistent boolean?
+--- @field available (fun(ctx: sia.Context?):boolean)?
 --- @field description ((fun(ctx: sia.Context?):string)|string)?
 --- @field context sia.Context?
 local Message = {}
@@ -39,6 +40,7 @@ function Message:from_table(instruction, args)
   end
   obj.role = instruction.role
   obj.hide = instruction.hide
+  obj.available = instruction.available
   obj.content = instruction.content
   obj.description = instruction.description
   obj.persistent = instruction.persistent
@@ -62,7 +64,7 @@ end
 function Message:from_string(str, args)
   if type(str) == "string" then
     local instruction = require("sia.config").options.instructions[str]
-    if instruction and (not instruction.available or instruction.available(args)) then
+    if instruction then
       return Message:from_table(instruction, args)
     end
   end
@@ -76,9 +78,7 @@ function Message:new(instruction, args)
   if type(instruction) == "string" then
     return Message:from_string(instruction, args)
   else
-    if not instruction.available or instruction.available(args) then
-      return Message:from_table(instruction, args)
-    end
+    return Message:from_table(instruction, args)
   end
 end
 
@@ -97,8 +97,17 @@ function Message:to_prompt()
   return prompt
 end
 
+--- @return boolean
 function Message:is_context()
-  return self.role == "user" and self.persistent
+  return self.role == "user" and self.persistent == true
+end
+
+--- @return boolean
+function Message:is_available()
+  if self.available then
+    return self.available(self.context)
+  end
+  return true
 end
 
 --- @return string[]? content
@@ -197,10 +206,7 @@ end
 --- @param args sia.ActionArgument?
 --- @return boolean
 function Conversation:add_instruction(instruction, args)
-  if not instruction.available or instruction.available(args) then
-    return self:add_message(Message:from_table(instruction, args))
-  end
-  return false
+  return self:add_message(Message:from_table(instruction, args))
 end
 
 --- @return sia.Message message
@@ -238,6 +244,9 @@ function Conversation:to_query()
     temperature = self.temperature,
     prompt = vim
       .iter(self.messages)
+      :filter(function(m)
+        return m:is_available()
+      end)
       :map(function(m)
         return m:to_prompt()
       end)

@@ -107,7 +107,7 @@ end
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field conversation sia.Conversation the (ongoing) conversation
 --- @field name string
---- @field block_action sia.BlockActionConfig
+--- @field block_action sia.BlockAction
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = {}
 SplitStrategy.__index = SplitStrategy
@@ -201,19 +201,24 @@ function SplitStrategy:on_complete()
     local blocks = block.parse_blocks(self.buf, self._writer.cache)
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
-      if self.block_action and self.block_action.automatic then
-        local edit = self.block_action.execute(b)
+      if self.block_action then
+        local edit = self.block_action.find_edit(b)
         if edit then
+          print(vim.inspect(edit))
           edits[#edits + 1] = {
             bufnr = edit.buf,
             filename = vim.api.nvim_buf_get_name(edit.buf),
-            lnum = edit.pos[1],
+            lnum = edit.replace.pos[1],
+            text = "Changed",
           }
+          if self.block_action.execute_edit and self.block_action.automatic then
+            self.block_action.execute_edit(edit)
+          end
         end
       end
     end
 
-    if #edits > 1 then
+    if #edits > 0 and self.block_action.automatic then
       vim.fn.setqflist(edits, "r")
       vim.cmd("copen")
     end
@@ -230,7 +235,7 @@ name in neovim using three to five words. Only output the name, nothing else.]],
       },
     }, function(resp)
       self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-      pcall(vim.api.nvim_buf_set_name, self.buf, "*sia* " .. resp:lower():gsub("%s+", "-"))
+      pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
     end)
   end
 end

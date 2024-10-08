@@ -53,11 +53,27 @@ function M.get_action_mode(opts)
   elseif opts.bang and opts.mode == "v" then
     return "diff"
   else
-    if vim.fn.argc() > 0 then
-      return "edit"
-    end
     return "split"
   end
+end
+
+--- @param file string
+--- @return integer? buf
+function M.ensure_file_is_loaded(file)
+  local bufnr = vim.fn.bufnr(file)
+  if bufnr == -1 or not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    local status, _ = pcall(function()
+      bufnr = vim.fn.bufadd(file)
+      vim.fn.bufload(bufnr)
+      vim.api.nvim_set_option_value("buflisted", true, { buf = bufnr })
+      vim.api.nvim_command("argadd " .. file)
+    end)
+    if not status then
+      return nil
+    end
+  end
+
+  return bufnr
 end
 
 --- @param buf integer
