@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("sia.utils")
 local providers = require("sia.provider")
 
 --- @alias sia.config.Role "user"|"system"|"assistant"
@@ -16,7 +17,7 @@ local providers = require("sia.provider")
 
 --- @class sia.config.Split
 --- @field cmd "vsplit"|"split"?
---- @field block_action "search_replace"?
+--- @field block_action (string|sia.BlockAction)?
 --- @field wo table<string, any>?
 
 --- @class sia.config.Replace
@@ -62,11 +63,10 @@ local providers = require("sia.provider")
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
---- @field instructions table<string, sia.config.Instruction>
+--- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
---- @field debug boolean?
 --- @field report_usage boolean?
 M.options = {}
 
@@ -83,108 +83,10 @@ local defaults = {
     copilot = { "copilot", "gpt-4o" },
   },
   instructions = {
-    split_system = {
-      role = "system",
-      persistent = true,
-      content = [[You are an AI assistant named "Sia" integrated with Neovim.
-
-If the user provides a code context with line numbers and a buffer number, then provide code snippets with precise annotations in fenced blocks,
-following these guidelines:
-
-- Include `[buffer] replace-range:[start-line],[end-line]` right after the language identifier in the code block.
-- Always preserve indentation, and avoid outputting numbered lines.
-- Replace ranges must accurately reflect the lines being modified, including comments or closing brackets.
-- Double-check start-line and end-line accuracy, ensuring the range covers the exact lines of change without overwriting or deleting other content.
-
-Example (user provides buffer 2):
-
-```python 2 replace-range:5,6
-   self.b = b
-   self.c = None
-```]],
-    },
-    current_buffer_line_number = require("sia.instructions").current_buffer(true),
-    current_buffer = require("sia.instructions").current_buffer(false),
-    current_context_line_number = require("sia.instructions").current_context(true),
-    current_context = require("sia.instructions").current_context(false),
-    insert_system = {
-      role = "system",
-      content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
-
-1. If possible, make sure that you only output the relevant and requested information.
-2. Refrain from explaining your reasoning, unless the user requests it, or adding unrelated text to the output.
-3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
-4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
-5. **Always preserve** indentation for code.
-6. Never include the full provided context in your response. Only output the relevant requested information.
-7. **Do not include code fences** (e.g., triple backticks ``` or any other code delimiters) or any markdown formatting when outputting code. Output the code directly, without surrounding it with code fences or additional formatting.]],
-    },
-    diff_system = {
-      role = "system",
-      content = [[The user query is initiated from a text editor and will automatically be diffed against the input.
-
-Guidelines:
-
-	1.	Only output the requested changes.
-	2.	**Never** include code fences (```) or line numbers in your output unless they are required for the specific context (e.g., editing a Markdown file that uses code fences).
-	3.	**Never surround your complete answer with code fences, under any circumstances, unless the user explicitly asks for them.**
-  4.	Always preserve the original indentation for code.
-	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
-    },
-  },
-  --- @type sia.config.Defaults
-  defaults = {
-    model = "gpt-4o-mini", -- default model
-    temperature = 0.3, -- default temperature
-    prefix = 1, -- prefix lines in insert
-    suffix = 0, -- suffix lines in insert
-    split = {
-      cmd = "vsplit",
-      wo = { wrap = true },
-    },
-    diff = {
-      cmd = "vsplit",
-      wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
-    },
-    insert = {
-      placement = "cursor",
-    },
-    replace = {
-      highlight = "DiffAdd",
-      timeout = 300,
-    },
-    actions = {
-      insert = {
-        mode = "insert",
-        temperature = 0.2,
-        instructions = {
-          "insert_system",
-          "current_buffer",
-        },
-      },
-      diff = {
-        mode = "diff",
-        model = "gpt-4o",
-        temperature = 0.2,
-        instructions = {
-          "diff_system",
-          "current_buffer",
-          "current_context",
-        },
-      },
-      --- @type sia.config.Action
-      split = {
-        model = "chatgpt-4o-latest",
-        -- model = "copilot",
-        mode = "split",
-        temperature = 0.1,
-        split = {
-          block_action = "search_replace",
-        },
-        instructions = {
-          {
-            role = "system",
-            content = [[Act as an expert software developer. Always use best practices when coding.
+    editblock_system = {
+      {
+        role = "system",
+        content = [[Act as an expert software developer. Always use best practices when coding.
 Respect and use existing conventions, libraries, etc that are already present in the code base.
 
 You are diligent and tireless!
@@ -205,10 +107,10 @@ Once you understand the request you MUST:
 3. If you are unsure what the user wants, ask for clarification before making changes.
 
 All changes to files must use this *SEARCH/REPLACE block* format.]],
-          },
-          {
-            role = "system",
-            content = [[# *SEARCH/REPLACE block* Rules:
+      },
+      {
+        role = "system",
+        content = [[# *SEARCH/REPLACE block* Rules:
 
 Every *SEARCH/REPLACE block* must use this format:
 1. The opening fence, code language and the *FULL* file path alone on a line, verbatim. No bold asterisks, no quotes around it, no escaping of characters, etc., eg: ```python test.py
@@ -249,16 +151,16 @@ You NEVER leave comments describing code without implementing it!
 You always COMPLETELY IMPLEMENT the needed code!
 
 ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!]],
-          },
-          {
-            role = "user",
-            hide = true,
-            content = "Change get_factorial() to use math.factorial",
-          },
-          {
-            role = "assistant",
-            hide = true,
-            content = [[To make this change we need to modify `mathweb/flask/app.py` to:
+      },
+      {
+        role = "user",
+        hide = true,
+        content = "Change get_factorial() to use math.factorial",
+      },
+      {
+        role = "assistant",
+        hide = true,
+        content = [[To make this change we need to modify `mathweb/flask/app.py` to:
 
 1. Import the math package.
 2. Remove the existing factorial() function.
@@ -297,16 +199,16 @@ def factorial(n):
     return str(math.factorial(n))
 >>>>>>> REPLACE
 ```]],
-          },
-          {
-            role = "user",
-            hide = true,
-            content = "Refactor hello() into its own file.",
-          },
-          {
-            role = "assistant",
-            hide = true,
-            content = [[To make this change we need to modify `main.py` and make a new file `hello.py`:
+      },
+      {
+        role = "user",
+        hide = true,
+        content = "Refactor hello() into its own file.",
+      },
+      {
+        role = "assistant",
+        hide = true,
+        content = [[To make this change we need to modify `main.py` and make a new file `hello.py`:
 
 1. Make a new hello.py file with hello() in it.
 2. Remove hello() from main.py and replace it with an import.
@@ -333,7 +235,103 @@ def hello():
 from hello import hello
 >>>>>>> REPLACE
 ```]],
-          },
+      },
+    },
+    git_files = {
+      role = "user",
+      persistent = true,
+      description = "List the files in the current git repository.",
+      available = function()
+        return utils.is_git_repo()
+      end,
+      content = function(ctx)
+        return string.format(
+          "This is the current directory:\n:%s",
+          vim.fn.system("git ls-tree -r --name-only HEAD | tree --fromfile")
+        )
+      end,
+    },
+    current_buffer_line_number = require("sia.instructions").current_buffer({ show_line_numbers = true }),
+    current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = false }),
+    current_context_line_number = require("sia.instructions").current_context({ show_line_numbers = true }),
+    current_context = require("sia.instructions").current_context({ show_line_numbers = false }),
+    insert_system = {
+      role = "system",
+      content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
+
+1. If possible, make sure that you only output the relevant and requested information.
+2. Refrain from explaining your reasoning, unless the user requests it, or adding unrelated text to the output.
+3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
+4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
+5. **Always preserve** indentation for code.
+6. Never include the full provided context in your response. Only output the relevant requested information.
+7. **Do not include code fences** (e.g., triple backticks ``` or any other code delimiters) or any markdown formatting when outputting code. Output the code directly, without surrounding it with code fences or additional formatting.]],
+    },
+    diff_system = {
+      role = "system",
+      content = [[The user query is initiated from a text editor and will automatically be diffed against the input.
+
+Guidelines:
+
+	1.	Only output the requested changes.
+	2.	**Never** include code fences (```) or line numbers in your output unless they are required for the specific context (e.g., editing a Markdown file that uses code fences).
+	3.	**Never surround your complete answer with code fences, under any circumstances, unless the user explicitly asks for them.**
+  4.	Always preserve the original indentation for code.
+	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
+    },
+  },
+  --- @type sia.config.Defaults
+  defaults = {
+    model = "gpt-4o-mini", -- default model
+    temperature = 0.3, -- default temperature
+    prefix = 1, -- prefix lines in insert
+    suffix = 0, -- suffix lines in insert
+    split = {
+      cmd = "vsplit",
+      wo = { wrap = true },
+      block_action = "search_replace",
+    },
+    diff = {
+      cmd = "vsplit",
+      wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
+    },
+    insert = {
+      placement = "cursor",
+    },
+    replace = {
+      highlight = "DiffAdd",
+      timeout = 300,
+    },
+    actions = {
+      insert = {
+        mode = "insert",
+        temperature = 0.2,
+        instructions = {
+          "insert_system",
+          "current_buffer",
+        },
+      },
+      diff = {
+        mode = "diff",
+        model = "chatgpt-4o-latest",
+        temperature = 0.2,
+        instructions = {
+          "diff_system",
+          require("sia.instructions").current_buffer({ fences = false }),
+          require("sia.instructions").current_context({ fences = false }),
+        },
+      },
+      --- @type sia.config.Action
+      split = {
+        model = "chatgpt-4o-latest",
+        -- model = "copilot",
+        mode = "split",
+        temperature = 0.1,
+        split = {
+          block_action = "search_replace",
+        },
+        instructions = {
+          "editblock_system",
           require("sia.instructions").current_args(),
           "current_context",
         },
@@ -343,7 +341,7 @@ from hello import hello
   actions = {
     diagnostic = {
       instructions = {
-        "split_system",
+        "editblock_system",
         {
           role = "user",
           id = function(ctx)
@@ -375,16 +373,14 @@ from hello import hello
             end
 
             return string.format(
-              [[The programming language is %s. The buffer is: %s. This is a list of the diagnostic messages:
+              [[This is a list of the diagnostic messages:
 %s
 ]],
-              vim.bo[opts.buf].ft,
-              opts.buf,
               concatenated_diagnostics
             )
           end,
         },
-        "current_context_line_number",
+        "current_context",
       },
       mode = "split",
       range = true,
@@ -422,20 +418,7 @@ from hello import hello
       input = "ignore",
       mode = "insert",
       enabled = function()
-        local function is_git_repo()
-          local handle = io.popen("git rev-parse --is-inside-work-tree 2>/dev/null")
-          if handle == nil then
-            return false
-          end
-          local result = handle:read("*a")
-          handle:close()
-          if result:match("true") then
-            local exit_code = os.execute("git diff --cached --quiet")
-            return exit_code ~= nil and exit_code ~= 0
-          end
-          return false
-        end
-        return is_git_repo()
+        return utils.is_git_repo(true)
       end,
       insert = { placement = "cursor" },
     },
@@ -459,6 +442,7 @@ from hello import hello
     },
     unittest = {
       instructions = {
+        "editblock_system",
         {
           role = "system",
           content = [[When generating unit tests, follow these steps:
@@ -471,13 +455,20 @@ from hello import hello
         - Normal cases
         - Edge cases
         - Error handling (if applicable)
-  6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.]],
+  6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
+  7. Based on the provided list of files, place the test in an appropriate file.
+  8. If the file exists, ask the user to provide it to the conversation so that the test can be appropriately inserted.
+  ]],
         },
+        "git_files",
+        require("sia.instructions").current_args(),
+        "current_buffer",
         "current_context",
       },
       capture = require("sia.capture").treesitter("@function.outer"),
       mode = "split",
       split = {
+        block_action = require("sia.blocks").customize_action("search_replace", { automatic = true }),
         cmd = "vsplit",
       },
       range = true,
@@ -489,31 +480,29 @@ from hello import hello
         "insert_system",
         {
           role = "system",
-          content = [[You are tasked with writing documentation for functions, methods, and classes written in {{filetype}}. Your documentation must adhere to the {{language}} conventions (e.g., JSDoc for JavaScript, docstrings for Python, Javadoc for Java), including appropriate tags and formatting.
+          content = [[You are tasked with writing documentation for functions, methods, and classes. Your documentation must adhere to the language conventions (e.g., JSDoc for JavaScript, docstrings for Python, Javadoc for Java), including appropriate tags and formatting.
 
-**Requirements:**
-1. Follow the language-specific documentation style strictly (e.g., use `/** ... */` for JavaScript, `""" ... """` for Python).
-2. Only output the documentation text; never output the function declaration, implementation, or any code examples.
-3. Include all relevant sections, such as:
-   - A clear description of the function's purpose.
-   - Detailed parameter explanations using the appropriate tags (e.g., `@param` for JSDoc).
-   - Return value descriptions using language-specific tags (e.g., `@return`).
-4. Avoid including any code snippets, including function signatures or suggested implementations.
-5. Never under any circumstance include markdown code fences surrounding the documentation. Failure to adhere strictly to this format will result in an incorrect response.
-6. If the user request a specific format, follow that format but remember to strictly adhere to the rules! Non compliance is an error!
-7. If the user gives you a class, struct etc, only provide documentation for the class, struct and NOT for the functions/methods. Non compliance is an error!
+Requirements:
 
-**Important**: Double-check that your response strictly follows the language's
-documentation style and contains only the requested documentation text. If any
-code is included, the response is incorrect.]],
+1. **Language-Specific Conventions**: Follow the language-specific documentation style strictly (e.g., use /** ... */ for JavaScript, """ ... """ for Python). Ensure all tags are accurate and appropriate for the language.
+2. No Code Output: Only output the documentation text; never output the function declaration, implementation, or any code examples, including function signatures or suggested implementations.
+3. **Formatting and Sections**:
+  *	Provide a clear and concise description of the function’s purpose.
+  *	Use appropriate tags (e.g., @param, @return) to describe parameters and return values.
+  *	Maintain strict adherence to formatting conventions for each language.
+4. **Strict Indentation Rules**:
+  *	The documentation must be indented to match the level of the provided context.
+  *	Always ensure the indentation aligns with the surrounding code, allowing the documentation to be copied directly into the code without requiring reformatting.
+  *	Failure to produce correctly indented output is considered an error.
+5. **No Markdown or Fences**:
+  *	Do not include markdown code fences or other wrappers surrounding the documentation.
+6. **Class/Struct Documentation**:
+  *	If the user provides a class or struct, only document the class/struct itself, not its methods or functions. Any deviation is considered incorrect.
+7. **Compliance and Double-Check**:
+  *	Double-check that your response adheres strictly to the language’s documentation style, contains only the requested documentation text, and maintains proper indentation for easy insertion into code. ]],
         },
-        {
-          role = "user",
-          content = "Here is the function/class/method/struct:\n```{{filetype}}\n{{context}}\n```",
-        },
+        "current_context",
       },
-      prefix = 2,
-      suffix = 0,
       capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
       mode = "insert",
       insert = {
@@ -530,7 +519,6 @@ code is included, the response is incorrect.]],
     },
   },
   report_usage = true,
-  debug = false,
 }
 
 function M.setup(options)

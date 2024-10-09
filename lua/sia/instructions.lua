@@ -43,9 +43,10 @@ function M.current_args()
   }
 end
 
---- @param show_line_numbers boolean?
+--- @param global {show_line_numbers: boolean?, fences: boolean?}
 --- @return sia.config.Instruction
-function M.current_buffer(show_line_numbers)
+function M.current_buffer(global)
+  global = global or {}
   --- @type sia.config.Instruction
   return {
     id = function(ctx)
@@ -57,19 +58,27 @@ function M.current_buffer(show_line_numbers)
       return string.format("%s", utils.get_filename(opts.buf, ":."))
     end,
     content = function(opts)
+      local start_fence = ""
+      local end_fence = ""
+      if global.fences ~= false then
+        start_fence = "```" .. vim.bo[opts.buf].ft
+        end_fence = "```"
+      end
       return string.format(
-        "%s\n```%s\n%s\n```",
+        "%s\n%s\n%s\n%s",
         utils.get_filename(opts.buf),
-        vim.bo[opts.buf].ft,
-        utils.get_code(1, -1, { buf = opts.buf, show_line_numbers = show_line_numbers })
+        start_fence,
+        utils.get_code(1, -1, { buf = opts.buf, show_line_numbers = global.show_line_numbers }),
+        end_fence
       )
     end,
   }
 end
 
---- @param show_line_numbers boolean?
+--- @param global {show_line_numbers: boolean?, fences: boolean?}
 --- @return sia.config.Instruction
-function M.current_context(show_line_numbers)
+function M.current_context(global)
+  global = global or {}
   --- @type sia.config.Instruction
   return {
     id = function(ctx)
@@ -84,17 +93,27 @@ function M.current_context(show_line_numbers)
     end,
     persistent = true,
     content = function(opts)
+      local start_fence = ""
+      local end_fence = ""
+      if global.fences ~= false then
+        start_fence = "```" .. vim.bo[opts.buf].ft
+        end_fence = "```"
+      end
+
       if opts.pos then
         local start_line, end_line = opts.pos[1], opts.pos[2]
         local code = utils.get_code(start_line, end_line, { buf = opts.buf, show_line_numbers = show_line_numbers })
         return string.format(
-          [[The provided context from %s:
-```%s
+          [[The provided context line %d to line %d from %s:
 %s
-```]],
+%s
+%s]],
+          opts.pos[1],
+          opts.pos[2],
           utils.get_filename(opts.buf, ":p"),
-          vim.bo[opts.buf].ft,
-          code
+          start_fence,
+          code,
+          end_fence
         )
       end
     end,

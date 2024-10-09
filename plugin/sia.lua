@@ -40,6 +40,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
       return
     end
     opts.start_line, opts.end_line = capture[1], capture[2]
+    opts.mode = "v"
   end
 
   if action.range == true and opts.mode ~= "v" then
@@ -53,6 +54,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     vim.notify(args.fargs[1] .. " is not enabled")
     return
   end
+  print(vim.inspect(opts))
   require("sia").main(action, opts)
 end, {
   range = true,

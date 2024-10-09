@@ -60,12 +60,19 @@ end
 --- Create a new message from a stored instruction
 --- @param str string|string[]
 --- @param args sia.ActionArgument?
---- @return sia.Message?
+--- @return sia.Message[]?
 function Message:from_string(str, args)
   if type(str) == "string" then
     local instruction = require("sia.config").options.instructions[str]
     if instruction then
-      return Message:from_table(instruction, args)
+      if vim.islist(instruction) then
+        local messages = {}
+        for _, step in ipairs(instruction) do
+          table.insert(messages, Message:from_table(step, args))
+        end
+        return messages
+      end
+      return { Message:from_table(instruction, args) }
     end
   end
 end
@@ -73,12 +80,12 @@ end
 --- Create a new message from an Instruction or a stored instruction.
 --- @param instruction sia.config.Instruction|string
 --- @param args sia.ActionArgument?
---- @return sia.Message?
+--- @return sia.Message[]?
 function Message:new(instruction, args)
   if type(instruction) == "string" then
     return Message:from_string(instruction, args)
   else
-    return Message:from_table(instruction, args)
+    return { Message:from_table(instruction, args) }
   end
 end
 
@@ -99,7 +106,7 @@ end
 
 --- @return boolean
 function Message:is_context()
-  return self.role == "user" and self.persistent == true
+  return self.role == "user" and self.persistent == true and self:is_available()
 end
 
 --- @return boolean
@@ -170,10 +177,16 @@ function Conversation:new(action, args)
     cursor = args.cursor,
   }
   obj.messages = {}
-  for a, instruction in ipairs(action.instructions or {}) do
+  for _, instruction in ipairs(action.instructions or {}) do
     local message = Message:new(instruction, args)
     if message then
-      table.insert(obj.messages, message)
+      if type(message) == "table" then
+        for _, m in ipairs(message) do
+          table.insert(obj.messages, m)
+        end
+      else
+        table.insert(obj.messages, message)
+      end
     end
   end
 

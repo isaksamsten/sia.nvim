@@ -142,7 +142,11 @@ function SplitStrategy:new(conversation, options)
   obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
-  obj.block_action = block.actions[options.block_action]
+  if type(options.block_action) == "table" then
+    obj.block_action = options.block_action --[[@as sia.BlockAction]]
+  else
+    obj.block_action = block.actions[options.block_action]
+  end
 
   if SplitStrategy.count() == 0 then
     obj.name = "*sia*"
@@ -210,8 +214,8 @@ function SplitStrategy:on_complete()
             text = edit.search.content[1] or "",
           }
           edit_bufs[edit.buf] = true
-          if self.block_action.execute_edit and self.block_action.automatic then
-            self.block_action.execute_edit(edit)
+          if self.block_action.automatic_edit and self.block_action.automatic then
+            self.block_action.automatic_edit(edit)
           end
         end
       end
@@ -456,6 +460,7 @@ function InsertStrategy:_get_insert_placement()
 
   if pad == "below" then
     vim.api.nvim_buf_set_lines(context.buf, start_line, start_line, false, { "" })
+    start_line = start_line + 1
   elseif pad == "above" then
     vim.api.nvim_buf_set_lines(context.buf, start_line - 1, start_line - 1, false, { "" })
   end

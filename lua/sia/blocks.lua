@@ -117,13 +117,12 @@ function M.replace_block(action, block, replace)
   if block.code then
     local edit = action.find_edit(block)
     if edit then
-      action.execute_edit(edit)
-      flash_highlight(
-        edit.buf,
-        { edit.search.pos[1] - 1, edit.search.pos[1] + #block.code - 2 },
-        replace.timeout,
-        replace.highlight
-      )
+      local pos = action.manual_edit(edit)
+      print(vim.inspect(pos))
+      if pos then
+        flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
+        vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf } })
+      end
     end
   end
 end
@@ -147,6 +146,7 @@ function M.insert_block(block, replace, padding)
         replace.timeout,
         replace.highlight
       )
+      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = other.buf } })
     end)
   end
 end
@@ -154,53 +154,6 @@ end
 local SEARCH = 1
 local REPLACE = 2
 local NONE = 3
-
---- Finds the exact match of sequence of lines from search in content.
---- @param content string[] The haystack
---- @param search string[] The needle
---- @return [integer, integer]? pos The start and end line indices of the match
-local function find_exact_match(content, search)
-  local pos = {}
-  for i, line in pairs(content) do
-    if line == search[1] then
-      local found = true
-      pos[1] = i
-      if #search > #content - i + 1 then
-        found = false
-        break
-      end
-
-      for j = 2, #search do
-        if content[i + j - 1] ~= search[j] then
-          found = false
-          break
-        end
-      end
-      if found then
-        pos[2] = i + #search
-        break
-      end
-    end
-  end
-  if #pos == 2 then
-    return pos
-  else
-    return nil
-  end
-end
-
-local function find_deindented_match(content, search)
-  local search_trim = {}
-  for i, line in pairs(search) do
-    search_trim[i] = line:gsub("^%s*", "")
-  end
-
-  local content_trim = {}
-  for i, line in pairs(content) do
-    content_trim[i] = line:gsub("^%s*", "")
-  end
-  return find_exact_match(content_trim, search_trim)
-end
 
 --- @param b sia.Block
 --- @return sia.BlockEdit?
@@ -274,29 +227,47 @@ local function search_replace_action(b)
 end
 
 --- @alias sia.BlockEdit {buf: integer, search: { pos: [integer, integer], content:string[]}, replace: {pos: [integer, integer], content: string[]}}
---- @alias sia.BlockAction { automatic: boolean, manual: boolean, execute_edit: (fun(edit: sia.BlockEdit):nil), find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
+--- @alias sia.BlockAction { automatic: boolean, manual_edit: (fun(edit:sia.BlockEdit):[integer,integer]?), automatic_edit: (fun(edit: sia.BlockEdit):[integer, integer]?)?, find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
 
 --- @type table<string, sia.BlockAction>
 M.actions = {
   ["search_replace"] = {
-    automatic = true,
-    manual = false,
+    automatic = false,
     find_edit = search_replace_action,
-    --- @param ctx sia.BlockEdit
-    execute_edit = function(ctx)
+    --- @param edit sia.BlockEdit
+    manual_edit = function(edit)
+      vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
+      return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }
+    end,
+    --- @param edit sia.BlockEdit
+    automatic_edit = function(edit)
       local content = { "<<<<<<< User" }
-      for _, line in ipairs(ctx.search.content) do
+      for _, line in ipairs(edit.search.content) do
         content[#content + 1] = line
       end
       content[#content + 1] = "======="
-      for _, line in ipairs(ctx.replace.content) do
+      for _, line in ipairs(edit.replace.content) do
         content[#content + 1] = line
       end
       content[#content + 1] = ">>>>>>> Sia"
 
-      vim.api.nvim_buf_set_lines(ctx.buf, ctx.search.pos[1] - 1, ctx.search.pos[2], false, content)
+      vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, content)
+      return { edit.search.pos[1], edit.search.pos[1] + #content - 1 }
     end,
   },
 }
+
+--- @param name string
+--- @param opts { automatic: boolean? }
+--- @return sia.BlockAction?
+function M.customize_action(name, opts)
+  local action = M.actions[name]
+  if action then
+    action = vim.deepcopy(action)
+    action.automatic = opts.automatic or action.automatic
+    return action
+  end
+  return nil
+end
 
 return M

@@ -252,6 +252,39 @@ function M.setup()
     end
   end, { noremap = true, silent = true })
 
+  vim.keymap.set("n", "<Plug>(sia-replace-all-blocks)", function()
+    local split = SplitStrategy.by_buf()
+    if split then
+      local edits = {}
+      local edit_bufs = {}
+      for _, block in ipairs(split.blocks) do
+        if split.block_action then
+          local edit = split.block_action.find_edit(block)
+          if edit then
+            edits[#edits + 1] = {
+              bufnr = edit.buf,
+              filename = vim.api.nvim_buf_get_name(edit.buf),
+              lnum = edit.replace.pos[1],
+              text = edit.search.content[1] or "",
+            }
+            edit_bufs[edit.buf] = true
+            if split.block_action.automatic_edit then
+              split.block_action.automatic_edit(edit)
+            end
+          end
+        end
+        for buf, _ in pairs(edit_bufs) do
+          vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
+        end
+
+        if #edits > 0 and split.block_action.automatic_edit then
+          vim.fn.setqflist(edits, "r")
+          vim.cmd("copen")
+        end
+      end
+    end
+  end, { noremap = true, silent = true })
+
   vim.keymap.set("n", "<Plug>(sia-insert-block-above)", function()
     local split = SplitStrategy.by_buf()
     if split then
