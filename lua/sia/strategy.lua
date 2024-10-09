@@ -192,7 +192,6 @@ end
 
 function SplitStrategy:on_complete()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
-    local edits = {}
     vim.bo[self.buf].modifiable = false
 
     self.conversation:add_instruction(
@@ -201,34 +200,10 @@ function SplitStrategy:on_complete()
     )
 
     local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
-    local edit_bufs = {}
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
-      if self.block_action then
-        local edit = self.block_action.find_edit(b)
-        if edit then
-          edits[#edits + 1] = {
-            bufnr = edit.buf,
-            filename = vim.api.nvim_buf_get_name(edit.buf),
-            lnum = edit.replace.pos[1],
-            text = edit.search.content[1] or "",
-          }
-          edit_bufs[edit.buf] = true
-          if self.block_action.automatic_edit and self.block_action.automatic then
-            self.block_action.automatic_edit(edit)
-          end
-        end
-      end
     end
-
-    for buf, _ in pairs(edit_bufs) do
-      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
-    end
-
-    if #edits > 0 and self.block_action.automatic then
-      vim.fn.setqflist(edits, "r")
-      vim.cmd("copen")
-    end
+    require("sia.blocks").replace_all_blocks(self.block_action, blocks)
 
     self._writer = nil
     assistant.execute_query({

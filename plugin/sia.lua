@@ -54,7 +54,6 @@ vim.api.nvim_create_user_command("Sia", function(args)
     vim.notify(args.fargs[1] .. " is not enabled")
     return
   end
-  print(vim.inspect(opts))
   require("sia").main(action, opts)
 end, {
   range = true,

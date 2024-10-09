@@ -123,6 +123,25 @@ function M.accept(buf)
   end
 end
 
+local function on_detect_conflict_markers(buf)
+  conflicts[buf] = detect_conflict_markers(buf)
+  if conflicts[buf] then
+    vim.cmd([[
+syntax match ConflictMarkerBegin containedin=ALL /^<<<<<<<\+/
+syntax match ConflictMarkerEnd containedin=ALL /^>>>>>>>\+/
+syntax match ConflictMarkerSeparator containedin=ALL /^=======\+$/
+syntax region ConflictMarkerOurs containedin=ALL start=/^<<<<<<<\+/hs=e+1 end=/^=======\+$\&/
+syntax region ConflictMarkerTheirs containedin=ALL start=/^=======\+/hs=e+1 end=/^>>>>>>>\+\&/
+]])
+    vim.cmd([[
+highlight default link ConflictMarkerBegin DiffDelete
+highlight default link ConflictMarkerOurs DiffDelete
+highlight default link ConflictMarkerSeparator NoneText
+highlight default link ConflictMarkerEnd DiffAdd
+highlight default link ConflictMarkerTheirs DiffAdd
+]])
+  end
+end
 function M.setup()
   local augroup = vim.api.nvim_create_augroup("SiaMarkers", { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
@@ -136,15 +155,15 @@ function M.setup()
     group = augroup,
     pattern = "*",
     callback = function(args)
-      conflicts[args.buf] = detect_conflict_markers(args.buf)
+      on_detect_conflict_markers(args.buf)
     end,
   })
 
   vim.api.nvim_create_autocmd("User", {
     group = augroup,
     pattern = "SiaEditPost",
-    callback = function(data)
-      conflicts[data.data.buf] = detect_conflict_markers(data.data.buf)
+    callback = function(args)
+      on_detect_conflict_markers(args.data.buf)
     end,
   })
 end

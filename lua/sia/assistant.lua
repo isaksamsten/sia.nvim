@@ -122,7 +122,7 @@ function M.execute_strategy(strategy)
 end
 
 --- @param query sia.Query
---- @param callback fun(string):nil
+--- @param callback fun(s:string):nil
 function M.execute_query(query, callback)
   call_provider(query, {
     on_stdout = function(_, data, _)

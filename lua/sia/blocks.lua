@@ -110,6 +110,38 @@ function M.parse_blocks(source, start_line, response)
   return blocks
 end
 
+--- @param block_action sia.BlockAction
+--- @param blocks sia.Block[]
+function M.replace_all_blocks(block_action, blocks)
+  local edits = {}
+  local edit_bufs = {}
+  for _, block in ipairs(blocks) do
+    if block_action then
+      local edit = block_action.find_edit(block)
+      if edit then
+        edits[#edits + 1] = {
+          bufnr = edit.buf,
+          filename = vim.api.nvim_buf_get_name(edit.buf),
+          lnum = edit.replace.pos[1],
+          text = edit.search.content[1] or "",
+        }
+        edit_bufs[edit.buf] = true
+        if block_action.automatic_edit then
+          block_action.automatic_edit(edit)
+        end
+      end
+    end
+    for buf, _ in pairs(edit_bufs) do
+      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
+    end
+
+    if #edits > 0 and block_action.automatic_edit then
+      vim.fn.setqflist(edits, "r")
+      vim.cmd("copen")
+    end
+  end
+end
+
 --- @param action sia.BlockAction
 --- @param block sia.Block
 --- @param replace sia.config.Replace
@@ -118,7 +150,6 @@ function M.replace_block(action, block, replace)
     local edit = action.find_edit(block)
     if edit then
       local pos = action.manual_edit(edit)
-      print(vim.inspect(pos))
       if pos then
         flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
         vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf } })
@@ -133,7 +164,6 @@ end
 function M.insert_block(block, replace, padding)
   if block.code then
     local source_line_count = #block.code
-    -- if the LLM generated bad destination buffer or if no buffer was provided.
     utils.select_other_buffer(block.source.buf, function(other)
       local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
       if padding then
