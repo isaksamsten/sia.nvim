@@ -79,6 +79,7 @@ local defaults = {
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o" },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
+    ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     copilot = { "copilot", "gpt-4o" },
   },
   instructions = {
@@ -173,7 +174,8 @@ Guidelines:
       },
       --- @type sia.config.Action
       split = {
-        model = "gpt-4o",
+        model = "chatgpt-4o-latest",
+        -- model = "copilot",
         mode = "split",
         temperature = 0.1,
         split = {
@@ -184,6 +186,11 @@ Guidelines:
             role = "system",
             content = [[Act as an expert software developer. Always use best practices when coding.
 Respect and use existing conventions, libraries, etc that are already present in the code base.
+
+You are diligent and tireless!
+You NEVER leave comments describing code without implementing it!
+You always COMPLETELY IMPLEMENT the needed code!
+
 Take requests for changes to the supplied code.
 If the request is ambiguous, ask questions.
 
@@ -197,9 +204,11 @@ Once you understand the request you MUST:
 
 3. If you are unsure what the user wants, ask for clarification before making changes.
 
-All changes to files must use this *SEARCH/REPLACE block* format.
-
-# *SEARCH/REPLACE block* Rules:
+All changes to files must use this *SEARCH/REPLACE block* format.]],
+          },
+          {
+            role = "system",
+            content = [[# *SEARCH/REPLACE block* Rules:
 
 Every *SEARCH/REPLACE block* must use this format:
 1. The opening fence, code language and the *FULL* file path alone on a line, verbatim. No bold asterisks, no quotes around it, no escaping of characters, etc., eg: ```python test.py
@@ -234,6 +243,10 @@ If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
 - A new file path, including dir name if needed
 - An empty `SEARCH` section
 - The new file's contents in the `REPLACE` section
+
+You are diligent and tireless!
+You NEVER leave comments describing code without implementing it!
+You always COMPLETELY IMPLEMENT the needed code!
 
 ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!]],
           },

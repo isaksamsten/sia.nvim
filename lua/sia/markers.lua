@@ -91,6 +91,7 @@ end
 
 local conflicts = {}
 
+--- @param buf integer
 function M.reject(buf)
   if conflicts[buf] then
     local pos = markers()
@@ -106,7 +107,8 @@ function M.reject(buf)
   end
 end
 
-function M.accept(buf, line)
+--- @param buf integer
+function M.accept(buf)
   if conflicts[buf] then
     local pos = markers()
     if pos then
@@ -142,8 +144,7 @@ function M.setup()
     group = augroup,
     pattern = "SiaEditPost",
     callback = function(data)
-      print("Sia edit post triggered")
-      conflicts[data.buf] = detect_conflict_markers(data.buf)
+      conflicts[data.data.buf] = detect_conflict_markers(data.data.buf)
     end,
   })
 end

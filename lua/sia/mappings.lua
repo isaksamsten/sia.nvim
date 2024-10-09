@@ -140,7 +140,7 @@ function M.setup()
 
   vim.keymap.set("n", "<Plug>(sia-accept)", function()
     local buf = vim.api.nvim_get_current_buf()
-    require("sia.markers").accept(buf, vim.api.nvim_win_get_cursor(0)[1])
+    require("sia.markers").accept(buf)
   end)
 
   vim.keymap.set({ "n", "v" }, "<Plug>(sia-paste-block-above)", function()
@@ -247,7 +247,7 @@ function M.setup()
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
       if block then
-        require("sia.blocks").replace_block(split.block_action, block, config.options.defaults.replace)
+        require("sia.blocks").replace_block(split.block_action, block, config.options.defaults.replace or {})
       end
     end
   end, { noremap = true, silent = true })
@@ -258,7 +258,7 @@ function M.setup()
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
       if block then
-        require("sia.blocks").insert_block(block, config.options.defaults.replace, -1)
+        require("sia.blocks").insert_block(block, config.options.defaults.replace, 1)
       end
     end
   end, { noremap = true, silent = true })

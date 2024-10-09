@@ -7,6 +7,7 @@ local assistant = require("sia.assistant")
 --- Write text to a buffer.
 --- @class sia.Writer
 --- @field buf number
+--- @field start_line integer
 --- @field line number
 --- @field column number
 --- @field show (fun(s: string):boolean)?
@@ -21,12 +22,13 @@ Writer.__index = Writer
 function Writer:new(buf, line, column, show)
   local obj = {
     buf = buf,
+    start_line = line or 0,
     line = line or 0,
     column = column or 0,
     cache = {},
     show = show,
   }
-  obj.cache[line] = ""
+  obj.cache[1] = ""
   setmetatable(obj, self)
   return obj
 end
@@ -34,7 +36,7 @@ end
 --- @param substring string
 function Writer:append_substring(substring)
   vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
-  self.cache[self.line] = self.cache[self.line] .. substring
+  self.cache[#self.cache] = self.cache[#self.cache] .. substring
   self.column = self.column + #substring
 end
 
@@ -42,7 +44,7 @@ function Writer:append_newline()
   vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   self.line = self.line + 1
   self.column = 0
-  self.cache[self.line] = ""
+  self.cache[#self.cache + 1] = ""
 end
 
 --- @param content string The string content to append to the buffer.
@@ -188,34 +190,35 @@ function SplitStrategy:on_complete()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     local edits = {}
     vim.bo[self.buf].modifiable = false
-    local content = {}
-    for _, line in pairs(self._writer.cache) do
-      content[#content + 1] = line
-    end
 
     self.conversation:add_instruction(
-      { role = "assistant", content = content },
+      { role = "assistant", content = self._writer.cache },
       { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
     )
 
-    local blocks = block.parse_blocks(self.buf, self._writer.cache)
+    local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
+    local edit_bufs = {}
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
       if self.block_action then
         local edit = self.block_action.find_edit(b)
         if edit then
-          print(vim.inspect(edit))
           edits[#edits + 1] = {
             bufnr = edit.buf,
             filename = vim.api.nvim_buf_get_name(edit.buf),
             lnum = edit.replace.pos[1],
-            text = "Changed",
+            text = edit.search.content[1] or "",
           }
+          edit_bufs[edit.buf] = true
           if self.block_action.execute_edit and self.block_action.automatic then
             self.block_action.execute_edit(edit)
           end
         end
       end
+    end
+
+    for buf, _ in pairs(edit_bufs) do
+      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
     end
 
     if #edits > 0 and self.block_action.automatic then

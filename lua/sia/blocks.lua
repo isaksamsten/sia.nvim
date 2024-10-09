@@ -6,6 +6,7 @@
 local M = {}
 
 local utils = require("sia.utils")
+local matcher = require("sia.matcher")
 
 local ns_flash_id = vim.api.nvim_create_namespace("sia_flash") -- Create a namespace for the highlight
 
@@ -75,29 +76,30 @@ function M.insert_block_at(buf, start_line, end_line, block, replace)
 end
 
 --- @param source integer
+--- @param start_line integer
 --- @param response string[]
 --- @return sia.Block[]
-function M.parse_blocks(source, response)
+function M.parse_blocks(source, start_line, response)
   --- @type sia.Block?
   local block = nil
 
   --- @type sia.Block[]
   local blocks = {}
 
-  for i, line in pairs(response) do
+  for i, line in ipairs(response) do
     if block == nil then
       local tag = string.match(line, "^%s*```.+%s+(.*)")
 
       if tag ~= nil then
         block = {
-          source = { buf = source, pos = { i } },
+          source = { buf = source, pos = { i + start_line } },
           tag = tag,
           code = {},
         }
       end
     else
       if string.match(line, "^%s*```%s*$") then
-        block.source.pos[2] = i
+        block.source.pos[2] = i + start_line
         blocks[#blocks + 1] = block
         block = nil
       else
@@ -113,9 +115,15 @@ end
 --- @param replace sia.config.Replace
 function M.replace_block(action, block, replace)
   if block.code then
-    local edit = action.execute(block)
+    local edit = action.find_edit(block)
     if edit then
-      flash_highlight(edit.buf, { edit.replace[1] - 1, edit.replace[2] - 1 }, replace.timeout, replace.highlight)
+      action.execute_edit(edit)
+      flash_highlight(
+        edit.buf,
+        { edit.search.pos[1] - 1, edit.search.pos[1] + #block.code - 2 },
+        replace.timeout,
+        replace.highlight
+      )
     end
   end
 end
@@ -240,9 +248,17 @@ local function search_replace_action(b)
     if #search == 0 and #content == 1 and content[1] == "" then
       pos = { 1, 1 }
     else
-      pos = find_exact_match(content, search)
-      if not pos then
-        pos = find_deindented_match(content, search)
+      --- Never match an empty search in a non-empty file
+      if #search == 0 and #content > 1 then
+        pos = nil
+      else
+        pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
+        if not pos then
+          pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true })
+          if not pos then
+            pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
+          end
+        end
       end
     end
 
@@ -266,7 +282,7 @@ M.actions = {
     automatic = true,
     manual = false,
     find_edit = search_replace_action,
-    --- @type
+    --- @param ctx sia.BlockEdit
     execute_edit = function(ctx)
       local content = { "<<<<<<< User" }
       for _, line in ipairs(ctx.search.content) do
@@ -278,8 +294,7 @@ M.actions = {
       end
       content[#content + 1] = ">>>>>>> Sia"
 
-      vim.api.nvim_buf_set_lines(ctx.buf, ctx.search.pos[1] - 1, ctx.search.pos[2] - 1, false, content)
-      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = ctx.buf } })
+      vim.api.nvim_buf_set_lines(ctx.buf, ctx.search.pos[1] - 1, ctx.search.pos[2], false, content)
     end,
   },
 }
