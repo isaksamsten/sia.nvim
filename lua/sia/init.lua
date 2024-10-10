@@ -21,7 +21,9 @@ function M.setup(options)
     require("sia.markers").reject(vim.api.nvim_get_current_buf())
   end, {})
 
-  vim.api.nvim_create_user_command("SiaAdd", function(args)
+  --- TODO: add command for moving global files to the local
+  --- perhaps with empty bang command when in sia
+  vim.api.nvim_create_user_command("SiaFile", function(args)
     local split = SplitStrategy.by_buf()
     if #args.fargs == 0 then
       local files
@@ -32,9 +34,21 @@ function M.setup(options)
       end
       print(table.concat(files, ", "))
     else
+      if args.bang then
+        if split then
+          split.files = {}
+        else
+          utils.clear_global_files()
+        end
+      end
       local files = {}
       for _, arg in ipairs(args.fargs) do
-        vim.list_extend(files, vim.fn.glob(arg, true, true))
+        local expanded = vim.fn.glob(arg, true, true)
+        if #expanded > 0 then
+          vim.list_extend(files, expanded)
+        else
+          table.insert(files, arg)
+        end
       end
 
       if split then
@@ -43,14 +57,9 @@ function M.setup(options)
         utils.add_global_files(files)
       end
     end
-    if split then
-      print("Add files to %s", split.name)
-    else
-      print("Add files to the global list")
-    end
-  end, { nargs = "*", bar = true, complete = "file" })
+  end, { nargs = "*", bang = true, bar = true, complete = "file" })
 
-  vim.api.nvim_create_user_command("SiaDelete", function(args)
+  vim.api.nvim_create_user_command("SiaFileDelete", function(args)
     local split = SplitStrategy.by_buf()
     if split then
       split:remove_files(args.fargs)

@@ -7,9 +7,7 @@ An LLM assistant for Neovim with support for OpenAI and Copilot.
 
 ## ✨ Features
 
-
 https://github.com/user-attachments/assets/26f0a7e6-2afd-4b69-b4c3-f9945721f442
-
 
 ## ⚡️ Requirements
 
@@ -53,23 +51,23 @@ TODO
 - `SiaStart`: query has been submitted
 - `SiaProgress`: a response has been received
 - `SiaComplete`: the query is completed
-- `SiaEditPost`: after a buffer has been edited by Sia
+- `SiaEditPost`: after a buffer has been edited
 
 ## 🚀 Usage
 
 **Normal Mode**
 
-- `:Sia [query]` send query and open a split view with the response.
-- `:Sia [query]` if executed from a conversation, continue the conversation
-  with the new query.
-- `:Sia /prompt [query]` execute the prompt with the optional extra query.
-- `:Sia! [query]` send the query and insert the response.
+- `:Sia [query]` sends the query and opens a split view with the response.
+- `:Sia [query]` if run from a conversation, continues the conversation with the new query.
+- `:Sia /prompt [query]` executes the prompt with the optional additional query.
+- `:Sia! [query]` sends the query and inserts the response.
 
-- `:SiaAdd` show the files in the global file list; or if executed from a split
-  the files associated with the current conversation.
-- `:SiaAdd patterns` add files matching patterns to the global file list; or if
-  executed from a split to the current conversation.
-- `:SiaDelete patterns` remove files matching pattern from the global file list; or if executed from a split from the current conversation.
+- `:SiaFile` displays the files in the global file list; or if run from a split, shows the files associated with the current conversation.
+- `:SiaFile patterns` adds files matching the patterns to the global file list; or if run from a split, adds them to the current conversation.
+- `:SiaFileDelete patterns` removes files matching the patterns from the global file list; or if run from a split, removes them from the current conversation.
+
+- `:SiaAccept` accepts a suggested edit. For example, `:cdo SiaAccept` accepts all suggested changes.
+- `:SiaReject` rejects a suggested edit.
 
 **Ranges**
 
@@ -82,9 +80,9 @@ Any range is supported, for example:
 **Examples**
 
 - `:%Sia fix the test function` - open a split with a fix to the test function.
-- `:Sia how can I implement quicksort in brainfuck?` - open a split with the answer.
+- `:Sia write snake in pygame` - open a split with the answer.
 - `:Sia /doc numpydoc` - document the function or class under cursor with numpydoc format.
-- `:SiaAdd a.py b.py | Sia move the function foo_a to b.py`
+- `:SiaFile a.py b.py | Sia move the function foo_a to b.py`
 - `:%Sia /diagnostic` - open a split with a solution to diagnostics in the current file.
 
 ### Suggested keybindings:

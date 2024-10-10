@@ -49,10 +49,13 @@ end
 
 function _G.__sia_add_buffer()
   M.add_instruction(function(strategy)
-    return strategy.conversation:add_instruction(require("sia.instructions").current_buffer(true), {
-      buf = vim.api.nvim_get_current_buf(),
-      cursor = vim.api.nvim_win_get_cursor(0),
-    })
+    return strategy.conversation:add_instruction(
+      require("sia.instructions").current_buffer({ show_line_numbers = true, fences = true }),
+      {
+        buf = vim.api.nvim_get_current_buf(),
+        cursor = vim.api.nvim_win_get_cursor(0),
+      }
+    )
   end)
 end
 
@@ -62,13 +65,16 @@ function _G.__sia_add_context(type)
   local end_line = end_pos[2]
   if start_line > 0 then
     M.add_instruction(function(strategy)
-      return strategy.conversation:add_instruction(require("sia.instructions").current_context(true), {
-        buf = vim.api.nvim_get_current_buf(),
-        cursor = vim.api.nvim_win_get_cursor(0),
-        start_line = start_line,
-        end_line = end_line,
-        mode = "v",
-      })
+      return strategy.conversation:add_instruction(
+        require("sia.instructions").current_context({ show_line_numbers = true, fences = true }),
+        {
+          buf = vim.api.nvim_get_current_buf(),
+          cursor = vim.api.nvim_win_get_cursor(0),
+          start_line = start_line,
+          end_line = end_line,
+          mode = "v",
+        }
+      )
     end)
   end
 end
@@ -122,8 +128,8 @@ function M.setup()
   vim.keymap.set("n", "<Plug>(sia-toggle)", function()
     local last = SplitStrategy.last()
     if last and vim.api.nvim_buf_is_valid(last.buf) then
-      local win = utils.get_window_for_buffer(last.buf)
-      if win and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
+      local win = vim.fn.bufwinid(last.buf)
+      if win ~= -1 and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
         vim.api.nvim_win_close(win, true)
       else
         vim.cmd(last.options.cmd)
@@ -136,12 +142,12 @@ function M.setup()
   vim.keymap.set("n", "<Plug>(sia-reject)", function()
     local buf = vim.api.nvim_get_current_buf()
     require("sia.markers").reject(buf)
-  end)
+  end, { noremap = true, silent = true })
 
   vim.keymap.set("n", "<Plug>(sia-accept)", function()
     local buf = vim.api.nvim_get_current_buf()
     require("sia.markers").accept(buf)
-  end)
+  end, { noremap = true, silent = true })
 
   vim.keymap.set("n", "<Plug>(sia-replace-block)", function()
     local split = SplitStrategy.by_buf()
@@ -149,7 +155,6 @@ function M.setup()
     if split then
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
-      print("block", vim.inspect(block))
       if block then
         vim.schedule(function()
           require("sia.blocks").replace_block(split.block_action, block, config.options.defaults.replace or {})
@@ -297,19 +302,13 @@ function M.setup()
 
   vim.api.nvim_set_keymap(
     "n",
-    "<Plug>(sia-append-buffer)",
-    ":lua __sia_add_buffer()<CR>",
-    { noremap = true, silent = true }
-  )
-  vim.api.nvim_set_keymap(
-    "n",
-    "<Plug>(sia-append)",
+    "<Plug>(sia-add-context)",
     ":set opfunc=v:lua.__sia_add_context<CR>g@",
     { noremap = true, silent = true }
   )
   vim.api.nvim_set_keymap(
     "x",
-    "<Plug>(sia-append)",
+    "<Plug>(sia-add-context)",
     ":<C-U>lua __sia_add_context(vim.fn.visualmode())<CR>",
     { noremap = true, silent = true }
   )
