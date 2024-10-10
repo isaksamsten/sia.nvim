@@ -8,6 +8,7 @@ local NONE = 0
 local OURS = 1
 local THEIRS = 2
 
+--- Detect if the buffer contains conflict markers
 --- @param buf integer
 --- @return boolean
 local function detect_conflict_markers(buf)
@@ -38,6 +39,7 @@ local function detect_conflict_markers(buf)
   return false
 end
 
+--- @return integer? pos
 local function current_conflict_begin()
   local begin = vim.fn.searchpos(OURS_PATTERN, "bcnW")[1]
   local before_end = vim.fn.searchpos(THEIRS_PATTERN, "bnW")[1]
@@ -49,6 +51,7 @@ local function current_conflict_begin()
   return begin
 end
 
+--- @return integer? pos
 local function current_conflict_end()
   local after_begin = vim.fn.searchpos(OURS_PATTERN, "nW")[1]
   local end_pos = vim.fn.searchpos(THEIRS_PATTERN, "cnW")[1]
@@ -60,6 +63,7 @@ local function current_conflict_end()
   return end_pos
 end
 
+--- @return integer? pos
 local function current_conflict_separator(before_begin, after_end)
   -- when separator is before cursor
   local before_sep = vim.fn.searchpos(DELIMITER_PATTERN, "bcnW")[1]
@@ -76,7 +80,7 @@ local function current_conflict_separator(before_begin, after_end)
   return nil
 end
 
---- @return [integer, integer, integer]?
+--- @return [integer, integer, integer]? pos start, middle and end position
 local function markers()
   local begin = current_conflict_begin()
   local ending = current_conflict_end()
@@ -123,25 +127,34 @@ function M.accept(buf)
   end
 end
 
+--- @param buf integer
 local function on_detect_conflict_markers(buf)
   conflicts[buf] = detect_conflict_markers(buf)
+  local spell = vim.o.spell
+  if not spell then
+    local win = vim.fn.bufwinid(buf)
+    if win ~= -1 then
+      spell = vim.wo[win].spell
+    end
+  end
   if conflicts[buf] then
-    vim.cmd([[
-syntax match ConflictMarkerBegin containedin=ALL /^<<<<<<<\+/
-syntax match ConflictMarkerEnd containedin=ALL /^>>>>>>>\+/
-syntax match ConflictMarkerSeparator containedin=ALL /^=======\+$/
-syntax region ConflictMarkerOurs containedin=ALL start=/^<<<<<<<\+/hs=e+1 end=/^=======\+$\&/
-syntax region ConflictMarkerTheirs containedin=ALL start=/^=======\+/hs=e+1 end=/^>>>>>>>\+\&/
+    vim.api.nvim_buf_call(buf, function()
+      vim.cmd([[
+    syntax match ConflictMarkerBegin containedin=ALL /^<<<<<<<\+/
+    syntax match ConflictMarkerEnd containedin=ALL /^>>>>>>>\+/
+    syntax match ConflictMarkerSeparator containedin=ALL /^=======\+$/
+    syntax region ConflictMarkerOurs contained containedin=ALL start=/^<<<<<<<\+/hs=e+1 end=/^=======\+$\&/
+    syntax region ConflictMarkerTheirs contained containedin=ALL start=/^=======\+/hs=e+1 end=/^>>>>>>>\+\&/
+    highlight default link ConflictMarkerBegin DiffDelete
+    highlight default link ConflictMarkerOurs DiffDelete
+    highlight default link ConflictMarkerSeparator NoneText
+    highlight default link ConflictMarkerEnd DiffAdd
+    highlight default link ConflictMarkerTheirs DiffAdd
 ]])
-    vim.cmd([[
-highlight default link ConflictMarkerBegin DiffDelete
-highlight default link ConflictMarkerOurs DiffDelete
-highlight default link ConflictMarkerSeparator NoneText
-highlight default link ConflictMarkerEnd DiffAdd
-highlight default link ConflictMarkerTheirs DiffAdd
-]])
+    end)
   end
 end
+
 function M.setup()
   local augroup = vim.api.nvim_create_augroup("SiaMarkers", { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
@@ -166,7 +179,15 @@ function M.setup()
       on_detect_conflict_markers(args.data.buf)
     end,
   })
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup,
+    pattern = "spell",
+    callback = function()
+      for buf, _ in pairs(conflicts) do
+        on_detect_conflict_markers(buf)
+      end
+    end,
+  })
 end
 
-M.conflicts = conflicts
 return M

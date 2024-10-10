@@ -249,7 +249,9 @@ function M.setup()
       local block = split:find_block(line)
       print("block", vim.inspect(block))
       if block then
-        require("sia.blocks").replace_block(split.block_action, block, config.options.defaults.replace or {})
+        vim.schedule(function()
+          require("sia.blocks").replace_block(split.block_action, block, config.options.defaults.replace or {})
+        end)
       end
     end
   end, { noremap = true, silent = true })
@@ -257,7 +259,9 @@ function M.setup()
   vim.keymap.set("n", "<Plug>(sia-replace-all-blocks)", function()
     local split = SplitStrategy.by_buf()
     if split then
-      require("sia.blocks").replace_all_blocks(split.block_action, split.blocks)
+      vim.schedule(function()
+        require("sia.blocks").replace_all_blocks(split.block_action, split.blocks)
+      end)
     end
   end, { noremap = true, silent = true })
 
@@ -267,7 +271,9 @@ function M.setup()
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
       if block then
-        require("sia.blocks").insert_block(block, config.options.defaults.replace, 1)
+        vim.schedule(function()
+          require("sia.blocks").insert_block(split.block_action, block, config.options.defaults.replace, 1)
+        end)
       end
     end
   end, { noremap = true, silent = true })
@@ -278,7 +284,9 @@ function M.setup()
       local line = vim.api.nvim_win_get_cursor(0)[1]
       local block = split:find_block(line)
       if block then
-        require("sia.blocks").insert_block(block, config.options.defaults.replace)
+        vim.schedule(function()
+          require("sia.blocks").insert_block(split.block_action, block, config.options.defaults.replace)
+        end)
       end
     end
   end, { noremap = true, silent = true })

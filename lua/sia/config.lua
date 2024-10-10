@@ -289,7 +289,7 @@ Guidelines:
     split = {
       cmd = "vsplit",
       wo = { wrap = true },
-      block_action = "search_replace",
+      block_action = "verbatim",
     },
     diff = {
       cmd = "vsplit",
@@ -349,7 +349,12 @@ Guidelines:
           end,
           persistent = true,
           description = function(opts)
-            return string.format("Diagnostics on line %d to %d", opts.pos[1], opts.pos[2])
+            return string.format(
+              "Diagnostics on line %d to %d in %s",
+              opts.pos[1],
+              opts.pos[2],
+              utils.get_filename(opts.buf)
+            )
           end,
           content = function(opts)
             local start_line, end_line = opts.pos[1], opts.pos[2]
@@ -373,9 +378,10 @@ Guidelines:
             end
 
             return string.format(
-              [[This is a list of the diagnostic messages:
+              [[This is a list of the diagnostic messages in %s:
 %s
 ]],
+              utils.get_filename(opts.buf, ":p"),
               concatenated_diagnostics
             )
           end,
@@ -383,8 +389,11 @@ Guidelines:
         "current_context",
       },
       mode = "split",
+      split = {
+        block_action = "search_replace",
+      },
       range = true,
-      model = "gpt-4o",
+      model = "chatgpt-4o-latest",
     },
     commit = {
       instructions = {
@@ -457,7 +466,9 @@ Guidelines:
         - Error handling (if applicable)
   6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
   7. Based on the provided list of files, place the test in an appropriate file.
-  8. If the file exists, ask the user to provide it to the conversation so that the test can be appropriately inserted.
+  8. If the file where you want to add the test exists but is not part of the
+     current conversation, ask the user to provide it to the conversation using `:args filename`, so
+     that the test can be appropriately inserted into the file.
   ]],
         },
         "git_files",
@@ -468,7 +479,7 @@ Guidelines:
       capture = require("sia.capture").treesitter("@function.outer"),
       mode = "split",
       split = {
-        block_action = require("sia.blocks").customize_action("search_replace", { automatic = true }),
+        block_action = "block_action",
         cmd = "vsplit",
       },
       range = true,

@@ -10,6 +10,7 @@ local matcher = require("sia.matcher")
 
 local ns_flash_id = vim.api.nvim_create_namespace("sia_flash") -- Create a namespace for the highlight
 
+--- Flash hl_group over the lines between pos[1] and pos[2] for timeout.
 --- @param bufnr integer
 --- @param pos [integer, integer]
 --- @param timeout integer?
@@ -31,6 +32,7 @@ local function flash_highlight(bufnr, pos, timeout, hl_group)
   )
 end
 
+--- Select a block and execute the callback with the block as argument.
 --- @param blocks sia.Block[]
 --- @param callback fun(block: sia.Block, single: boolean?):nil
 function M.select_block(blocks, callback)
@@ -47,6 +49,7 @@ function M.select_block(blocks, callback)
   end
 end
 
+--- Insert a given block in the buffer above the specified line.
 --- @param buf integer
 --- @param line integer
 --- @param block sia.Block
@@ -56,6 +59,7 @@ function M.insert_block_above(buf, line, block, replace)
   flash_highlight(buf, { line - 1, line + #block.code - 1 }, replace.timeout, replace.highlight)
 end
 
+--- Insert the given block in the buffer below the specified line.
 --- @param buf integer
 --- @param line integer
 --- @param block sia.Block
@@ -65,6 +69,7 @@ function M.insert_block_below(buf, line, block, replace)
   flash_highlight(buf, { line, line + #block.code - 1 }, replace.timeout, replace.highlight)
 end
 
+--- Insert a block replacing the lines between start and end.
 --- @param buf integer
 --- @param start_line integer
 --- @param end_line integer
@@ -75,6 +80,7 @@ function M.insert_block_at(buf, start_line, end_line, block, replace)
   flash_highlight(buf, { start_line - 1, start_line + #block.code - 2 }, replace.timeout, replace.highlight)
 end
 
+--- Parse fenced code blocks.
 --- @param source integer
 --- @param start_line integer
 --- @param response string[]
@@ -88,7 +94,7 @@ function M.parse_blocks(source, start_line, response)
 
   for i, line in ipairs(response) do
     if block == nil then
-      local tag = string.match(line, "^%s*```.+%s+(.*)")
+      local tag = string.match(line, "^%s*```.+%s*(.*)")
 
       if tag ~= nil then
         block = {
@@ -110,15 +116,17 @@ function M.parse_blocks(source, start_line, response)
   return blocks
 end
 
+--- Given the specified action, find the target buffer and insert the block.
+--- Adds all edits to the quickfix list.
 --- @param block_action sia.BlockAction
 --- @param blocks sia.Block[]
 function M.replace_all_blocks(block_action, blocks)
-  local edits = {}
-  local edit_bufs = {}
-  for _, block in ipairs(blocks) do
-    if block_action then
+  if block_action and block_action.automatic_edit then
+    local edits = {}
+    local edit_bufs = {}
+    for _, block in ipairs(blocks) do
       local edit = block_action.find_edit(block)
-      if edit then
+      if edit and edit.buf and edit.search.pos then
         edits[#edits + 1] = {
           bufnr = edit.buf,
           filename = vim.api.nvim_buf_get_name(edit.buf),
@@ -126,29 +134,28 @@ function M.replace_all_blocks(block_action, blocks)
           text = edit.search.content[1] or "",
         }
         edit_bufs[edit.buf] = true
-        if block_action.automatic_edit then
-          block_action.automatic_edit(edit)
-        end
+        block_action.automatic_edit(edit)
       end
     end
     for buf, _ in pairs(edit_bufs) do
       vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
     end
 
-    if #edits > 0 and block_action.automatic_edit then
+    if #edits > 0 then
       vim.fn.setqflist(edits, "r")
       vim.cmd("copen")
     end
   end
 end
 
+--- Given the specified action, find the target buffer and insert the block.
 --- @param action sia.BlockAction
 --- @param block sia.Block
 --- @param replace sia.config.Replace
 function M.replace_block(action, block, replace)
   if block.code then
     local edit = action.find_edit(block)
-    if edit then
+    if edit and edit.buf and edit.search.pos then
       local pos = action.manual_edit(edit)
       if pos then
         flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
@@ -158,25 +165,28 @@ function M.replace_block(action, block, replace)
   end
 end
 
+--- @param action sia.BlockAction
 --- @param block sia.Block
 --- @param replace sia.config.Replace
 --- @param padding integer?
-function M.insert_block(block, replace, padding)
+function M.insert_block(action, block, replace, padding)
   if block.code then
-    local source_line_count = #block.code
     utils.select_other_buffer(block.source.buf, function(other)
       local start_range, _ = unpack(vim.api.nvim_win_get_cursor(other.win))
       if padding then
         start_range = start_range - padding
       end
-      vim.api.nvim_buf_set_lines(other.buf, start_range, start_range, false, block.code)
-      flash_highlight(
-        other.buf,
-        { start_range, start_range + source_line_count - 1 },
-        replace.timeout,
-        replace.highlight
-      )
-      vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = other.buf } })
+      local edit = action.find_edit(block)
+      if edit then
+        edit.buf = other.buf
+        edit.search.pos = { start_range + 1, start_range }
+        local pos = action.manual_edit(edit)
+        if pos then
+          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
+          vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf } })
+          vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = other.buf } })
+        end
+      end
     end)
   end
 end
@@ -199,6 +209,7 @@ local function search_replace_action(b)
 
   local state = NONE
 
+  -- TODO: we assume that the code block only contains one search/replace block
   for _, line in pairs(b.code) do
     if state == NONE then
       if string.match(line, "^<<<<<<?<?<?<?%s+SEARCH%s*$") then
@@ -251,38 +262,69 @@ local function search_replace_action(b)
         search = { pos = pos, content = search },
         replace = { pos = { pos[1], pos[1] + #replace }, content = replace },
       }
+    else
+      return {
+        buf = buf,
+        search = { content = search },
+        replace = { content = replace },
+      }
     end
+  else
+    return {
+      buf = buf,
+      search = { content = search },
+      replace = { content = replace },
+    }
   end
-  return nil
 end
 
---- @alias sia.BlockEdit {buf: integer, search: { pos: [integer, integer], content:string[]}, replace: {pos: [integer, integer], content: string[]}}
+--- @alias sia.BlockEdit {buf: integer?, search: { pos: [integer, integer]?, content:string[]}, replace: {pos: [integer, integer]?, content: string[]}}
 --- @alias sia.BlockAction { automatic: boolean, manual_edit: (fun(edit:sia.BlockEdit):[integer,integer]?), automatic_edit: (fun(edit: sia.BlockEdit):[integer, integer]?)?, find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
 
 --- @type table<string, sia.BlockAction>
 M.actions = {
   ["search_replace"] = {
+    --- Should the split strategy automatically trigger it?
     automatic = false,
+
+    --- Find edits and their location
     find_edit = search_replace_action,
     --- @param edit sia.BlockEdit
     manual_edit = function(edit)
-      vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
-      return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }
+      if edit.buf and edit.search.pos then
+        vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
+        return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }
+      end
     end,
     --- @param edit sia.BlockEdit
     automatic_edit = function(edit)
-      local content = { "<<<<<<< User" }
-      for _, line in ipairs(edit.search.content) do
-        content[#content + 1] = line
-      end
-      content[#content + 1] = "======="
-      for _, line in ipairs(edit.replace.content) do
-        content[#content + 1] = line
-      end
-      content[#content + 1] = ">>>>>>> Sia"
+      if edit.buf and edit.search.pos then
+        local content = { "<<<<<<< User" }
+        for _, line in ipairs(edit.search.content) do
+          content[#content + 1] = line
+        end
+        content[#content + 1] = "======="
+        for _, line in ipairs(edit.replace.content) do
+          content[#content + 1] = line
+        end
+        content[#content + 1] = ">>>>>>> Sia"
 
-      vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, content)
-      return { edit.search.pos[1], edit.search.pos[1] + #content - 1 }
+        vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, content)
+        return { edit.search.pos[1], edit.search.pos[1] + #content - 1 }
+      end
+    end,
+  },
+  verbatim = {
+    automatic = false,
+    find_edit = function(block)
+      return { search = { content = block.code }, replace = { content = block.code } }
+    end,
+    automatic_edit = nil,
+    manual_edit = function(edit)
+      if edit.buf and edit.search.pos then
+        vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
+        return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }
+      end
     end,
   },
 }

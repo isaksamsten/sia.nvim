@@ -1,5 +1,6 @@
 local M = {}
 
+--- Find the longest common substring between two strings.
 --- @param a string
 --- @param b string
 --- @return integer start_a
@@ -37,6 +38,7 @@ function M.longest_common_substring(a, b)
   return match_end_a - longest_match_len + 1, match_end_b - longest_match_len + 1, longest_match_len
 end
 
+--- Calculate the similarity ratio between two strings.
 --- @param a string
 --- @param b string
 --- @return number ratio  where 1 is perfect match and 0 no match. Empty strings do not match.
@@ -44,43 +46,42 @@ function M.similarity_ratio(a, b)
   local len_a = #a
   local len_b = #b
 
-  -- Base case: if either string is empty, ratio is 0
   if len_a == 0 or len_b == 0 then
     return 0
   end
 
-  -- Total length of both strings
   local total_length = len_a + len_b
-
-  -- Initialize variables to keep track of the total matching characters
   local total_matching_chars = 0
 
-  -- Create copies of strings for matching
   local match_a = a
   local match_b = b
 
-  -- Loop to find all matching blocks
   while true do
     local start_a, start_b, match_len = M.longest_common_substring(match_a, match_b)
     if match_len == 0 then
-      break -- No more matches
+      break
     end
 
-    -- Add the length of the match to the total count of matching characters
     total_matching_chars = total_matching_chars + match_len
-
-    -- Remove the matching block from the strings
     match_a = match_a:sub(1, start_a - 1) .. match_a:sub(start_a + match_len)
     match_b = match_b:sub(1, start_b - 1) .. match_b:sub(start_b + match_len)
   end
 
-  -- Calculate the similarity ratio using the formula
   return (2 * total_matching_chars) / total_length
 end
 
+--- Find the span of lines in needle in haystack.
+---  - if ignore_whitespace, then empty lines are ignored and two spans with
+---    the same content but differences in whitespace is considered similar
+---  - if threshold is a number (between 0 and 1), fuzzy match lines.
+---
+---  TODO: consider finding all matching spans and score them to so we can
+---  select the best and not only the first
+---
 --- @param needle string[]
 --- @param haystack string[]
 --- @param opts {threshold: number?, ignore_whitespace: boolean?}?
+--- @return [integer, integer]? position the position in haystack of the first match.
 function M.find_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
     return line:match("^%s*$") ~= nil -- Treat lines with only whitespace as empty

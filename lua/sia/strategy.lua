@@ -203,7 +203,9 @@ function SplitStrategy:on_complete()
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
     end
-    require("sia.blocks").replace_all_blocks(self.block_action, blocks)
+    if self.block_action.automatic then
+      require("sia.blocks").replace_all_blocks(self.block_action, blocks)
+    end
 
     self._writer = nil
     assistant.execute_query({

@@ -132,7 +132,7 @@ function M.get_diagnostics(start_line, end_line, opts)
 
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local min_severity = opts.min_severity or vim.diagnostic.severity
+  local min_severity = opts.min_severity or vim.diagnostic.severity.WARN
 
   local diagnostics = {}
 
