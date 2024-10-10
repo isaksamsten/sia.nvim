@@ -84,6 +84,12 @@ end
 function Message:new(instruction, args)
   if type(instruction) == "string" then
     return Message:from_string(instruction, args)
+  elseif vim.islist(instruction) then
+    local messages = {}
+    for _, step in ipairs(instruction) do
+      table.insert(messages, Message:from_table(step, args))
+    end
+    return messages
   else
     return { Message:from_table(instruction, args) }
   end
@@ -178,14 +184,10 @@ function Conversation:new(action, args)
   }
   obj.messages = {}
   for _, instruction in ipairs(action.instructions or {}) do
-    local message = Message:new(instruction, args)
-    if message then
-      if type(message) == "table" then
-        for _, m in ipairs(message) do
-          table.insert(obj.messages, m)
-        end
-      else
-        table.insert(obj.messages, message)
+    local messages = Message:new(instruction, args)
+    if messages then
+      for _, m in ipairs(messages) do
+        table.insert(obj.messages, m)
       end
     end
   end

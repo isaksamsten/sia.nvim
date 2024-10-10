@@ -1,5 +1,57 @@
+local SplitStrategy = require("sia.strategy").SplitStrategy
 local utils = require("sia.utils")
 local M = {}
+
+--- @return string[] files
+local function get_local_or_global_files()
+  local split = SplitStrategy.by_buf()
+  if split then
+    return split.files
+  else
+    return utils.get_global_files()
+  end
+end
+
+--- @return sia.config.Instruction
+function M.files()
+  --- @type sia.config.Instruction
+  return {
+    role = "user",
+    id = function(ctx)
+      return get_local_or_global_files()
+    end,
+    available = function(_)
+      return #get_local_or_global_files() > 0
+    end,
+    persistent = true,
+    description = function(opts)
+      local files = get_local_or_global_files()
+      if #files > 0 then
+        return table.concat(files, ", ")
+      end
+      return "No files"
+    end,
+    content = function(ctx)
+      local content = {}
+      local args = get_local_or_global_files()
+      for _, arg in ipairs(args) do
+        local buf = utils.ensure_file_is_loaded(arg)
+        if buf then
+          table.insert(
+            content,
+            string.format(
+              "%s\n```%s\n%s\n```\n",
+              arg,
+              vim.bo[buf].ft,
+              utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
+            )
+          )
+        end
+      end
+      return table.concat(content, "\n")
+    end,
+  }
+end
 
 --- @return sia.config.Instruction
 function M.current_args()
@@ -102,7 +154,8 @@ function M.current_context(global)
 
       if opts.pos then
         local start_line, end_line = opts.pos[1], opts.pos[2]
-        local code = utils.get_code(start_line, end_line, { buf = opts.buf, show_line_numbers = show_line_numbers })
+        local code =
+          utils.get_code(start_line, end_line, { buf = opts.buf, show_line_numbers = global.show_line_numbers })
         return string.format(
           [[The provided context line %d to line %d from %s:
 %s
@@ -123,7 +176,7 @@ end
 function M.verbatim()
   return {
     role = "user",
-    persisetent = true,
+    persistent = true,
     id = function(ctx)
       return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.start_line, ctx.end_line }
     end,

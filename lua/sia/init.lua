@@ -1,4 +1,5 @@
 local config = require("sia.config")
+local utils = require("sia.utils")
 local Conversation = require("sia.conversation").Conversation
 local SplitStrategy = require("sia.strategy").SplitStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
@@ -19,6 +20,62 @@ function M.setup(options)
   vim.api.nvim_create_user_command("SiaReject", function()
     require("sia.markers").reject(vim.api.nvim_get_current_buf())
   end, {})
+
+  vim.api.nvim_create_user_command("SiaAdd", function(args)
+    local split = SplitStrategy.by_buf()
+    if #args.fargs == 0 then
+      local files
+      if split then
+        files = split.files
+      else
+        files = utils.get_global_files()
+      end
+      print(table.concat(files, ", "))
+    else
+      local files = {}
+      for _, arg in ipairs(args.fargs) do
+        vim.list_extend(files, vim.fn.glob(arg, true, true))
+      end
+
+      if split then
+        split:add_files(files)
+      else
+        utils.add_global_files(files)
+      end
+    end
+    if split then
+      print("Add files to %s", split.name)
+    else
+      print("Add files to the global list")
+    end
+  end, { nargs = "*", bar = true, complete = "file" })
+
+  vim.api.nvim_create_user_command("SiaDelete", function(args)
+    local split = SplitStrategy.by_buf()
+    if split then
+      split:remove_files(args.fargs)
+    else
+      utils.remove_global_files(args.fargs)
+    end
+  end, {
+    nargs = "+",
+    complete = function(arg_lead)
+      local split = SplitStrategy.by_buf()
+      local files
+      if split then
+        files = split.files
+      else
+        files = utils.get_global_files()
+      end
+      local matches = {}
+      for _, file in ipairs(files) do
+        if vim.fn.match(file, "^" .. vim.fn.escape(arg_lead, "\\")) >= 0 then
+          table.insert(matches, file)
+        end
+      end
+      return matches
+    end,
+  })
 
   vim.treesitter.language.register("markdown", "sia")
 

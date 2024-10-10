@@ -1,5 +1,51 @@
 local M = {}
 
+--- @type string[]
+local global_file_list = {}
+
+--- @param files string[]
+function M.add_global_files(files)
+  for _, file in ipairs(files) do
+    if not vim.tbl_contains(global_file_list, file) then
+      table.insert(global_file_list, file)
+    end
+  end
+end
+
+--- Clear the global file list
+function M.clear_global_files()
+  global_file_list = {}
+end
+
+--- @param patterns string[]
+function M.remove_global_files(patterns)
+  --- @type string[]
+  local regexes = {}
+  for i, pattern in ipairs(patterns) do
+    regexes[i] = vim.fn.glob2regpat(pattern)
+  end
+
+  --- @type integer[]
+  local to_remove = {}
+  for i, file in ipairs(global_file_list) do
+    for _, regex in ipairs(regexes) do
+      if vim.fn.match(file, regex) ~= -1 then
+        table.insert(to_remove, i)
+        break
+      end
+    end
+  end
+
+  for i = #to_remove, 1, -1 do
+    table.remove(global_file_list, to_remove[i])
+  end
+end
+
+--- @return string[] files
+function M.get_global_files()
+  return global_file_list
+end
+
 --- Resolves a given prompt based on configuration options and context.
 --- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
 --- based on the current file type and provided options.

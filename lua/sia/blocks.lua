@@ -94,7 +94,7 @@ function M.parse_blocks(source, start_line, response)
 
   for i, line in ipairs(response) do
     if block == nil then
-      local tag = string.match(line, "^%s*```.+%s*(.*)")
+      local tag = string.match(line, "^%s*```%s*[%w_]+%s*(.*)")
 
       if tag ~= nil then
         block = {
@@ -198,7 +198,12 @@ local NONE = 3
 --- @param b sia.Block
 --- @return sia.BlockEdit?
 local function search_replace_action(b)
-  local file = vim.fn.fnamemodify(string.match(b.tag, "file:(.+)"), ":p")
+  local file = string.match(b.tag, "file:(.+)")
+  if not file then
+    return nil
+  end
+
+  file = vim.fn.fnamemodify(file, ":p")
   local buf = utils.ensure_file_is_loaded(file)
   if not buf then
     return nil

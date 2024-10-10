@@ -1,5 +1,5 @@
 local M = {}
-local Message = require("sia.conversation").Message
+local utils = require("sia.utils")
 local ChatCanvas = require("sia.canvas").ChatCanvas
 local block = require("sia.blocks")
 local assistant = require("sia.assistant")
@@ -109,6 +109,7 @@ end
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field conversation sia.Conversation the (ongoing) conversation
 --- @field name string
+--- @field files string[]
 --- @field block_action sia.BlockAction
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = {}
@@ -142,6 +143,9 @@ function SplitStrategy:new(conversation, options)
   obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
+  obj.files = utils.get_global_files()
+  utils.clear_global_files()
+
   if type(options.block_action) == "table" then
     obj.block_action = options.block_action --[[@as sia.BlockAction]]
   else
@@ -160,6 +164,43 @@ function SplitStrategy:new(conversation, options)
   obj.canvas = ChatCanvas:new(obj.buf)
   obj.canvas:render_messages(vim.list_slice(obj.conversation.messages, 1, #obj.conversation.messages - 1))
   return obj
+end
+
+function SplitStrategy:add_files(files)
+  for _, file in ipairs(files) do
+    if not vim.tbl_contains(self.files, file) then
+      self.files[#self.files + 1] = file
+    end
+  end
+end
+
+function SplitStrategy:add_file(file)
+  if not vim.tbl_contains(self.files, file) then
+    self.files[#self.files + 1] = file
+  end
+end
+
+function SplitStrategy:remove_files(patterns)
+  --- @type string[]
+  local regexes = {}
+  for i, pattern in ipairs(patterns) do
+    regexes[i] = vim.fn.glob2regpat(pattern)
+  end
+
+  --- @type integer[]
+  local to_remove = {}
+  for i, file in ipairs(self.files) do
+    for _, regex in ipairs(regexes) do
+      if vim.fn.match(file, regex) ~= -1 then
+        table.insert(to_remove, i)
+        break
+      end
+    end
+  end
+
+  for i = #to_remove, 1, -1 do
+    table.remove(self.files, to_remove[i])
+  end
 end
 
 function SplitStrategy:on_start(job)
@@ -203,7 +244,7 @@ function SplitStrategy:on_complete()
     for _, b in ipairs(blocks) do
       self.blocks[#self.blocks + 1] = b
     end
-    if self.block_action.automatic then
+    if self.block_action and self.block_action.automatic then
       require("sia.blocks").replace_all_blocks(self.block_action, blocks)
     end
 
@@ -263,7 +304,7 @@ function SplitStrategy.visible()
   local visible = {}
   for buf, _ in pairs(SplitStrategy._buffers) do
     if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_is_valid(buf) then
-      local win = vim.fn.bufwinnr(buf)
+      local win = vim.fn.bufwinid(buf)
       if win ~= -1 then
         table.insert(visible, { buf = buf, win = win })
       end

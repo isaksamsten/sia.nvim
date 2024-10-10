@@ -5,61 +5,22 @@
 
 An LLM assistant for Neovim with support for OpenAI and Copilot.
 
-## 💡 Idea
-
-The idea behind this plugin, Sia, is to enhance the writing and editing process
-within Neovim by integrating a powerful language model (LLM) to assist users in
-refining their text. It aims to provide a seamless way to interact with AI for
-tasks such as correcting grammar, improving clarity, and ensuring adherence to
-academic standards, particularly for scientific manuscripts written in LaTeX.
-By leveraging Neovim's built-in diff capabilities, Sia allows users to see the
-differences between their original text and the AI-generated suggestions,
-making it easier to understand and implement improvements. This combination of
-AI assistance and efficient text editing tools empowers users to produce
-high-quality written content more effectively.
-
 ## ✨ Features
-
-Prompt selected line into LLM and highlight the differences with the original text.
-
-https://github.com/user-attachments/assets/559fbaa8-e5fd-4bc1-a6bf-54e62632dc5d
-
-https://github.com/user-attachments/assets/16718940-272a-4c08-bc0a-1562d6d031c5
-
-Ask questions about code
-
-https://github.com/user-attachments/assets/cd187b9e-1188-48ba-b63d-d5faff674a39
-
-Help with diagnostics
-
-https://github.com/user-attachments/assets/1729b076-3789-46e7-8b4e-e656207b4c56
-
-Explain code (here with operator pending mode binding to explain the current method).
-
-https://github.com/user-attachments/assets/a3a8b830-1f1b-4d4b-aa31-c2292e26085e
-
-(Note that `sia.nvim` automatically tries to give chat buffers a relevant name)
-
-Add new functionality
-
-https://github.com/user-attachments/assets/e06faca2-58ab-42da-a2e6-77eee126c495
 
 ## ⚡️ Requirements
 
-- Neovim >= **0.9**
+- Neovim >= **0.10**
 - curl
-- Access to OpenAI API
+- Access to OpenAI API or Copilot
 
 ## 📦 Installation
 
-1. Install using a plugin manager
+1. Install using a Lazy:
 
 ```lua
--- using lazy.nvim
 {
   "isaksamsten/sia.nvim",
   opts = {},
-  -- Not required but it improve upon built-in diff view with char diff
   dependencies = {
     {
       "rickhowe/diffchar.vim",
@@ -78,193 +39,7 @@ https://github.com/user-attachments/assets/e06faca2-58ab-42da-a2e6-77eee126c495
 
 ## 📦 Customize
 
-### Prompts
-
-`sia.nvim` has six predefined prompts:
-
-- `:Sia /commit` Insert at the end of the current line a commit message describing
-  _staged_ changes.
-- `:Sia /explain` With the current range, open a split view and explain what the
-  code does.
-- `:Sia /unittest` With the current range or function under cursor, open a split
-  view and generate a unit test.
-- `:Sia /doc` With the current range or function under cursor, insert a
-  documentation comment or string above or below the declaration (depending on
-  language)
-- `:Sia /codify` Replace the current context (range or current line) with the LLMs
-  interpretation of intent. Sends the full buffer as context.
-- `:Sia /diagnostics` sends a list of diagnostic messages in the current range and
-  the full buffer, prompting the LLM to fix the issues.
-
-We can change the behaviour of those prompts:
-
-```lua
-opts = {
-  prompts = {
-    ask = {
-      temperature = 1.0,
-      model = "gpt-4o",
-    }
-  },
-}
-```
-
-Or we can add new prompts:
-
-```lua
-opts = {
-  models = {
-    ["gpt-4o"] = { "openai", "gpt-4o-2024-08-06" },
-    ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
-    copilot = { "copilot", "gpt-4o-2024-05-13" },
-  },
-  prompts = {
-    fix = {
-      prompt = {
-        {
-          role = "system",
-          content = [[You are tasked with fixing code written in {{filetype}} to
-improve its performance, clarity and correctness. Provide only the
-modified code. *NEVER USE MARKDOWN CODE BLOCKS!*]],
-        },
-        {
-          role = "user",
-          content = "{{context}}",
-        },
-      },
-      mode = "diff",
-      model = "gpt-4o",
-      temperature = 0.0,
-      context = function(bufnr)
-        return require("sia.capture").treesitter("@function.outer")(bufnr)
-      end,
-    },
-  },
-}
-```
-
-Prompts support the following attributes:
-
-```lua
-{
-  prompt -- table with {user, content} or string (named prompt)
-  prefix -- if context is nil, the number of lines before the current line as context
-  suffix -- if context is nil, the number of lines after the current line as context
-  mode -- insert|diff|split|replace
-  insert = {
-    -- if a range is given, below|above means below or above end of range
-    -- otherwise below|above means below or above start of cursor
-    placement -- function()|below|above|cursor|{below|above, cursor|start|end}
-  }
-  split = {
-    cmd -- cmd to split e.g., vsplit
-    wo -- window options for the new split
-  }
-  diff = {
-    wo -- window options to transfer from the old window to the new
-  }
-  cursor -- start|end where to place the cursor after response
-  context -- function() return true, {start_line, end_line}
-  enabled -- true|false|function() if the prompt is enabled
-  range -- true|false if the prompt requires a range
-  use_mode_prompt -- true|false (defaults to true if not set) include the named_prompts [mode]_system as the first system prompt in the request
-}
-```
-
-### Defaults
-
-We can specify defaults:
-
-```lua
-opts = {
-  default = {
-    model = "gpt-4o-mini", -- default model
-    temperature = 0.5, -- default temperature
-    prefix = 1, -- prefix lines in insert
-    suffix = 0, -- suffix lines in insert
-    mode = "auto", -- auto|diff|insert|split
-    split = {
-      cmd = "vsplit", -- command to split with
-      wo = { wrap = true }, -- window options for the new split
-    },
-    diff = { -- options for diff window
-      -- wo is options copied from the original buffer to the diff buffer
-      wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
-    },
-    insert = { -- options for insert
-      placement = "below",
-    },
-  },
-}
-```
-
-#### Insert prompt placement
-
-If range:
-
-- `placement == {"above", "cursor"}` then the response is inserted above the
-  current cursor position.
-- `placement == {"above", "end"}` then the response is insert just before the
-  end of the range.
-- `placement == {"below", "start"}` then the response is inserted just below
-  the start of the range.
-- `placement == "below"` then the response is inserted just below the _end_ of
-  the range.
-- `placement == "above"` then the response is inserted just above the _start_
-  of the range.
-
-If no range:
-
-- `placement == "above"` then the response in inserted just above the cursor.
-- `placement == "below"` then the response is inserted just below the cursor.
-- `placement == {"above", "start"}` then the response is inserted just above
-  the start of the current _context_ (as defined by the `context` parameter,
-  e.g., a treesitter capture)
-- `placement == {"above", "end"}` then the response is inserted just above
-  the end of the current _context_ (as defined by the `context` parameter,
-  e.g., a treesitter capture)
-- The same applies to `{"below", "start"}` and `{"below", "end"`}.
-
-### Named prompts
-
-Oftentimes we reuse the same conversation for multiple prompts.
-
-We can create named prompts:
-
-```lua
-opts = {
-  named_prompts = {
-    diff_system = {
-      role = "system",
-      content = "The content will be diffed",
-    },
-  },
-}
-```
-
-The prompt can then be reused:
-
-```lua
-opts = {
-  prompts = {
-    my_prompt = {
-      prompt = {
-        "diff_system",
-       { role="user", content="Do something" }
-     }
-    }
-  }
-}
-```
-
-### Other options
-
-```lua
-opts = {
-  openai_api_key = "OPENAI_API_KEY", -- the environment variable with the API key,
-  report_usage = true, -- vim.notify the total number of tokens when request is completed
-}
-```
+TODO
 
 ### Autocommands
 
@@ -274,17 +49,23 @@ opts = {
 - `SiaStart`: query has been submitted
 - `SiaProgress`: a response has been received
 - `SiaComplete`: the query is completed
+- `SiaEditPost`: after a buffer has been edited by Sia
 
 ## 🚀 Usage
 
 **Normal Mode**
 
 - `:Sia [query]` send query and open a split view with the response.
-- `:Sia [query]` if `ft=sia` send the full buffer and the query and insert the
-  response in the chat
-- `:Sia /prompt [query]` send current context and use the stored `/prompt`
-  and insert the response in the buffer.
+- `:Sia [query]` if executed from a conversation, continue the conversation
+  with the new query.
+- `:Sia /prompt [query]` execute the prompt with the optional extra query.
 - `:Sia! [query]` send the query and insert the response.
+
+- `:SiaAdd` show the files in the global file list; or if executed from a split
+  the files associated with the current conversation.
+- `:SiaAdd patterns` add files matching patterns to the global file list; or if
+  executed from a split to the current conversation.
+- `:SiaDelete patterns` remove files matching pattern from the global file list; or if executed from a split from the current conversation.
 
 **Ranges**
 
@@ -292,9 +73,15 @@ Any range is supported, for example:
 
 - `:'<,'>Sia! [query]` send the selected lines and query and diff the response
 - `:'<,'>Sia [query]` send the selected lines and query and open a split with the response.
-- `:'<,'>Sia /prompt [query]` send the selected lines and the stored prompt
-- `:%Sia /prompt` send the buffer and the query and execute prompt
-- `:%Sia [query]` send the buffer and the query and open a split
+- `:'<,'>Sia /prompt [query]` execute the prompt with the extra query.
+
+**Examples**
+
+- `:%Sia fix the test function` - open a split with a fix to the test function.
+- `:Sia how can I implement quicksort in brainfuck?` - open a split with the answer.
+- `:Sia /doc numpydoc` - document the function or class under cursor with numpydoc format.
+- `:SiaAdd a.py b.py | Sia move the function foo_a to b.py`
+- `:%Sia /diagnostic` - open a split with a solution to diagnostics in the current file.
 
 ### Suggested keybindings:
 

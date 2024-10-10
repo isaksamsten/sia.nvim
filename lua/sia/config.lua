@@ -133,7 +133,7 @@ Keep *SEARCH/REPLACE* blocks concise.
 Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
 Include just the changing lines, and a few surrounding lines if needed for uniqueness.
 Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
-Reserve empty *SEARCH* blocks for new files.
+Reserve empty *SEARCH* blocks for new files. If the file is not new, the *SEARCH* block MUST contain the code to be replaced.
 
 Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
 
@@ -332,7 +332,7 @@ Guidelines:
         },
         instructions = {
           "editblock_system",
-          require("sia.instructions").current_args(),
+          require("sia.instructions").files(),
           "current_context",
         },
       },
@@ -342,6 +342,10 @@ Guidelines:
     diagnostic = {
       instructions = {
         "editblock_system",
+        {
+          role = "system",
+          content = [[If you need additional files to improve the diagnostics, ask the user to add the file using `:SiaAdd filename`.]],
+        },
         {
           role = "user",
           id = function(ctx)
@@ -386,6 +390,7 @@ Guidelines:
             )
           end,
         },
+        require("sia.instructions").files(),
         "current_context",
       },
       mode = "split",
@@ -441,8 +446,14 @@ Guidelines:
   2. Describe the purpose of the code and reference core concepts from the programming language.
   3. Explain each function or significant block of code, including parameters and return values.
   4. Highlight any specific functions or methods used and their roles.
-  5. Provide context on how the code fits into a larger application if applicable.]],
+  5. Provide context on how the code fits into a larger application if applicable.
+
+If you need additional context to improve the explanation. Ask the user to add
+the file to the context using `:SiaAdd filename`.
+  ]],
         },
+        "git_files",
+        require("sia.instructions").files(),
         "current_context_line_number",
       },
       mode = "split",
@@ -467,7 +478,7 @@ Guidelines:
   6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
   7. Based on the provided list of files, place the test in an appropriate file.
   8. If the file where you want to add the test exists but is not part of the
-     current conversation, ask the user to provide it to the conversation using `:args filename`, so
+     current conversation, ask the user to provide it to the conversation using `:SiaAdd filename`, so
      that the test can be appropriately inserted into the file.
   ]],
         },
@@ -479,7 +490,7 @@ Guidelines:
       capture = require("sia.capture").treesitter("@function.outer"),
       mode = "split",
       split = {
-        block_action = "block_action",
+        block_action = "search_replace",
         cmd = "vsplit",
       },
       range = true,
