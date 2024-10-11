@@ -76,6 +76,17 @@ function M.execute_strategy(strategy)
           pattern = "SiaStart",
           data = strategy,
         })
+
+        local status, json = pcall(vim.json.decode, responses[1], { luanil = { object = true } })
+        if status then
+          if json.error then
+            vim.api.nvim_exec_autocmds("User", {
+              pattern = "SiaError",
+              data = json.error,
+            })
+            strategy:on_progress(json.error.message)
+          end
+        end
       end
 
       for _, resp in pairs(responses) do

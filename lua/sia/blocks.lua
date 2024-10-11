@@ -2,6 +2,7 @@
 --- @field source {buf: integer, pos: [integer, integer] }
 --- @field tag string?
 --- @field code string[]
+--- @field _applied boolean?
 
 local M = {}
 
@@ -121,20 +122,27 @@ end
 --- @param block_action sia.BlockAction
 --- @param blocks sia.Block[]
 function M.replace_all_blocks(block_action, blocks)
-  if block_action and block_action.automatic_edit then
+  if block_action and block_action.apply_edit then
     local edits = {}
     local edit_bufs = {}
     for _, block in ipairs(blocks) do
-      local edit = block_action.find_edit(block)
-      if edit and edit.buf and edit.search.pos then
-        edits[#edits + 1] = {
-          bufnr = edit.buf,
-          filename = vim.api.nvim_buf_get_name(edit.buf),
-          lnum = edit.replace.pos[1],
-          text = edit.search.content[1] or "",
-        }
-        edit_bufs[edit.buf] = true
-        block_action.automatic_edit(edit)
+      if not block._applied then
+        local edit = block_action.find_edit(block)
+        if edit and edit.buf and edit.search.pos then
+          edits[#edits + 1] = {
+            bufnr = edit.buf,
+            filename = vim.api.nvim_buf_get_name(edit.buf),
+            lnum = edit.replace.pos[1],
+            text = edit.search.content[1] or "",
+          }
+          edit_bufs[edit.buf] = true
+          if block_action.automatic then
+            block_action.apply_edit(edit)
+          else
+            block_action.apply_marker(edit)
+          end
+          block._applied = true
+        end
       end
     end
     for buf, _ in pairs(edit_bufs) do
@@ -156,7 +164,7 @@ function M.replace_block(action, block, replace)
   if block.code then
     local edit = action.find_edit(block)
     if edit and edit.buf and edit.search.pos then
-      local pos = action.manual_edit(edit)
+      local pos = action.apply_edit(edit)
       if pos then
         flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
         vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf } })
@@ -180,7 +188,7 @@ function M.insert_block(action, block, replace, padding)
       if edit then
         edit.buf = other.buf
         edit.search.pos = { start_range + 1, start_range }
-        local pos = action.manual_edit(edit)
+        local pos = action.apply_edit(edit)
         if pos then
           flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
           vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf } })
@@ -246,17 +254,14 @@ local function search_replace_action(b)
     -- An empty search should only match an empty file/buffer
     if #search == 0 and #content == 1 and content[1] == "" then
       pos = { 1, 1 }
+    elseif #search == 0 and #content > 1 then
+      pos = { #content + 1, #content + 1 } -- match at the end of the file
     else
-      --- Never match an empty search in a non-empty file
-      if #search == 0 and #content > 1 then
-        pos = nil
-      else
-        pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
+      pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
+      if not pos then
+        pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true })
         if not pos then
-          pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true })
-          if not pos then
-            pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
-          end
+          pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
         end
       end
     end
@@ -284,7 +289,7 @@ local function search_replace_action(b)
 end
 
 --- @alias sia.BlockEdit {buf: integer?, search: { pos: [integer, integer]?, content:string[]}, replace: {pos: [integer, integer]?, content: string[]}}
---- @alias sia.BlockAction { automatic: boolean, manual_edit: (fun(edit:sia.BlockEdit):[integer,integer]?), automatic_edit: (fun(edit: sia.BlockEdit):[integer, integer]?)?, find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
+--- @alias sia.BlockAction { automatic: boolean, apply_edit: (fun(edit:sia.BlockEdit):[integer,integer]?), apply_marker: (fun(edit: sia.BlockEdit):[integer, integer]?)?, find_edit: (fun(block: sia.Block):sia.BlockEdit?) }
 
 --- @type table<string, sia.BlockAction>
 M.actions = {
@@ -295,14 +300,14 @@ M.actions = {
     --- Find edits and their location
     find_edit = search_replace_action,
     --- @param edit sia.BlockEdit
-    manual_edit = function(edit)
+    apply_edit = function(edit)
       if edit.buf and edit.search.pos then
         vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
         return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }
       end
     end,
     --- @param edit sia.BlockEdit
-    automatic_edit = function(edit)
+    apply_marker = function(edit)
       if edit.buf and edit.search.pos then
         local content = { "<<<<<<< User" }
         for _, line in ipairs(edit.search.content) do
@@ -324,8 +329,7 @@ M.actions = {
     find_edit = function(block)
       return { search = { content = block.code }, replace = { content = block.code } }
     end,
-    automatic_edit = nil,
-    manual_edit = function(edit)
+    apply_edit = function(edit)
       if edit.buf and edit.search.pos then
         vim.api.nvim_buf_set_lines(edit.buf, edit.search.pos[1] - 1, edit.search.pos[2], false, edit.replace.content)
         return { edit.search.pos[1], edit.search.pos[1] + #edit.replace.content - 1 }

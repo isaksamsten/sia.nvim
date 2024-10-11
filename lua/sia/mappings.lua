@@ -225,21 +225,17 @@ function M.setup()
   vim.keymap.set("n", "<Plug>(sia-delete-context)", function()
     local split = SplitStrategy.by_buf()
     if split then
-      local contexts, mappings = split.conversation:get_context_messages()
+      local contexts, mappings = split.conversation:get_context_instructions()
       if #contexts == 0 then
         vim.notify("No contexts available")
         return
       end
       vim.ui.select(contexts, {
         prompt = "Delete context",
-        --- @param message sia.Message
-        format_item = function(message)
-          return message:get_description()
-        end,
         --- @param idx integer?
       }, function(_, idx)
         if idx then
-          split.conversation:remove_message(mappings[idx])
+          split.conversation:remove_instruction(mappings[idx])
         end
       end)
     end
@@ -248,7 +244,7 @@ function M.setup()
   vim.keymap.set("n", "<Plug>(sia-peek-context)", function()
     local split = SplitStrategy.by_buf()
     if split then
-      local contexts, mappings = split.conversation:get_context_messages()
+      local contexts = split.conversation:get_context_messages()
       if #contexts == 0 then
         vim.notify("No contexts available")
         return
@@ -282,17 +278,6 @@ function M.setup()
             vim.wo[win].wrap = true
             vim.keymap.set("n", "q", function()
               vim.api.nvim_win_close(win, true)
-            end, { buffer = buf })
-
-            vim.keymap.set("n", "x", function()
-              vim.ui.input({
-                prompt = "Delete context (y/N)? ",
-              }, function(response)
-                if response == "y" then
-                  split.conversation:remove_message(mappings[idx])
-                  vim.api.nvim_win_close(win, true)
-                end
-              end)
             end, { buffer = buf })
           end
         end

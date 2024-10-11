@@ -25,7 +25,7 @@ local providers = require("sia.provider")
 --- @field timeout number?
 
 --- @class sia.config.Instruction
---- @field id (fun(ctx:sia.ActionArgument?):table?)|nil
+--- @field id (fun(ctx:sia.Context?):table?)|nil
 --- @field role sia.config.Role
 --- @field persistent boolean?
 --- @field available (fun(ctx:sia.Context?):boolean)?
@@ -34,7 +34,8 @@ local providers = require("sia.provider")
 --- @field content (fun(ctx: sia.Context?):string)|string|string[]
 
 --- @class sia.config.Action
---- @field instructions [string|sia.config.Instruction]
+--- @field instructions (string|sia.config.Instruction|(fun():sia.config.Instruction[]))[]
+--- @field reminder (string|sia.config.Instruction)?
 --- @field model string?
 --- @field temperature number?
 --- @field input sia.config.ActionInput?
@@ -83,6 +84,52 @@ local defaults = {
     copilot = { "copilot", "gpt-4o" },
   },
   instructions = {
+    editblock_reminder = {
+      role = "system",
+      content = [[# *SEARCH/REPLACE block* Rules:
+
+Every *SEARCH/REPLACE block* must use this format:
+1. The opening fence, code language and the *FULL* file path alone on a line prefixed with file:, verbatim. No bold asterisks, no quotes around it, no escaping of characters, etc., eg: ```python file:test.py
+2. The start of search block: <<<<<<< SEARCH
+3. A contiguous chunk of lines to search for in the existing source code
+4. The dividing line: =======
+5. The lines to replace into the source code
+6. The end of the replace block: >>>>>>> REPLACE
+7. The closing fence: ```
+
+Use the *FULL* file path, as shown to you by the user.
+
+Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character for character, including all comments, docstrings, etc.
+If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
+
+*SEARCH/REPLACE* blocks will replace *all* matching occurrences.
+**Include enough lines to make the SEARCH blocks uniquely match the lines to change.**
+
+Keep *SEARCH/REPLACE* blocks concise.
+Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
+Include just the changing lines, and a few surrounding lines if needed for uniqueness.
+Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
+Reserve empty *SEARCH* blocks for empty files.
+Empty *SEARCH* blocks are added at the end of files.
+
+Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
+
+To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location.
+
+Pay attention to which filenames the user wants you to edit. If the file is not
+listed, do not edit it, instead ask the user to add it to the chat.
+
+If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
+- A new file path, including dir name if needed
+- An empty `SEARCH` section
+- The new file's contents in the `REPLACE` section
+
+You are diligent and tireless!
+You NEVER leave comments describing code without implementing it!
+You always COMPLETELY IMPLEMENT the needed code!
+
+ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!]],
+    },
     editblock_system = {
       {
         role = "system",
@@ -107,50 +154,6 @@ Once you understand the request you MUST:
 3. If you are unsure what the user wants, ask for clarification before making changes.
 
 All changes to files must use this *SEARCH/REPLACE block* format.]],
-      },
-      {
-        role = "system",
-        content = [[# *SEARCH/REPLACE block* Rules:
-
-Every *SEARCH/REPLACE block* must use this format:
-1. The opening fence, code language and the *FULL* file path alone on a line, verbatim. No bold asterisks, no quotes around it, no escaping of characters, etc., eg: ```python test.py
-2. The start of search block: <<<<<<< SEARCH
-3. A contiguous chunk of lines to search for in the existing source code
-4. The dividing line: =======
-5. The lines to replace into the source code
-6. The end of the replace block: >>>>>>> REPLACE
-7. The closing fence: ```
-
-Use the *FULL* file path, as shown to you by the user.
-
-Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character for character, including all comments, docstrings, etc.
-If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
-
-*SEARCH/REPLACE* blocks will replace *all* matching occurrences.
-Include enough lines to make the SEARCH blocks uniquely match the lines to change.
-
-Keep *SEARCH/REPLACE* blocks concise.
-Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
-Include just the changing lines, and a few surrounding lines if needed for uniqueness.
-Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
-Reserve empty *SEARCH* blocks for new files. If the file is not new, the *SEARCH* block MUST contain the code to be replaced.
-
-Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
-
-To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location.
-
-Pay attention to which filenames the user wants you to edit, especially if they are asking you to create a new file.
-
-If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
-- A new file path, including dir name if needed
-- An empty `SEARCH` section
-- The new file's contents in the `REPLACE` section
-
-You are diligent and tireless!
-You NEVER leave comments describing code without implementing it!
-You always COMPLETELY IMPLEMENT the needed code!
-
-ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!]],
       },
       {
         role = "user",
@@ -236,20 +239,37 @@ from hello import hello
 >>>>>>> REPLACE
 ```]],
       },
+      {
+        role = "user",
+        hide = true,
+        content = "I switched to a new code base. Please don't consider the above files or try to edit them any longer.",
+      },
+      {
+        role = "assistant",
+        hide = true,
+        content = "Understood. I will no longer consider the above files for editing.",
+      },
     },
     git_files = {
-      role = "user",
-      persistent = true,
-      description = "List the files in the current git repository.",
-      available = function()
-        return utils.is_git_repo()
-      end,
-      content = function(ctx)
-        return string.format(
-          "This is the current directory:\n:%s",
-          vim.fn.system("git ls-tree -r --name-only HEAD | tree --fromfile")
-        )
-      end,
+      {
+        role = "user",
+        persistent = true,
+        description = "List the files in the current git repository.",
+        available = function()
+          return utils.is_git_repo()
+        end,
+        content = function(ctx)
+          return string.format(
+            "This is the current directory:\n:%s",
+            vim.fn.system("git ls-tree -r --name-only HEAD | tree --fromfile")
+          )
+        end,
+      },
+      {
+        role = "assistant",
+        hide = true,
+        content = "Thanks for providing the list of files in the current git repository.",
+      },
     },
     current_buffer_line_number = require("sia.instructions").current_buffer({ show_line_numbers = true }),
     current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = false }),
@@ -282,7 +302,8 @@ Guidelines:
   },
   --- @type sia.config.Defaults
   defaults = {
-    model = "gpt-4o-mini", -- default model
+    -- model = "gpt-4o-mini", -- default model
+    model = "copilot", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -313,7 +334,6 @@ Guidelines:
       },
       diff = {
         mode = "diff",
-        model = "chatgpt-4o-latest",
         temperature = 0.2,
         instructions = {
           "diff_system",
@@ -323,18 +343,18 @@ Guidelines:
       },
       --- @type sia.config.Action
       split = {
-        model = "chatgpt-4o-latest",
-        -- model = "copilot",
         mode = "split",
         temperature = 0.1,
         split = {
           block_action = "search_replace",
         },
+
         instructions = {
           "editblock_system",
-          require("sia.instructions").files(),
+          require("sia.instructions").files,
           "current_context",
         },
+        reminder = "editblock_reminder",
       },
     },
   },
@@ -343,13 +363,9 @@ Guidelines:
       instructions = {
         "editblock_system",
         {
-          role = "system",
-          content = [[If you need additional files to improve the diagnostics, ask the user to add the file using `:SiaAdd filename`.]],
-        },
-        {
           role = "user",
           id = function(ctx)
-            return { "diagnostics", ctx.buf, ctx.start_line, ctx.end_line }
+            return { "diagnostics", ctx.buf, ctx.pos[1], ctx.pos[2] }
           end,
           persistent = true,
           description = function(opts)
@@ -390,15 +406,15 @@ Guidelines:
             )
           end,
         },
-        require("sia.instructions").files(),
+        require("sia.instructions").files,
         "current_context",
       },
       mode = "split",
       split = {
         block_action = "search_replace",
       },
+      reminder = "editblock_reminder",
       range = true,
-      model = "chatgpt-4o-latest",
     },
     commit = {
       instructions = {
@@ -449,7 +465,7 @@ Guidelines:
   5. Provide context on how the code fits into a larger application if applicable.
 
 If you need additional context to improve the explanation. Ask the user to add
-the file to the context using `:SiaAdd filename`.
+the file to the context using SiaFile.
   ]],
         },
         "git_files",
@@ -463,11 +479,16 @@ the file to the context using `:SiaAdd filename`.
     unittest = {
       instructions = {
         "editblock_system",
+        "git_files",
+        require("sia.instructions").files,
+        "current_context",
         {
-          role = "system",
-          content = [[When generating unit tests, follow these steps:
+          role = "user",
+          hide = true,
+          content = [[Generate unit tests for the provided function or module flowing these steps:
 
-  1. Identify the programming language.
+  1. Use the provided file list to idenfify a suitable file to place the test in.
+    - If the files' contents have not been added to the conversation, ASK the USER to ADD it!
   2. Identify the purpose of the function or module to be tested.
   3. List the edge cases and typical use cases that should be covered in the tests and share the plan with the user.
   4. Generate unit tests using an appropriate testing framework for the identified programming language.
@@ -477,15 +498,8 @@ the file to the context using `:SiaAdd filename`.
         - Error handling (if applicable)
   6. Provide the generated unit tests in a clear and organized manner without additional explanations or chat.
   7. Based on the provided list of files, place the test in an appropriate file.
-  8. If the file where you want to add the test exists but is not part of the
-     current conversation, ask the user to provide it to the conversation using `:SiaAdd filename`, so
-     that the test can be appropriately inserted into the file.
   ]],
         },
-        "git_files",
-        require("sia.instructions").current_args(),
-        "current_buffer",
-        "current_context",
       },
       capture = require("sia.capture").treesitter("@function.outer"),
       mode = "split",
@@ -493,6 +507,7 @@ the file to the context using `:SiaAdd filename`.
         block_action = "search_replace",
         cmd = "vsplit",
       },
+      reminder = "editblock_reminder",
       range = true,
       wo = {},
       temperature = 0.5,

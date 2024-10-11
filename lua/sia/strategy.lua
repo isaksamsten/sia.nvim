@@ -162,7 +162,8 @@ function SplitStrategy:new(conversation, options)
   SplitStrategy._buffers[obj.buf] = obj
   SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
   obj.canvas = ChatCanvas:new(obj.buf)
-  obj.canvas:render_messages(vim.list_slice(obj.conversation.messages, 1, #obj.conversation.messages - 1))
+  local messages = conversation:get_messages()
+  obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
   return obj
 end
 
@@ -226,7 +227,7 @@ function SplitStrategy:on_progress(content)
 end
 
 --- @param instruction sia.config.Instruction
---- @param args sia.ActionArgument
+--- @param args sia.Context
 function SplitStrategy:add_instruction(instruction, args)
   self.conversation:add_instruction(instruction, args)
 end
