@@ -9,6 +9,8 @@ An LLM assistant for Neovim with support for OpenAI and Copilot.
 
 https://github.com/user-attachments/assets/26f0a7e6-2afd-4b69-b4c3-f9945721f442
 
+https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
+
 ## ⚡️ Requirements
 
 - Neovim >= **0.10**
