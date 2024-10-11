@@ -325,4 +325,51 @@ function M.is_git_repo(has_staged)
   end
   return false
 end
+
+local BEFORE = 1
+local AFTER = 2
+local NONE = 3
+
+--- @param content string[]
+--- @param opts {before: string, delimiter: string, after: string}?
+--- @return string[] before
+--- @return string[] after
+function M.partition_marker(content, opts)
+  opts = opts or {}
+
+  local before = opts.before or "^<<<<<<?<?<?<?"
+  local after = opts.after or "^>>>>>>?>?>?>?>"
+  local delimiter = opts.delimiter or "^======?=?=?=?"
+
+  local search = {}
+  local replace = {}
+  local state = NONE
+  -- TODO: we assume that the code block only contains one search/replace block
+  for _, line in pairs(content) do
+    if state == NONE then
+      if string.match(line, before) then
+        state = BEFORE
+      else
+        goto continue
+      end
+    else
+      if state == BEFORE then
+        if string.match(line, delimiter) then
+          state = AFTER
+        else
+          search[#search + 1] = line
+        end
+      elseif state == AFTER then
+        if string.match(line, after) then
+          return search, replace
+        else
+          replace[#replace + 1] = line
+        end
+      end
+    end
+    ::continue::
+  end
+
+  return {}, {}
+end
 return M

@@ -199,10 +199,6 @@ function M.insert_block(action, block, replace, padding)
   end
 end
 
-local SEARCH = 1
-local REPLACE = 2
-local NONE = 3
-
 --- @param b sia.Block
 --- @return sia.BlockEdit?
 local function search_replace_action(b)
@@ -217,35 +213,20 @@ local function search_replace_action(b)
     return nil
   end
 
-  local search = {}
-  local replace = {}
+  local search, replace = utils.partition_marker(b.code, {
+    before = "^<<<<<<?<?<?<?%s+SEARCH%s*",
+    delimiter = "^======?=?=?=?%s*$",
+    after = "^>>>>>>?>?>?>?>%s+REPLACE%s*",
+  })
 
-  local state = NONE
+  --- If we didn't find a search/replace block try a more relaxed search
+  if #search == 0 and #replace == 0 then
+    search, replace = utils.partition_marker(b.code)
+  end
 
-  -- TODO: we assume that the code block only contains one search/replace block
-  for _, line in pairs(b.code) do
-    if state == NONE then
-      if string.match(line, "^<<<<<<?<?<?<?%s+SEARCH%s*$") then
-        state = SEARCH
-      else
-        goto continue
-      end
-    else
-      if state == SEARCH then
-        if string.match(line, "^======?=?=?=?%s*$") then
-          state = REPLACE
-        else
-          search[#search + 1] = line
-        end
-      elseif state == REPLACE then
-        if string.match(line, "^>>>>>>?>?>?>?>%s+REPLACE%s*$") then
-          break
-        else
-          replace[#replace + 1] = line
-        end
-      end
-    end
-    ::continue::
+  --- if we still don't find anything, we abort.
+  if #search == 0 and #replace == 0 then
+    return nil
   end
 
   if vim.api.nvim_buf_is_loaded(buf) then

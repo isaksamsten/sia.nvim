@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("sia.utils")
 
 local OURS_PATTERN = "<<<<<<< User"
 local THEIRS_PATTERN = ">>>>>>> Sia"
@@ -14,29 +15,12 @@ local THEIRS = 2
 local function detect_conflict_markers(buf)
   local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
-  local state = NONE
-  for _, line in ipairs(content) do
-    if state == NONE then
-      if string.match(line, OURS_PATTERN) then
-        state = OURS
-      else
-        goto continue
-      end
-    else
-      if state == OURS then
-        if string.match(line, DELIMITER_PATTERN) then
-          state = THEIRS
-        end
-      elseif state == THEIRS then
-        if string.match(line, THEIRS_PATTERN) then
-          return true
-        else
-        end
-      end
-    end
-    ::continue::
-  end
-  return false
+  local before, after = utils.partition_marker(content, {
+    before = OURS_PATTERN,
+    delimiter = DELIMITER_PATTERN,
+    after = THEIRS_PATTERN,
+  })
+  return #before > 0 or #after > 0
 end
 
 --- @return integer? pos
