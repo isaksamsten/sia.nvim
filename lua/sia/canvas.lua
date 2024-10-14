@@ -38,9 +38,9 @@ function ChatCanvas:render_messages(messages)
           heading = "# Sia"
         end
         if line == 1 then
-          vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { heading })
+          vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { heading, "" })
         else
-          vim.api.nvim_buf_set_lines(buf, line, line, false, { "", heading })
+          vim.api.nvim_buf_set_lines(buf, line, line, false, { "", "---", "", heading, "" })
         end
         vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
       end
