@@ -23,13 +23,13 @@ function M.files()
     local user_instruction = {
       role = "user",
       id = function(ctx)
-        return { file }
+        return { "user", file }
       end,
       persistent = true,
       available = function(_)
         return vim.fn.filereadable(file) == 1
       end,
-      description = function(opts)
+      description = function(ctx)
         return vim.fn.fnamemodify(file, ":.")
       end,
       content = function(ctx)
@@ -54,10 +54,11 @@ Any other messages in the chat may contain outdated versions of the files' conte
     --- @type sia.config.Instruction
     local assistant_instruction = {
       id = function(ctx)
-        return { file }
+        return { "assistant", file }
       end,
       role = "assistant",
       persistent = true,
+      hide = true,
       content = "Ok",
     }
     instructions[#instructions + 1] = user_instruction
@@ -79,7 +80,7 @@ function M.current_args()
       return vim.fn.argc() > 0
     end,
     persistent = true,
-    description = function(opts)
+    description = function(ctx)
       if vim.fn.argc() > 0 then
         local argv = vim.fn.argv() --[[@as string[] ]]
         return table.concat(argv, ", ")
@@ -117,25 +118,28 @@ function M.current_buffer(global)
   return {
     {
       id = function(ctx)
-        return { vim.api.nvim_buf_get_name(ctx.buf) }
+        return { "user", vim.api.nvim_buf_get_name(ctx.buf) }
+      end,
+      available = function(ctx)
+        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf)
       end,
       role = "user",
       persistent = true,
-      description = function(opts)
-        return string.format("%s", utils.get_filename(opts.buf, ":."))
+      description = function(ctx)
+        return string.format("%s", utils.get_filename(ctx.buf, ":."))
       end,
-      content = function(opts)
+      content = function(ctx)
         local start_fence = ""
         local end_fence = ""
         if global.fences ~= false then
-          start_fence = "```" .. vim.bo[opts.buf].ft
+          start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
         return string.format(
           "%s\n%s\n%s\n%s",
-          utils.get_filename(opts.buf),
+          utils.get_filename(ctx.buf),
           start_fence,
-          utils.get_code(1, -1, { buf = opts.buf, show_line_numbers = global.show_line_numbers }),
+          utils.get_code(1, -1, { buf = ctx.buf, show_line_numbers = global.show_line_numbers }),
           end_fence
         )
       end,
@@ -144,7 +148,7 @@ function M.current_buffer(global)
       role = "assistant",
       hide = true,
       id = function(ctx)
-        return { vim.api.nvim_buf_get_name(ctx.buf) }
+        return { "assistant", vim.api.nvim_buf_get_name(ctx.buf) }
       end,
       persistent = true,
       content = "Ok",
@@ -160,36 +164,36 @@ function M.current_context(global)
   return {
     {
       id = function(ctx)
-        return { vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
+        return { "user", vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       role = "user",
-      description = function(opts)
-        return string.format("%s lines %d-%d", utils.get_filename(opts.buf, ":p"), opts.pos[1], opts.pos[2])
+      description = function(ctx)
+        return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
       end,
-      available = function(opts)
-        return opts and opts.mode == "v"
+      available = function(ctx)
+        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
       end,
       persistent = true,
-      content = function(opts)
+      content = function(ctx)
         local start_fence = ""
         local end_fence = ""
         if global.fences ~= false then
-          start_fence = "```" .. vim.bo[opts.buf].ft
+          start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
 
-        if opts.pos then
-          local start_line, end_line = opts.pos[1], opts.pos[2]
+        if ctx.pos then
+          local start_line, end_line = ctx.pos[1], ctx.pos[2]
           local code =
-            utils.get_code(start_line, end_line, { buf = opts.buf, show_line_numbers = global.show_line_numbers })
+            utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
           return string.format(
             [[The provided context line %d to line %d from %s:
 %s
 %s
 %s]],
-            opts.pos[1],
-            opts.pos[2],
-            utils.get_filename(opts.buf, ":p"),
+            ctx.pos[1],
+            ctx.pos[2],
+            utils.get_filename(ctx.buf, ":p"),
             start_fence,
             code,
             end_fence
@@ -201,7 +205,10 @@ function M.current_context(global)
       role = "assistant",
       hide = true,
       id = function(ctx)
-        return { vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
+        return { "assistant", vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
+      end,
+      available = function(ctx)
+        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
       end,
       persistent = true,
       content = "Ok",
@@ -217,12 +224,15 @@ function M.verbatim()
       id = function(ctx)
         return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.pos[1], ctx.pos[2] }
       end,
-      description = function(opts)
-        return string.format("%s verbatim lines %d-%d", utils.get_filename(opts.buf, ":."), opts.pos[1], opts.pos[2])
+      available = function(ctx)
+        return vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v"
       end,
-      content = function(opts)
-        local start_line, end_line = opts.pos[1], opts.pos[2]
-        return table.concat(vim.api.nvim_buf_get_lines(opts.buf, start_line - 1, end_line, false), "\n")
+      description = function(ctx)
+        return string.format("%s verbatim lines %d-%d", utils.get_filename(ctx.buf, ":."), ctx.pos[1], ctx.pos[2])
+      end,
+      content = function(ctx)
+        local start_line, end_line = ctx.pos[1], ctx.pos[2]
+        return table.concat(vim.api.nvim_buf_get_lines(ctx.buf, start_line - 1, end_line, false), "\n")
       end,
     },
     {
@@ -234,35 +244,6 @@ function M.verbatim()
       content = "Ok",
       persistent = true,
     },
-  }
-end
-
---- @param fname string
---- @return sia.config.Instruction
-function M.read_file(fname)
-  --- @type sia.config.Instruction
-  return {
-    id = function(ctx)
-      return { fname }
-    end,
-    role = "user",
-    description = function(opts)
-      return vim.fn.fnamemodify(fname, ":.")
-    end,
-    available = function(opts)
-      return vim.fn.filereadable(fname) == 1
-    end,
-    persistent = true,
-    content = function(opts)
-      if vim.fn.filereadable(fname) == 1 then
-        return string.format(
-          "This is the complete file %s:\n```%s\n%s\n```",
-          fname,
-          vim.filetype.match({ filename = fname }) or "",
-          table.concat(vim.fn.readfile(fname, ""), "\n")
-        )
-      end
-    end,
   }
 end
 

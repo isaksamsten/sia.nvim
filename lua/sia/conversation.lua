@@ -19,7 +19,7 @@
 --- @field cursor integer[]
 
 --- @class sia.Message
---- @field id table?
+--- @field id (fun(ctx:sia.Context?):table?)?
 --- @field role "user"|"assistant"|"system"
 --- @field hide boolean?
 --- @field content string[]|string|(fun(ctx:sia.Context?):string)
@@ -35,9 +35,7 @@ Message.__index = Message
 --- @return sia.Message
 function Message:from_table(instruction, args)
   local obj = setmetatable({}, self)
-  if instruction.id then
-    obj.id = instruction.id(args)
-  end
+  obj.id = instruction.id
   obj.role = instruction.role
   obj.hide = instruction.hide
   obj.available = instruction.available
@@ -127,6 +125,14 @@ function Message:is_available()
   return true
 end
 
+--- @return table?
+function Message:get_id()
+  if self.id then
+    return self.id(self.context)
+  end
+  return nil
+end
+
 --- @return string[]? content
 function Message:get_content()
   --- @type string[]?
@@ -159,9 +165,10 @@ function Message:get_description()
   end
 end
 
+--- @alias sia.InstructionOption (string|sia.config.Instruction|(fun():sia.config.Instruction[]))
 --- @class sia.Conversation
---- @field instructions (string|sia.config.Instruction|(fun():sia.config.Instruction[]))[]
---- @field reminder (string|sia.config.Instruction)?
+--- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
+--- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
 --- @field model string?
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
@@ -189,21 +196,24 @@ function Conversation:new(action, args)
   }
   obj.instructions = {}
   for _, instruction in ipairs(action.instructions or {}) do
-    table.insert(obj.instructions, vim.deepcopy(instruction))
+    table.insert(obj.instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
   end
-  obj.reminder = vim.deepcopy(action.reminder)
+  if action.reminder then
+    obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
+  end
 
   return obj
 end
 
---- @param id table
+--- @param id table?
 --- @return boolean
 function Conversation:contains_message(id)
   if id then
     for _, other in ipairs(self.instructions) do
-      local messages = Message:new(other, self.context)
+      local messages = Message:new(other.instruction, other.context)
       for _, message in ipairs(messages or {}) do
-        if message.id and vim.deep_equal(message.id, id) then
+        local message_id = message:get_id()
+        if message_id and vim.deep_equal(message_id, id) then
           return true
         end
       end
@@ -229,12 +239,13 @@ function Conversation:add_instruction(instruction, args)
   local tmp_messages = Message:new(instruction, args)
   local contains = false
   for _, message in ipairs(tmp_messages or {}) do
-    if self:contains_message(message.id) then
+    local message_id = message:get_id()
+    if self:contains_message(message_id) then
       contains = true
     end
   end
   if not contains then
-    table.insert(self.instructions, instruction)
+    table.insert(self.instructions, { instruction = instruction, context = args })
     return true
   end
 
@@ -243,7 +254,8 @@ end
 
 --- @return sia.Message message
 function Conversation:last_message()
-  local messages = Message:new(self.instructions[#self.instructions], self.context)
+  local instruction = self.instructions[#self.instructions]
+  local messages = Message:new(instruction.instruction, instruction.context)
   if not messages then
     error("No messages found")
   end
@@ -257,7 +269,7 @@ function Conversation:get_context_instructions()
   local mappings = {}
   for i, instruction in ipairs(self.instructions) do
     local context = {}
-    for _, message in ipairs(Message:new(instruction, self.context) or {}) do
+    for _, message in ipairs(Message:new(instruction.instruction, instruction.context) or {}) do
       if message:is_context() then
         table.insert(context, message:get_description())
       end
@@ -277,7 +289,7 @@ end
 function Conversation:get_context_messages()
   local messages = {}
   for _, instruction in ipairs(self.instructions) do
-    for _, message in ipairs(Message:new(instruction, self.context) or {}) do
+    for _, message in ipairs(Message:new(instruction.instruction, instruction.context) or {}) do
       if message:is_context() then
         table.insert(messages, message)
       end
@@ -290,8 +302,9 @@ end
 function Conversation:get_messages()
   return vim
     .iter(self.instructions)
+    --- @param instruction {instruction: sia.InstructionOption, context: sia.Context? }
     :map(function(instruction)
-      return Message:new(instruction, self.context)
+      return Message:new(instruction.instruction, instruction.context)
     end)
     :flatten()
     :filter(function(m)
@@ -317,8 +330,9 @@ end
 function Conversation:to_query()
   local prompt = vim
     .iter(self.instructions)
+    --- @param instruction {instruction: sia.InstructionOption, context: sia.Context?}
     :map(function(instruction)
-      return Message:new(instruction, self.context)
+      return Message:new(instruction.instruction, instruction.context)
     end)
     :flatten()
     :filter(function(m)
@@ -333,7 +347,7 @@ function Conversation:to_query()
     :totable()
 
   if self.reminder then
-    for _, reminder in ipairs(Message:new(self.reminder, self.context) or {}) do
+    for _, reminder in ipairs(Message:new(self.reminder.instruction, self.reminder.context) or {}) do
       if reminder:is_available() then
         local p = reminder:to_prompt()
         if p.content and p.content ~= "" then
