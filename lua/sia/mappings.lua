@@ -163,6 +163,14 @@ function M.setup()
     end
   end, { noremap = true, silent = true })
 
+  vim.keymap.set("n", "<Plug>(sia-next-marker)", function()
+    require("sia.markers").next()
+  end, { noremap = true, silent = true })
+
+  vim.keymap.set("n", "<Plug>(sia-previous-marker)", function()
+    require("sia.markers").previous()
+  end, { noremap = true, silent = true })
+
   vim.keymap.set("n", "<Plug>(sia-replace-all-blocks)", function()
     local split = SplitStrategy.by_buf()
     if split then

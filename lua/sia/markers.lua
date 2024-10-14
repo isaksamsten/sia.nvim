@@ -1,8 +1,8 @@
 local M = {}
 local utils = require("sia.utils")
 
-local OURS_PATTERN = "<<<<<<< User"
-local THEIRS_PATTERN = ">>>>>>> Sia"
+local OURS_PATTERN = "<<<<<<<*"
+local THEIRS_PATTERN = ">>>>>>>*"
 local DELIMITER_PATTERN = "======="
 
 local NONE = 0
@@ -77,6 +77,31 @@ local function markers()
   end
 end
 
+function M.next()
+  local pos = vim.fn.getpos(".")[2]
+  local start = vim.fn.searchpos(OURS_PATTERN, "cW")[1]
+  local middle = vim.fn.searchpos(DELIMITER_PATTERN, "cW")[1]
+  local ending = vim.fn.searchpos(THEIRS_PATTERN, "cW")[1]
+
+  if start == 0 or middle == 0 or ending == 0 then
+    vim.fn.setpos(".", { 0, pos, 1, 0 })
+  else
+    vim.fn.cursor(middle, 0)
+  end
+end
+
+function M.previous()
+  local pos = vim.fn.getpos(".")[2]
+  local ending = vim.fn.searchpos(THEIRS_PATTERN, "bcW")[1]
+  local middle = vim.fn.searchpos(DELIMITER_PATTERN, "bcW")[1]
+  local start = vim.fn.searchpos(OURS_PATTERN, "bcW")[1]
+
+  if start == 0 or middle == 0 or ending == 0 then
+    vim.fn.setpos(".", { 0, pos, 1, 0 })
+  else
+    vim.fn.cursor(middle, 0)
+  end
+end
 local conflicts = {}
 
 --- @param buf integer
@@ -169,6 +194,16 @@ function M.setup()
     callback = function()
       for buf, _ in pairs(conflicts) do
         on_detect_conflict_markers(buf)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("User", {
+    group = augroup,
+    pattern = "SiaComplete",
+    callback = function(args)
+      if args.data.strategy and args.data.strategy.buf then
+        on_detect_conflict_markers(args.data.strategy.buf)
       end
     end,
   })
