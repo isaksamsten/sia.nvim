@@ -209,9 +209,9 @@ function SplitStrategy:on_start(job)
     vim.bo[self.buf].modifiable = true
     self.canvas:render_messages({ self.conversation:last_message() })
     if self.canvas:line_count() == 1 then
-      self.canvas:render_last({ "# Sia", "" })
+      self.canvas:render_last({ "# Sia", "", "" })
     else
-      self.canvas:render_last({ "", "# Sia", "" })
+      self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
     end
     set_abort_keymap(self.buf, job)
     local line_count = vim.api.nvim_buf_line_count(self.buf)

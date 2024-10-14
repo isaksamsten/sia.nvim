@@ -70,8 +70,7 @@ function _G.__sia_add_context(type)
         {
           buf = vim.api.nvim_get_current_buf(),
           cursor = vim.api.nvim_win_get_cursor(0),
-          start_line = start_line,
-          end_line = end_line,
+          pos = { start_line, end_line },
           mode = "v",
         }
       )
