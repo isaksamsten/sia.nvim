@@ -56,6 +56,9 @@ Any other messages in the chat may contain outdated versions of the files' conte
       id = function(ctx)
         return { "assistant", file }
       end,
+      available = function(_)
+        return vim.fn.filereadable(file) == 1
+      end,
       role = "assistant",
       persistent = true,
       hide = true,

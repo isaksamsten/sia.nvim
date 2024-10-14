@@ -1,7 +1,5 @@
-local config = require("sia.config")
-local utils = require("sia.utils")
-
 vim.api.nvim_create_user_command("Sia", function(args)
+  local utils = require("sia.utils")
   if #args.fargs == 0 and not vim.b.sia then
     vim.notify("No prompt")
     return
@@ -60,6 +58,7 @@ end, {
   bang = true,
   nargs = "*",
   complete = function(ArgLead)
+    local config = require("sia.config")
     local cmd_type = vim.fn.getcmdtype()
     local cmd_line = vim.fn.getcmdline()
     local is_range = false
