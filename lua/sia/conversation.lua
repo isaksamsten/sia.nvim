@@ -222,16 +222,6 @@ function Conversation:contains_message(id)
   return false
 end
 
--- --- @param message sia.Message a context message
--- --- @return boolean
--- function Conversation:add_message(message)
---   if not self:contains_message(message) then
---     table.insert(self.instructions, message)
---     return true
---   end
---   return false
--- end
-
 --- @param instruction sia.config.Instruction
 --- @param args sia.Context?
 --- @return boolean
@@ -312,19 +302,6 @@ function Conversation:get_messages()
     end)
     :totable()
 end
-
--- --- @param id table
--- function Conversation:remove_message(id)
---   local to_remove = {}
---   for i, message in ipairs(self.instructions) do
---     if message.id and vim.deep_equal(message.id, id) then
---       table.insert(to_remove, i)
---     end
---   end
---   for _, index in ipairs(to_remove) do
---     table.remove(self.instructions, index)
---   end
--- end
 
 --- @return sia.Query
 function Conversation:to_query()
