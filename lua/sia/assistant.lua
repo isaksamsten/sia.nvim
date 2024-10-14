@@ -74,7 +74,7 @@ function M.execute_strategy(strategy)
         first_on_stdout = false
         vim.api.nvim_exec_autocmds("User", {
           pattern = "SiaStart",
-          data = strategy,
+          data = { strategy = strategy },
         })
 
         local status, json = pcall(vim.json.decode, responses[1], { luanil = { object = true } })
@@ -113,6 +113,7 @@ function M.execute_strategy(strategy)
                   strategy:on_progress(delta.content)
                   vim.api.nvim_exec_autocmds("User", {
                     pattern = "SiaProgress",
+                    data = { strategy = strategy, content = delta.content },
                   })
                 end
               end
@@ -125,7 +126,7 @@ function M.execute_strategy(strategy)
       strategy:on_complete()
       vim.api.nvim_exec_autocmds("User", {
         pattern = "SiaComplete",
-        data = { error_code = error_code },
+        data = { strategy = strategy, error_code = error_code },
       })
     end,
     stream = true,
