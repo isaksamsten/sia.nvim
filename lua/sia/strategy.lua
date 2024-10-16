@@ -264,12 +264,12 @@ function SplitStrategy:on_complete()
       end
     end
 
-    if not vim.tbl_isempty(self.tools) and self.options.tools then
+    if not vim.tbl_isempty(self.tools) then
       for _, tool in pairs(self.tools) do
         local func = tool["function"]
         local status, arguments = pcall(vim.fn.json_decode, func.arguments)
-        if func and status and self.options.tools[func.name] then
-          local content = self.options.tools[func.name](self, arguments)
+        if func and status then
+          local content = self.conversation:execute_tool(func.name, self, arguments)
           if content then
             self.conversation:add_instruction(
               { role = "assistant", tool_calls = { tool } },
@@ -283,7 +283,7 @@ function SplitStrategy:on_complete()
             continue = true
             self.canvas:render_last(content)
           else
-            self.canvas:render_last({ " The function call to " .. func.name .. " failed." })
+            self.canvas:render_last({ "The function call to " .. func.name .. " failed." })
           end
         end
       end

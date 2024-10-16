@@ -196,6 +196,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
+--- @field tool_fn table<string, fun(split: sia.SplitStrategy, args:table):string[]?>?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -225,6 +226,10 @@ function Conversation:new(action, args)
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
   obj.tools = action.tools
+  obj.tool_fn = {}
+  for _, tool in ipairs(action.tools or {}) do
+    obj.tool_fn[tool.name] = tool.execute
+  end
 
   return obj
 end
@@ -310,6 +315,13 @@ function Conversation:get_context_messages()
     end
   end
   return messages
+end
+
+--- @return string[]?
+function Conversation:execute_tool(name, split, args)
+  if self.tool_fn[name] then
+    return self.tool_fn[name](split, args)
+  end
 end
 
 --- @return sia.Message[] messages
