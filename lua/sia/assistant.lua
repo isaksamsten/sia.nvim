@@ -18,6 +18,7 @@ local function call_provider(query, opts)
     model = model[2],
     temperature = query.temperature or config.options.defaults.temperature,
     messages = query.prompt,
+    tools = query.tools,
   }
 
   if opts.stream then
@@ -109,12 +110,16 @@ function M.execute_strategy(strategy)
               end
               if obj.choices and #obj.choices > 0 then
                 local delta = obj.choices[1].delta
-                if delta and delta.content then
-                  strategy:on_progress(delta.content)
-                  vim.api.nvim_exec_autocmds("User", {
-                    pattern = "SiaProgress",
-                    data = { strategy = strategy, content = delta.content },
-                  })
+                if delta then
+                  if delta.content then
+                    strategy:on_progress(delta.content)
+                    vim.api.nvim_exec_autocmds("User", {
+                      pattern = "SiaProgress",
+                      data = { strategy = strategy, content = delta.content },
+                    })
+                  elseif delta.tool_calls then
+                    strategy:on_tool_call(delta.tool_calls)
+                  end
                 end
               end
             end
@@ -123,11 +128,15 @@ function M.execute_strategy(strategy)
       end
     end,
     on_exit = function(_, error_code, _)
-      strategy:on_complete()
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "SiaComplete",
-        data = { strategy = strategy, error_code = error_code },
-      })
+      local continue = strategy:on_complete()
+      if continue then
+        M.execute_strategy(strategy)
+      else
+        vim.api.nvim_exec_autocmds("User", {
+          pattern = "SiaComplete",
+          data = { buf = strategy.buf or 0, error_code = error_code },
+        })
+      end
     end,
     stream = true,
   })

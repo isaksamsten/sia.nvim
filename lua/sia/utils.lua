@@ -46,6 +46,24 @@ function M.get_global_files()
   return global_file_list
 end
 
+--- @return string[] paths
+function M.glob_pattern_to_files(patterns)
+  if type(patterns) == "string" then
+    patterns = { patterns }
+  end
+
+  local files = {}
+  for _, pattern in ipairs(patterns) do
+    local expanded = vim.fn.glob(pattern, true, true)
+    if #expanded > 0 then
+      vim.list_extend(files, expanded)
+    else
+      table.insert(files, pattern)
+    end
+  end
+  return files
+end
+
 --- Resolves a given prompt based on configuration options and context.
 --- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
 --- based on the current file type and provided options.

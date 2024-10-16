@@ -21,8 +21,6 @@ function M.setup(options)
     require("sia.markers").reject(vim.api.nvim_get_current_buf())
   end, {})
 
-  --- TODO: add command for moving global files to the local
-  --- perhaps with empty bang command when in sia
   vim.api.nvim_create_user_command("SiaFile", function(args)
     local split = SplitStrategy.by_buf()
     if #args.fargs == 0 then
@@ -41,15 +39,7 @@ function M.setup(options)
           utils.clear_global_files()
         end
       end
-      local files = {}
-      for _, arg in ipairs(args.fargs) do
-        local expanded = vim.fn.glob(arg, true, true)
-        if #expanded > 0 then
-          vim.list_extend(files, expanded)
-        else
-          table.insert(files, arg)
-        end
-      end
+      local files = utils.glob_pattern_to_files(args.fargs)
 
       if split then
         split:add_files(files)

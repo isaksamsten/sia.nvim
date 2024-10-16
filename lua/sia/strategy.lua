@@ -92,7 +92,12 @@ function Strategy:on_start(job) end
 function Strategy:on_progress(content) end
 
 --- Callback triggered when the strategy is completed.
+--- @return boolean? continue
 function Strategy:on_complete() end
+
+--- Callback triggered when LLM wants to call a function
+--- @param t table
+function Strategy:on_tool_call(t) end
 
 --- Returns the query submitted to the LLM
 --- @return sia.Query
@@ -100,6 +105,11 @@ function Strategy:get_query()
   --- @type sia.Query
   return nil
 end
+
+--- @class sia.ToolCall
+--- @field id string
+--- @field type string
+--- @field function { arguments: string, name: string }
 
 --- Create a new split window tracking the chat.
 --- @class sia.SplitStrategy : sia.Strategy
@@ -111,6 +121,7 @@ end
 --- @field name string
 --- @field files string[]
 --- @field block_action sia.BlockAction
+--- @field tools table<integer, sia.ToolCall>
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = {}
 SplitStrategy.__index = SplitStrategy
@@ -143,6 +154,7 @@ function SplitStrategy:new(conversation, options)
   obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
+  obj.tools = {}
   obj.files = utils.get_global_files()
   utils.clear_global_files()
 
@@ -167,6 +179,7 @@ function SplitStrategy:new(conversation, options)
   return obj
 end
 
+--- @param files string[]
 function SplitStrategy:add_files(files)
   for _, file in ipairs(files) do
     if not vim.tbl_contains(self.files, file) then
@@ -181,6 +194,7 @@ function SplitStrategy:add_file(file)
   end
 end
 
+--- @param patterns string[]
 function SplitStrategy:remove_files(patterns)
   --- @type string[]
   local regexes = {}
@@ -233,36 +247,84 @@ function SplitStrategy:add_instruction(instruction, args)
 end
 
 function SplitStrategy:on_complete()
+  local continue = false
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+    if #self._writer.cache > 0 then
+      self.conversation:add_instruction(
+        { role = "assistant", content = self._writer.cache },
+        { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
+      )
+
+      local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
+      for _, b in ipairs(blocks) do
+        self.blocks[#self.blocks + 1] = b
+      end
+      if self.block_action and self.options.automatic_block_action then
+        require("sia.blocks").replace_all_blocks(self.block_action, blocks)
+      end
+    end
+
+    if not vim.tbl_isempty(self.tools) and self.options.tools then
+      for _, tool in pairs(self.tools) do
+        local func = tool["function"]
+        local status, arguments = pcall(vim.fn.json_decode, func.arguments)
+        if func and status and self.options.tools[func.name] then
+          local content = self.options.tools[func.name](self, arguments)
+          if content then
+            self.conversation:add_instruction(
+              { role = "assistant", tool_calls = { tool } },
+              { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
+            )
+
+            self.conversation:add_instruction(
+              { role = "tool", content = content, _tool_call_id = tool.id },
+              { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
+            )
+            continue = true
+            self.canvas:render_last(content)
+          else
+            self.canvas:render_last({ " The function call to " .. func.name .. " failed." })
+          end
+        end
+      end
+      self.tools = {}
+    end
+
     vim.bo[self.buf].modifiable = false
-
-    self.conversation:add_instruction(
-      { role = "assistant", content = self._writer.cache },
-      { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-    )
-
-    local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
-    for _, b in ipairs(blocks) do
-      self.blocks[#self.blocks + 1] = b
-    end
-    if self.block_action and self.block_action.automatic then
-      require("sia.blocks").replace_all_blocks(self.block_action, blocks)
-    end
-
     self._writer = nil
-    assistant.execute_query({
-      prompt = {
-        {
-          role = "system",
-          content = [[Summarize the interaction. Make it suitable for a buffer
+    if not continue then
+      assistant.execute_query({
+        prompt = {
+          {
+            role = "system",
+            content = [[Summarize the interaction. Make it suitable for a buffer
 name in neovim using three to five words. Only output the name, nothing else.]],
+          },
+          { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
         },
-        { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
-      },
-    }, function(resp)
-      self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-      pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
-    end)
+      }, function(resp)
+        if resp then
+          self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+          pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+        end
+      end)
+    end
+    return continue
+  end
+end
+
+function SplitStrategy:on_tool_call(t)
+  for _, v in ipairs(t) do
+    local func = v["function"]
+    if not self.tools[v.index] then
+      self.tools[v.index] = { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
+    end
+    if func.name then
+      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name .. func.name
+    end
+    if func.arguments then
+      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments .. func.arguments
+    end
   end
 end
 

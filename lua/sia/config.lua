@@ -2,7 +2,7 @@ local M = {}
 local utils = require("sia.utils")
 local providers = require("sia.provider")
 
---- @alias sia.config.Role "user"|"system"|"assistant"
+--- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
 --- @alias sia.config.ActionMode "split"|"diff"|"insert"
@@ -18,7 +18,9 @@ local providers = require("sia.provider")
 --- @class sia.config.Split
 --- @field cmd "vsplit"|"split"?
 --- @field block_action (string|sia.BlockAction)?
+--- @field automatic_block_action boolean?
 --- @field wo table<string, any>?
+--- @field tools table<string, fun(split: sia.SplitStrategy, args:table):string[]?>?
 
 --- @class sia.config.Replace
 --- @field highlight string
@@ -31,11 +33,20 @@ local providers = require("sia.provider")
 --- @field available (fun(ctx:sia.Context?):boolean)?
 --- @field hide boolean?
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
---- @field content (fun(ctx: sia.Context?):string)|string|string[]
+--- @field content ((fun(ctx: sia.Context?):string)|string|string[])?
+--- @field tool_calls sia.ToolCall[]?
+--- @field _tool_call_id string?
+
+--- @class sia.config.Tool
+--- @field name string
+--- @field description string
+--- @field parameters table<string, sia.ToolParameter>
+--- @field required string[]?
 
 --- @class sia.config.Action
 --- @field instructions (string|sia.config.Instruction|(fun():sia.config.Instruction[]))[]
 --- @field reminder (string|sia.config.Instruction)?
+--- @field tools sia.config.Tool[]?
 --- @field model string?
 --- @field temperature number?
 --- @field input sia.config.ActionInput?
@@ -107,17 +118,17 @@ If the file contains code or other data wrapped/escaped in json/xml/quotes or ot
 
 Keep *SEARCH/REPLACE* blocks concise.
 Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
-Include just the changing lines, and a few surrounding lines if needed for uniqueness.
+Include just the changing lines, AND a few surrounding lines to ensure UNIQUE MATCHES.
 Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
-Reserve empty *SEARCH* blocks for empty files.
-Empty *SEARCH* blocks are added at the end of files.
+Empty *SEARCH* blocks are added at the end of files, so try and reserve them for EMPTY files.
 
 Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
 
 To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location.
 
 Pay attention to which filenames the user wants you to edit. If the file is not
-listed, do not edit it, instead ask the user to add it to the chat.
+listed, do not edit it, instead use the function `add_file` to add it to the conversation.
+If a file is no longer relevant, use the function `remove_file` to remove it from the conversation.
 
 If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
 - A new file path, including dir name if needed
@@ -152,6 +163,10 @@ Once you understand the request you MUST:
 2. Describe each change with a *SEARCH/REPLACE block* per the examples below.
 
 3. If you are unsure what the user wants, ask for clarification before making changes.
+
+4. You have access to the following functions:
+  - `add_file` to add files matching a glob pattern to the conversation.
+  - `remove_file` to remove files matching a glob pattern from the conversation.
 
 All changes to files must use this *SEARCH/REPLACE block* format.]],
       },
@@ -260,8 +275,8 @@ from hello import hello
         end,
         content = function(ctx)
           return string.format(
-            "This is the current directory:\n:%s",
-            vim.fn.system("git ls-tree -r --name-only HEAD | tree --fromfile")
+            "This is the current directory hierarchy:\n:%s",
+            vim.fn.system("git ls-tree -r --name-only HEAD")
           )
         end,
       },
@@ -311,6 +326,7 @@ Guidelines:
       cmd = "vsplit",
       wo = { wrap = true },
       block_action = "verbatim",
+      automatic_block_action = false,
     },
     diff = {
       cmd = "vsplit",
@@ -347,10 +363,70 @@ Guidelines:
         temperature = 0.1,
         split = {
           block_action = "search_replace",
-        },
+          automatic_block_action = true,
+          tools = {
+            add_file = function(split, args)
+              if args.glob_pattern then
+                local files = require("sia.utils").glob_pattern_to_files(args.glob_pattern)
+                if #files > 10 then
+                  return { "The glob pattern is too broad. Please narrow it down." }
+                end
 
+                local missing_files = {}
+                local existing_files = {}
+                for _, file in ipairs(files) do
+                  if vim.fn.filereadable(file) == 0 then
+                    table.insert(missing_files, file)
+                  else
+                    table.insert(existing_files, file)
+                    split:add_file(file)
+                  end
+                end
+                local message = {}
+                if #existing_files > 0 and #missing_files > 0 then
+                  message[#message + 1] = "I've added the files:"
+                  for _, file in ipairs(existing_files) do
+                    table.insert(message, " - " .. file)
+                  end
+                  message[#message + 1] = ""
+                  message[#message + 1] = "I can't seem to find the files:"
+                  for _, file in ipairs(missing_files) do
+                    table.insert(message, " - " .. file)
+                  end
+                elseif #existing_files > 0 then
+                  message[#message + 1] = "I've added the files:"
+                  for _, file in ipairs(existing_files) do
+                    table.insert(message, " - " .. file)
+                  end
+                else
+                  message[#message + 1] = "I can't seem to find the files:"
+                  for _, file in ipairs(missing_files) do
+                    table.insert(message, " - " .. file)
+                  end
+                end
+                return message
+              else
+                return { "The glob pattern is missing" }
+              end
+            end,
+            remove_file = function(split, args)
+              if args.glob_pattern then
+                split:remove_files({ args.glob_pattern })
+                return { "I've removed the files matching " .. args.glob_pattern .. " from the conversation." }
+              else
+                return { "The glob pattern is missing" }
+              end
+            end,
+          },
+        },
+        tools = {
+          require("sia.tools").add_file,
+          require("sia.tools").remove_file,
+        },
+        model = "gpt-4o",
         instructions = {
           "editblock_system",
+          "git_files",
           require("sia.instructions").files,
           "current_context",
         },

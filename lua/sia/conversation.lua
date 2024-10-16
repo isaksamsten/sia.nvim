@@ -1,5 +1,7 @@
---- @alias sia.Prompt {role: "user"|"assistant"|"system", content: string}
---- @alias sia.Query { model: string?, temperature: number?, prompt: sia.Prompt}
+--- @alias sia.Prompt {role: sia.config.Role, content: string?, tool_calls: sia.ToolCall[]?, tool_call_id: string? }
+--- @alias sia.Query { model: string?, temperature: number?, prompt: sia.Prompt, tools: sia.Tool[]?}
+--- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
+--- @alias sia.ToolParameter { type: "number"|"string"?, enum: string[]?, description: string? }
 
 --- @class sia.ActionArgument
 --- @field start_line integer?
@@ -20,9 +22,11 @@
 
 --- @class sia.Message
 --- @field id (fun(ctx:sia.Context?):table?)?
---- @field role "user"|"assistant"|"system"
+--- @field role sia.config.Role
 --- @field hide boolean?
---- @field content string[]|string|(fun(ctx:sia.Context?):string)
+--- @field content (string[]|string|(fun(ctx:sia.Context?):string))?
+--- @field tool_calls sia.ToolCall[]?
+--- @field _tool_call_id string?
 --- @field persistent boolean?
 --- @field available (fun(ctx: sia.Context?):boolean)?
 --- @field description ((fun(ctx: sia.Context?):string)|string)?
@@ -42,6 +46,12 @@ function Message:from_table(instruction, args)
   obj.content = instruction.content
   obj.description = instruction.description
   obj.persistent = instruction.persistent
+  if instruction.tool_calls then
+    obj.tool_calls = instruction.tool_calls
+  end
+  if instruction._tool_call_id then
+    obj._tool_call_id = instruction._tool_call_id
+  end
   if args then
     obj.context = {
       buf = args.buf,
@@ -100,14 +110,22 @@ end
 --- @return sia.Prompt
 function Message:to_prompt()
   local prompt = { role = self.role }
-  if type(self.content) == "function" then
-    prompt.content = self.content(self.context)
-  elseif type(self.content) == "table" then
-    local content = self.content
-    --- @cast content [string]
-    prompt.content = table.concat(content, "\n")
-  else
-    prompt.content = self.content
+  if self.content then
+    if type(self.content) == "function" then
+      prompt.content = self.content(self.context)
+    elseif type(self.content) == "table" then
+      local content = self.content
+      --- @cast content [string]
+      prompt.content = table.concat(content, "\n")
+    else
+      prompt.content = self.content
+    end
+  end
+  if self.tool_calls then
+    prompt.tool_calls = self.tool_calls
+  end
+  if self._tool_call_id then
+    prompt.tool_call_id = self._tool_call_id
   end
   return prompt
 end
@@ -115,6 +133,10 @@ end
 --- @return boolean
 function Message:is_context()
   return self.role == "user" and self.persistent == true and self:is_available()
+end
+
+function Message:is_shown()
+  return not (self.hide == true or self.persistent == true or self.role == "system" or self.role == "tool")
 end
 
 --- @return boolean
@@ -169,6 +191,7 @@ end
 --- @class sia.Conversation
 --- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 --- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
+--- @field tools sia.config.Tool[]?
 --- @field model string?
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
@@ -201,6 +224,7 @@ function Conversation:new(action, args)
   if action.reminder then
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
+  obj.tools = action.tools
 
   return obj
 end
@@ -319,25 +343,49 @@ function Conversation:to_query()
       return m:to_prompt()
     end)
     :filter(function(p)
-      return p.content and p.content ~= ""
+      return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
     :totable()
 
   if self.reminder then
     for _, reminder in ipairs(Message:new(self.reminder.instruction, self.reminder.context) or {}) do
       if reminder:is_available() then
-        local p = reminder:to_prompt()
-        if p.content and p.content ~= "" then
-          table.insert(prompt, #prompt, p)
+        if #prompt == 0 or prompt[#prompt].role ~= "user" then
+          table.insert(prompt, #prompt + 1, reminder:to_prompt())
+        else
+          table.insert(prompt, #prompt, reminder:to_prompt())
         end
       end
     end
   end
 
+  --- @type sia.Tool[]?
+  local tools = nil
+  if self.tools then
+    tools = {}
+    for _, tool in ipairs(self.tools) do
+      tools[#tools + 1] = {
+        type = "function",
+        ["function"] = {
+          name = tool.name,
+          description = tool.description,
+          parameters = {
+            type = "object",
+            properties = tool.parameters,
+            required = tool.required,
+            additionalProperties = false,
+          },
+        },
+      }
+    end
+  end
+
+  --- @type sia.Query
   return {
     model = self.model,
     temperature = self.temperature,
     prompt = prompt,
+    tools = tools,
   }
 end
 
