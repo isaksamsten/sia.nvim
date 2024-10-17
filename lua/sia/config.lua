@@ -120,7 +120,6 @@ Keep *SEARCH/REPLACE* blocks concise.
 Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
 Include just the changing lines, AND a few surrounding lines to ensure UNIQUE MATCHES.
 Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
-Empty *SEARCH* blocks are added at the end of files, so try and reserve them for EMPTY files.
 
 Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
 
