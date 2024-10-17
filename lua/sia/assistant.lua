@@ -66,7 +66,8 @@ function M.execute_strategy(strategy)
   local incomplete = nil
   vim.api.nvim_exec_autocmds("User", {
     pattern = "SiaInit",
-    data = strategy,
+    --- @diagnostic disable-next-line: undefined-field
+    data = { buf = strategy.buf },
   })
   call_provider(query, {
     on_stdout = function(job_id, responses, _)
@@ -75,7 +76,8 @@ function M.execute_strategy(strategy)
         first_on_stdout = false
         vim.api.nvim_exec_autocmds("User", {
           pattern = "SiaStart",
-          data = { strategy = strategy },
+          --- @diagnostic disable-next-line: undefined-field
+          data = { buf = strategy.buf },
         })
 
         local status, json = pcall(vim.json.decode, responses[1], { luanil = { object = true } })
@@ -115,7 +117,8 @@ function M.execute_strategy(strategy)
                     strategy:on_progress(delta.content)
                     vim.api.nvim_exec_autocmds("User", {
                       pattern = "SiaProgress",
-                      data = { strategy = strategy, content = delta.content },
+                      --- @diagnostic disable-next-line: undefined-field
+                      data = { buf = strategy.buf, content = delta.content },
                     })
                   elseif delta.tool_calls then
                     strategy:on_tool_call(delta.tool_calls)
@@ -134,7 +137,8 @@ function M.execute_strategy(strategy)
       else
         vim.api.nvim_exec_autocmds("User", {
           pattern = "SiaComplete",
-          data = { buf = strategy.buf or 0, error_code = error_code },
+          --- @diagnostic disable-next-line: undefined-field
+          data = { buf = strategy.buf, error_code = error_code },
         })
       end
     end,
