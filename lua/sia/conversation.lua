@@ -196,7 +196,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
---- @field tool_fn table<string, fun(split: sia.SplitStrategy, args:table):string[]?>?
+--- @field tool_fn table<string, fun(arguments: table, callback: fun(content: string[]?):nil)>?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -317,10 +317,14 @@ function Conversation:get_context_messages()
   return messages
 end
 
+--- @param name string
+--- @param arguments table
+--- @param strategy sia.Strategy
+--- @param callback  fun(content: string[]?):nil
 --- @return string[]?
-function Conversation:execute_tool(name, split, args)
+function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
-    return self.tool_fn[name](split, args)
+    return self.tool_fn[name](arguments, strategy, callback)
   end
 end
 

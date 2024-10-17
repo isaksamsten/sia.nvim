@@ -64,6 +64,7 @@ function M.execute_strategy(strategy)
   local query = strategy:get_query()
   local first_on_stdout = true
   local incomplete = nil
+  strategy:on_init()
   vim.api.nvim_exec_autocmds("User", {
     pattern = "SiaInit",
     --- @diagnostic disable-next-line: undefined-field
@@ -131,16 +132,12 @@ function M.execute_strategy(strategy)
       end
     end,
     on_exit = function(_, error_code, _)
-      local continue = strategy:on_complete()
-      if continue then
-        M.execute_strategy(strategy)
-      else
-        vim.api.nvim_exec_autocmds("User", {
-          pattern = "SiaComplete",
-          --- @diagnostic disable-next-line: undefined-field
-          data = { buf = strategy.buf, error_code = error_code },
-        })
-      end
+      strategy:on_complete()
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "SiaComplete",
+        --- @diagnostic disable-next-line: undefined-field
+        data = { buf = strategy.buf, error_code = error_code },
+      })
     end,
     stream = true,
   })

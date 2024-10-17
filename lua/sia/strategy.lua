@@ -94,6 +94,8 @@ function Strategy:new(conversation)
   return obj
 end
 
+function Strategy:on_init() end
+
 --- Callback triggered when the strategy starts.
 --- @param job number
 function Strategy:on_start(job) end
@@ -125,47 +127,41 @@ function Strategy:on_tool_call(t)
   end
 end
 
---- @param buf integer?
---- @return boolean continue if the conversation should continue
---- @return string[][]? the contents returned by the function call
-function Strategy:execute_tools(buf)
+--- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun():nil) }
+function Strategy:execute_tools(opts)
   if not vim.tbl_isempty(self.tools) then
-    --- @type string[][]
-    local output = {}
-    local continue = false
-    buf = buf or self.conversation.context.buf
+    local tool_count = vim.tbl_count(self.tools)
     for _, tool in pairs(self.tools) do
       local func = tool["function"]
+      if opts.on_tool_start then
+        opts.on_tool_start(tool)
+      end
       local status, arguments = pcall(vim.fn.json_decode, func.arguments)
       if func and status then
-        local content = self.conversation:execute_tool(func.name, self, arguments)
-
-        -- Notify the LLM that we called the function
-        self.conversation:add_instruction(
-          { role = "assistant", tool_calls = { tool } },
-          { buf = buf, cursor = vim.api.nvim_win_get_cursor(0) }
+        self.conversation:execute_tool(
+          func.name,
+          arguments,
+          self,
+          vim.schedule_wrap(function(content)
+            tool_count = tool_count - 1
+            if opts.on_tool_complete then
+              opts.on_tool_complete(tool, content)
+            end
+            if tool_count == 0 then
+              if opts.on_tools_complete then
+                opts.on_tools_complete()
+              end
+              self.tools = {}
+            end
+          end)
         )
-        if content then
-          output[#output + 1] = content
-        else
-          output[#output + 1] = { "The function call to " .. func.name .. " failed." }
-        end
-
-        -- Notify the LLM about the result of the function call
-        self.conversation:add_instruction(
-          { role = "tool", content = output[#output], _tool_call_id = tool.id },
-          { buf = buf, cursor = vim.api.nvim_win_get_cursor(0) }
-        )
-
-        --- If we've called the tool, continue the conversation automatically
-        continue = true
       end
     end
-    --- Reset tools to allow the next response to collect new function calls
-    self.tools = {}
-    return continue, output
+  else
+    if opts.on_no_tools then
+      opts.on_no_tools()
+    end
   end
-  return false, nil
 end
 
 --- Returns the query submitted to the LLM
@@ -245,6 +241,7 @@ function SplitStrategy:new(conversation, options)
   obj.canvas = ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
+
   return obj
 end
 
@@ -287,7 +284,7 @@ function SplitStrategy:remove_files(patterns)
   end
 end
 
-function SplitStrategy:on_start(job)
+function SplitStrategy:on_init()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     self.canvas:render_messages({ self.conversation:last_message() })
@@ -296,10 +293,17 @@ function SplitStrategy:on_start(job)
     else
       self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
     end
-    set_abort_keymap(self.buf, job)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
+    self.canvas:update_progress({ { "Working....", "Comment" } })
 
     self._writer = Writer:new(self.buf, line_count - 1, 0)
+  end
+end
+
+function SplitStrategy:on_start(job)
+  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+    set_abort_keymap(self.buf, job)
+    self.canvas:clear_extmarks()
   end
 end
 
@@ -315,6 +319,10 @@ function SplitStrategy:add_instruction(instruction, args)
   self.conversation:add_instruction(instruction, args)
 end
 
+function SplitStrategy:get_win()
+  return vim.fn.bufwinid(self.buf)
+end
+
 function SplitStrategy:on_complete()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     if #self._writer.cache > 0 then
@@ -328,37 +336,50 @@ function SplitStrategy:on_complete()
         self.blocks[#self.blocks + 1] = b
       end
       if self.block_action and self.options.automatic_block_action then
-        require("sia.blocks").replace_all_blocks(self.block_action, blocks)
+        vim.schedule(function()
+          require("sia.blocks").replace_all_blocks(self.block_action, blocks)
+        end)
       end
     end
 
-    local continue, contents = self:execute_tools(self.buf)
-    if contents then
-      for _, content in ipairs(contents) do
+    self:execute_tools({
+      on_tool_start = function(tool)
+        self.canvas:update_progress({ { "Calling '" .. tool["function"].name .. "'...", "Comment" } })
+      end,
+      on_tool_complete = function(tool, content)
+        self.canvas:clear_extmarks()
         self.canvas:render_last(content)
-      end
-    end
-
-    vim.bo[self.buf].modifiable = false
-    self._writer = nil
-    if not continue then
-      assistant.execute_query({
-        prompt = {
-          {
-            role = "system",
-            content = [[Summarize the interaction. Make it suitable for a buffer
-name in neovim using three to five words. Only output the name, nothing else.]],
+        self.conversation:add_instruction(
+          { role = "assistant", tool_calls = { tool } },
+          { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
+        )
+        self.conversation:add_instruction(
+          { role = "tool", content = content, _tool_call_id = tool.id },
+          { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
+        )
+      end,
+      on_tools_complete = function()
+        assistant.execute_strategy(self)
+      end,
+      on_no_tools = function()
+        vim.bo[self.buf].modifiable = false
+        assistant.execute_query({
+          prompt = {
+            {
+              role = "system",
+              content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three to five words separated by spaces. Only output the name, nothing else.",
+            },
+            { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
           },
-          { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
-        },
-      }, function(resp)
-        if resp then
-          self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-          pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
-        end
-      end)
-    end
-    return continue
+        }, function(resp)
+          if resp then
+            self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+            pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+          end
+        end)
+      end,
+    })
+    self._writer = nil
   end
 end
 
@@ -484,21 +505,25 @@ end
 
 function DiffStrategy:on_complete()
   del_abort_keymap(self.buf)
-  local continue, content = self:execute_tools(self.buf)
-  vim.notify(vim.inspect(content))
-  if not continue and vim.api.nvim_buf_is_loaded(self.buf) and vim.api.nvim_buf_is_valid(self.buf) then
-    local context = self.conversation.context
-    local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
-    vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
-    if vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win) then
-      vim.api.nvim_set_current_win(self.win)
-      vim.cmd("diffthis")
-      vim.api.nvim_set_current_win(context.win)
-      vim.cmd("diffthis")
-    end
-    vim.bo[self.buf].modifiable = false
-  end
-  return continue
+  self:execute_tools({
+    on_tools_complete = function()
+      assistant.execute_strategy(self)
+    end,
+    on_no_tools = function()
+      if vim.api.nvim_buf_is_loaded(self.buf) and vim.api.nvim_buf_is_valid(self.buf) then
+        local context = self.conversation.context
+        local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
+        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
+        if vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win) then
+          vim.api.nvim_set_current_win(self.win)
+          vim.cmd("diffthis")
+          vim.api.nvim_set_current_win(context.win)
+          vim.cmd("diffthis")
+        end
+        vim.bo[self.buf].modifiable = false
+      end
+    end,
+  })
 end
 
 --- @return sia.Query
@@ -544,16 +569,16 @@ end
 function InsertStrategy:on_complete()
   local context = self.conversation.context
   del_abort_keymap(context.buf)
-  local continue, _ = self:execute_tools()
+  self:execute_tools({
+    on_tool_start = function() end,
+    on_tool_complete = function() end,
+    on_tools_complete = function()
+      assistant.execute_strategy(self)
+    end,
+  })
   if self._writer then
     self._writer = nil
   end
-  return continue
-end
-
-function InsertStrategy:execute_tools(buf)
-  vim.notify("InsertStrategy:execute_tools")
-  return Strategy.execute_tools(self, buf)
 end
 
 --- @return number start_line

@@ -247,7 +247,6 @@ local function search_replace_action(b)
 
   if vim.api.nvim_buf_is_loaded(buf) then
     local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    print(vim.inspect(content))
     local pos
     -- Empty search in an empty buffer, insert at the first line
     if #search == 0 and #content == 1 and content[1] == "" then
