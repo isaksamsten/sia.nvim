@@ -81,7 +81,18 @@ local function del_abort_keymap(buf)
 end
 
 --- @class sia.Strategy
+--- @field tools table<integer, sia.ToolCall>
+--- @field conversation sia.Conversation
 local Strategy = {}
+Strategy.__index = Strategy
+
+--- @return sia.Strategy
+function Strategy:new(conversation)
+  local obj = setmetatable({}, self)
+  obj.conversation = conversation
+  obj.tools = conversation.tools or {}
+  return obj
+end
 
 --- Callback triggered when the strategy starts.
 --- @param job number
@@ -96,8 +107,66 @@ function Strategy:on_progress(content) end
 function Strategy:on_complete() end
 
 --- Callback triggered when LLM wants to call a function
+---
+--- Collects a streaming function call response
 --- @param t table
-function Strategy:on_tool_call(t) end
+function Strategy:on_tool_call(t)
+  for _, v in ipairs(t) do
+    local func = v["function"]
+    if not self.tools[v.index] then
+      self.tools[v.index] = { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
+    end
+    if func.name then
+      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name .. func.name
+    end
+    if func.arguments then
+      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments .. func.arguments
+    end
+  end
+end
+
+--- @param buf integer?
+--- @return boolean continue if the conversation should continue
+--- @return string[][]? the contents returned by the function call
+function Strategy:execute_tools(buf)
+  if not vim.tbl_isempty(self.tools) then
+    --- @type string[][]
+    local output = {}
+    local continue = false
+    buf = buf or self.conversation.context.buf
+    for _, tool in pairs(self.tools) do
+      local func = tool["function"]
+      local status, arguments = pcall(vim.fn.json_decode, func.arguments)
+      if func and status then
+        local content = self.conversation:execute_tool(func.name, self, arguments)
+
+        -- Notify the LLM that we called the function
+        self.conversation:add_instruction(
+          { role = "assistant", tool_calls = { tool } },
+          { buf = buf, cursor = vim.api.nvim_win_get_cursor(0) }
+        )
+        if content then
+          output[#output + 1] = content
+        else
+          output[#output + 1] = { "The function call to " .. func.name .. " failed." }
+        end
+
+        -- Notify the LLM about the result of the function call
+        self.conversation:add_instruction(
+          { role = "tool", content = output[#output], _tool_call_id = tool.id },
+          { buf = buf, cursor = vim.api.nvim_win_get_cursor(0) }
+        )
+
+        --- If we've called the tool, continue the conversation automatically
+        continue = true
+      end
+    end
+    --- Reset tools to allow the next response to collect new function calls
+    self.tools = {}
+    return continue, output
+  end
+  return false, nil
+end
 
 --- Returns the query submitted to the LLM
 --- @return sia.Query
@@ -117,13 +186,11 @@ end
 --- @field options sia.config.Split options for the split
 --- @field blocks sia.Block[] code blocks identified in the conversation
 --- @field canvas sia.Canvas the canvas used to draw the conversation
---- @field conversation sia.Conversation the (ongoing) conversation
 --- @field name string
 --- @field files string[]
 --- @field block_action sia.BlockAction
---- @field tools table<integer, sia.ToolCall>
 --- @field _writer sia.Writer? the writer
-local SplitStrategy = {}
+local SplitStrategy = setmetatable({}, { __index = Strategy })
 SplitStrategy.__index = SplitStrategy
 
 --- @type table<integer, sia.SplitStrategy>
@@ -148,10 +215,9 @@ function SplitStrategy:new(conversation, options)
   vim.bo[buf].ft = "sia"
   vim.bo[buf].syntax = "markdown"
   vim.bo[buf].buftype = "nowrite"
-  local obj = setmetatable({}, self)
+  local obj = setmetatable(Strategy:new(conversation), self)
   obj.buf = buf
   obj._writer = nil
-  obj.conversation = conversation
   obj.options = options
   obj.blocks = {}
   obj.tools = {}
@@ -164,15 +230,18 @@ function SplitStrategy:new(conversation, options)
     obj.block_action = block.actions[options.block_action]
   end
 
+  --- @cast obj sia.SplitStrategy
+  SplitStrategy._buffers[obj.buf] = obj
+  SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
+
+  -- Ensure that the count has been incremented
   if SplitStrategy.count() == 0 then
     obj.name = "*sia*"
   else
     obj.name = "*sia " .. SplitStrategy.count() .. "*"
   end
-  vim.api.nvim_buf_set_name(buf, obj.name)
 
-  SplitStrategy._buffers[obj.buf] = obj
-  SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
+  vim.api.nvim_buf_set_name(buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
@@ -247,7 +316,6 @@ function SplitStrategy:add_instruction(instruction, args)
 end
 
 function SplitStrategy:on_complete()
-  local continue = false
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     if #self._writer.cache > 0 then
       self.conversation:add_instruction(
@@ -264,30 +332,11 @@ function SplitStrategy:on_complete()
       end
     end
 
-    if not vim.tbl_isempty(self.tools) then
-      for _, tool in pairs(self.tools) do
-        local func = tool["function"]
-        local status, arguments = pcall(vim.fn.json_decode, func.arguments)
-        if func and status then
-          local content = self.conversation:execute_tool(func.name, self, arguments)
-          if content then
-            self.conversation:add_instruction(
-              { role = "assistant", tool_calls = { tool } },
-              { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-            )
-
-            self.conversation:add_instruction(
-              { role = "tool", content = content, _tool_call_id = tool.id },
-              { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-            )
-            continue = true
-            self.canvas:render_last(content)
-          else
-            self.canvas:render_last({ "The function call to " .. func.name .. " failed." })
-          end
-        end
+    local continue, contents = self:execute_tools(self.buf)
+    if contents then
+      for _, content in ipairs(contents) do
+        self.canvas:render_last(content)
       end
-      self.tools = {}
     end
 
     vim.bo[self.buf].modifiable = false
@@ -310,21 +359,6 @@ name in neovim using three to five words. Only output the name, nothing else.]],
       end)
     end
     return continue
-  end
-end
-
-function SplitStrategy:on_tool_call(t)
-  for _, v in ipairs(t) do
-    local func = v["function"]
-    if not self.tools[v.index] then
-      self.tools[v.index] = { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
-    end
-    if func.name then
-      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name .. func.name
-    end
-    if func.arguments then
-      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments .. func.arguments
-    end
   end
 end
 
@@ -404,18 +438,17 @@ function SplitStrategy.count()
 end
 
 --- @class sia.DiffStrategy : sia.Strategy
---- @field conversation sia.Conversation
 --- @field buf number
 --- @field win number
---- @field private _options sia.config.Diff
+--- @field options sia.config.Diff
 --- @field private _writer sia.Writer?
-local DiffStrategy = {}
+local DiffStrategy = setmetatable({}, { __index = Strategy })
 DiffStrategy.__index = DiffStrategy
 
 --- @param conversation sia.Conversation
 --- @param options sia.config.Diff
 function DiffStrategy:new(conversation, options)
-  local obj = setmetatable({}, self)
+  local obj = setmetatable(Strategy:new(conversation), self)
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(false, true)
@@ -423,8 +456,7 @@ function DiffStrategy:new(conversation, options)
 
   obj.buf = buf
   obj.win = win
-  obj._options = options
-  obj.conversation = conversation
+  obj.options = options
   return obj
 end
 
@@ -433,7 +465,7 @@ function DiffStrategy:on_start(job)
   vim.bo[self.buf].modifiable = true
   set_abort_keymap(self.buf, job)
   vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
-  for _, wo in ipairs(self._options.wo) do
+  for _, wo in ipairs(self.options.wo) do
     vim.wo[self.win][wo] = vim.wo[self.conversation.context.win][wo]
   end
 
@@ -452,7 +484,9 @@ end
 
 function DiffStrategy:on_complete()
   del_abort_keymap(self.buf)
-  if vim.api.nvim_buf_is_loaded(self.buf) and vim.api.nvim_buf_is_valid(self.buf) then
+  local continue, content = self:execute_tools(self.buf)
+  vim.notify(vim.inspect(content))
+  if not continue and vim.api.nvim_buf_is_loaded(self.buf) and vim.api.nvim_buf_is_valid(self.buf) then
     local context = self.conversation.context
     local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
     vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
@@ -464,6 +498,7 @@ function DiffStrategy:on_complete()
     end
     vim.bo[self.buf].modifiable = false
   end
+  return continue
 end
 
 --- @return sia.Query
@@ -475,14 +510,13 @@ end
 --- @field conversation sia.Conversation
 --- @field private _options sia.config.Insert
 --- @field private _writer sia.Writer?
-local InsertStrategy = {}
+local InsertStrategy = setmetatable({}, { __index = Strategy })
 InsertStrategy.__index = InsertStrategy
 
 --- @param conversation sia.Conversation
 --- @param options sia.config.Insert
 function InsertStrategy:new(conversation, options)
-  local obj = setmetatable({}, self)
-  obj.conversation = conversation
+  local obj = setmetatable(Strategy:new(conversation), self)
   obj._options = options
   obj._writer = nil
   return obj
@@ -510,9 +544,16 @@ end
 function InsertStrategy:on_complete()
   local context = self.conversation.context
   del_abort_keymap(context.buf)
+  local continue, _ = self:execute_tools()
   if self._writer then
     self._writer = nil
   end
+  return continue
+end
+
+function InsertStrategy:execute_tools(buf)
+  vim.notify("InsertStrategy:execute_tools")
+  return Strategy.execute_tools(self, buf)
 end
 
 --- @return number start_line
