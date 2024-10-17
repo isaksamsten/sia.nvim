@@ -219,29 +219,50 @@ local function search_replace_action(b)
     after = "^>>>>>>?>?>?>?>%s+REPLACE%s*",
   })
 
-  --- If we didn't find a search/replace block try a more relaxed search
+  -- If we didn't find a search/replace block try a more relaxed search
+  -- of any markers
   if #search == 0 and #replace == 0 then
     search, replace = utils.partition_marker(b.code)
   end
 
-  --- if we still don't find anything, we abort.
+  -- if we still don't find anything, we abort.
   if #search == 0 and #replace == 0 then
     return nil
   end
 
+  -- if all lines in search are white space, empty the list
+  -- The LLM is sometimes lazy, and outputs an empty line for search.
+  -- This will match the first empty line, but we want to insert it
+  -- at the end.
+  local all_empty = true
+  for _, line in ipairs(search) do
+    if not string.match(line, "^%s*$") then
+      all_empty = false
+      break
+    end
+  end
+  if all_empty then
+    search = {}
+  end
+
   if vim.api.nvim_buf_is_loaded(buf) then
     local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    print(vim.inspect(content))
     local pos
-    -- An empty search should only match an empty file/buffer
+    -- Empty search in an empty buffer, insert at the first line
     if #search == 0 and #content == 1 and content[1] == "" then
       pos = { 1, 1 }
+    -- Empty search in a full buffer, insert after the last line
     elseif #search == 0 and #content > 1 then
-      pos = { #content + 1, #content + 1 } -- match at the end of the file
+      pos = { #content + 1, #content + 1 }
     else
+      -- First try with an exact match
       pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
       if not pos then
+        -- If that fails, we try with a match ignoring empty lines
         pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true })
         if not pos then
+          -- If that fails, we resort to an approximate match, without empty lines
           pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
         end
       end
