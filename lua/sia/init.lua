@@ -4,7 +4,7 @@ local Conversation = require("sia.conversation").Conversation
 local SplitStrategy = require("sia.strategy").SplitStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
 local InsertStrategy = require("sia.strategy").InsertStrategy
--- local EditStrategy = require("sia.strategy").EditStrategy
+local HiddenStrategy = require("sia.strategy").HiddenStrategy
 
 local M = {}
 
@@ -121,6 +121,13 @@ function M.main(action, opts)
       elseif conversation.mode == "insert" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
         strategy = InsertStrategy:new(conversation, options)
+      elseif conversation.mode == "hidden" then
+        local options = vim.tbl_deep_extend("force", config.options.defaults.hidden, action.hidden or {})
+        if not options.callback then
+          vim.notify("Hidden strategy requires a callback function", vim.log.levels.ERROR)
+          return
+        end
+        strategy = HiddenStrategy:new(conversation, options)
       else
         local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
         strategy = SplitStrategy:new(conversation, options)

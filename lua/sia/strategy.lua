@@ -6,27 +6,24 @@ local assistant = require("sia.assistant")
 
 --- Write text to a buffer.
 --- @class sia.Writer
---- @field buf number
+--- @field buf number?
 --- @field start_line integer
 --- @field line number
 --- @field column number
---- @field show (fun(s: string):boolean)?
 --- @field cache string[]
 local Writer = {}
 Writer.__index = Writer
 
---- @param buf integer
---- @param line integer
---- @param column integer
---- @param show (fun(s: string):boolean)?
-function Writer:new(buf, line, column, show)
+--- @param buf integer?
+--- @param line integer?
+--- @param column integer?
+function Writer:new(buf, line, column)
   local obj = {
     buf = buf,
     start_line = line or 0,
     line = line or 0,
     column = column or 0,
     cache = {},
-    show = show,
   }
   obj.cache[1] = ""
   setmetatable(obj, self)
@@ -35,13 +32,17 @@ end
 
 --- @param substring string
 function Writer:append_substring(substring)
-  vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
+  if self.buf then
+    vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
+  end
   self.cache[#self.cache] = self.cache[#self.cache] .. substring
   self.column = self.column + #substring
 end
 
 function Writer:append_newline()
-  vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
+  if self.buf then
+    vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
+  end
   self.line = self.line + 1
   self.column = 0
   self.cache[#self.cache + 1] = ""
@@ -105,8 +106,8 @@ function Strategy:on_start(job) end
 function Strategy:on_progress(content) end
 
 --- Callback triggered when the strategy is completed.
---- @return boolean? continue
-function Strategy:on_complete() end
+--- @param error_code integer?
+function Strategy:on_complete(error_code) end
 
 --- Callback triggered when LLM wants to call a function
 ---
@@ -168,7 +169,7 @@ end
 --- @return sia.Query
 function Strategy:get_query()
   --- @type sia.Query
-  return nil
+  return self.conversation:to_query()
 end
 
 --- @class sia.ToolCall
@@ -394,11 +395,6 @@ function SplitStrategy:find_block(line)
   return nil
 end
 
---- @return sia.Query
-function SplitStrategy:get_query()
-  return self.conversation:to_query()
-end
-
 --- Get the SplitStrategy associated with buf
 --- @param buf number? the buffer if nil use current
 --- @return sia.SplitStrategy?
@@ -526,11 +522,6 @@ function DiffStrategy:on_complete()
   })
 end
 
---- @return sia.Query
-function DiffStrategy:get_query()
-  return self.conversation:to_query()
-end
-
 --- @class sia.InsertStrategy : sia.Strategy
 --- @field conversation sia.Conversation
 --- @field private _options sia.config.Insert
@@ -616,10 +607,62 @@ function InsertStrategy:_get_insert_placement()
   return start_line, #line[1]
 end
 
-function InsertStrategy:get_query()
-  return self.conversation:to_query()
+--- @class sia.HiddenStrategy : sia.Strategy
+--- @field conversation sia.Conversation
+--- @field private _options sia.config.Hidden
+--- @field private _writer sia.Writer?
+--- @field private _progress integer
+local HiddenStrategy = setmetatable({}, { __index = Strategy })
+HiddenStrategy.__index = HiddenStrategy
+
+--- @param conversation sia.Conversation
+--- @param options sia.config.Hidden
+function HiddenStrategy:new(conversation, options)
+  local obj = setmetatable(Strategy:new(conversation), self)
+  obj._options = options
+  obj._writer = nil
+  return obj
 end
 
+--- @param job number
+function HiddenStrategy:on_start(job)
+  local context = self.conversation.context
+  vim.api.nvim_echo({
+    { self._options.messages and self._options.messages.on_start or "", "Normal" },
+    { "Press 'x' to abort", "Comment" },
+  }, false, {})
+  self._progress = 1
+  set_abort_keymap(context.buf, job)
+end
+
+function HiddenStrategy:on_progress(content)
+  if not self._writer then
+    self._writer = Writer:new()
+  end
+  self._writer:append(content)
+end
+
+function HiddenStrategy:on_complete(error_code)
+  vim.api.nvim_echo({}, false, {})
+  if error_code ~= 0 then
+    return
+  end
+  local context = self.conversation.context
+  del_abort_keymap(context.buf)
+  self:execute_tools({
+    on_tool_start = function() end,
+    on_tool_complete = function() end,
+    on_tools_complete = function()
+      assistant.execute_strategy(self)
+    end,
+  })
+  self._options.callback(context, self._writer.cache)
+  if self._writer then
+    self._writer = nil
+  end
+end
+
+M.HiddenStrategy = HiddenStrategy
 M.SplitStrategy = SplitStrategy
 M.DiffStrategy = DiffStrategy
 M.InsertStrategy = InsertStrategy

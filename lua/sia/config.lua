@@ -5,7 +5,7 @@ local providers = require("sia.provider")
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
---- @alias sia.config.ActionMode "split"|"diff"|"insert"
+--- @alias sia.config.ActionMode "split"|"diff"|"insert"|"hidden"
 
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
@@ -20,6 +20,10 @@ local providers = require("sia.provider")
 --- @field block_action (string|sia.BlockAction)?
 --- @field automatic_block_action boolean?
 --- @field wo table<string, any>?
+
+--- @class sia.config.Hidden
+--- @field callback (fun(ctx:sia.Context, content:string[]):nil)?
+--- @field messages { on_start: string?, on_progress: string[]? }?
 
 --- @class sia.config.Replace
 --- @field highlight string
@@ -57,6 +61,7 @@ local providers = require("sia.provider")
 --- @field insert sia.config.Insert?
 --- @field diff sia.config.Diff?
 --- @field split sia.config.Split?
+--- @field hidden sia.config.Hidden?
 
 --- @class sia.config.Defaults
 --- @field model string
@@ -66,6 +71,7 @@ local providers = require("sia.provider")
 --- @field replace sia.config.Replace
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
+--- @field hidden sia.config.Hidden
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -127,7 +133,6 @@ To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from i
 
 Pay attention to which filenames the user wants you to edit. If the file is not
 listed, do not edit it, instead use the function `add_file` to add it to the conversation.
-If a file is no longer relevant, use the function `remove_file` to remove it from the conversation.
 
 If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
 - A new file path, including dir name if needed
@@ -165,7 +170,6 @@ Once you understand the request you MUST:
 
 4. You have access to the following functions:
   - `add_file` to add files matching a glob pattern to the conversation.
-  - `remove_file` to remove files matching a glob pattern from the conversation.
 
 All changes to files must use this *SEARCH/REPLACE block* format.]],
       },
@@ -327,6 +331,9 @@ Guidelines:
       block_action = "verbatim",
       automatic_block_action = false,
     },
+    hidden = {
+      messages = {},
+    },
     diff = {
       cmd = "vsplit",
       wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
@@ -366,7 +373,6 @@ Guidelines:
         },
         tools = {
           require("sia.tools").add_file,
-          require("sia.tools").remove_file,
         },
         model = "gpt-4o",
         instructions = {
@@ -473,6 +479,71 @@ Guidelines:
       end,
       insert = { placement = "cursor" },
     },
+    review = {
+      instructions = {
+        {
+          role = "system",
+          content = [[Your task is to review the provided code snippet, focusing specifically on its readability and maintainability.
+Identify any issues related to:
+- Naming conventions that are unclear, misleading or doesn't follow conventions for the language being used.
+- The presence of unnecessary comments, or the lack of necessary ones.
+- Overly complex expressions that could benefit from simplification.
+- High nesting levels that make the code difficult to follow.
+- The use of excessively long names for variables or functions.
+- Any inconsistencies in naming, formatting, or overall coding style.
+- Repetitive code patterns that could be more efficiently handled through abstraction or optimization.
+
+Your feedback must be concise, directly addressing each identified issue with:
+- The specific line number(s) where the issue is found.
+- A clear description of the problem. Never use linebreaks!
+- A concrete suggestion for how to improve or correct the issue.
+
+Format your feedback as follows:
+line=<line_number>: <issue_description>
+
+If the issue is related to a range of lines, use the following format:
+line=<start_line>-<end_line>: <issue_description>
+
+If you find multiple issues on the same line, list each issue separately within the same feedback statement, using a semicolon to separate them.
+
+Example feedback:
+line=3: The variable name 'x' is unclear. Comment next to variable declaration is unnecessary.
+line=8: Expression is overly complex. Break down the expression into simpler components.
+line=10: Using camel case here is unconventional for lua. Use snake case instead.
+line=11-15: Excessive nesting makes the code hard to follow. Consider refactoring to reduce nesting levels.
+
+If the code snippet has no readability issues, simply confirm that the code is clear and well-written]],
+        },
+        "current_context_line_number",
+      },
+      mode = "hidden",
+      hidden = {
+        callback = function(ctx, content)
+          local list = {}
+          for _, line in ipairs(content) do
+            local start_line, message = line:match("^line=(%d+): (.+)")
+            local end_line = start_line
+            if not start_line then
+              start_line, end_line, message = line:match("^line=(%d+)-(%d+): (.+)")
+            end
+            if start_line and end_line and message then
+              table.insert(list, {
+                bufnr = ctx.buf,
+                filname = vim.api.nvim_buf_get_name(ctx.buf),
+                lnum = tonumber(start_line),
+                end_lnum = tonumber(end_line),
+                col = 0,
+                end_col = -1,
+                text = message,
+                type = "I",
+              })
+            end
+          end
+          vim.fn.setqflist(list, "r")
+          vim.cmd.copen()
+        end,
+      },
+    },
     explain = {
       instructions = {
         {
@@ -529,6 +600,9 @@ the file to the context using SiaFile.
         cmd = "vsplit",
       },
       reminder = "editblock_reminder",
+      tools = {
+        require("sia.tools").add_file,
+      },
       range = true,
       wo = {},
       temperature = 0.5,

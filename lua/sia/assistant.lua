@@ -132,7 +132,7 @@ function M.execute_strategy(strategy)
       end
     end,
     on_exit = function(_, error_code, _)
-      strategy:on_complete()
+      strategy:on_complete(error_code)
       vim.api.nvim_exec_autocmds("User", {
         pattern = "SiaComplete",
         --- @diagnostic disable-next-line: undefined-field
