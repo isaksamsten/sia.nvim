@@ -294,10 +294,7 @@ function SplitStrategy:on_init()
     else
       self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
     end
-    local line_count = vim.api.nvim_buf_line_count(self.buf)
     self.canvas:update_progress({ { "Working....", "Comment" } })
-
-    self._writer = Writer:new(self.buf, line_count - 1, 0)
   end
 end
 
@@ -305,6 +302,8 @@ function SplitStrategy:on_start(job)
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
     self.canvas:clear_extmarks()
+    local line_count = vim.api.nvim_buf_line_count(self.buf)
+    self._writer = Writer:new(self.buf, line_count - 1, 0)
   end
 end
 

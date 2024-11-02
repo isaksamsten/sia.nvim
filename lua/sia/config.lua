@@ -483,7 +483,7 @@ Guidelines:
       instructions = {
         {
           role = "system",
-          content = [[Your task is to review the provided code snippet, focusing specifically on its readability and maintainability.
+          content = [[Your task is to review the provided code snippet, focusing specifically on its readability, maintainability and efficiency.
 Identify any issues related to:
 - Naming conventions that are unclear, misleading or doesn't follow conventions for the language being used.
 - The presence of unnecessary comments, or the lack of necessary ones.
@@ -492,6 +492,7 @@ Identify any issues related to:
 - The use of excessively long names for variables or functions.
 - Any inconsistencies in naming, formatting, or overall coding style.
 - Repetitive code patterns that could be more efficiently handled through abstraction or optimization.
+- Inefficient or redundant code that could be improved or removed.
 
 Your feedback must be concise, directly addressing each identified issue with:
 - The specific line number(s) where the issue is found.
