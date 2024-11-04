@@ -98,7 +98,8 @@ local defaults = {
     ["gpt-4o"] = { "openai", "gpt-4o" },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
     ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
-    copilot = { "copilot", "gpt-4o" },
+    ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
+    ["copilot-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
   },
   instructions = {
     editblock_reminder = {
@@ -320,8 +321,7 @@ Guidelines:
   },
   --- @type sia.config.Defaults
   defaults = {
-    -- model = "gpt-4o-mini", -- default model
-    model = "copilot", -- default
+    model = "copilot-sonnet-3.5", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -374,7 +374,6 @@ Guidelines:
         tools = {
           require("sia.tools").add_file,
         },
-        model = "gpt-4o",
         instructions = {
           "editblock_system",
           "git_files",
@@ -530,7 +529,7 @@ If the code snippet has no readability issues, simply confirm that the code is c
             if start_line and end_line and message then
               table.insert(list, {
                 bufnr = ctx.buf,
-                filname = vim.api.nvim_buf_get_name(ctx.buf),
+                filename = vim.api.nvim_buf_get_name(ctx.buf),
                 lnum = tonumber(start_line),
                 end_lnum = tonumber(end_line),
                 col = 0,
@@ -613,26 +612,28 @@ the file to the context using SiaFile.
         "insert_system",
         {
           role = "system",
-          content = [[You are tasked with writing documentation for functions, methods, and classes. Your documentation must adhere to the language conventions (e.g., JSDoc for JavaScript, docstrings for Python, Javadoc for Java), including appropriate tags and formatting.
+          content = [[You are tasked with writing documentation for functions,
+methods, and classes. Your documentation must adhere to the language
+conventions (e.g., JSDoc for JavaScript, docstrings for Python,
+Javadoc for Java), including appropriate tags and formatting.
 
 Requirements:
 
-1. **Language-Specific Conventions**: Follow the language-specific documentation style strictly (e.g., use /** ... */ for JavaScript, """ ... """ for Python). Ensure all tags are accurate and appropriate for the language.
-2. No Code Output: Only output the documentation text; never output the function declaration, implementation, or any code examples, including function signatures or suggested implementations.
-3. **Formatting and Sections**:
-  *	Provide a clear and concise description of the function’s purpose.
-  *	Use appropriate tags (e.g., @param, @return) to describe parameters and return values.
-  *	Maintain strict adherence to formatting conventions for each language.
-4. **Strict Indentation Rules**:
-  *	The documentation must be indented to match the level of the provided context.
-  *	Always ensure the indentation aligns with the surrounding code, allowing the documentation to be copied directly into the code without requiring reformatting.
-  *	Failure to produce correctly indented output is considered an error.
-5. **No Markdown or Fences**:
-  *	Do not include markdown code fences or other wrappers surrounding the documentation.
-6. **Class/Struct Documentation**:
-  *	If the user provides a class or struct, only document the class/struct itself, not its methods or functions. Any deviation is considered incorrect.
-7. **Compliance and Double-Check**:
-  *	Double-check that your response adheres strictly to the language’s documentation style, contains only the requested documentation text, and maintains proper indentation for easy insertion into code. ]],
+1. **Never output the function declaration or implementation**
+2. Follow the language-specific documentation style strictly. Ensure all tags
+   are accurate and appropriate for the language.
+3. Never explain your changes. Only output the documentation.
+4. **Indentation Rules**:
+  1. The documentation must be indented to match the level of the provided context.
+  2. Always ensure the indentation aligns with the surrounding code, allowing the documentation to be copied directly into the code without requiring reformatting.
+  3. Failure to produce correctly indented output is considered an error.
+5. Do not include markdown code fences or other wrappers surrounding the
+   documentation.
+6. If the user provides a class or struct, only document the class/struct
+   itself, not its methods or functions. Any deviation is considered incorrect.
+7. Double-check that your response adheres strictly to the language’s
+   documentation style, contains only the requested documentation text, and
+   maintains proper indentation for easy insertion into code.]],
         },
         "current_context",
       },
