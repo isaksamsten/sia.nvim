@@ -69,16 +69,20 @@ end
 --- @param buf integer
 --- @param job integer
 local function set_abort_keymap(buf, job)
-  vim.api.nvim_buf_set_keymap(buf, "n", "x", "", {
-    callback = function()
-      vim.fn.jobstop(job)
-    end,
-  })
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.api.nvim_buf_set_keymap(buf, "n", "x", "", {
+      callback = function()
+        vim.fn.jobstop(job)
+      end,
+    })
+  end
 end
 
 --- @param buf number
 local function del_abort_keymap(buf)
-  vim.api.nvim_buf_del_keymap(buf, "n", "x")
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.api.nvim_buf_del_keymap(buf, "n", "x")
+  end
 end
 
 --- @class sia.Strategy
@@ -134,28 +138,30 @@ function Strategy:execute_tools(opts)
     local tool_count = vim.tbl_count(self.tools)
     for _, tool in pairs(self.tools) do
       local func = tool["function"]
-      if opts.on_tool_start then
-        opts.on_tool_start(tool)
-      end
-      local status, arguments = pcall(vim.fn.json_decode, func.arguments)
-      if func and status then
-        self.conversation:execute_tool(
-          func.name,
-          arguments,
-          self,
-          vim.schedule_wrap(function(content)
-            tool_count = tool_count - 1
-            if opts.on_tool_complete then
-              opts.on_tool_complete(tool, content)
-            end
-            if tool_count == 0 then
-              if opts.on_tools_complete then
-                opts.on_tools_complete()
+      if func then
+        if opts.on_tool_start then
+          opts.on_tool_start(tool)
+        end
+        local status, arguments = pcall(vim.fn.json_decode, func.arguments)
+        if status then
+          self.conversation:execute_tool(
+            func.name,
+            arguments,
+            self,
+            vim.schedule_wrap(function(content)
+              tool_count = tool_count - 1
+              if opts.on_tool_complete then
+                opts.on_tool_complete(tool, content)
               end
-              self.tools = {}
-            end
-          end)
-        )
+              if tool_count == 0 then
+                if opts.on_tools_complete then
+                  opts.on_tools_complete()
+                end
+                self.tools = {}
+              end
+            end)
+          )
+        end
       end
     end
   else
@@ -364,6 +370,7 @@ function SplitStrategy:on_complete()
       on_no_tools = function()
         vim.bo[self.buf].modifiable = false
         assistant.execute_query({
+          model = "gpt-4o-mini",
           prompt = {
             {
               role = "system",
@@ -649,7 +656,10 @@ function HiddenStrategy:on_complete(error_code)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   self:execute_tools({
-    on_tool_start = function() end,
+    on_tool_start = function(tool)
+      print(vim.inspect(tool))
+      vim.api.nvim_echo({ { "Calling '" .. tool.name .. "'...", "Comment" } }, false, {})
+    end,
     on_tool_complete = function() end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
