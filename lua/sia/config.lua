@@ -369,7 +369,6 @@ Guidelines:
         temperature = 0.1,
         split = {
           block_action = "search_replace",
-          automatic_block_action = true,
         },
         tools = {
           require("sia.tools").add_file,
@@ -385,6 +384,29 @@ Guidelines:
     },
   },
   actions = {
+    edit = {
+      mode = "hidden",
+      temperature = 0.1,
+      hidden = {
+        callback = function(context, content)
+          local Blocks = require("sia.blocks")
+          local blocks = Blocks.parse_blocks(context.buf, 0, content)
+          vim.schedule(function()
+            Blocks.replace_all_blocks(Blocks.actions["search_replace"], blocks)
+          end)
+        end,
+      },
+      tools = {
+        require("sia.tools").add_file,
+      },
+      instructions = {
+        "editblock_system",
+        "git_files",
+        require("sia.instructions").files,
+        "current_context",
+      },
+      reminder = "editblock_reminder",
+    },
     diagnostic = {
       instructions = {
         "editblock_system",
