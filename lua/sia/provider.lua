@@ -1,9 +1,15 @@
 local M = {}
 
+---Get a valid GitHub Copilot API key by:
+---1. Looking up the OAuth token in the GitHub Copilot config
+---2. Using the OAuth token to request a temporary access token from GitHub's API
+---@return function(): string? Function that returns a valid Copilot API token or nil if unsuccessful
 local function copilot_api_key()
   local token = nil
   local oauth = nil
 
+  ---Find the appropriate configuration directory based on the OS
+  ---@return string? config_path The full path to the config directory or nil if not found
   local function find_config()
     local config = vim.fn.expand("$XDG_CONFIG_HOME")
     if config and vim.fn.isdirectory(config) > 0 then
@@ -21,6 +27,8 @@ local function copilot_api_key()
     end
   end
 
+  ---Extract the OAuth token from the GitHub Copilot apps.json configuration file
+  ---@return string? oauth_token The OAuth token if found, nil otherwise
   local function get_oauth_token()
     if oauth then
       return oauth
@@ -41,6 +49,8 @@ local function copilot_api_key()
     return nil
   end
 
+  ---Closure that manages token state and retrieves a valid Copilot API token
+  ---@return string? token A valid Copilot API token or nil if the request fails
   return function()
     if token and token.expires_at > os.time() then
       return token.token
