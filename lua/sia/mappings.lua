@@ -124,6 +124,38 @@ end
 
 function M.setup()
   local config = require("sia.config")
+
+  vim.keymap.set("n", "<Plug>(sia-reply)", function()
+    local buf = vim.api.nvim_get_current_buf()
+    local current = SplitStrategy.by_buf(buf)
+    if current then
+      vim.cmd("split")
+      buf = vim.api.nvim_create_buf(false, true)
+      local win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(win, buf)
+      vim.bo[buf].bufhidden = "hide"
+      vim.bo[buf].swapfile = false
+      vim.bo[buf].ft = "markdown"
+      vim.api.nvim_buf_set_name(buf, "*sia reply*")
+      vim.api.nvim_win_set_height(win, 10)
+
+      vim.keymap.set("n", "<CR>", function()
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        --- @type sia.config.Instruction
+        local instruction = {
+          role = "user",
+          content = lines,
+        }
+        current:add_instruction(instruction, nil)
+        require("sia.assistant").execute_strategy(current)
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end, { buffer = buf })
+      vim.keymap.set("n", "q", function()
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end, { buffer = buf })
+    end
+  end)
+
   vim.keymap.set("n", "<Plug>(sia-toggle)", function()
     local last = SplitStrategy.last()
     if last and vim.api.nvim_buf_is_valid(last.buf) then

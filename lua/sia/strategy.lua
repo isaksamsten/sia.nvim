@@ -320,7 +320,7 @@ function SplitStrategy:on_progress(content)
 end
 
 --- @param instruction sia.config.Instruction
---- @param args sia.Context
+--- @param args sia.Context?
 function SplitStrategy:add_instruction(instruction, args)
   self.conversation:add_instruction(instruction, args)
 end
