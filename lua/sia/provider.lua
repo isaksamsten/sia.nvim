@@ -89,4 +89,11 @@ M.openai = {
   end,
 }
 
+M.gemini = {
+  base_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+  api_key = function()
+    return os.getenv("GEMINI_API_KEY")
+  end,
+}
+
 return M

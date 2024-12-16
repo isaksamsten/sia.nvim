@@ -93,6 +93,7 @@ local defaults = {
   providers = {
     openai = providers.openai,
     copilot = providers.copilot,
+    gemini = providers.gemini,
   },
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o" },
@@ -100,6 +101,10 @@ local defaults = {
     ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
     ["copilot-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
+    ["gemini-1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
+    ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
+    ["gemini-2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
+    ["gemini-1.5-pro"] = { "gemini", "gemini-1.5-pro" },
   },
   instructions = {
     editblock_reminder = {

@@ -3,7 +3,9 @@
 </p>
 <h1 align="center">sia.nvim</h1>
 
-An LLM assistant for Neovim with support for OpenAI and Copilot.
+An LLM assistant for Neovim.
+
+Supports: OpenAI, Copilot and Gemini (and any other OpenAI API compliant LLM).
 
 ## ✨ Features
  
@@ -19,7 +21,7 @@ https://github.com/user-attachments/assets/aac7b52d-0e53-4afc-be81-48e3268fca27
 
 - Neovim >= **0.10**
 - curl
-- Access to OpenAI API or Copilot
+- Access to OpenAI API, Copilot or Gemini
 
 ## 📦 Installation
 
@@ -43,7 +45,7 @@ https://github.com/user-attachments/assets/aac7b52d-0e53-4afc-be81-48e3268fca27
 }
 ```
 
-2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`.
+2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`, enable Copilot (use the vim plugin to set it up) or add Gemini API key to your environment as `GEMINI_API_KEY`.
 
 ## 📦 Customize
 
@@ -134,6 +136,7 @@ keys = {
   { "gR", mode = "n", "<Plug>(sia-replace-all-blocks)", ft = "sia" },
   { "ga", mode = "n", "<Plug>(sia-insert-block-above)", ft = "sia" },
   { "gb", mode = "n", "<Plug>(sia-insert-block-below)", ft = "sia" },
+  { "<CR>", mode = "n", "<Plug>(sia-reply)", ft = "sia" },
 }
 ```
 
@@ -143,6 +146,7 @@ keys = {
 - `<Plug>(sia-replace-all-blocks)`: for all code blocks in the chat, apply the suggested edits and open a quickfix list.
 - `<Plug>(sia-insert-block-above)`: insert the code block above the cursor.
 - `<Plug>(sia-insert-block-below)`: insert the code block below the cursor.
+- `<Plug>(sia-reply)`: open a split view where we can compose a longer query.
 
 When inserting suggestions, Sia will create markers in the code that needs to be accepted or rejected.
 
