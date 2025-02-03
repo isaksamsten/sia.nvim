@@ -7,6 +7,11 @@ An LLM assistant for Neovim.
 
 Supports: OpenAI, Copilot and Gemini (and any other OpenAI API compliant LLM).
 
+Default configuration has the following models: `gpt-4o`, `gpt-4o-mini`,
+`o3-mini`, `copilot-gpt-4o`, `copilot-o3-mini`, `copilot-sonnet-3.5`,
+`gemini-1.5-flash-8b`, `gemini-1.5-flash`, `gemini-2.0-flash-exp` and
+`gemini-1.5-pro`.
+
 ## ✨ Features
  
 https://github.com/user-attachments/assets/7e8ba341-afa7-45c5-8571-225b27a1a2ef

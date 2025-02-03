@@ -16,10 +16,13 @@ local function call_provider(query, opts)
   --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?}
   local data = {
     model = model[2],
-    temperature = query.temperature or config.options.defaults.temperature,
     messages = query.prompt,
     tools = query.tools,
   }
+
+  if not model.reasoning_effort then
+    data.temperature = query.temperature or config.options.defaults.temperature
+  end
 
   if opts.stream then
     data.stream = true

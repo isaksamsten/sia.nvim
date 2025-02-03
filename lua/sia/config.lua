@@ -98,9 +98,13 @@ local defaults = {
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o" },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
+    ["o3-mini"] = { "openai", "o3-mini", reasoning_effort = "medium" },
+    ["o3-mini-low"] = { "openai", "o3-mini", reasoning_effort = "low" },
+    ["o3-mini-high"] = { "openai", "o3-mini", reasoning_effort = "high" },
     ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
     ["copilot-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
+    ["copilot-o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["gemini-1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
     ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
     ["gemini-2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
@@ -326,7 +330,7 @@ Guidelines:
   },
   --- @type sia.config.Defaults
   defaults = {
-    model = "copilot-sonnet-3.5", -- default
+    model = "copilot-o3-mini", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
