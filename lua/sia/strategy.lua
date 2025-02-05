@@ -3,6 +3,7 @@ local utils = require("sia.utils")
 local ChatCanvas = require("sia.canvas").ChatCanvas
 local block = require("sia.blocks")
 local assistant = require("sia.assistant")
+local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
 
 --- Write text to a buffer.
 --- @class sia.Writer
@@ -483,10 +484,8 @@ function DiffStrategy:new(conversation, options)
   return obj
 end
 
---- @param job number
-function DiffStrategy:on_start(job)
+function DiffStrategy:on_init()
   vim.bo[self.buf].modifiable = true
-  set_abort_keymap(self.buf, job)
   vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
   for _, wo in ipairs(self.options.wo) do
     vim.wo[self.win][wo] = vim.wo[self.conversation.context.win][wo]
@@ -495,7 +494,18 @@ function DiffStrategy:on_start(job)
   local context = self.conversation.context
   local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
   vim.api.nvim_buf_set_lines(self.buf, 0, 0, false, before)
-  self._writer = Writer:new(self.buf, context.pos[1] - 1, 0)
+
+  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, vim.api.nvim_buf_line_count(self.buf) - 1, 0, {
+    virt_lines = { { { "Request in progress. Please wait...", "NonText" } } },
+  })
+end
+
+--- @param job number
+function DiffStrategy:on_start(job)
+  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
+  set_abort_keymap(self.buf, job)
+  self._writer = Writer:new(self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
 end
 
 --- @param content string
