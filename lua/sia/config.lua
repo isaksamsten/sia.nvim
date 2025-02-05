@@ -10,6 +10,7 @@ local providers = require("sia.provider")
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
 --- @field cursor ("start"|"end")?
+--- @field message [string, string]?
 
 --- @class sia.config.Diff
 --- @field wo [string]?
@@ -679,6 +680,7 @@ Requirements:
             return { "above", "start" }
           end
         end,
+        message = { "Generating documentation...", "Comment" },
       },
       cursor = "end", -- start or end
     },

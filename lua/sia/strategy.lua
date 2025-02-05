@@ -542,6 +542,8 @@ end
 --- @field conversation sia.Conversation
 --- @field private _options sia.config.Insert
 --- @field private _writer sia.Writer?
+--- @field private _line integer
+--- @field private _col integer
 local InsertStrategy = setmetatable({}, { __index = Strategy })
 InsertStrategy.__index = InsertStrategy
 
@@ -551,12 +553,24 @@ function InsertStrategy:new(conversation, options)
   local obj = setmetatable(Strategy:new(conversation), self)
   obj._options = options
   obj._writer = nil
+
   return obj
+end
+
+function InsertStrategy:on_init()
+  local line, col = self:_get_insert_placement()
+  self._line = line
+  self._col = col
+  local message = self._options.message or { "Please wait...", "NonText" }
+  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col, {
+    virt_text = { message },
+  })
 end
 
 --- @param job number
 function InsertStrategy:on_start(job)
   local context = self.conversation.context
+  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   set_abort_keymap(context.buf, job)
 end
 
@@ -567,8 +581,7 @@ function InsertStrategy:on_progress(content)
       pcall(vim.cmd.undojoin)
     end)
   else
-    local line, col = self:_get_insert_placement()
-    self._writer = Writer:new(context.buf, line - 1, col)
+    self._writer = Writer:new(context.buf, self._line - 1, self._col)
   end
   self._writer:append(content)
 end
