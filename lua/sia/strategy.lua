@@ -657,8 +657,7 @@ function HiddenStrategy:on_complete(error_code)
   del_abort_keymap(context.buf)
   self:execute_tools({
     on_tool_start = function(tool)
-      print(vim.inspect(tool))
-      vim.api.nvim_echo({ { "Calling '" .. tool.name .. "'...", "Comment" } }, false, {})
+      vim.api.nvim_echo({ { "Calling '" .. tool["function"].name .. "'...", "Comment" } }, false, {})
     end,
     on_tool_complete = function() end,
     on_tools_complete = function()
