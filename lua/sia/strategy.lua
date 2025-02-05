@@ -300,7 +300,7 @@ function SplitStrategy:on_init()
     else
       self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
     end
-    self.canvas:update_progress({ { "Working....", "Comment" } })
+    self.canvas:update_progress({ { "Request in progress. Please wait...", "NonText" } })
   end
 end
 
