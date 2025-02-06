@@ -301,7 +301,7 @@ function SplitStrategy:on_init()
     else
       self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
     end
-    self.canvas:update_progress({ { "Request in progress. Please wait...", "NonText" } })
+    self.canvas:update_progress({ { "I'm thinking! Please wait...", "NonText" } })
   end
 end
 
@@ -351,7 +351,7 @@ function SplitStrategy:on_complete()
 
     self:execute_tools({
       on_tool_start = function(tool)
-        self.canvas:update_progress({ { "Calling '" .. tool["function"].name .. "'...", "Comment" } })
+        self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "Comment" } })
       end,
       on_tool_complete = function(tool, content)
         self.canvas:clear_extmarks()
@@ -497,7 +497,8 @@ function DiffStrategy:on_init()
 
   vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, vim.api.nvim_buf_line_count(self.buf) - 1, 0, {
-    virt_lines = { { { "Request in progress. Please wait...", "NonText" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "NonText" } } },
+    virt_lines_above = true,
   })
 end
 
@@ -562,8 +563,9 @@ function InsertStrategy:on_init()
   self._line = line
   self._col = col
   local message = self._options.message or { "Please wait...", "NonText" }
-  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col, {
-    virt_text = { message },
+  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col - 1, {
+    virt_text = { { "🤖 ", "Normal" }, message },
+    virt_text_pos = "inline",
   })
 end
 

@@ -37,8 +37,10 @@ end
 function ChatCanvas:update_progress(content)
   local buf = self.buf
   self:clear_extmarks()
+  table.insert(content, 1, { "🤖 ", "Normal" })
   vim.api.nvim_buf_set_extmark(buf, CHAT_NS, self:line_count() - 1, 0, {
     virt_lines = { content },
+    virt_lines_above = true,
   })
 end
 
