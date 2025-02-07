@@ -564,7 +564,7 @@ function InsertStrategy:on_init()
   self._line = line
   self._col = col
   local message = self._options.message or { "Please wait...", "NonText" }
-  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col - 1, {
+  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col, {
     virt_text = { { "🤖 ", "Normal" }, message },
     virt_text_pos = "inline",
   })
@@ -609,18 +609,20 @@ end
 function InsertStrategy:_get_insert_placement()
   local context = self.conversation.context
   local start_line, end_line = context.pos[1], context.pos[2]
-  local pad
+  local padding_direction
   local placement = self._options.placement
   if type(placement) == "function" then
     placement = placement()
   end
 
   if type(placement) == "table" then
-    pad = placement[1]
+    padding_direction = placement[1]
     if placement[2] == "cursor" then
       start_line = context.cursor[1]
     elseif placement[2] == "end" then
       start_line = end_line
+    elseif type(placement[2]) == "function" then
+      start_line = placement[2](start_line, end_line)
     end
   elseif placement == "cursor" then
     start_line = context.cursor[1]
@@ -628,22 +630,21 @@ function InsertStrategy:_get_insert_placement()
     start_line = end_line
   end
 
-  if pad == "below" then
+  if padding_direction == "below" then
     vim.api.nvim_buf_set_lines(context.buf, start_line, start_line, false, { "" })
     start_line = start_line + 1
-  elseif pad == "above" then
+  elseif padding_direction == "above" then
     vim.api.nvim_buf_set_lines(context.buf, start_line - 1, start_line - 1, false, { "" })
   end
 
-  local line = vim.api.nvim_buf_get_lines(context.buf, start_line - 1, start_line, false)
-  return start_line, #line[1]
+  local content = vim.api.nvim_buf_get_lines(context.buf, start_line - 1, start_line, false)
+  return start_line, #content[1]
 end
 
 --- @class sia.HiddenStrategy : sia.Strategy
 --- @field conversation sia.Conversation
 --- @field private _options sia.config.Hidden
 --- @field private _writer sia.Writer?
---- @field private _progress integer
 local HiddenStrategy = setmetatable({}, { __index = Strategy })
 HiddenStrategy.__index = HiddenStrategy
 
@@ -656,14 +657,16 @@ function HiddenStrategy:new(conversation, options)
   return obj
 end
 
+function HiddenStrategy:on_init()
+  vim.api.nvim_echo({
+    { "🤖 ", "Normal" },
+    { self._options.messages and self._options.messages.on_start or "I'm thinking. Please wait... ", "Normal" },
+  }, false, {})
+end
+
 --- @param job number
 function HiddenStrategy:on_start(job)
   local context = self.conversation.context
-  vim.api.nvim_echo({
-    { self._options.messages and self._options.messages.on_start or "", "Normal" },
-    { "Press 'x' to abort", "Comment" },
-  }, false, {})
-  self._progress = 1
   set_abort_keymap(context.buf, job)
 end
 
