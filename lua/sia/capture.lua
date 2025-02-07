@@ -18,9 +18,9 @@ function M.treesitter(query)
   if type(query) == "string" then
     return get_textobject_under_cursor
   else
-    local function get_first_textobject_under_cursor(bufnr, opts)
+    local function get_first_textobject_under_cursor(opts)
       for _, q in ipairs(query) do
-        local ret = M.treesitter(q)(bufnr, opts)
+        local ret = M.treesitter(q)(opts)
         if ret then
           return ret
         end
