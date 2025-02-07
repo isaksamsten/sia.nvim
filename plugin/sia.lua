@@ -132,7 +132,6 @@ end, {
             return item
           end)
           :filter(function(model)
-            print(model, ArgLead, vim.startswith(model, ArgLead))
             return vim.startswith(model, ArgLead)
           end)
           :totable()
