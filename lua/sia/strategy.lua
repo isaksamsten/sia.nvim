@@ -296,6 +296,7 @@ function SplitStrategy:on_init()
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     self.canvas:render_messages({ self.conversation:last_message() })
+    self.canvas:render_model(self.conversation.model or require("sia.config").options.defaults.model)
     if self.canvas:line_count() == 1 then
       self.canvas:render_last({ "# Sia", "", "" })
     else

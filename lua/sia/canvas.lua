@@ -1,6 +1,8 @@
 local M = {}
 
 local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
+local MODEL_NS = vim.api.nvim_create_namespace("sia_chat_model")
+
 --- @class sia.Canvas
 local Canvas = {}
 
@@ -12,9 +14,10 @@ function Canvas:render_last(content) end
 
 function Canvas:scroll_to_bottom() end
 
---- @param line integer
 --- @param content string[][]
 function Canvas:update_progress(content) end
+
+function Canvas:render_model(model) end
 
 function Canvas:clear_extmarks() end
 
@@ -44,6 +47,14 @@ function ChatCanvas:update_progress(content)
   })
 end
 
+function ChatCanvas:render_model(model)
+  vim.api.nvim_buf_clear_namespace(self.buf, MODEL_NS, 0, 0)
+  vim.api.nvim_buf_set_extmark(self.buf, MODEL_NS, 0, 0, {
+    virt_text = { { "model: ", "NonText" }, { model, "NonText" } },
+    virt_text_pos = "right_align",
+  })
+end
+
 function ChatCanvas:clear_extmarks()
   local buf = self.buf
   vim.api.nvim_buf_clear_namespace(buf, CHAT_NS, 0, -1)
@@ -65,15 +76,15 @@ function ChatCanvas:render_messages(messages)
     if message:is_shown() then
       local content = message:get_content()
       if content then
-        local line = vim.api.nvim_buf_line_count(buf)
+        local line_count = vim.api.nvim_buf_line_count(buf)
         local heading = "# User"
         if message.role == "assistant" then
           heading = "# Sia"
         end
-        if line == 1 then
-          vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { heading, "" })
+        if line_count == 1 then
+          vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, { heading, "" })
         else
-          vim.api.nvim_buf_set_lines(buf, line, line, false, { "", "---", "", heading, "" })
+          vim.api.nvim_buf_set_lines(buf, line_count, line_count, false, { "", "---", "", heading, "" })
         end
         vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
       end
