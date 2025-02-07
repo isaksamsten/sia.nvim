@@ -675,7 +675,16 @@ Requirements:
         placement = function()
           local ft = vim.bo.ft
           if ft == "python" then
-            return { "below", "start" }
+            return {
+              "below",
+              function(start_line)
+                local capture = require("sia.capture").treesitter({ "@function.inner", "@class.inner" })({ buf = 0 })
+                if capture then
+                  return capture[1] - 1
+                end
+                return start_line
+              end,
+            }
           else
             return { "above", "start" }
           end
