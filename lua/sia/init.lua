@@ -95,7 +95,7 @@ function M.setup(options)
       callback = function(args)
         local data = args.data
         if data then
-          vim.notify("Total tokens: " .. data.total_tokens)
+          vim.api.nvim_echo({ { "Total tokens: ", "Normal" }, { "" .. data.total_tokens, "Error" } }, false, {})
         end
       end,
     })
