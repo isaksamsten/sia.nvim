@@ -331,7 +331,7 @@ Guidelines:
   },
   --- @type sia.config.Defaults
   defaults = {
-    model = "copilot-o3-mini", -- default
+    model = "gpt-4o-mini", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
