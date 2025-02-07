@@ -1,5 +1,23 @@
+local function find_and_remove_flag(flag, fargs)
+  local index_of_flag
+  for i, v in ipairs(fargs) do
+    if v == flag then
+      index_of_flag = i
+    end
+  end
+  if index_of_flag and #fargs > index_of_flag then
+    local value = table.remove(fargs, index_of_flag + 1)
+    table.remove(fargs, index_of_flag)
+    return value
+  end
+end
+
+local possible_flags = { "-m" }
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
+
+  local model = find_and_remove_flag("-m", args.fargs)
+
   if #args.fargs == 0 and not vim.b.sia then
     vim.notify("No prompt")
     return
@@ -52,6 +70,11 @@ vim.api.nvim_create_user_command("Sia", function(args)
     vim.notify(args.fargs[1] .. " is not enabled")
     return
   end
+
+  if model then
+    action.model = model
+  end
+
   require("sia").main(action, opts)
 end, {
   range = true,
@@ -90,18 +113,33 @@ end, {
       end
     end
 
-    if not vim.startswith(ArgLead, "/") then
-      return {}
-    end
-    local complete = {}
-    local term = ArgLead:sub(2)
-    for key, prompt in pairs(config.options.actions) do
-      if vim.startswith(key, term) and not require("sia.utils").is_action_disabled(prompt) and vim.bo.ft ~= "sia" then
-        if prompt.range == nil or (prompt.range == is_range) then
-          table.insert(complete, "/" .. key)
+    if vim.startswith(ArgLead, "/") then
+      local complete = {}
+      local term = ArgLead:sub(2)
+      for key, prompt in pairs(config.options.actions) do
+        if vim.startswith(key, term) and not require("sia.utils").is_action_disabled(prompt) and vim.bo.ft ~= "sia" then
+          if prompt.range == nil or (prompt.range == is_range) then
+            table.insert(complete, "/" .. key)
+          end
         end
       end
+      return complete
+    else
+      if string.match(cmd_line, "-m %w*$") then
+        local models = vim
+          .iter(config.options.models)
+          :map(function(item)
+            return item
+          end)
+          :filter(function(model)
+            print(model, ArgLead, vim.startswith(model, ArgLead))
+            return vim.startswith(model, ArgLead)
+          end)
+          :totable()
+        return models
+      end
     end
-    return complete
+
+    return {}
   end,
 })
