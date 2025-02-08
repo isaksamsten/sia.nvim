@@ -566,7 +566,7 @@ function InsertStrategy:on_init()
   local message = self._options.message or { "Please wait...", "NonText" }
   vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col, {
     virt_text = { { "🤖 ", "Normal" }, message },
-    virt_text_pos = "inline",
+    virt_text_pos = "overlay",
   })
 end
 
