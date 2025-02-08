@@ -80,10 +80,9 @@ end, {
   range = true,
   bang = true,
   nargs = "*",
-  complete = function(ArgLead)
+  complete = function(ArgLead, CmdLine, CursorPos)
     local config = require("sia.config")
     local cmd_type = vim.fn.getcmdtype()
-    local cmd_line = vim.fn.getcmdline()
     local is_range = false
     local has_bang = false
 
@@ -103,39 +102,44 @@ end, {
       }
 
       for _, pattern in ipairs(range_patterns) do
-        if cmd_line:match(pattern) then
+        if CmdLine:match(pattern) then
           is_range = true
           break
         end
       end
-      if cmd_line:match(".-%w+!%s+.*") then
+      if CmdLine:match(".-%w+!%s+.*") then
         has_bang = true
       end
     end
 
-    if vim.startswith(ArgLead, "/") then
-      local complete = {}
-      local term = ArgLead:sub(2)
-      for key, prompt in pairs(config.options.actions) do
-        if vim.startswith(key, term) and not require("sia.utils").is_action_disabled(prompt) and vim.bo.ft ~= "sia" then
-          if prompt.range == nil or (prompt.range == is_range) then
-            table.insert(complete, "/" .. key)
+    local match = string.match(string.sub(CmdLine, 1, CursorPos), "-m ([%w-_]*)$")
+    if match then
+      local models = vim
+        .iter(config.options.models)
+        :map(function(item)
+          return item
+        end)
+        :filter(function(model)
+          return vim.startswith(model, match)
+        end)
+        :totable()
+      return models
+    else
+      if vim.startswith(ArgLead, "/") then
+        local complete = {}
+        local term = ArgLead:sub(2)
+        for key, prompt in pairs(config.options.actions) do
+          if
+            vim.startswith(key, term)
+            and not require("sia.utils").is_action_disabled(prompt)
+            and vim.bo.ft ~= "sia"
+          then
+            if prompt.range == nil or (prompt.range == is_range) then
+              table.insert(complete, "/" .. key)
+            end
           end
         end
-      end
-      return complete
-    else
-      if string.match(cmd_line, "-m %w*$") then
-        local models = vim
-          .iter(config.options.models)
-          :map(function(item)
-            return item
-          end)
-          :filter(function(model)
-            return vim.startswith(model, ArgLead)
-          end)
-          :totable()
-        return models
+        return complete
       end
     end
 
