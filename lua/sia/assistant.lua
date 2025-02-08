@@ -64,6 +64,7 @@ end
 
 --- @param strategy sia.Strategy
 function M.execute_strategy(strategy)
+  local config = require("sia.config")
   local query = strategy:get_query()
   local first_on_stdout = true
   local incomplete = nil
@@ -109,9 +110,10 @@ function M.execute_strategy(strategy)
               incomplete = "data: " .. resp
             else
               if obj.usage then
+                local model = config.options.models[query.model or config.options.defaults.model]
                 vim.api.nvim_exec_autocmds("User", {
                   pattern = "SiaUsageReport",
-                  data = obj.usage,
+                  data = { usage = obj.usage, model = { name = model[2], cost = model.cost } },
                 })
               end
               if obj.choices and #obj.choices > 0 then
