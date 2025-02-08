@@ -71,42 +71,43 @@ TODO
 
 **Normal Mode**
 
-- `:Sia [query]` sends the query and opens a split view with the response.
-- `:Sia [query]` if run from a conversation, continues the conversation with the new query.
-- `:Sia /prompt [query]` executes the prompt with the optional additional query.
-- `:Sia! [query]` sends the query and inserts the response.
+- `:Sia [query]` - Sends the query and opens a split view with the response.
+- `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
+- `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
+- `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
 
-- `:SiaFile` displays the files in the global file list; or if run from a split, shows the files associated with the current conversation.
-- `:SiaFile patterns` adds files matching the patterns to the global file list; or if run from a split, adds them to the current conversation.
-- `:SiaFileDelete patterns` removes files matching the patterns from the global file list; or if run from a split, removes them from the current conversation.
+- `:SiaFile` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
+- `:SiaFile patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
+- `:SiaFileDelete patterns` - Removes files matching the specified patterns from the global file list; if run from a split, removes them from the current conversation.
 
-- `:SiaAccept` accepts a suggested edit.
-- `:SiaReject` rejects a suggested edit.
+- `:SiaAccept` - Accepts a suggested edit.
+- `:SiaReject` - Rejects a suggested edit.
 
 **Ranges**
 
-Any range is supported, for example:
+Any range is supported. For example:
 
-- `:'<,'>Sia! [query]` send the selected lines and query and diff the response
-- `:'<,'>Sia [query]` send the selected lines and query and open a split with the response.
-- `:'<,'>Sia /prompt [query]` execute the prompt with the extra query.
+- `:'<,'>Sia! [query]` - Sends the selected lines along with the query and diffs the response.
+- `:'<,'>Sia [query]` - Sends the selected lines and query, opening a split with the response.
+- `:'<,'>Sia /prompt [query]` - Executes the prompt with the extra query for the selected range.
 
 **Examples**
 
-- `:%Sia fix the test function` - open a split with a fix to the test function.
-- `:Sia write snake in pygame` - open a split with the answer.
-- `:Sia /doc numpydoc` - document the function or class under cursor with numpydoc format.
-- `:SiaFile a.py b.py | Sia move the function foo_a to b.py`
-- `:%Sia /diagnostic` - open a split with a solution to diagnostics in the current file.
+- `:%Sia fix the test function` - Opens a split with a suggested fix for the test function.
+- `:Sia write snake in pygame` - Opens a split with the generated answer for the query.
+- `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
+- `:SiaFile a.py b.py | Sia move the function foo_a to b.py` - Moves the function `foo_a` from `a.py` to `b.py`.
+- `:%Sia /diagnostic` - Opens a split with a solution to diagnostics in the current file.
 
-### Suggested keybindings:
+### Suggested Keybindings
 
-We can bind visual and operator mode bindings to
+You can bind visual and operator mode selections to enhance your workflow with `sia.nvim`:
 
-- `<Plug>(sia-append)` append the current selection or operator mode selection
-  to the current visible split.
-- `<Plug>(sia-execute)` execute the default prompt (`vim.b.sia`) with
-  selection or operator mode selection.
+- **Append Current Selection**: 
+  - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible split.
+  
+- **Execute Default Prompt**: 
+  - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
 
 ```lua
 keys = {
@@ -115,13 +116,9 @@ keys = {
 }
 ```
 
-Then we can send the current paragraph to the default prompt with `gzzip` or
-append the current method (assuming `treesitter-textobjects`) to the ongoing
-chat with `gzaam`.
+You can send the current paragraph to the default prompt using `gzzip` or append the current method (assuming `treesitter-textobjects`) to the ongoing chat with `gzaam`.
 
-Sia also creates Plug bindings for all actions using
-`<Plug>(sia-execute-<ACTION>)`, e.g., `<Plug>(sia-execute-explain)` for the
-default action `/explain`.
+Sia also creates Plug bindings for all actions using `<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-explain)` for the default action `/explain`.
 
 ```lua
 keys = {
@@ -129,9 +126,9 @@ keys = {
 }
 ```
 
-**Chat**
+### Chat Mappings
 
-In the split view (with `ft=sia`), we can bind the following mappings:
+In the split view (with `ft=sia`), you can bind the following mappings for efficient interaction:
 
 ```lua
 keys = {
@@ -145,24 +142,26 @@ keys = {
 }
 ```
 
-- `<Plug>(sia-peek-context)`: view each context added to the chat
-- `<Plug>(sia-delete-instruction)`: delete instructions from the chat
-- `<Plug>(sia-replace-block)`: when the cursor is on a code block, apply the suggested edit.
-- `<Plug>(sia-replace-all-blocks)`: for all code blocks in the chat, apply the suggested edits and open a quickfix list.
-- `<Plug>(sia-insert-block-above)`: insert the code block above the cursor.
-- `<Plug>(sia-insert-block-below)`: insert the code block below the cursor.
-- `<Plug>(sia-reply)`: open a split view where we can compose a longer query.
+- **View Context**: `<Plug>(sia-peek-context)` - View each context added to the chat.
+- **Delete Instruction**: `<Plug>(sia-delete-instruction)` - Remove instructions from the chat.
+- **Replace Block**: `<Plug>(sia-replace-block)` - Apply the suggested edit when the cursor is on a code block.
+- **Replace All Blocks**: `<Plug>(sia-replace-all-blocks)` - Apply suggested edits to all code blocks in the chat and open a quickfix list.
+- **Insert Block Above**: `<Plug>(sia-insert-block-above)` - Insert a code block above the cursor.
+- **Insert Block Below**: `<Plug>(sia-insert-block-below)` - Insert a code block below the cursor.
+- **Compose Longer Query**: `<Plug>(sia-reply)` - Open a split view to compose a longer query.
 
-When inserting suggestions, Sia will create markers in the code that needs to be accepted or rejected.
+### Accepting and Rejecting Suggestions
+
+When inserting suggestions, Sia will create markers in the code that need to be accepted or rejected:
 
 ```lua
 keys = {
-  { "ct", mode = "n", "<Plug>(sia-accept)", desc = "Accept change" },
-  { "co", mode = "n", "<Plug>(sia-reject)", desc = "Accept change" },
+  { "zpa", mode = "n", "<Plug>(sia-accept)", desc = "Accept change" },
+  { "zpr", mode = "n", "<Plug>(sia-reject)", desc = "Reject change" },
 }
 ```
 
-Sia will insert markers like these, when replacing all blocks:
+Markers will look like this when replacing all blocks:
 
 ```python
 <<<<<<< User
@@ -180,7 +179,7 @@ from ranges import range_inclusive, range_exclusive, range_with_step
 >>>>>>> Sia
 ```
 
-To accept the suggestion, we can call `SiaAccept` or the mapping bound to
-`<Plug>(sia-accept)` and to reject we call `SiaReject` or the mapping bound to
-`<Plug>(sia-reject)`. For example, to accept all suggestions we could call
-`:cdo SiaAccept` when all changes are in the quickfix list.
+To accept a suggestion, call `SiaAccept` or use the mapping bound to
+`<Plug>(sia-accept)`. To reject, call `SiaReject` or use the mapping bound to
+`<Plug>(sia-reject)`. For example, to accept all suggestions, you can run `:cdo
+SiaAccept` when all changes are in the quickfix list.
