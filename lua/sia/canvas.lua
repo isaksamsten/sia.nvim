@@ -48,7 +48,7 @@ function ChatCanvas:update_progress(content)
 end
 
 function ChatCanvas:render_model(model)
-  vim.api.nvim_buf_clear_namespace(self.buf, MODEL_NS, 0, 0)
+  vim.api.nvim_buf_clear_namespace(self.buf, MODEL_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(self.buf, MODEL_NS, 0, 0, {
     virt_text = { { "model: ", "NonText" }, { model, "NonText" } },
     virt_text_pos = "right_align",
