@@ -98,32 +98,33 @@ function M.setup(options)
           local usage = data.usage
           local model = data.model
           if not (usage.completion_tokens or usage.prompt_tokens) and usage.total_tokens then
-            vim.api.nvim_echo({
-              { "Total tokens: ", "NonText" },
-              { "" .. usage.total_tokens, "NonText" },
-              { " (" .. model[2] .. ")", "NonText" },
-            }, false, {})
+            local prompt = { { "" .. usage.total_tokens, "NonText" } }
+            if model then
+              table.insert(prompt, 1, { model.name, "Comment" })
+            end
+            vim.api.nvim_echo(prompt, false, {})
           elseif usage.completion_tokens and usage.prompt_tokens then
             local prompt = {
-              { "prompt tokens: ", "NonText" },
-              { "" .. usage.prompt_tokens, "NonText" },
-              { " completion tokens: ", "NonText" },
+              { " " .. usage.prompt_tokens, "NonText" },
+              { "/", "NonText" },
               { "" .. usage.completion_tokens, "NonText" },
             }
             if model then
               if model.cost then
-                table.insert(
-                  prompt,
-                  5,
-                  { string.format(" ($%.2f)", usage.completion_tokens * model.cost.completion_tokens), "NonText" }
-                )
-                table.insert(
-                  prompt,
-                  3,
-                  { string.format(" ($%.2f)", usage.prompt_tokens * model.cost.prompt_tokens), "NonText" }
-                )
+                local total_cost = usage.completion_tokens * model.cost.completion_tokens
+                  + usage.prompt_tokens * model.cost.prompt_tokens
+                if total_cost < 0.1 then
+                  total_cost = "<0.1"
+                else
+                  total_cost = string.format("%.2f", total_cost)
+                end
+
+                table.insert(prompt, {
+                  string.format(" ($%s)", total_cost),
+                  "NonText",
+                })
               end
-              table.insert(prompt, 1, { model.name .. " ", "NonText" })
+              table.insert(prompt, 1, { model.name, "Comment" })
             end
             vim.api.nvim_echo(prompt, false, {})
           end
