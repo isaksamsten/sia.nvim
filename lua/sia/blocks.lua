@@ -121,8 +121,10 @@ end
 --- Adds all edits to the quickfix list.
 --- @param block_action sia.BlockAction
 --- @param blocks sia.Block[]
-function M.replace_all_blocks(block_action, blocks)
-  if block_action and block_action.apply_edit then
+--- @param opts table
+function M.replace_all_blocks(block_action, blocks, opts)
+  opts = opts or {}
+  if block_action then
     local edits = {}
     local edit_bufs = {}
     for _, block in ipairs(blocks) do
@@ -136,9 +138,12 @@ function M.replace_all_blocks(block_action, blocks)
             text = edit.search.content[1] or "",
           }
           edit_bufs[edit.buf] = true
-          if block_action.automatic then
-            block_action.apply_edit(edit)
-          else
+          if block_action.automatic and block_action.apply_edit then
+            local pos = block_action.apply_edit(edit)
+            if pos then
+              flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, opts.timeout, opts.highlight)
+            end
+          elseif block_action.apply_marker then
             block_action.apply_marker(edit)
           end
           block._applied = true
@@ -149,7 +154,7 @@ function M.replace_all_blocks(block_action, blocks)
       vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
     end
 
-    if #edits > 0 then
+    if #edits > 0 and block_action.automatic == false then
       vim.fn.setqflist(edits, "r")
       vim.cmd("copen")
     end
@@ -342,7 +347,7 @@ M.actions = {
 --- @param name string
 --- @param opts { automatic: boolean? }
 --- @return sia.BlockAction?
-function M.customize_action(name, opts)
+function M.custom_action(name, opts)
   local action = M.actions[name]
   if action then
     action = vim.deepcopy(action)
