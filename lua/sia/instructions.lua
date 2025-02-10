@@ -121,7 +121,7 @@ function M.current_buffer(global)
   return {
     {
       id = function(ctx)
-        return { "user", vim.api.nvim_buf_get_name(ctx.buf) }
+        return { "buffer", "user", ctx.buf }
       end,
       available = function(ctx)
         return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf)
@@ -140,7 +140,7 @@ function M.current_buffer(global)
         end
         return string.format(
           "%s\n%s\n%s\n%s",
-          utils.get_filename(ctx.buf),
+          utils.get_filename(ctx.buf, ":p"),
           start_fence,
           utils.get_code(1, -1, { buf = ctx.buf, show_line_numbers = global.show_line_numbers }),
           end_fence
@@ -151,7 +151,7 @@ function M.current_buffer(global)
       role = "assistant",
       hide = true,
       id = function(ctx)
-        return { "assistant", vim.api.nvim_buf_get_name(ctx.buf) }
+        return { "buffer", "assistant", ctx.buf }
       end,
       persistent = true,
       content = "Ok",
@@ -167,7 +167,7 @@ function M.current_context(global)
   return {
     {
       id = function(ctx)
-        return { "user", vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
+        return { "user", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       role = "user",
       description = function(ctx)
@@ -208,10 +208,55 @@ function M.current_context(global)
       role = "assistant",
       hide = true,
       id = function(ctx)
-        return { "assistant", vim.api.nvim_buf_get_name(ctx.buf), ctx.buf, ctx.pos[1], ctx.pos[2] }
+        return { "assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       available = function(ctx)
         return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
+      end,
+      persistent = true,
+      content = "Ok",
+    },
+  }
+end
+
+--- @return sia.config.Instruction[]
+function M.buffer(bufnr, global)
+  global = global or {}
+  --- @type sia.config.Instruction[]
+  return {
+    {
+      persistent = true,
+      role = "user",
+      id = function(ctx)
+        return { "user", "buffer", bufnr }
+      end,
+      description = function(ctx)
+        return string.format("%s", utils.get_filename(bufnr, ":."))
+      end,
+      available = function(ctx)
+        return vim.api.nvim_buf_is_loaded(bufnr) and vim.api.nvim_buf_is_valid(bufnr)
+      end,
+      content = function(ctx)
+        local start_fence = ""
+        local end_fence = ""
+        if global.fences ~= false then
+          start_fence = "```" .. vim.bo[bufnr].ft
+          end_fence = "```"
+        end
+        return string.format(
+          "%s\n%s\n%s\n%s",
+          utils.get_filename(bufnr, ":p"),
+          start_fence,
+          utils.get_code(1, -1, { buf = bufnr, show_line_numbers = global.show_line_numbers }),
+          end_fence
+        )
+      end,
+    },
+    {
+      role = "assistant",
+      hide = true,
+      id = function(ctx)
+        return { "buffer", "assistant", bufnr }
       end,
       persistent = true,
       content = "Ok",
@@ -225,7 +270,7 @@ function M.verbatim()
       role = "user",
       persistent = true,
       id = function(ctx)
-        return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.pos[1], ctx.pos[2] }
+        return { "verbatim", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       available = function(ctx)
         return vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v"
