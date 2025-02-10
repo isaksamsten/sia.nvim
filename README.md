@@ -185,3 +185,62 @@ To accept a suggestion, call `SiaAccept` or use the mapping bound to
 `<Plug>(sia-accept)`. To reject, call `SiaReject` or use the mapping bound to
 `<Plug>(sia-reject)`. For example, to accept all suggestions, you can run `:cdo
 SiaAccept` when all changes are in the quickfix list.
+
+
+## Customize configuration
+
+### Default actions
+
+In Sia, you can execute various actions using the command `:Sia <action>`. The following actions are bundled in the default configuration:
+
+- **edit**: Edit a selection without confirmation using the instructions.
+  - Example: `'<,'>Sia /edit optimize`
+
+- **diagnostic**: Open a split window with explanations for the diagnostics in the specified range.
+  - Example: `'<,'>Sia /diagnostic`
+
+- **commit**: Insert a commit message (enabled only if inside a Git repository and the current file type is `gitcommit`).
+  - Example: `Sia /commit`
+
+- **review**: Review the code in the specified range and open a quickfix window with comments.
+  - Example: `'<,'>Sia /review`
+
+- **explain**: Open a split window explaining the current range.
+  - Example: `'<,'>Sia /explain focus on the counter`
+
+- **unittest**: Open a split window with unit tests for the current range or the captured function under the cursor.
+
+- **doc**: Insert documentation for the function or class under the cursor.
+  - Example: `Sia /doc`
+
+- **fix**: Inline fix for the issue provided in a quickfix window.
+  - Example: `Sia /fix`
+
+### Customizing actions
+See `lua/sia/actions.lua` for example actions. Here is a short snippet with a
+simple action.
+
+```lua
+require("sia").setup({
+  actions = {
+    yoda = {
+      mode = "split", -- Open in a split
+      split = { cmd = "split" }, -- We want an horizontal split
+      instructions = {
+        -- Custom system prompt
+        {
+          role = "system",
+          content = "You are a helpful writer, rewriting prose as Yoda.",
+        },
+        "current_context", -- builtin instruction to get the current selection
+      }
+      range = true, -- A range is required
+    },
+
+    -- customize a built in instruction ()
+    fix = require("sia.actions").fix({split = true})
+  }
+})
+```
+
+We can use it with `Sia /yoda`.

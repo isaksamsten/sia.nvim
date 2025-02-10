@@ -72,6 +72,9 @@ end
 function Message:from_string(str, args)
   if type(str) == "string" then
     local instruction = require("sia.config").options.instructions[str]
+    if not instruction then
+      instruction = require("sia.builtin")[str]
+    end
     if instruction then
       if vim.islist(instruction) then
         local messages = {}
