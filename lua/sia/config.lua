@@ -50,6 +50,7 @@ local providers = require("sia.provider")
 
 --- @class sia.config.Action
 --- @field instructions (string|sia.config.Instruction|(fun():sia.config.Instruction[]))[]
+--- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionArgument):nil)?
 --- @field reminder (string|sia.config.Instruction)?
 --- @field tools sia.config.Tool[]?
 --- @field model string?

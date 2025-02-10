@@ -94,6 +94,11 @@ function M.resolve_action(argument, opts)
     action = vim.deepcopy(config.options.defaults.actions[action_mode])
     table.insert(action.instructions, { role = "user", content = table.concat(argument, " ") })
   end
+
+  if action.modify_instructions then
+    action.modify_instructions(action.instructions, opts)
+  end
+
   return action
 end
 
