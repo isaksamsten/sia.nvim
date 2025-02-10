@@ -13,6 +13,8 @@ Default configuration has the following models: `gpt-4o`, `gpt-4o-mini`,
 `gemini-1.5-pro`.
 
 ## ✨ Features
+
+https://github.com/user-attachments/assets/aca42a2e-c44f-4312-a75f-81aeff684fb6
  
 https://github.com/user-attachments/assets/7e8ba341-afa7-45c5-8571-225b27a1a2ef
 
