@@ -14,10 +14,10 @@ local providers = require("sia.provider")
 
 --- @class sia.config.Diff
 --- @field wo [string]?
---- @field cmd "vsplit"|"split"?
+--- @field cmd string?
 
 --- @class sia.config.Split
---- @field cmd "vsplit"|"split"?
+--- @field cmd string?
 --- @field block_action (string|sia.BlockAction)?
 --- @field automatic_block_action boolean?
 --- @field wo table<string, any>?
@@ -414,12 +414,8 @@ Guidelines:
       mode = "hidden",
       temperature = 0.1,
       hidden = {
-        callback = function(context, content)
-          local Blocks = require("sia.blocks")
-          local blocks = Blocks.parse_blocks(context.buf, 0, content)
-          vim.schedule(function()
-            Blocks.replace_all_blocks(Blocks.actions["search_replace"], blocks)
-          end)
+        callback = function(ctx, content)
+          return require("sia.actions").edit(ctx, content)
         end,
       },
       tools = {
@@ -587,8 +583,12 @@ If the code snippet has no readability issues, simply confirm that the code is c
               })
             end
           end
-          vim.fn.setqflist(list, "r")
-          vim.cmd.copen()
+          if #list > 0 then
+            vim.fn.setqflist(list, "r")
+            vim.cmd.copen()
+          else
+            vim.notify("No review feedback!")
+          end
         end,
       },
     },
@@ -708,6 +708,49 @@ Requirements:
         message = { "Generating documentation...", "Comment" },
       },
       cursor = "end", -- start or end
+    },
+
+    fix = {
+      instructions = {
+        "editblock_system",
+        {
+          role = "user",
+          enabled = function(ctx)
+            return vim.bo.ft == "qf"
+          end,
+          content = function(ctx)
+            local function get_qf_item()
+              local list = vim.fn.getqflist()
+              local cursor_line = ctx.cursor[1]
+              return list[cursor_line]
+            end
+            local item = get_qf_item()
+            return string.format("At line %d: %s", item.lnum, item.text)
+          end,
+        },
+      },
+      reminder = "editblock_reminder",
+      mode = "hidden",
+      hidden = {
+        callback = function(ctx, content)
+          return require("sia.actions").edit(ctx, content)
+        end,
+      },
+      enabled = function()
+        return vim.bo.ft == "qf" and #vim.fn.getqflist() > 0
+      end,
+      modify_instructions = function(instructions, ctx)
+        local function get_qf_item()
+          local list = vim.fn.getqflist()
+          local cursor_line = ctx.cursor[1]
+          return list[cursor_line]
+        end
+
+        local item = get_qf_item()
+        if item and item.bufnr then
+          table.insert(instructions, 2, require("sia.instructions").buffer(item.bufnr))
+        end
+      end,
     },
   },
   report_usage = true,
