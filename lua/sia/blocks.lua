@@ -121,7 +121,7 @@ end
 --- Adds all edits to the quickfix list.
 --- @param block_action sia.BlockAction
 --- @param blocks sia.Block[]
---- @param opts table
+--- @param opts table?
 function M.replace_all_blocks(block_action, blocks, opts)
   opts = opts or {}
   if block_action then
@@ -357,4 +357,16 @@ function M.custom_action(name, opts)
   return nil
 end
 
+--- @param context sia.Context
+--- @param content string[]
+function M.replace_blocks_callback(context, content)
+  local blocks = M.parse_blocks(context.buf, 0, content)
+  local action = M.custom_action("search_replace", { automatic = true, show_qf = false })
+
+  if action then
+    vim.schedule(function()
+      M.replace_all_blocks(action, blocks)
+    end)
+  end
+end
 return M

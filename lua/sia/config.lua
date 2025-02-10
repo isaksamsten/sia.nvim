@@ -415,7 +415,7 @@ Guidelines:
       temperature = 0.1,
       hidden = {
         callback = function(ctx, content)
-          return require("sia.actions").edit(ctx, content)
+          return require("sia.blocks").replace_blocks_callback(ctx, content)
         end,
       },
       tools = {
@@ -733,7 +733,7 @@ Requirements:
       mode = "hidden",
       hidden = {
         callback = function(ctx, content)
-          return require("sia.actions").edit(ctx, content)
+          return require("sia.blocks").replace_blocks_callback(ctx, content)
         end,
       },
       enabled = function()
