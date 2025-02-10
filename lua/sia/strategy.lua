@@ -82,7 +82,7 @@ end
 --- @param buf number
 local function del_abort_keymap(buf)
   if vim.api.nvim_buf_is_valid(buf) then
-    vim.api.nvim_buf_del_keymap(buf, "n", "x")
+    pcall(vim.api.nvim_buf_del_keymap, buf, "n", "x")
   end
 end
 
@@ -113,6 +113,8 @@ function Strategy:on_progress(content) end
 --- Callback triggered when the strategy is completed.
 --- @param error_code integer?
 function Strategy:on_complete(error_code) end
+
+function Strategy:on_error() end
 
 --- Callback triggered when LLM wants to call a function
 ---
@@ -306,6 +308,10 @@ function SplitStrategy:on_init()
   end
 end
 
+function SplitStrategy:on_error()
+  self.canvas:update_progress({ { "An error has occured...", "Error" } })
+end
+
 function SplitStrategy:on_start(job)
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
@@ -332,6 +338,10 @@ function SplitStrategy:get_win()
 end
 
 function SplitStrategy:on_complete()
+  if not self._writer then
+    return
+  end
+
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     if #self._writer.cache > 0 then
       self.conversation:add_instruction(
@@ -503,6 +513,10 @@ function DiffStrategy:on_init()
   })
 end
 
+function DiffStrategy:on_error()
+  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
+end
+
 --- @param job number
 function DiffStrategy:on_start(job)
   vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
@@ -560,11 +574,14 @@ function InsertStrategy:new(conversation, options)
 end
 
 function InsertStrategy:on_init()
-  local line, col = self:_get_insert_placement()
+  local line, padding_direction = self:_get_insert_placement()
   self._line = line
-  self._col = col
+  self._padding_direction = padding_direction
+  if padding_direction == "below" then
+    self._line = line + 1
+  end
   local message = self._options.message or { "Please wait...", "NonText" }
-  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, self._col, {
+  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, 0, {
     virt_text = { { "🤖 ", "Normal" }, message },
     virt_text_pos = "overlay",
   })
@@ -573,8 +590,18 @@ end
 --- @param job number
 function InsertStrategy:on_start(job)
   local context = self.conversation.context
+
+  if self._padding_direction == "below" or self._padding_direction == "above" then
+    vim.api.nvim_buf_set_lines(context.buf, self._line - 1, self._line - 1, false, { "" })
+  end
+  local content = vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
+  self._cal = #content
   vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   set_abort_keymap(context.buf, job)
+end
+
+function InsertStrategy:on_error()
+  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
 end
 
 function InsertStrategy:on_progress(content)
@@ -605,7 +632,7 @@ function InsertStrategy:on_complete()
 end
 
 --- @return number start_line
---- @return number start_col
+--- @return string padding_direction
 function InsertStrategy:_get_insert_placement()
   local context = self.conversation.context
   local start_line, end_line = context.pos[1], context.pos[2]
@@ -630,15 +657,7 @@ function InsertStrategy:_get_insert_placement()
     start_line = end_line
   end
 
-  if padding_direction == "below" then
-    vim.api.nvim_buf_set_lines(context.buf, start_line, start_line, false, { "" })
-    start_line = start_line + 1
-  elseif padding_direction == "above" then
-    vim.api.nvim_buf_set_lines(context.buf, start_line - 1, start_line - 1, false, { "" })
-  end
-
-  local content = vim.api.nvim_buf_get_lines(context.buf, start_line - 1, start_line, false)
-  return start_line, #content[1]
+  return start_line, padding_direction
 end
 
 --- @class sia.HiddenStrategy : sia.Strategy
@@ -669,6 +688,8 @@ function HiddenStrategy:on_start(job)
   local context = self.conversation.context
   set_abort_keymap(context.buf, job)
 end
+
+function HiddenStrategy:on_error() end
 
 function HiddenStrategy:on_progress(content)
   if not self._writer then

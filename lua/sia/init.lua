@@ -88,6 +88,20 @@ function M.setup(options)
       end
     end,
   })
+
+  vim.api.nvim_create_autocmd("User", {
+    group = augroup,
+    pattern = "SiaError",
+    callback = function(args)
+      local data = args.data
+      if data.message then
+        vim.notify("Sia: " .. data.message, vim.log.levels.WARN)
+      else
+        vim.notify("Sia: unknown error", vim.log.levels.WARN)
+      end
+    end,
+  })
+
   if config.options.report_usage == true then
     vim.api.nvim_create_autocmd("User", {
       group = augroup,
