@@ -107,7 +107,7 @@ function _G.__sia_execute(type)
   if action and not utils.is_action_disabled(action) then
     require("sia").main(action, args)
   else
-    vim.notify("Unavailable action")
+    vim.notify("Sia: Unavailable action")
   end
 end
 
@@ -266,7 +266,7 @@ function M.setup()
     if split then
       local contexts, mappings = split.conversation:get_context_instructions()
       if #contexts == 0 then
-        vim.notify("No contexts available")
+        vim.notify("Sia: No contexts available")
         return
       end
       vim.ui.select(contexts, {
@@ -285,7 +285,7 @@ function M.setup()
     if split then
       local contexts = split.conversation:get_context_messages()
       if #contexts == 0 then
-        vim.notify("No contexts available")
+        vim.notify("Sia: No contexts available")
         return
       end
       vim.ui.select(contexts, {

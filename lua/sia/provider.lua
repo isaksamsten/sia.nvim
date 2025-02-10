@@ -58,7 +58,7 @@ local function copilot_api_key()
 
     oauth = get_oauth_token()
     if not oauth then
-      vim.notify("Can't find Copilot auth token")
+      vim.notify("Sia: Can't find Copilot auth token")
     end
 
     local cmd = table.concat({

@@ -19,7 +19,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local model = find_and_remove_flag("-m", args.fargs)
 
   if #args.fargs == 0 and not vim.b.sia then
-    vim.notify("Error: No prompt provided.", vim.log.levels.ERROR)
+    vim.notify("Sia: No prompt provided.", vim.log.levels.ERROR)
     return
   end
 
@@ -52,7 +52,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if action.capture and opts.mode ~= "v" then
     local capture = action.capture(opts)
     if not capture then
-      vim.notify("Unable to capture current context.")
+      vim.notify("Sia: Unable to capture current context.")
       return
     end
     opts.start_line, opts.end_line = capture[1], capture[2]
@@ -60,14 +60,14 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   if action.range == true and opts.mode ~= "v" then
-    vim.notify("The prompt /" .. args.fargs[1] .. " must be used with a range", vim.log.levels.ERROR)
+    vim.notify("Sia: The action /" .. args.fargs[1] .. " must be used with a range", vim.log.levels.ERROR)
     return
   end
 
   local is_range = opts.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
-    vim.notify("The prompt /" .. args.fargs[1] .. " is not enabled in the current context.")
+    vim.notify("Sia: The action /" .. args.fargs[1] .. " is not enabled in the current context.", vim.log.levels.ERROR)
     return
   end
 

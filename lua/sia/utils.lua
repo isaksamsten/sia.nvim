@@ -77,12 +77,12 @@ function M.resolve_action(argument, opts)
   if vim.startswith(argument[1], "/") and vim.bo.ft ~= "sia" then
     action = vim.deepcopy(config.options.actions[argument[1]:sub(2)])
     if action == nil then
-      vim.notify(argument[1] .. " does not exists")
+      vim.notify("Sia: The action '" .. argument[1] .. "' does not exists.", vim.log.levels.ERROR)
       return nil
     end
 
     if action.input and action.input == "require" and #argument < 2 then
-      vim.notify(argument[1] .. " requires input")
+      vim.notify("Sia: The action '" .. argument[1] .. "' requires input.", vim.log.levels.ERROR)
       return nil
     end
 

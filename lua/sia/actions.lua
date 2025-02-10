@@ -190,7 +190,7 @@ If the code snippet has no readability issues, simply confirm that the code is c
           vim.fn.setqflist(list, "r")
           vim.cmd.copen()
         else
-          vim.notify("No review feedback")
+          vim.notify("Sia: No review feedback")
         end
       end,
     },
