@@ -71,11 +71,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     return
   end
 
-  if model then
-    action.model = model
-  end
-
-  require("sia").main(action, opts)
+  require("sia").main(action, opts, model)
 end, {
   range = true,
   bang = true,

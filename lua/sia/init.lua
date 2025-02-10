@@ -150,7 +150,8 @@ end
 
 --- @param action sia.config.Action
 --- @param opts sia.ActionArgument
-function M.main(action, opts)
+--- @param model string?
+function M.main(action, opts, model)
   if vim.api.nvim_buf_is_valid(opts.buf) and vim.api.nvim_buf_is_loaded(opts.buf) then
     local strategy
     if vim.bo[opts.buf].filetype == "sia" then
@@ -160,9 +161,14 @@ function M.main(action, opts)
         strategy:add_instruction(last_instruction, opts)
 
         -- The user might have explicitly changed the model with -m
-        strategy.conversation.model = action.model
+        if model then
+          strategy.conversation.model = model
+        end
       end
     else
+      if model then
+        action.model = model
+      end
       local conversation = Conversation:new(action, opts)
       if conversation.mode == "diff" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
