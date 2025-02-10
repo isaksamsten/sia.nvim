@@ -144,6 +144,9 @@ function M.main(action, opts)
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
         strategy:add_instruction(last_instruction, opts)
+
+        -- The user might have explicitly changed the model with -m
+        strategy.conversation.model = action.model
       end
     else
       local conversation = Conversation:new(action, opts)
