@@ -15,7 +15,7 @@ Default configuration has the following models: `gpt-4o`, `gpt-4o-mini`,
 ## ✨ Features
 
 https://github.com/user-attachments/assets/aca42a2e-c44f-4312-a75f-81aeff684fb6
- 
+
 https://github.com/user-attachments/assets/7e8ba341-afa7-45c5-8571-225b27a1a2ef
 
 https://github.com/user-attachments/assets/26f0a7e6-2afd-4b69-b4c3-f9945721f442
@@ -105,10 +105,9 @@ Any range is supported. For example:
 
 You can bind visual and operator mode selections to enhance your workflow with `sia.nvim`:
 
-- **Append Current Selection**: 
+- **Append Current Selection**:
   - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible split.
-  
-- **Execute Default Prompt**: 
+- **Execute Default Prompt**:
   - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
 
 ```lua
@@ -186,7 +185,6 @@ To accept a suggestion, call `SiaAccept` or use the mapping bound to
 `<Plug>(sia-reject)`. For example, to accept all suggestions, you can run `:cdo
 SiaAccept` when all changes are in the quickfix list.
 
-
 ## Customize configuration
 
 ### Default actions
@@ -194,29 +192,36 @@ SiaAccept` when all changes are in the quickfix list.
 In Sia, you can execute various actions using the command `:Sia <action>`. The following actions are bundled in the default configuration:
 
 - **edit**: Edit a selection without confirmation using the instructions.
+
   - Example: `'<,'>Sia /edit optimize`
 
 - **diagnostic**: Open a split window with explanations for the diagnostics in the specified range.
+
   - Example: `'<,'>Sia /diagnostic`
 
 - **commit**: Insert a commit message (enabled only if inside a Git repository and the current file type is `gitcommit`).
+
   - Example: `Sia /commit`
 
 - **review**: Review the code in the specified range and open a quickfix window with comments.
+
   - Example: `'<,'>Sia /review`
 
 - **explain**: Open a split window explaining the current range.
+
   - Example: `'<,'>Sia /explain focus on the counter`
 
 - **unittest**: Open a split window with unit tests for the current range or the captured function under the cursor.
 
 - **doc**: Insert documentation for the function or class under the cursor.
+
   - Example: `Sia /doc`
 
 - **fix**: Inline fix for the issue provided in a quickfix window.
   - Example: `Sia /fix`
 
 ### Customizing actions
+
 See `lua/sia/actions.lua` for example actions. Here is a short snippet with a
 simple action.
 
@@ -244,3 +249,10 @@ require("sia").setup({
 ```
 
 We can use it with `Sia /yoda`.
+
+## Highlight groups
+
+- `SiaDiffAddHeader`:
+- `SiaDiffAdd`:
+- `SiaDiffDeleteHeader`:
+- `SiaDiffDelete`:

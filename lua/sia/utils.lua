@@ -354,24 +354,31 @@ local AFTER = 2
 local NONE = 3
 
 --- @param content string[]
---- @param opts {before: string, delimiter: string, after: string}?
---- @return string[] before
---- @return string[] after
+--- @param opts {before: string, delimiter: string, after: string, find_all: boolean?}?
+--- @return { before_tag: string?, after_tag: string?, before: string[]?, after:string[]?, all: {lnum: integer, lnum_end: integer, before:string[], after:string[], before_tag: string?, after_tag: string?}[]? }
 function M.partition_marker(content, opts)
   opts = opts or {}
 
   local before = opts.before or "^<<<<<<?<?<?<?"
   local after = opts.after or "^>>>>>>?>?>?>?>"
   local delimiter = opts.delimiter or "^======?=?=?=?"
+  local find_all = opts.find_all or false
 
   local search = {}
   local replace = {}
+  local search_tag = nil
+  local all = {}
   local state = NONE
-  -- TODO: we assume that the code block only contains one search/replace block
-  for _, line in pairs(content) do
+  local lnum = -1
+  local match
+
+  for l, line in pairs(content) do
     if state == NONE then
-      if string.match(line, before) then
+      match = string.match(line, before)
+      if match then
         state = BEFORE
+        search_tag = match
+        lnum = l
       else
         goto continue
       end
@@ -383,8 +390,24 @@ function M.partition_marker(content, opts)
           search[#search + 1] = line
         end
       elseif state == AFTER then
-        if string.match(line, after) then
-          return search, replace
+        match = string.match(line, after)
+        if match then
+          if not find_all then
+            return { before_tag = search_tag, after_tag = match, before = search, after = replace }
+          else
+            all[#all + 1] = {
+              before_tag = search_tag,
+              after_tag = match,
+              lnum = lnum,
+              lnum_end = l,
+              before = search,
+              after = replace,
+            }
+            search = {}
+            replace = {}
+            search_tag = nil
+            state = NONE
+          end
         else
           replace[#replace + 1] = line
         end
@@ -393,7 +416,11 @@ function M.partition_marker(content, opts)
     ::continue::
   end
 
-  return {}, {}
+  if #all > 0 then
+    return { all = all }
+  else
+    return {}
+  end
 end
 
 function M.urlencode(str)

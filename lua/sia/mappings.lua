@@ -180,6 +180,11 @@ function M.setup()
     require("sia.markers").accept(buf)
   end, { noremap = true, silent = true })
 
+  vim.keymap.set("n", "<Plug>(sia-diff)", function()
+    local buf = vim.api.nvim_get_current_buf()
+    require("sia.markers").diff(buf)
+  end, { noremap = true, silent = true })
+
   vim.keymap.set("n", "<Plug>(sia-replace-block)", function()
     local split = SplitStrategy.by_buf()
 

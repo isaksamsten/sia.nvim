@@ -18,7 +18,7 @@ local ns_flash_id = vim.api.nvim_create_namespace("sia_flash") -- Create a names
 --- @param hl_group string?
 local function flash_highlight(bufnr, pos, timeout, hl_group)
   for line = pos[1], pos[2] do
-    vim.api.nvim_buf_add_highlight(bufnr, ns_flash_id, hl_group or "DiffAdd", line, 0, -1)
+    vim.api.nvim_buf_add_highlight(bufnr, ns_flash_id, hl_group or "SiaDiffAdd", line, 0, -1)
   end
 
   local timer = vim.loop.new_timer()
@@ -218,7 +218,7 @@ local function search_replace_action(b)
     return nil
   end
 
-  local search, replace = utils.partition_marker(b.code, {
+  local marker = utils.partition_marker(b.code, {
     before = "^<<<<<<?<?<?<?%s+SEARCH%s*",
     delimiter = "^======?=?=?=?%s*$",
     after = "^>>>>>>?>?>?>?>%s+REPLACE%s*",
@@ -226,12 +226,12 @@ local function search_replace_action(b)
 
   -- If we didn't find a search/replace block try a more relaxed search
   -- of any markers
-  if #search == 0 and #replace == 0 then
-    search, replace = utils.partition_marker(b.code)
+  if not marker.before and not marker.after then
+    marker = utils.partition_marker(b.code)
   end
 
   -- if we still don't find anything, we abort.
-  if #search == 0 and #replace == 0 then
+  if not marker.before and not marker.after then
     return nil
   end
 
@@ -240,6 +240,8 @@ local function search_replace_action(b)
   -- This will match the first empty line, but we want to insert it
   -- at the end.
   local all_empty = true
+  local search = marker.before or {}
+  local replace = marker.after or {}
   for _, line in ipairs(search) do
     if not string.match(line, "^%s*$") then
       all_empty = false

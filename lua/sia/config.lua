@@ -150,7 +150,7 @@ local defaults = {
       placement = "cursor",
     },
     replace = {
-      highlight = "DiffAdd",
+      highlight = "SiaDiffAdd",
       timeout = 300,
     },
     actions = {
