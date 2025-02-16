@@ -191,6 +191,10 @@ from ranges import range_inclusive, range_exclusive, range_with_step
 >>>>>>> Sia
 ````
 
+If you are using `conflicting.nvim`, you can accept the suggestion from `Sia`
+with `Conflicting incoming` (or for all changes in the quickfix list with `:cdo
+Conflicting incoming`)
+
 ## Customize configuration
 
 ### Default actions
