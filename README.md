@@ -153,13 +153,24 @@ keys = {
 
 ### Accepting and Rejecting Suggestions
 
-When inserting suggestions, Sia will create markers in the code that need to be accepted or rejected:
+When inserting suggestions, Sia will create markers in the code that need to be accepted or rejected.
 
-```lua
-keys = {
-  { "zpa", mode = "n", "<Plug>(sia-accept)", desc = "Accept change" },
-  { "zpr", mode = "n", "<Plug>(sia-reject)", desc = "Reject change" },
-}
+Consider using
+[conflicting.nvim](https://github.com/isaksamsten/conflicting.nvim) to
+highlight and resolve the conflicts.
+
+Add `conflicting.nvim` to dependencies (or separately to also deal with Git merges), and setup an auto command:
+
+````lua
+vim.api.nvim_create_autocmd("User", {
+  pattern = "SiaEditPost",
+  callback = function(args)
+    local buf = args.data.buf
+    if buf then
+      require("conflicting").track(buf)
+    end
+  end,
+})
 ```
 
 Markers will look like this when replacing all blocks:
@@ -178,12 +189,7 @@ def range_with_step(start, end, step):
 =======
 from ranges import range_inclusive, range_exclusive, range_with_step
 >>>>>>> Sia
-```
-
-To accept a suggestion, call `SiaAccept` or use the mapping bound to
-`<Plug>(sia-accept)`. To reject, call `SiaReject` or use the mapping bound to
-`<Plug>(sia-reject)`. For example, to accept all suggestions, you can run `:cdo
-SiaAccept` when all changes are in the quickfix list.
+````
 
 ## Customize configuration
 

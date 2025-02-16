@@ -170,21 +170,6 @@ function M.setup()
     end
   end, { noremap = true, silent = true })
 
-  vim.keymap.set("n", "<Plug>(sia-reject)", function()
-    local buf = vim.api.nvim_get_current_buf()
-    require("sia.markers").reject(buf)
-  end, { noremap = true, silent = true })
-
-  vim.keymap.set("n", "<Plug>(sia-accept)", function()
-    local buf = vim.api.nvim_get_current_buf()
-    require("sia.markers").accept(buf)
-  end, { noremap = true, silent = true })
-
-  vim.keymap.set("n", "<Plug>(sia-diff)", function()
-    local buf = vim.api.nvim_get_current_buf()
-    require("sia.markers").diff(buf)
-  end, { noremap = true, silent = true })
-
   vim.keymap.set("n", "<Plug>(sia-replace-block)", function()
     local split = SplitStrategy.by_buf()
 
@@ -197,14 +182,6 @@ function M.setup()
         end)
       end
     end
-  end, { noremap = true, silent = true })
-
-  vim.keymap.set("n", "<Plug>(sia-next-marker)", function()
-    require("sia.markers").next()
-  end, { noremap = true, silent = true })
-
-  vim.keymap.set("n", "<Plug>(sia-previous-marker)", function()
-    require("sia.markers").previous()
   end, { noremap = true, silent = true })
 
   vim.keymap.set("n", "<Plug>(sia-replace-all-blocks)", function()

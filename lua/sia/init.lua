@@ -27,16 +27,7 @@ end
 function M.setup(options)
   config.setup(options)
   set_highlight_groups()
-  require("sia.markers").setup()
   require("sia.mappings").setup()
-
-  vim.api.nvim_create_user_command("SiaAccept", function()
-    require("sia.markers").accept(vim.api.nvim_get_current_buf())
-  end, {})
-
-  vim.api.nvim_create_user_command("SiaReject", function()
-    require("sia.markers").reject(vim.api.nvim_get_current_buf())
-  end, {})
 
   vim.api.nvim_create_user_command("SiaFile", function(args)
     local split = SplitStrategy.by_buf()
