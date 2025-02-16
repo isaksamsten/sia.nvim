@@ -259,10 +259,3 @@ require("sia").setup({
 ```
 
 We can use it with `Sia /yoda`.
-
-## Highlight groups
-
-- `SiaDiffAddHeader`:
-- `SiaDiffAdd`:
-- `SiaDiffDeleteHeader`:
-- `SiaDiffDelete`:
