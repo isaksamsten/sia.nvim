@@ -161,7 +161,7 @@ highlight and resolve the conflicts.
 
 Add `conflicting.nvim` to dependencies (or separately to also deal with Git merges), and setup an auto command:
 
-````lua
+```lua
 vim.api.nvim_create_autocmd("User", {
   pattern = "SiaEditPost",
   callback = function(args)
