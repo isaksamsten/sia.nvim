@@ -219,30 +219,6 @@ function M.setup()
     end
   end, { noremap = true, silent = true })
 
-  vim.keymap.set("n", "<Plug>(sia-show-context)", function()
-    vim.schedule(function()
-      local split = SplitStrategy.by_buf()
-      if split then
-        local contexts, _ = split.conversation:get_context_messages()
-        local items = {}
-        for _, message in ipairs(contexts) do
-          if message.context then
-            table.insert(items, {
-              bufnr = message.context.buf,
-              filename = utils.get_filename(message.context.buf, ":."),
-              lnum = message.context.pos[1],
-              text = string.format("lines %d-%d", message.context.pos[1], message.context.pos[2]),
-            })
-          end
-        end
-        if #items > 0 then
-          vim.fn.setqflist(items, "r")
-          vim.cmd("copen")
-        end
-      end
-    end)
-  end, { noremap = true, silent = true })
-
   vim.keymap.set("n", "<Plug>(sia-delete-context)", function()
     local split = SplitStrategy.by_buf()
     if split then

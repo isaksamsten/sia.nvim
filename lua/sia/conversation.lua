@@ -199,7 +199,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
---- @field tool_fn table<string, fun(arguments: table, callback: fun(content: string[]?):nil)>?
+--- @field tool_fn table<string, fun(arguments: table, strategy: sia.Strategy, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -223,9 +223,11 @@ function Conversation:new(action, args)
   }
   obj.instructions = {}
   for _, instruction in ipairs(action.instructions or {}) do
+    --- @diagnostic disable-next-line: param-type-mismatch
     table.insert(obj.instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
   end
   if action.reminder then
+    --- @diagnostic disable-next-line: param-type-mismatch
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
   obj.tools = action.tools

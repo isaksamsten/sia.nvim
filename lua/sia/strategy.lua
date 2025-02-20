@@ -5,6 +5,43 @@ local block = require("sia.blocks")
 local assistant = require("sia.assistant")
 local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
 
+--- @param tools sia.CompletedTools[]
+--- @param callback fun():nil
+local function confirm_tool(tools, callback)
+  local require_confirmation = {}
+  for _, tool in ipairs(tools) do
+    if tool.confirmation then
+      local descriptions = require_confirmation[tool.name]
+      if descriptions == nil then
+        descriptions = {}
+      end
+      for _, description in pairs(tool.confirmation.description) do
+        table.insert(descriptions, description)
+      end
+      require_confirmation[tool.name] = descriptions
+    end
+  end
+
+  if not vim.tbl_isempty(require_confirmation) then
+    local bullet_list = {}
+    for name, confirmation in pairs(require_confirmation) do
+      table.insert(bullet_list, string.format("\n • %s (%s)", name, table.concat(confirmation, ", ")))
+    end
+
+    local prompt = string.format(
+      "The following tools require confirmation:%s\n\nDo you want to continue? (y/N): ",
+      table.concat(bullet_list)
+    )
+    vim.ui.input({ prompt = prompt }, function(input)
+      if input and (input:lower() == "y" or input:lower() == "yes") then
+        callback()
+      end
+    end)
+  else
+    callback()
+  end
+end
+
 --- Write text to a buffer.
 --- @class sia.Writer
 --- @field buf number?
@@ -135,10 +172,14 @@ function Strategy:on_tool_call(t)
   end
 end
 
+--- @alias sia.CompletedTools { name: string, confirmation: { description: string[] }?  }
 --- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun():nil) }
 function Strategy:execute_tools(opts)
   if not vim.tbl_isempty(self.tools) then
     local tool_count = vim.tbl_count(self.tools)
+
+    --- @type sia.CompletedTools[]
+    local completed_tools = {}
     for _, tool in pairs(self.tools) do
       local func = tool["function"]
       if func then
@@ -151,14 +192,15 @@ function Strategy:execute_tools(opts)
             func.name,
             arguments,
             self,
-            vim.schedule_wrap(function(content)
+            vim.schedule_wrap(function(content, confirmation)
               tool_count = tool_count - 1
               if opts.on_tool_complete then
                 opts.on_tool_complete(tool, content)
+                table.insert(completed_tools, { name = func.name, confirmation = confirmation })
               end
               if tool_count == 0 then
                 if opts.on_tools_complete then
-                  opts.on_tools_complete()
+                  confirm_tool(completed_tools, opts.on_tools_complete)
                 end
                 self.tools = {}
               end
