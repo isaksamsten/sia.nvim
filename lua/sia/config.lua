@@ -180,6 +180,7 @@ local defaults = {
         },
         tools = {
           require("sia.tools").add_file,
+          require("sia.tools").find_lsp_symbol,
         },
         instructions = {
           "editblock_system",

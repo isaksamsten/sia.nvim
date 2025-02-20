@@ -342,9 +342,9 @@ function SplitStrategy:on_init()
     self.canvas:render_messages({ self.conversation:last_message() })
     self.canvas:render_model(self.conversation.model or require("sia.config").options.defaults.model)
     if self.canvas:line_count() == 1 then
-      self.canvas:render_last({ "# Sia", "", "" })
+      self.canvas:render_last({ "# Sia", "" })
     else
-      self.canvas:render_last({ "", "---", "", "# Sia", "", "" })
+      self.canvas:render_last({ "", "---", "", "# Sia", "" })
     end
     self.canvas:update_progress({ { "I'm thinking! Please wait...", "NonText" } })
   end

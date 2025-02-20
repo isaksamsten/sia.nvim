@@ -86,7 +86,8 @@ function ChatCanvas:render_messages(messages)
         else
           vim.api.nvim_buf_set_lines(buf, line_count, line_count, false, { "", "---", "", heading, "" })
         end
-        vim.api.nvim_buf_set_lines(buf, -1, -1, false, content)
+        line_count = vim.api.nvim_buf_line_count(buf)
+        vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, content)
       end
     end
   end

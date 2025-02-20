@@ -71,6 +71,8 @@ Once you understand the request you MUST:
 
 4. You have access to the following functions:
   - `add_file` to add files matching a glob pattern to the conversation.
+  - `find_lsp_symbol` to search for LSP symbols in the workspace. Use this
+    to know what files to add to the conversation.
 
 All changes to files must use this *SEARCH/REPLACE block* format.]],
     },
