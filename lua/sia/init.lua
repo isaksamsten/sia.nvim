@@ -8,25 +8,8 @@ local HiddenStrategy = require("sia.strategy").HiddenStrategy
 
 local M = {}
 
-local highlight_groups = {
-  SiaDiffDelete = { link = "DiffDelete" },
-  SiaDiffDeleteHeader = { link = "DiffDelete" },
-  SiaDiffChange = { link = "DiffChange" },
-  SiaDiffChangeHeader = { link = "DiffChange" },
-  SiaDiffDelimiter = { link = "Normal" },
-}
-local function set_highlight_groups()
-  for group, attr in pairs(highlight_groups) do
-    local existing = vim.api.nvim_get_hl(0, { name = group })
-    if vim.tbl_isempty(existing) then
-      vim.api.nvim_set_hl(0, group, attr)
-    end
-  end
-end
-
 function M.setup(options)
   config.setup(options)
-  set_highlight_groups()
   require("sia.mappings").setup()
 
   vim.api.nvim_create_user_command("SiaFile", function(args)
