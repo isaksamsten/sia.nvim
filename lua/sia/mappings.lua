@@ -87,10 +87,11 @@ function _G.__sia_execute(type)
     return
   end
 
-  --- @type sia.ActionArgument
+  --- @type sia.ActionContext
   local args = {
     start_line = start_line,
     end_line = end_line,
+    pos = { start_line, end_line },
     mode = "v",
     buf = vim.api.nvim_get_current_buf(),
     win = vim.api.nvim_get_current_win(),

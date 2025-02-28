@@ -21,6 +21,8 @@ function Canvas:render_model(model) end
 
 function Canvas:clear_extmarks() end
 
+function Canvas:clear() end
+
 function Canvas:line_count() end
 
 --- @class sia.ChatCanvas : sia.Canvas
@@ -110,6 +112,7 @@ function ChatCanvas:clear()
 end
 
 function ChatCanvas:line_count()
+  self:clear_extmarks()
   return vim.api.nvim_buf_line_count(self.buf)
 end
 

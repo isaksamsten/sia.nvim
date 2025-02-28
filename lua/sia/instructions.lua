@@ -12,9 +12,13 @@ local function get_local_or_global_files()
   end
 end
 
+--- @param conversation sia.Conversation
 --- @return sia.config.Instruction[]
-function M.files()
-  local files = get_local_or_global_files()
+function M.files(conversation)
+  local files = utils.get_global_files()
+  if conversation.files then
+    files = conversation.files
+  end
 
   --- @type sia.config.Instruction[]
   local instructions = {}
@@ -286,11 +290,61 @@ function M.verbatim()
     {
       role = "assistant",
       hide = true,
+      available = function(ctx)
+        return vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v"
+      end,
       id = function(ctx)
         return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.pos[1], ctx.pos[2] }
       end,
       content = "Ok",
       persistent = true,
+    },
+  }
+end
+
+--- @param opts {mark: string, mark_lnum: integer}?
+--- @return sia.config.Instruction[]
+function M.context(buf, pos, opts)
+  opts = opts or {}
+  --- @type sia.config.Instruction[]
+  return {
+    {
+      role = "user",
+      persistent = true,
+      available = function()
+        return vim.api.nvim_buf_is_loaded(buf)
+      end,
+      description = function()
+        return string.format("%s verbatim lines %d-%d", utils.get_filename(buf, ":."), pos[1], pos[2])
+      end,
+      content = function()
+        local lines = vim.api.nvim_buf_get_lines(buf, pos[1] - 1, pos[2] - 1, false)
+        if opts.mark then
+          local mark = opts.mark_lnum - (pos[1] - 1)
+          table.insert(lines, mark, "█" .. opts.mark)
+        end
+        local c = string.format(
+          "The provided context from line %d to line %d in %s\n```%s\n%s\n```",
+          pos[1],
+          pos[2],
+          utils.get_filename(buf, ":."),
+          vim.bo[buf].ft,
+          table.concat(lines, "\n")
+        )
+        return c
+      end,
+    },
+    {
+      role = "assistant",
+      persistent = true,
+      id = function()
+        return { "context", pos, vim.api.nvim_buf_get_name(buf) }
+      end,
+      available = function()
+        return vim.api.nvim_buf_is_loaded(buf)
+      end,
+      hide = true,
+      content = "Ok",
     },
   }
 end

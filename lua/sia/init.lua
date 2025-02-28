@@ -93,13 +93,13 @@ function M.setup(options)
     end,
   })
 
-  vim.api.nvim_create_autocmd("ColorScheme", {
-    group = augroup,
-    pattern = "*",
-    callback = function(args)
-      set_highlight_groups()
-    end,
-  })
+  -- vim.api.nvim_create_autocmd("ColorScheme", {
+  --   group = augroup,
+  --   pattern = "*",
+  --   callback = function(args)
+  --     set_highlight_groups()
+  --   end,
+  -- })
 
   if config.options.report_usage == true then
     vim.api.nvim_create_autocmd("User", {
@@ -148,10 +148,10 @@ function M.setup(options)
 end
 
 --- @param action sia.config.Action
---- @param opts sia.ActionArgument
+--- @param opts sia.ActionContext
 --- @param model string?
 function M.main(action, opts, model)
-  if vim.api.nvim_buf_is_valid(opts.buf) and vim.api.nvim_buf_is_loaded(opts.buf) then
+  if vim.api.nvim_buf_is_loaded(opts.buf) then
     local strategy
     if vim.bo[opts.buf].filetype == "sia" then
       strategy = SplitStrategy.by_buf(opts.buf)

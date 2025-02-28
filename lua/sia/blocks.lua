@@ -359,16 +359,20 @@ function M.custom_action(name, opts)
   return nil
 end
 
---- @param context sia.Context
 --- @param content string[]
 function M.replace_blocks_callback(context, content)
   local blocks = M.parse_blocks(context.buf, 0, content)
   local action = M.custom_action("search_replace", { automatic = true, show_qf = false })
 
-  if action then
+  if action and #blocks > 0 then
     vim.schedule(function()
       M.replace_all_blocks(action, blocks)
     end)
+  else
+    vim.notify("Sia returned code modifications.")
   end
 end
+
+M.actions["search_replace_edit"] = M.custom_action("search_replace", { automatic = true, show_qf = false })
+
 return M

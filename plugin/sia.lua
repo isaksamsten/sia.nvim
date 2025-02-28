@@ -12,24 +12,29 @@ local function find_and_remove_flag(flag, fargs)
   end
 end
 
-local possible_flags = { "-m" }
+local flags = {
+  ["-m"] = { pattern = "", completion = function() end },
+}
+
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
   local model = find_and_remove_flag("-m", args.fargs)
+  local split = find_and_remove_flag("-s", args.fargs)
 
   if #args.fargs == 0 and not vim.b.sia then
     vim.notify("Sia: No prompt provided.", vim.log.levels.ERROR)
     return
   end
 
-  --- @type sia.ActionArgument
+  --- @type sia.ActionContext
   local opts = {
     win = vim.api.nvim_get_current_win(),
     buf = vim.api.nvim_get_current_buf(),
     cursor = vim.api.nvim_win_get_cursor(0),
     start_line = args.line1,
     end_line = args.line2,
+    pos = { args.line1, args.line2 },
     bang = args.bang,
   }
   if args.count == -1 then
@@ -56,6 +61,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
       return
     end
     opts.start_line, opts.end_line = capture[1], capture[2]
+    opts.pos = { capture[1], capture[2] }
     opts.mode = "v"
   end
 
@@ -69,6 +75,10 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if utils.is_action_disabled(action) or not is_range_valid then
     vim.notify("Sia: The action /" .. args.fargs[1] .. " is not enabled in the current context.", vim.log.levels.ERROR)
     return
+  end
+
+  if action.mode == "split" and split ~= nil then
+    action.split.cmd = split
   end
 
   require("sia").main(action, opts, model)

@@ -63,7 +63,8 @@ local function call_provider(query, opts)
 end
 
 --- @param strategy sia.Strategy
-function M.execute_strategy(strategy)
+--- @param opts { on_complete: fun(): nil }?
+function M.execute_strategy(strategy, opts)
   local config = require("sia.config")
   local query = strategy:get_query()
   local first_on_stdout = true
@@ -141,7 +142,7 @@ function M.execute_strategy(strategy)
       end
     end,
     on_exit = function(_, _, _)
-      strategy:on_complete()
+      strategy:on_complete(opts)
       vim.api.nvim_exec_autocmds("User", {
         pattern = "SiaComplete",
         --- @diagnostic disable-next-line: undefined-field

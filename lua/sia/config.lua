@@ -48,8 +48,8 @@ local providers = require("sia.provider")
 --- @field execute fun(args:table, strategy: sia.Strategy, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
 
 --- @class sia.config.Action
---- @field instructions (string|sia.config.Instruction|(fun():sia.config.Instruction[]))[]
---- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionArgument):nil)?
+--- @field instructions (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]
+--- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
 --- @field reminder (string|sia.config.Instruction)?
 --- @field tools sia.config.Tool[]?
 --- @field model string?
@@ -57,7 +57,7 @@ local providers = require("sia.provider")
 --- @field input sia.config.ActionInput?
 --- @field mode sia.config.ActionMode?
 --- @field enabled (fun():boolean)|boolean?
---- @field capture nil|(fun(arg: sia.ActionArgument):[number, number])
+--- @field capture nil|(fun(arg: sia.ActionContext):[number, number])
 --- @field range boolean?
 --- @field insert sia.config.Insert?
 --- @field diff sia.config.Diff?
@@ -120,6 +120,8 @@ local defaults = {
     ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
     ["copilot-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
+    ["copilot-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
+    ["copilot-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
     ["copilot-o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["gemini-1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
     ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
@@ -201,6 +203,7 @@ local defaults = {
     unittest = require("sia.actions").unittest(),
     doc = require("sia.actions").doc(),
     fix = require("sia.actions").fix(),
+    replace = require("sia.actions").replace(),
   },
   report_usage = true,
 }

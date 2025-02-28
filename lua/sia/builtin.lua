@@ -2,6 +2,42 @@
 --- We can use these as string-names for instructions when building actions.
 --- Users can provide their own in `instructions` in the config.
 local M = {
+  watch_user_assist = {
+    hide = true,
+    role = "user",
+    content = [[
+I've written your instructions in comments in the code and marked them with "Sia"
+You can see the "Sia" comments shown below (marked with █).
+Find them in the code files I've shared with you, and follow their instructions.
+
+Instructions:
+ - Marked lines ending with Sia! corresponds to instructions
+ - Marked lines ending with only Sia corresponds to additional context that can
+ be used complete the instruction.
+ - **IMPORTANT** After completing those instructions, also be sure to remove all the "Sia"
+ comments from the code too.
+]],
+  },
+  watch_user_question = {
+    hide = true,
+    role = "user",
+    content = [[Act as an expert code analyst.
+Answer questions about the supplied code.
+
+Describe code changes however you like. Don't use SEARCH/REPLACE blocks!
+
+Find the "Sia" comments below (marked with █) in the code files I've shared with you.
+They contain my questions that I need you to answer and other instructions for you.
+
+
+Instructions:
+ - Marked lines ending with Sia? corresponds to questions
+ - Marked lines ending with only Sia corresponds to additional context that can
+ be used to answer the questions.
+
+]],
+  },
+
   editblock_reminder = {
     role = "system",
     content = [[# *SEARCH/REPLACE block* Rules:
@@ -200,8 +236,8 @@ from hello import hello
     role = "system",
     content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
 
-1. If possible, make sure that you only output the relevant and requested information.
-2. Refrain from explaining your reasoning, unless the user requests it, or adding unrelated text to the output.
+1. Make sure that you only output the relevant and requested information.
+2. Refrain from explaining your reasoning, unless the user requests it. Never add unrelated text to the output.
 3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
 4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
 5. **Always preserve** indentation for code.

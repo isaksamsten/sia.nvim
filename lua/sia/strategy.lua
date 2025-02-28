@@ -6,8 +6,8 @@ local assistant = require("sia.assistant")
 local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
 
 --- @param tools sia.CompletedTools[]
---- @param callback fun():nil
-local function confirm_tool(tools, callback)
+--- @param opts {on_confirm: (fun():nil), on_reject: (fun():nil)?}
+local function request_user_confirmation(tools, opts)
   local require_confirmation = {}
   for _, tool in ipairs(tools) do
     if tool.confirmation then
@@ -34,11 +34,13 @@ local function confirm_tool(tools, callback)
     )
     vim.ui.input({ prompt = prompt }, function(input)
       if input and (input:lower() == "y" or input:lower() == "yes") then
-        callback()
+        opts.on_confirm()
+      else
+        opts.on_reject()
       end
     end)
   else
-    callback()
+    opts.on_confirm()
   end
 end
 
@@ -133,7 +135,7 @@ Strategy.__index = Strategy
 function Strategy:new(conversation)
   local obj = setmetatable({}, self)
   obj.conversation = conversation
-  obj.tools = conversation.tools or {}
+  obj.tools = {}
   return obj
 end
 
@@ -148,8 +150,8 @@ function Strategy:on_start(job) end
 function Strategy:on_progress(content) end
 
 --- Callback triggered when the strategy is completed.
---- @param error_code integer?
-function Strategy:on_complete(error_code) end
+--- @param opts { on_complete: fun(): nil }?
+function Strategy:on_complete(opts) end
 
 function Strategy:on_error() end
 
@@ -200,7 +202,10 @@ function Strategy:execute_tools(opts)
               end
               if tool_count == 0 then
                 if opts.on_tools_complete then
-                  confirm_tool(completed_tools, opts.on_tools_complete)
+                  request_user_confirmation(
+                    completed_tools,
+                    { on_confirm = opts.on_tools_complete, on_reject = opts.on_no_tools }
+                  )
                 end
                 self.tools = {}
               end
@@ -235,7 +240,6 @@ end
 --- @field blocks sia.Block[] code blocks identified in the conversation
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field name string
---- @field files string[]
 --- @field block_action sia.BlockAction
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = setmetatable({}, { __index = Strategy })
@@ -268,9 +272,6 @@ function SplitStrategy:new(conversation, options)
   obj._writer = nil
   obj.options = options
   obj.blocks = {}
-  obj.tools = {}
-  obj.files = utils.get_global_files()
-  utils.clear_global_files()
 
   if type(options.block_action) == "table" then
     obj.block_action = options.block_action --[[@as sia.BlockAction]]
@@ -295,45 +296,6 @@ function SplitStrategy:new(conversation, options)
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
 
   return obj
-end
-
---- @param files string[]
-function SplitStrategy:add_files(files)
-  for _, file in ipairs(files) do
-    if not vim.tbl_contains(self.files, file) then
-      self.files[#self.files + 1] = file
-    end
-  end
-end
-
-function SplitStrategy:add_file(file)
-  if not vim.tbl_contains(self.files, file) then
-    self.files[#self.files + 1] = file
-  end
-end
-
---- @param patterns string[]
-function SplitStrategy:remove_files(patterns)
-  --- @type string[]
-  local regexes = {}
-  for i, pattern in ipairs(patterns) do
-    regexes[i] = vim.fn.glob2regpat(pattern)
-  end
-
-  --- @type integer[]
-  local to_remove = {}
-  for i, file in ipairs(self.files) do
-    for _, regex in ipairs(regexes) do
-      if vim.fn.match(file, regex) ~= -1 then
-        table.insert(to_remove, i)
-        break
-      end
-    end
-  end
-
-  for i = #to_remove, 1, -1 do
-    table.remove(self.files, to_remove[i])
-  end
 end
 
 function SplitStrategy:on_init()
@@ -379,17 +341,14 @@ function SplitStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
-function SplitStrategy:on_complete()
+function SplitStrategy:on_complete(opts)
   if not self._writer then
     return
   end
 
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     if #self._writer.cache > 0 then
-      self.conversation:add_instruction(
-        { role = "assistant", content = self._writer.cache },
-        { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-      )
+      self.conversation:add_instruction({ role = "assistant", content = self._writer.cache })
 
       local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
       for _, b in ipairs(blocks) do
@@ -409,14 +368,8 @@ function SplitStrategy:on_complete()
       on_tool_complete = function(tool, content)
         self.canvas:clear_extmarks()
         self.canvas:render_last(content)
-        self.conversation:add_instruction(
-          { role = "assistant", tool_calls = { tool } },
-          { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-        )
-        self.conversation:add_instruction(
-          { role = "tool", content = content, _tool_call_id = tool.id },
-          { buf = self.buf, cursor = vim.api.nvim_win_get_cursor(0) }
-        )
+        self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
+        self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
       end,
       on_tools_complete = function()
         assistant.execute_strategy(self)
@@ -438,6 +391,9 @@ function SplitStrategy:on_complete()
             pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
           end
         end)
+        if opts and opts.on_complete then
+          opts.on_complete()
+        end
       end,
     })
     self._writer = nil
@@ -500,6 +456,11 @@ end
 
 --- @param buf integer the buffer number
 function SplitStrategy.remove(buf)
+  local strategy = SplitStrategy._buffers[buf]
+  if strategy == nil then
+    return
+  end
+
   SplitStrategy._buffers[buf] = nil
   for i, b in ipairs(SplitStrategy._order) do
     if b == buf then
@@ -573,9 +534,13 @@ function DiffStrategy:on_progress(content)
   end
 end
 
-function DiffStrategy:on_complete()
+function DiffStrategy:on_complete(opts)
   del_abort_keymap(self.buf)
   self:execute_tools({
+    on_tool_complete = function(tool, content)
+      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+    end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
     end,
@@ -591,6 +556,9 @@ function DiffStrategy:on_complete()
           vim.cmd("diffthis")
         end
         vim.bo[self.buf].modifiable = false
+      end
+      if opts and opts.on_complete then
+        opts.on_complete()
       end
     end,
   })
@@ -658,19 +626,27 @@ function InsertStrategy:on_progress(content)
   self._writer:append(content)
 end
 
-function InsertStrategy:on_complete()
+function InsertStrategy:on_complete(opts)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   self:execute_tools({
     on_tool_start = function() end,
-    on_tool_complete = function() end,
+    on_tool_complete = function(tool, content)
+      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+    end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
     end,
+    on_no_tools = function()
+      if self._writer then
+        self._writer = nil
+      end
+      if opts and opts.on_complete then
+        opts.on_complete()
+      end
+    end,
   })
-  if self._writer then
-    self._writer = nil
-  end
 end
 
 --- @return number start_line
@@ -719,47 +695,51 @@ function HiddenStrategy:new(conversation, options)
 end
 
 function HiddenStrategy:on_init()
-  vim.api.nvim_echo({
-    { "🤖 ", "Normal" },
-    { self._options.messages and self._options.messages.on_start or "I'm thinking. Please wait... ", "Normal" },
-  }, false, {})
+  local context = self.conversation.context
+  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "NonText" } } },
+    virt_lines_above = true,
+    hl_group = "NonText",
+    end_line = context.pos[2],
+  })
 end
 
 --- @param job number
 function HiddenStrategy:on_start(job)
   local context = self.conversation.context
   set_abort_keymap(context.buf, job)
+  self._writer = Writer:new()
 end
 
 function HiddenStrategy:on_error() end
 
 function HiddenStrategy:on_progress(content)
-  if not self._writer then
-    self._writer = Writer:new()
-  end
   self._writer:append(content)
 end
 
-function HiddenStrategy:on_complete(error_code)
-  vim.api.nvim_echo({}, false, {})
-  if error_code ~= 0 then
-    return
+function HiddenStrategy:on_complete(opts)
+  if #self._writer.cache > 0 then
+    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache })
   end
-  local context = self.conversation.context
-  del_abort_keymap(context.buf)
   self:execute_tools({
-    on_tool_start = function(tool)
-      vim.api.nvim_echo({ { "Calling '" .. tool["function"].name .. "'...", "Comment" } }, false, {})
+    on_tool_start = function(tool) end,
+    on_tool_complete = function(tool, content)
+      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
     end,
-    on_tool_complete = function() end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
     end,
+    on_no_tools = function()
+      local context = self.conversation.context
+      self._options.callback(context, self._writer.cache)
+      vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+      if opts and opts.on_complete then
+        opts.on_complete()
+      end
+    end,
   })
-  self._options.callback(context, self._writer.cache)
-  if self._writer then
-    self._writer = nil
-  end
 end
 
 M.HiddenStrategy = HiddenStrategy

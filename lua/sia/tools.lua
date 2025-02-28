@@ -100,8 +100,7 @@ M.add_file = {
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },
-  execute = function(args, split, callback)
-    --- @cast split sia.SplitStrategy
+  execute = function(args, strategy, callback)
     if not args.glob_pattern then
       callback({ "Error: No glob pattern provided." })
       return
@@ -120,7 +119,7 @@ M.add_file = {
         table.insert(missing_files, file)
       else
         table.insert(existing_files, file)
-        split:add_file(file)
+        strategy.conversation:add_file(file)
       end
     end
 

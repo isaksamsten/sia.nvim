@@ -69,7 +69,7 @@ end
 --- based on the current file type and provided options.
 ---
 --- @param argument [string]
---- @param opts sia.ActionArgument
+--- @param opts sia.ActionContext
 --- @return sia.config.Action?
 function M.resolve_action(argument, opts)
   local config = require("sia.config")
@@ -110,7 +110,7 @@ function M.is_action_disabled(action)
   return false
 end
 
---- @param opts sia.ActionArgument
+--- @param opts sia.ActionContext
 --- @return sia.config.ActionMode
 function M.get_action_mode(opts)
   if vim.bo[opts.buf].ft == "sia" then

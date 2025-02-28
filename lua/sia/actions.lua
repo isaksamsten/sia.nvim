@@ -5,13 +5,12 @@ function M.edit()
   return {
     mode = "hidden",
     hidden = {
-      callback = function(ctx, content)
-        return require("sia.blocks").replace_blocks_callback(ctx, content)
-      end,
+      callback = require("sia.blocks").replace_blocks_callback,
     },
     tools = {
       require("sia.tools").add_file,
     },
+    input = "require",
     instructions = {
       "editblock_system",
       "git_files",
@@ -23,11 +22,45 @@ function M.edit()
 end
 
 --- @return sia.config.Action
+function M.replace()
+  --- @type sia.config.Action
+  return {
+    mode = "hidden",
+    hidden = {
+      callback = function(ctx, content)
+        if vim.api.nvim_buf_is_loaded(ctx.buf) then
+          vim.api.nvim_buf_set_lines(ctx.buf, ctx.pos[1] - 1, ctx.pos[2], false, content)
+        end
+      end,
+    },
+    instructions = {
+      {
+        role = "system",
+        content = [[You are plugged in to an editor. The user will provide you with a context
+and instructions. The user will provide context inside markdown code
+fences togheter with a filetype and a file. You will replace the
+context the user provides in accordance to the instructions. The
+replacement will be inserted verbatim into a text editor so refrain
+from adding unncessary explantions or code fences. Also avoid formatting not
+suitable for the users file type.
+
+REMEMBER: NEVER USE CODE FENCES OR MARKDOWN CODE BLOCKS!
+]],
+      },
+      "current_context",
+    },
+    input = "require",
+  }
+end
+
+--- @return sia.config.Action
 function M.diagnostic()
   local utils = require("sia.utils")
   return {
     instructions = {
       "editblock_system",
+      require("sia.instructions").files,
+      "current_context",
       {
         role = "user",
         id = function(ctx)
@@ -72,10 +105,11 @@ function M.diagnostic()
           )
         end,
       },
-      require("sia.instructions").files,
-      "current_context",
     },
     mode = "split",
+    tools = {
+      require("sia.tools").add_file,
+    },
     split = {
       block_action = "search_replace",
     },
@@ -162,6 +196,7 @@ line=11-15: Excessive nesting makes the code hard to follow. Consider refactorin
 If the code snippet has no readability issues, simply confirm that the code is clear and well-written]],
       },
       "current_context_line_number",
+      { role = "user", content = "Please review the provided context" },
     },
     mode = "hidden",
     hidden = {
@@ -215,8 +250,9 @@ If you need additional context to improve the explanation. Ask the user to add
 the file to the context using SiaFile.]],
       },
       "git_files",
-      require("sia.instructions").files(),
+      require("sia.instructions").files,
       "current_context_line_number",
+      { role = "user", content = "Please explain the provided context" },
     },
     mode = "split",
     range = true,
@@ -279,7 +315,7 @@ Javadoc for Java), including appropriate tags and formatting.
 
 Requirements:
 
-1. **Never output the function declaration or implementation**
+1. Never output the function declaration or implementation. ONLY documentation.
 2. Follow the language-specific documentation style strictly. Ensure all tags
    are accurate and appropriate for the language.
 3. Never explain your changes. Only output the documentation.
@@ -296,6 +332,7 @@ Requirements:
    maintains proper indentation for easy insertion into code.]],
       },
       "current_context",
+      { role = "user", content = "Please document the provided context" },
     },
     capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
     mode = "insert",

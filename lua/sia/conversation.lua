@@ -3,22 +3,17 @@
 --- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
 --- @alias sia.ToolParameter { type: "number"|"string"?, enum: string[]?, description: string? }
 
---- @class sia.ActionArgument
---- @field start_line integer?
---- @field end_line integer?
---- @field mode "v"|"n"?
---- @field bang boolean?
---- @field buf number
---- @field win number?
---- @field cursor integer[]
-
 --- @class sia.Context
 --- @field buf integer
 --- @field win integer?
---- @field pos [integer,integer]?
+--- @field pos [integer,integer]
 --- @field mode "n"|"v"?
 --- @field bang boolean?
---- @field cursor integer[]
+--- @field cursor integer[]?
+
+--- @class sia.ActionContext : sia.Context
+--- @field start_line integer?
+--- @field end_line integer?
 
 --- @class sia.Message
 --- @field id (fun(ctx:sia.Context?):table?)?
@@ -89,14 +84,10 @@ function Message:from_string(str, args)
 end
 
 --- Create a new message from an Instruction or a stored instruction.
---- @param instruction sia.config.Instruction|string|fun()|sia.config.Instruction[]|sia.config.Instruction[]
+--- @param instruction sia.config.Instruction|string|sia.config.Instruction[]
 --- @param args sia.Context?
 --- @return sia.Message[]?
 function Message:new(instruction, args)
-  if type(instruction) == "function" then
-    instruction = instruction()
-  end
-
   if type(instruction) == "string" then
     return Message:from_string(instruction, args)
   elseif vim.islist(instruction) then
@@ -190,12 +181,13 @@ function Message:get_description()
   end
 end
 
---- @alias sia.InstructionOption (string|sia.config.Instruction|(fun():sia.config.Instruction[]))
+--- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
 --- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 --- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
 --- @field tools sia.config.Tool[]?
 --- @field model string?
+--- @field files string[]
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
@@ -206,19 +198,22 @@ Conversation.__index = Conversation
 Conversation._buffers = {}
 
 --- @param action sia.config.Action
---- @param args sia.ActionArgument
+--- @param args sia.ActionContext
 --- @return sia.Conversation
 function Conversation:new(action, args)
   local obj = setmetatable({}, self)
   obj.model = action.model
   obj.temperature = action.temperature
   obj.mode = action.mode
+  obj.files = require("sia.utils").get_global_files() or {}
+  require("sia.utils").clear_global_files()
   obj.context = {
     buf = args.buf,
     win = args.win,
     mode = args.mode,
     bang = args.bang,
-    pos = { args.start_line, args.end_line },
+    pos = args.pos,
+    -- pos = { args.start_line, args.end_line },
     cursor = args.cursor,
   }
   obj.instructions = {}
@@ -239,12 +234,50 @@ function Conversation:new(action, args)
   return obj
 end
 
+--- @param files string[]
+function Conversation:add_files(files)
+  for _, file in ipairs(files) do
+    if not vim.tbl_contains(self.files, file) then
+      self.files[#self.files + 1] = file
+    end
+  end
+end
+
+function Conversation:add_file(file)
+  if not vim.tbl_contains(self.files, file) then
+    self.files[#self.files + 1] = file
+  end
+end
+
+--- @param patterns string[]
+function Conversation:remove_files(patterns)
+  --- @type string[]
+  local regexes = {}
+  for i, pattern in ipairs(patterns) do
+    regexes[i] = vim.fn.glob2regpat(pattern)
+  end
+
+  --- @type integer[]
+  local to_remove = {}
+  for i, file in ipairs(self.files) do
+    for _, regex in ipairs(regexes) do
+      if vim.fn.match(file, regex) ~= -1 then
+        table.insert(to_remove, i)
+        break
+      end
+    end
+  end
+
+  for i = #to_remove, 1, -1 do
+    table.remove(self.files, to_remove[i])
+  end
+end
 --- @param id table?
 --- @return boolean
 function Conversation:contains_message(id)
   if id then
     for _, other in ipairs(self.instructions) do
-      local messages = Message:new(other.instruction, other.context)
+      local messages = Message:new(self:unpack_instruction(other.instruction), other.context)
       for _, message in ipairs(messages or {}) do
         local message_id = message:get_id()
         if message_id and vim.deep_equal(message_id, id) then
@@ -256,7 +289,7 @@ function Conversation:contains_message(id)
   return false
 end
 
---- @param instruction sia.config.Instruction
+--- @param instruction sia.config.Instruction|string
 --- @param args sia.Context?
 --- @return boolean
 function Conversation:add_instruction(instruction, args)
@@ -279,7 +312,7 @@ end
 --- @return sia.Message message
 function Conversation:last_message()
   local instruction = self.instructions[#self.instructions]
-  local messages = Message:new(instruction.instruction, instruction.context)
+  local messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
   if not messages then
     error("No messages found")
   end
@@ -293,7 +326,8 @@ function Conversation:get_context_instructions()
   local mappings = {}
   for i, instruction in ipairs(self.instructions) do
     local context = {}
-    for _, message in ipairs(Message:new(instruction.instruction, instruction.context) or {}) do
+    local tmp_messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
+    for _, message in ipairs(tmp_messages or {}) do
       if message:is_context() then
         table.insert(context, message:get_description())
       end
@@ -313,7 +347,8 @@ end
 function Conversation:get_context_messages()
   local messages = {}
   for _, instruction in ipairs(self.instructions) do
-    for _, message in ipairs(Message:new(instruction.instruction, instruction.context) or {}) do
+    local tmp_messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context) or {}
+    for _, message in ipairs(tmp_messages) do
       if message:is_context() then
         table.insert(messages, message)
       end
@@ -339,7 +374,7 @@ function Conversation:get_messages()
     .iter(self.instructions)
     --- @param instruction {instruction: sia.InstructionOption, context: sia.Context? }
     :map(function(instruction)
-      return Message:new(instruction.instruction, instruction.context)
+      return Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
     end)
     :flatten()
     :filter(function(m)
@@ -348,14 +383,24 @@ function Conversation:get_messages()
     :totable()
 end
 
+function Conversation:unpack_instruction(instruction)
+  if type(instruction) == "function" then
+    return instruction(self)
+  else
+    return instruction
+  end
+end
+
 --- @return sia.Query
 function Conversation:to_query()
   local prompt = vim
     .iter(self.instructions)
-    --- @param instruction {instruction: sia.InstructionOption, context: sia.Context?}
-    :map(function(instruction)
-      return Message:new(instruction.instruction, instruction.context)
-    end)
+    --- @param instruction_context {instruction: sia.InstructionOption, context: sia.Context?}
+    :map(
+      function(instruction_context)
+        return Message:new(self:unpack_instruction(instruction_context.instruction), instruction_context.context)
+      end
+    )
     :flatten()
     :filter(function(m)
       return m:is_available()
@@ -369,7 +414,8 @@ function Conversation:to_query()
     :totable()
 
   if self.reminder then
-    for _, reminder in ipairs(Message:new(self.reminder.instruction, self.reminder.context) or {}) do
+    local reminders = Message:new(self:unpack_instruction(self.reminder.instruction), self.reminder.context)
+    for _, reminder in ipairs(reminders or {}) do
       if reminder:is_available() then
         if #prompt == 0 or prompt[#prompt].role ~= "user" then
           table.insert(prompt, #prompt + 1, reminder:to_prompt())

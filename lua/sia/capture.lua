@@ -1,13 +1,17 @@
 local M = {}
 
+--- @return fun(opts:sia.Context):[integer,integer]?
 function M.treesitter(query)
-  local function get_textobject_under_cursor(opts)
+  --- @param opts sia.Context
+  --- @return [integer, integer]?
+  local function get_textobject(opts)
     local ok, shared = pcall(require, "nvim-treesitter.textobjects.shared")
     if not ok then
       return nil
     end
 
-    local _, pos = shared.textobject_at_point(query, nil, nil, opts.buf, { lookahead = false, lookbehind = false })
+    local _, pos =
+      shared.textobject_at_point(query, nil, opts.cursor or nil, opts.buf, { lookahead = false, lookbehind = false })
     if pos then
       return { pos[1] + 1, pos[3] + 1 }
     end
@@ -16,9 +20,11 @@ function M.treesitter(query)
   end
 
   if type(query) == "string" then
-    return get_textobject_under_cursor
+    return get_textobject
   else
-    local function get_first_textobject_under_cursor(opts)
+    --- @param opts sia.Context
+    --- @return [integer, integer]?
+    local function get_first_textobject(opts)
       for _, q in ipairs(query) do
         local ret = M.treesitter(q)(opts)
         if ret then
@@ -27,7 +33,7 @@ function M.treesitter(query)
       end
       return nil
     end
-    return get_first_textobject_under_cursor
+    return get_first_textobject
   end
 end
 
