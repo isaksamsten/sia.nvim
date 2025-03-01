@@ -50,6 +50,7 @@ REMEMBER: NEVER USE CODE FENCES OR MARKDOWN CODE BLOCKS!
       "current_context",
     },
     input = "require",
+    range = true,
   }
 end
 
