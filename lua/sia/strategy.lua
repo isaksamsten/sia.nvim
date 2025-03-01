@@ -342,6 +342,7 @@ function SplitStrategy:get_win()
 end
 
 function SplitStrategy:on_complete(opts)
+  del_abort_keymap(self.buf)
   if not self._writer then
     return
   end
@@ -712,13 +713,19 @@ function HiddenStrategy:on_start(job)
   self._writer = Writer:new()
 end
 
-function HiddenStrategy:on_error() end
+function HiddenStrategy:on_error()
+  local context = self.conversation.context
+  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+  del_abort_keymap(context.buf)
+end
 
 function HiddenStrategy:on_progress(content)
   self._writer:append(content)
 end
 
 function HiddenStrategy:on_complete(opts)
+  local context = self.conversation.context
+  del_abort_keymap(context.buf)
   if #self._writer.cache > 0 then
     self.conversation:add_instruction({ role = "assistant", content = self._writer.cache })
   end
@@ -732,9 +739,22 @@ function HiddenStrategy:on_complete(opts)
       assistant.execute_strategy(self)
     end,
     on_no_tools = function()
-      local context = self.conversation.context
-      self._options.callback(context, self._writer.cache)
       vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+      local messages = self.conversation:get_messages(function(message)
+        return message.role == "assistant"
+      end)
+      local content = vim
+        .iter(messages)
+        :filter(function(message)
+          return type(message.content) == "table"
+        end)
+        :map(function(message)
+          return message.content
+        end)
+        :flatten()
+        :totable()
+
+      self._options.callback(context, content)
       if opts and opts.on_complete then
         opts.on_complete()
       end

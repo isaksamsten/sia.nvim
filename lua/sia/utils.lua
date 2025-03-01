@@ -1,5 +1,21 @@
 local M = {}
 
+--- Create a new split with markdown content
+--- @param content string[] The content to insert in the split
+--- @param opts? {cmd: string?, ft: string?} Optional configuration
+function M.create_markdown_split(content, opts)
+  opts = opts or {}
+  local cmd = opts.cmd or "new"
+  vim.cmd(cmd)
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].ft = opts.ft or "markdown"
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].buftype = "nofile"
+
+  return buf
+end
 --- @type string[]
 local global_file_list = {}
 

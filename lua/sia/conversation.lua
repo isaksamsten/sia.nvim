@@ -277,7 +277,7 @@ end
 function Conversation:contains_message(id)
   if id then
     for _, other in ipairs(self.instructions) do
-      local messages = Message:new(self:unpack_instruction(other.instruction), other.context)
+      local messages = self:_to_message(other)
       for _, message in ipairs(messages or {}) do
         local message_id = message:get_id()
         if message_id and vim.deep_equal(message_id, id) then
@@ -312,7 +312,7 @@ end
 --- @return sia.Message message
 function Conversation:last_message()
   local instruction = self.instructions[#self.instructions]
-  local messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
+  local messages = self:_to_message(instruction)
   if not messages then
     error("No messages found")
   end
@@ -326,7 +326,7 @@ function Conversation:get_context_instructions()
   local mappings = {}
   for i, instruction in ipairs(self.instructions) do
     local context = {}
-    local tmp_messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
+    local tmp_messages = self:_to_message(instruction)
     for _, message in ipairs(tmp_messages or {}) do
       if message:is_context() then
         table.insert(context, message:get_description())
@@ -347,8 +347,8 @@ end
 function Conversation:get_context_messages()
   local messages = {}
   for _, instruction in ipairs(self.instructions) do
-    local tmp_messages = Message:new(self:unpack_instruction(instruction.instruction), instruction.context) or {}
-    for _, message in ipairs(tmp_messages) do
+    local tmp_messages = self:_to_message(instruction)
+    for _, message in ipairs(tmp_messages or {}) do
       if message:is_context() then
         table.insert(messages, message)
       end
@@ -368,19 +368,37 @@ function Conversation:execute_tool(name, arguments, strategy, callback)
   end
 end
 
+--- @param filter (fun(message: sia.Message):boolean)?
 --- @return sia.Message[] messages
-function Conversation:get_messages()
+function Conversation:get_messages(filter)
   return vim
     .iter(self.instructions)
     --- @param instruction {instruction: sia.InstructionOption, context: sia.Context? }
     :map(function(instruction)
-      return Message:new(self:unpack_instruction(instruction.instruction), instruction.context)
+      return self:_to_message(instruction)
     end)
     :flatten()
     :filter(function(m)
-      return m:is_available()
+      return m:is_available() and (filter == nil or filter(m))
     end)
     :totable()
+end
+
+--- @param instruction_context {instruction: sia.InstructionOption, context: sia.Context?}?
+--- @return sia.Message[]?
+function Conversation:_to_message(instruction_context)
+  if instruction_context == nil then
+    return nil
+  end
+
+  local instruction
+  if type(instruction_context.instruction) == "function" then
+    instruction = instruction_context.instruction(self)
+  else
+    instruction = instruction_context.instruction
+  end
+  --- @cast instruction sia.config.Instruction|string|sia.config.Instruction[]
+  return Message:new(instruction, instruction_context.context)
 end
 
 function Conversation:unpack_instruction(instruction)
@@ -395,12 +413,9 @@ end
 function Conversation:to_query()
   local prompt = vim
     .iter(self.instructions)
-    --- @param instruction_context {instruction: sia.InstructionOption, context: sia.Context?}
-    :map(
-      function(instruction_context)
-        return Message:new(self:unpack_instruction(instruction_context.instruction), instruction_context.context)
-      end
-    )
+    :map(function(instruction_context)
+      return self:_to_message(instruction_context)
+    end)
     :flatten()
     :filter(function(m)
       return m:is_available()
@@ -414,7 +429,9 @@ function Conversation:to_query()
     :totable()
 
   if self.reminder then
-    local reminders = Message:new(self:unpack_instruction(self.reminder.instruction), self.reminder.context)
+    -- local reminders = Message:new(self:unpack_instruction(self.reminder.instruction), self.reminder.context)
+    --- @diagnostic disable-next-line param-type-mismatch
+    local reminders = self:_to_message(self.reminder)
     for _, reminder in ipairs(reminders or {}) do
       if reminder:is_available() then
         if #prompt == 0 or prompt[#prompt].role ~= "user" then

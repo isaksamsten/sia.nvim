@@ -75,9 +75,6 @@ end
 ---    the same content but differences in whitespace is considered similar
 ---  - if threshold is a number (between 0 and 1), fuzzy match lines.
 ---
----  TODO: consider finding all matching spans and score them to so we can
----  select the best and not only the first
----
 --- @param needle string[]
 --- @param haystack string[]
 --- @param opts {threshold: number?, ignore_whitespace: boolean?}?
@@ -148,6 +145,133 @@ function M.find_subsequence_span(needle, haystack, opts)
   end
 
   return nil
+end
+
+--- Find the top-k spans of lines in needle that match in haystack with similarity scoring.
+---  - if ignore_whitespace, then empty lines are ignored and two spans with
+---    the same content but differences in whitespace is considered similar
+---  - scores all potential spans regardless of threshold and returns the top-k highest scoring spans
+---  - it uses some tricks but is still rather slow.
+---
+--- @param needle string[]
+--- @param haystack string[]
+--- @param opts {ignore_whitespace: boolean?, threshold: number?, limit: integer?}?
+--- @return {span: [integer, integer], score: number}[]
+function M.find_best_subsequence_span(needle, haystack, opts)
+  local function is_empty(line)
+    return line:match("^%s*$") ~= nil
+  end
+
+  opts = opts or {}
+  local ignore_whitespace = opts.ignore_whitespace or false
+  local limit = opts.limit or 1
+  local threshold = opts.threshold or 0
+
+  local needle_len = #needle
+  local haystack_len = #haystack
+  local top_matches = {}
+  local min_top_score = 0
+
+  -- Count non-empty lines in needle once for all iterations
+  local total_non_empty_needle = needle_len
+  if ignore_whitespace then
+    total_non_empty_needle = 0
+    for j = 1, needle_len do
+      if not is_empty(needle[j]) then
+        total_non_empty_needle = total_non_empty_needle + 1
+      end
+    end
+  end
+
+  -- Iterate through haystack to find all potential matches
+  for i = 1, haystack_len do
+    local haystack_idx = i
+    local needle_idx = 1
+    local start_pos = -1
+    local sum_similarity = 0
+    local matched_lines = 0
+
+    while haystack_idx <= haystack_len and needle_idx <= needle_len do
+      if ignore_whitespace then
+        local empty_needle = is_empty(needle[needle_idx])
+        local empty_haystack = is_empty(haystack[haystack_idx])
+        if empty_needle and empty_haystack then
+          needle_idx = needle_idx + 1
+          haystack_idx = haystack_idx + 1
+          goto continue
+        elseif empty_needle then
+          needle_idx = needle_idx + 1
+          goto continue
+        elseif empty_haystack then
+          haystack_idx = haystack_idx + 1
+          goto continue
+        end
+      end
+
+      if start_pos == -1 then
+        start_pos = haystack_idx
+      end
+
+      local similarity
+      if needle[needle_idx] == haystack[haystack_idx] then
+        similarity = 1.0
+      else
+        similarity = M.similarity_ratio(needle[needle_idx], haystack[haystack_idx])
+      end
+
+      sum_similarity = sum_similarity + similarity
+      matched_lines = matched_lines + 1
+
+      -- Early pruning: if we can't reach the threshold or the current min score in top matches, abort this match
+      if matched_lines > 0 then
+        local current_avg = sum_similarity / matched_lines
+
+        -- Calculate best possible final average (if all remaining matches are perfect)
+        local remaining = total_non_empty_needle - matched_lines
+        local best_possible_avg = (sum_similarity + remaining) / total_non_empty_needle
+
+        local effective_threshold = math.max(threshold, min_top_score)
+        if best_possible_avg < effective_threshold then
+          goto next_start_position
+        end
+      end
+
+      needle_idx = needle_idx + 1
+      haystack_idx = haystack_idx + 1
+
+      ::continue::
+    end
+
+    if needle_idx == needle_len + 1 and start_pos ~= -1 and matched_lines > 0 then
+      local avg_score = sum_similarity / matched_lines
+
+      if avg_score >= threshold then
+        local match = {
+          span = { start_pos, haystack_idx - 1 },
+          score = avg_score,
+        }
+
+        if avg_score == 1.0 then
+          return { match }
+        end
+
+        table.insert(top_matches, match)
+
+        table.sort(top_matches, function(a, b)
+          return a.score > b.score
+        end)
+
+        if #top_matches > limit then
+          table.remove(top_matches)
+          min_top_score = top_matches[#top_matches].score
+        end
+      end
+    end
+
+    ::next_start_position::
+  end
+
+  return top_matches
 end
 
 return M

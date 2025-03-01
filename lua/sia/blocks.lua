@@ -154,7 +154,7 @@ function M.replace_all_blocks(block_action, blocks, opts)
       vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = buf } })
     end
 
-    if #edits > 0 and block_action.automatic == false then
+    if #edits > 0 then
       vim.fn.setqflist(edits, "r")
       vim.cmd("copen")
     end
@@ -262,6 +262,7 @@ local function search_replace_action(b)
     elseif #search == 0 and #content > 1 then
       pos = { #content + 1, #content + 1 }
     else
+      -- We try a few ways for finding the search region in order of complexity.
       -- First try with an exact match
       pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
       if not pos then
@@ -270,6 +271,21 @@ local function search_replace_action(b)
         if not pos then
           -- If that fails, we resort to an approximate match, without empty lines
           pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
+          if not pos then
+            -- If that fails, we resort to an even more approximate match where we don't have a
+            -- hard threshold on specific lines but that the average score for the entire region
+            -- needs on average 0.90.
+            pos = matcher.find_best_subsequence_span(
+              search,
+              content,
+              { ignore_whitespace = true, threshold = 0.9, limit = 1 }
+            )
+            if #pos > 0 then
+              pos = pos[1].span
+            else
+              pos = nil
+            end
+          end
         end
       end
     end
@@ -362,17 +378,17 @@ end
 --- @param content string[]
 function M.replace_blocks_callback(context, content)
   local blocks = M.parse_blocks(context.buf, 0, content)
-  local action = M.custom_action("search_replace", { automatic = true, show_qf = false })
+  local action = M.actions["search_replace_edit"]
 
   if action and #blocks > 0 then
     vim.schedule(function()
       M.replace_all_blocks(action, blocks)
     end)
   else
-    vim.notify("Sia returned code modifications.")
+    require("sia.utils").create_markdown_split(content, { cmd = "new|resize 20%" })
   end
 end
 
-M.actions["search_replace_edit"] = M.custom_action("search_replace", { automatic = true, show_qf = false })
+M.actions["search_replace_edit"] = M.custom_action("search_replace", { automatic = true })
 
 return M
