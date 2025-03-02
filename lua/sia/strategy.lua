@@ -150,7 +150,7 @@ function Strategy:on_start(job) end
 function Strategy:on_progress(content) end
 
 --- Callback triggered when the strategy is completed.
---- @param opts { on_complete: fun(): nil }?
+--- @param opts { on_complete: fun(): nil }
 function Strategy:on_complete(opts) end
 
 function Strategy:on_error() end
@@ -391,10 +391,10 @@ function SplitStrategy:on_complete(opts)
             self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
             pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
           end
+          if opts and opts.on_complete then
+            opts.on_complete()
+          end
         end)
-        if opts and opts.on_complete then
-          opts.on_complete()
-        end
       end,
     })
     self._writer = nil
