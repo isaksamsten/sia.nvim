@@ -3,6 +3,7 @@ local utils = require("sia.utils")
 local ChatCanvas = require("sia.canvas").ChatCanvas
 local block = require("sia.blocks")
 local assistant = require("sia.assistant")
+local Message = require("sia.conversation").Message
 local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
 
 --- @param tools sia.CompletedTools[]
@@ -743,18 +744,12 @@ function HiddenStrategy:on_complete(opts)
       local messages = self.conversation:get_messages(function(message)
         return message.role == "assistant"
       end)
-      local content = vim
-        .iter(messages)
-        :filter(function(message)
-          return type(message.content) == "table"
-        end)
-        :map(function(message)
-          return message.content
-        end)
-        :flatten()
-        :totable()
-
-      self._options.callback(context, content)
+      local content = Message.merge_content(messages)
+      if content then
+        self._options.callback(context, content)
+      else
+        vim.api.nvim_echo({ { "Sia: no response", "Error" } }, false, {})
+      end
       if opts and opts.on_complete then
         opts.on_complete()
       end

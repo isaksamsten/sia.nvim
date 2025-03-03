@@ -181,6 +181,21 @@ function Message:get_description()
   end
 end
 
+--- @param messages sia.Message[]?
+--- @return string[]? content
+function Message.merge_content(messages)
+  if messages == nil then
+    return nil
+  end
+
+  return vim
+    .iter(messages)
+    :map(function(m)
+      return m:get_content()
+    end)
+    :flatten()
+    :totable()
+end
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
 --- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
