@@ -17,16 +17,20 @@ local ns_flash_id = vim.api.nvim_create_namespace("sia_flash") -- Create a names
 --- @param timeout integer?
 --- @param hl_group string?
 local function flash_highlight(bufnr, pos, timeout, hl_group)
-  for line = pos[1], pos[2] do
-    vim.api.nvim_buf_add_highlight(bufnr, ns_flash_id, hl_group or "SiaDiffAdd", line, 0, -1)
-  end
+  local extmark = vim.api.nvim_buf_set_extmark(
+    bufnr,
+    ns_flash_id,
+    pos[1],
+    0,
+    { end_line = pos[2] + 1, hl_eol = true, hl_group = hl_group or "DiffAdd" }
+  )
 
   local timer = vim.loop.new_timer()
   timer:start(
     timeout or 300,
     0,
     vim.schedule_wrap(function()
-      vim.api.nvim_buf_clear_namespace(bufnr, ns_flash_id, pos[1], pos[2] + 1)
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, ns_flash_id, extmark)
       timer:stop()
       timer:close()
     end)
