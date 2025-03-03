@@ -17,7 +17,7 @@ function M.setup(options)
     if #args.fargs == 0 then
       local files
       if split then
-        files = split.files
+        files = split.conversation.files
       else
         files = utils.get_global_files()
       end
@@ -25,7 +25,7 @@ function M.setup(options)
     else
       if args.bang then
         if split then
-          split.files = {}
+          split.conversation.files = {}
         else
           utils.clear_global_files()
         end
@@ -33,7 +33,7 @@ function M.setup(options)
       local files = utils.glob_pattern_to_files(args.fargs)
 
       if split then
-        split:add_files(files)
+        split.conversation:add_files(files)
       else
         utils.add_global_files(files)
       end
@@ -43,7 +43,7 @@ function M.setup(options)
   vim.api.nvim_create_user_command("SiaFileDelete", function(args)
     local split = SplitStrategy.by_buf()
     if split then
-      split:remove_files(args.fargs)
+      split.conversation:remove_files(args.fargs)
     else
       utils.remove_global_files(args.fargs)
     end
@@ -53,7 +53,7 @@ function M.setup(options)
       local split = SplitStrategy.by_buf()
       local files
       if split then
-        files = split.files
+        files = split.conversation.files
       else
         files = utils.get_global_files()
       end
