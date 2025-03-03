@@ -70,6 +70,35 @@ function M.similarity_ratio(a, b)
   return (2 * total_matching_chars) / total_length
 end
 
+local function gen_in_conflict()
+  local IN_SEARCH = 0
+  local IN_OURS = 1
+  local IN_THEIRS = 2
+  local conflict_start = "^<<<<<<?<?<?<?"
+  local conflict_end = "^>>>>>>?>?>?>?>"
+  local conflict_delimiter = "^======?=?=?=?"
+
+  local current_conflict_state = IN_SEARCH
+  return function(line)
+    if current_conflict_state == IN_OURS then
+      if line:match(conflict_delimiter) then
+        current_conflict_state = IN_THEIRS
+      end
+      return true
+    elseif current_conflict_state == IN_THEIRS then
+      if line:match(conflict_end) then
+        current_conflict_state = IN_SEARCH
+      end
+      return true
+    else
+      if line:match(conflict_start) then
+        current_conflict_state = IN_OURS
+        return true
+      end
+      return false
+    end
+  end
+end
 --- Find the span of lines in needle in haystack.
 ---  - if ignore_whitespace, then empty lines are ignored and two spans with
 ---    the same content but differences in whitespace is considered similar
@@ -77,7 +106,7 @@ end
 ---
 --- @param needle string[]
 --- @param haystack string[]
---- @param opts {threshold: number?, ignore_whitespace: boolean?}?
+--- @param opts {threshold: number?, ignore_whitespace: boolean?, ignore_conflicts: boolean?}?
 --- @return [integer, integer]? position the position in haystack of the first match.
 function M.find_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
@@ -87,12 +116,21 @@ function M.find_subsequence_span(needle, haystack, opts)
   opts = opts or {}
   local threshold = opts.threshold
   local ignore_whitespace = opts.ignore_whitespace or false
+  local in_conflict = nil
+  if opts.ignore_conflicts or true then
+    in_conflict = gen_in_conflict()
+  end
 
   local needle_len = #needle
   local haystack_len = #haystack
 
   -- Iterate through y to find a potential starting point
   for i = 1, haystack_len do
+    -- Skip the starting position if it's in a conflict region
+    if in_conflict and in_conflict(haystack[i]) then
+      goto outer_continue
+    end
+
     local haystack_idx = i
     local needle_idx = 1
     local start_pos = -1
@@ -142,6 +180,8 @@ function M.find_subsequence_span(needle, haystack, opts)
     if needle_idx == needle_len + 1 then
       return { start_pos, haystack_idx - 1 }
     end
+
+    ::outer_continue::
   end
 
   return nil
@@ -155,7 +195,7 @@ end
 ---
 --- @param needle string[]
 --- @param haystack string[]
---- @param opts {ignore_whitespace: boolean?, threshold: number?, limit: integer?}?
+--- @param opts {ignore_whitespace: boolean?, threshold: number?, limit: integer?, ignore_conflicts: boolean?}?
 --- @return {span: [integer, integer], score: number}[]
 function M.find_best_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
@@ -166,6 +206,10 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   local ignore_whitespace = opts.ignore_whitespace or false
   local limit = opts.limit or 1
   local threshold = opts.threshold or 0
+  local in_conflict = nil
+  if opts.ignore_conflicts or true then
+    in_conflict = gen_in_conflict()
+  end
 
   local needle_len = #needle
   local haystack_len = #haystack
@@ -183,8 +227,11 @@ function M.find_best_subsequence_span(needle, haystack, opts)
     end
   end
 
-  -- Iterate through haystack to find all potential matches
   for i = 1, haystack_len do
+    if in_conflict and in_conflict(haystack[i]) then
+      goto next_start_position
+    end
+
     local haystack_idx = i
     local needle_idx = 1
     local start_pos = -1
