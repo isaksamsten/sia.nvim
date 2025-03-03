@@ -8,11 +8,179 @@ local HiddenStrategy = require("sia.strategy").HiddenStrategy
 
 local M = {}
 
+local highlight_groups = {
+  SiaResponseSelected = { link = "CursorLine" },
+}
+
+local function set_highlight_groups()
+  for group, attr in pairs(highlight_groups) do
+    local existing = vim.api.nvim_get_hl(0, { name = group })
+    if vim.tbl_isempty(existing) then
+      vim.api.nvim_set_hl(0, group, attr)
+    end
+  end
+end
+
+function M.replace(opts)
+  opts = opts or {}
+  local split = SplitStrategy.by_buf()
+  if split then
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+    local block = split:find_block(line)
+    if block then
+      vim.schedule(function()
+        require("sia.blocks").replace_all_blocks(split.block_action, { block }, { apply_marker = opts.apply_marker })
+      end)
+    end
+  end
+end
+
+function M.replace_all(opts)
+  opts = opts or {}
+  local split = SplitStrategy.by_buf()
+  local line = vim.api.nvim_win_get_cursor(0)[1]
+  if split then
+    vim.schedule(function()
+      require("sia.blocks").replace_all_blocks(
+        split.block_action,
+        split:find_all_blocks(line),
+        { apply_marker = opts.apply_marker }
+      )
+    end)
+  end
+end
+
+function M.insert(opts)
+  local split = SplitStrategy.by_buf()
+  if split then
+    local padding = 0
+    if opts.above then
+      padding = 1
+    end
+
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+    local block = split:find_block(line)
+    if block then
+      vim.schedule(function()
+        require("sia.blocks").insert_block(split.block_action, block, config.options.defaults.replace, padding)
+      end)
+    end
+  end
+end
+
+function M.remove_context()
+  local split = SplitStrategy.by_buf()
+  if split then
+    local contexts, mappings = split.conversation:get_context_instructions()
+    if #contexts == 0 then
+      vim.notify("Sia: No contexts available")
+      return
+    end
+    vim.ui.select(contexts, {
+      prompt = "Delete context",
+      --- @param idx integer?
+    }, function(_, idx)
+      if idx then
+        split.conversation:remove_instruction(mappings[idx])
+      end
+    end)
+  end
+end
+
+function M.preview_context()
+  local split = SplitStrategy.by_buf()
+  if split then
+    local contexts = split.conversation:get_context_messages()
+    if #contexts == 0 then
+      vim.notify("Sia: No contexts available")
+      return
+    end
+    vim.ui.select(contexts, {
+      prompt = "Peek context",
+      --- @param message sia.Message
+      format_item = function(message)
+        return message:get_description()
+      end,
+      --- @param item sia.Message?
+      --- @param idx integer
+    }, function(item, idx)
+      if item then
+        local content = item:get_content()
+        if content then
+          local buf = vim.api.nvim_create_buf(false, true)
+          vim.bo[buf].ft = "markdown"
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+          local win = vim.api.nvim_open_win(buf, true, {
+            relative = "win",
+            style = "minimal",
+            row = vim.o.lines - 3,
+            col = 0,
+            width = vim.api.nvim_win_get_width(0) - 1,
+            height = math.floor(vim.o.lines * 0.2),
+            border = "single",
+            title = item:get_description(),
+            title_pos = "center",
+          })
+          vim.wo[win].wrap = true
+          vim.keymap.set("n", "q", function()
+            vim.api.nvim_win_close(win, true)
+          end, { buffer = buf })
+        end
+      end
+    end)
+  end
+end
+
+function M.toggle()
+  local last = SplitStrategy.last()
+  if last and vim.api.nvim_buf_is_valid(last.buf) then
+    local win = vim.fn.bufwinid(last.buf)
+    if win ~= -1 and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
+      vim.api.nvim_win_close(win, true)
+    else
+      vim.cmd(last.options.cmd)
+      win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(win, last.buf)
+    end
+  end
+end
+
+function M.open_reply()
+  local buf = vim.api.nvim_get_current_buf()
+  local current = SplitStrategy.by_buf(buf)
+  if current then
+    vim.cmd("new")
+    buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(win, buf)
+    vim.bo[buf].bufhidden = "hide"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].ft = "markdown"
+    vim.api.nvim_buf_set_name(buf, "*sia reply*")
+    vim.api.nvim_win_set_height(win, 10)
+
+    vim.keymap.set("n", "<CR>", function()
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      --- @type sia.config.Instruction
+      local instruction = {
+        role = "user",
+        content = lines,
+      }
+      current:add_instruction(instruction, nil)
+      require("sia.assistant").execute_strategy(current)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end, { buffer = buf })
+    vim.keymap.set("n", "q", function()
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end, { buffer = buf })
+  end
+end
+
 function M.setup(options)
   config.setup(options)
   require("sia.mappings").setup()
 
-  vim.api.nvim_create_user_command("SiaFile", function(args)
+  vim.api.nvim_create_user_command("SiaAdd", function(args)
     local split = SplitStrategy.by_buf()
     if #args.fargs == 0 then
       local files
@@ -40,7 +208,7 @@ function M.setup(options)
     end
   end, { nargs = "*", bang = true, bar = true, complete = "file" })
 
-  vim.api.nvim_create_user_command("SiaFileDelete", function(args)
+  vim.api.nvim_create_user_command("SiaRemove", function(args)
     local split = SplitStrategy.by_buf()
     if split then
       split.conversation:remove_files(args.fargs)

@@ -248,7 +248,7 @@ function M.explain()
 5. Provide context on how the code fits into a larger application if applicable.
 
 If you need additional context to improve the explanation. Ask the user to add
-the file to the context using SiaFile.]],
+the file to the context using SiaAdd.]],
       },
       "git_files",
       require("sia.instructions").files,
@@ -291,7 +291,6 @@ function M.unittest()
     mode = "split",
     split = {
       block_action = "search_replace",
-      cmd = "vsplit",
     },
     reminder = "editblock_reminder",
     tools = {
@@ -413,7 +412,7 @@ function M.fix(config)
   else
     action.mode = "split"
     action.split = {
-      cmd = "wincmd p | vsplit",
+      cmd = "wincmd p | vnew",
       block_action = "search_replace",
     }
   end
