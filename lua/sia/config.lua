@@ -131,7 +131,7 @@ local defaults = {
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "gpt-4o-mini", -- default
+    model = "gpt-4o", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
