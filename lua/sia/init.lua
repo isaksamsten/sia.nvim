@@ -238,15 +238,6 @@ function M.setup(options)
   vim.treesitter.language.register("markdown", "sia")
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
-  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-    group = augroup,
-    pattern = "*",
-    callback = function(args)
-      if vim.bo[args.buf].filetype == "sia" then
-        SplitStrategy.remove(args.buf)
-      end
-    end,
-  })
 
   vim.api.nvim_create_autocmd("User", {
     group = augroup,
@@ -261,13 +252,13 @@ function M.setup(options)
     end,
   })
 
-  -- vim.api.nvim_create_autocmd("ColorScheme", {
-  --   group = augroup,
-  --   pattern = "*",
-  --   callback = function(args)
-  --     set_highlight_groups()
-  --   end,
-  -- })
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = augroup,
+    pattern = "*",
+    callback = function(args)
+      set_highlight_groups()
+    end,
+  })
 
   if config.options.report_usage == true then
     vim.api.nvim_create_autocmd("User", {

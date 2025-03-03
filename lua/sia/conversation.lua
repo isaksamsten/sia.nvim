@@ -199,6 +199,7 @@ end
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
 --- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
+--- @field indexed_instructions table<integer, {instruction: sia.InstructionOption, context: sia.Context?}>
 --- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
 --- @field tools sia.config.Tool[]?
 --- @field model string?
@@ -236,6 +237,7 @@ function Conversation:new(action, args)
     --- @diagnostic disable-next-line: param-type-mismatch
     table.insert(obj.instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
   end
+  obj.indexed_instructions = {}
   if action.reminder then
     --- @diagnostic disable-next-line: param-type-mismatch
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
@@ -306,8 +308,9 @@ end
 
 --- @param instruction sia.config.Instruction|string
 --- @param args sia.Context?
+--- @param index integer?
 --- @return boolean
-function Conversation:add_instruction(instruction, args)
+function Conversation:add_instruction(instruction, args, index)
   local tmp_messages = Message:new(instruction, args)
   local contains = false
   for _, message in ipairs(tmp_messages or {}) do
@@ -318,10 +321,19 @@ function Conversation:add_instruction(instruction, args)
   end
   if not contains then
     table.insert(self.instructions, { instruction = instruction, context = args })
+    if index then
+      self.indexed_instructions[index] = { instruction = instruction, context = args }
+    end
     return true
   end
 
   return false
+end
+
+--- @param index integer
+--- @return sia.Message[]?
+function Conversation:get_indexed_message(index)
+  return self:_to_message(self.indexed_instructions[index])
 end
 
 --- @return sia.Message message

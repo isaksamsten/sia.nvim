@@ -4,7 +4,10 @@ local ChatCanvas = require("sia.canvas").ChatCanvas
 local block = require("sia.blocks")
 local assistant = require("sia.assistant")
 local Message = require("sia.conversation").Message
+
 local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
+
+local SPLIT_NS = vim.api.nvim_create_namespace("SiaSplitStrategy")
 
 --- @param tools sia.CompletedTools[]
 --- @param opts {on_confirm: (fun():nil), on_reject: (fun():nil)?}
@@ -238,10 +241,11 @@ end
 --- @class sia.SplitStrategy : sia.Strategy
 --- @field buf integer the split view buffer
 --- @field options sia.config.Split options for the split
---- @field blocks sia.Block[] code blocks identified in the conversation
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field name string
 --- @field block_action sia.BlockAction
+--- @field current_response integer
+--- @field response_tracker table<integer, table?>
 --- @field _writer sia.Writer? the writer
 local SplitStrategy = setmetatable({}, { __index = Strategy })
 SplitStrategy.__index = SplitStrategy
@@ -273,6 +277,9 @@ function SplitStrategy:new(conversation, options)
   obj._writer = nil
   obj.options = options
   obj.blocks = {}
+  obj.current_response = 0
+  obj.response_tracker = {}
+  obj.augroup = vim.api.nvim_create_augroup("SiaSplitStrategy" .. buf, { clear = false })
 
   if type(options.block_action) == "table" then
     obj.block_action = options.block_action --[[@as sia.BlockAction]]
@@ -296,7 +303,49 @@ function SplitStrategy:new(conversation, options)
   local messages = conversation:get_messages()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
 
+  obj:_setup_autocommand()
   return obj
+end
+
+function SplitStrategy:_setup_autocommand()
+  --- @type {response: { message_id: integer, lnum: integer, lnum_end: integer}, extmark: integer}?
+  local old_resp = nil
+
+  local set_extmark = function(resp)
+    return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum - 1, 0, {
+      hl_eol = true,
+      end_line = resp.lnum_end,
+      hl_group = "SiaResponseSelected",
+    })
+  end
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = self.augroup,
+    buffer = self.buf,
+    callback = function()
+      local cursor = vim.api.nvim_win_get_cursor(0)[1] -- row
+      local resp = self.response_tracker[cursor]
+      if resp == nil then
+        if old_resp then
+          pcall(vim.api.nvim_buf_del_extmark, self.buf, SPLIT_NS, old_resp.extmark)
+        end
+        old_resp = nil
+        return
+      end
+
+      if old_resp == nil or resp.message_id ~= old_resp.response.message_id then
+        old_resp = { response = resp, extmark = set_extmark(resp) }
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+    group = self.augroup,
+    buffer = self.buf,
+    callback = function(args)
+      SplitStrategy.remove(args.buf)
+      pcall(vim.api.nvim_del_augroup_by_id, self.augroup)
+    end,
+  })
 end
 
 function SplitStrategy:on_init()
@@ -350,13 +399,27 @@ function SplitStrategy:on_complete(opts)
 
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     if #self._writer.cache > 0 then
-      self.conversation:add_instruction({ role = "assistant", content = self._writer.cache })
+      self.current_response = self.current_response + 1
+      self.conversation:add_instruction(
+        { role = "assistant", content = self._writer.cache },
+        nil,
+        self.current_response
+      )
 
-      local blocks = block.parse_blocks(self.buf, self._writer.start_line, self._writer.cache)
-      for _, b in ipairs(blocks) do
-        self.blocks[#self.blocks + 1] = b
+      local start_line = self._writer.start_line
+      local lnum_end = start_line + #self._writer.cache
+      local response_track = {
+        message_id = self.current_response,
+        lnum = start_line,
+        lnum_end = lnum_end,
+      }
+
+      for i = start_line, lnum_end do
+        self.response_tracker[i] = response_track
       end
+
       if self.block_action and self.options.automatic_block_action then
+        local blocks = block.parse_blocks(0, self._writer.cache)
         vim.schedule(function()
           require("sia.blocks").replace_all_blocks(self.block_action, blocks)
         end)
@@ -403,14 +466,28 @@ function SplitStrategy:on_complete(opts)
 end
 
 --- @param line integer
+--- @return sia.Block[]
+function SplitStrategy:find_all_blocks(line)
+  local resp = self.response_tracker[line]
+  if resp == nil then
+    return {}
+  end
+
+  local content = Message.merge_content(self.conversation:get_indexed_message(resp.message_id))
+  if content == nil then
+    return {}
+  end
+
+  return block.parse_blocks(resp.lnum - 1, content)
+end
+
+--- @param line integer
 --- @return sia.Block? block
 function SplitStrategy:find_block(line)
-  for _, b in ipairs(self.blocks) do
-    if b.source.pos[1] <= line - 1 and line - 1 <= b.source.pos[2] then
-      return b
-    end
-  end
-  return nil
+  local blocks = self:find_all_blocks(line)
+  return vim.iter(blocks):find(function(b)
+    return b.pos[1] <= line - 1 and line - 1 <= b.pos[2]
+  end)
 end
 
 --- Get the SplitStrategy associated with buf

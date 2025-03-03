@@ -80,12 +80,9 @@ TODO
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
 
-- `:SiaFile` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
-- `:SiaFile patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
-- `:SiaFileDelete patterns` - Removes files matching the specified patterns from the global file list; if run from a split, removes them from the current conversation.
-
-- `:SiaAccept` - Accepts a suggested edit.
-- `:SiaReject` - Rejects a suggested edit.
+- `:SiaAdd` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
+- `:SiaAdd patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
+- `:SiaRemove patterns` - Removes files matching the specified patterns from the global file list; if run from a split, removes them from the current conversation.
 
 **Ranges**
 
@@ -100,7 +97,7 @@ Any range is supported. For example:
 - `:%Sia fix the test function` - Opens a split with a suggested fix for the test function.
 - `:Sia write snake in pygame` - Opens a split with the generated answer for the query.
 - `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
-- `:SiaFile a.py b.py | Sia move the function foo_a to b.py` - Moves the function `foo_a` from `a.py` to `b.py`.
+- `:SiaAdd a.py b.py | Sia move the function foo_a to b.py` - Moves the function `foo_a` from `a.py` to `b.py`.
 - `:%Sia /diagnostic` - Opens a split with a solution to diagnostics in the current file.
 
 ### Suggested Keybindings
@@ -114,8 +111,8 @@ You can bind visual and operator mode selections to enhance your workflow with `
 
 ```lua
 keys = {
-  { "gza", mode = { "n", "x" }, "<Plug>(sia-append)" },
-  { "gzz", mode = { "n", "x" }, "<Plug>(sia-execute)" },
+  { "Za", mode = { "n", "x" }, "<Plug>(sia-append)" },
+  { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
 }
 ```
 
@@ -125,7 +122,7 @@ Sia also creates Plug bindings for all actions using `<Plug>(sia-execute-<ACTION
 
 ```lua
 keys = {
-  { "gze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
+  { "Ze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
 }
 ```
 
@@ -135,23 +132,25 @@ In the split view (with `ft=sia`), you can bind the following mappings for effic
 
 ```lua
 keys = {
-  { "cp", mode = "n", "<Plug>(sia-peek-context)", ft = "sia" },
-  { "cx", mode = "n", "<Plug>(sia-delete-instruction)", ft = "sia" },
-  { "gr", mode = "n", "<Plug>(sia-replace-block)", ft = "sia" },
-  { "gR", mode = "n", "<Plug>(sia-replace-all-blocks)", ft = "sia" },
-  { "ga", mode = "n", "<Plug>(sia-insert-block-above)", ft = "sia" },
-  { "gb", mode = "n", "<Plug>(sia-insert-block-below)", ft = "sia" },
-  { "<CR>", mode = "n", "<Plug>(sia-reply)", ft = "sia" },
+  { "p", mode = "n", require("sia").preview_context, ft = "sia" },
+  { "x", mode = "n", require("sia").remove_context, ft = "sia" },
+  { "i", mode = "n", require("sia").replace, ft = "sia" },
+  { "I", mode = "n", require("sia").replace_all, ft = "sia" },
+  { "r", mode = "n", function() require("sia").replace({apply_marker = true}) end, ft = "sia" },
+  { "R", mode = "n", function() require("sia").replace_all({apply_marker = true}) end, ft = "sia" },
+  { "a", mode = "n", function() require("sia").insert({above=true}) end, ft = "sia" },
+  { "b", mode = "n", require("sia").insert, ft = "sia" },
+  { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
 }
 ```
 
-- **View Context**: `<Plug>(sia-peek-context)` - View each context added to the chat.
-- **Delete Instruction**: `<Plug>(sia-delete-instruction)` - Remove instructions from the chat.
-- **Replace Block**: `<Plug>(sia-replace-block)` - Apply the suggested edit when the cursor is on a code block.
-- **Replace All Blocks**: `<Plug>(sia-replace-all-blocks)` - Apply suggested edits to all code blocks in the chat and open a quickfix list.
-- **Insert Block Above**: `<Plug>(sia-insert-block-above)` - Insert a code block above the cursor.
-- **Insert Block Below**: `<Plug>(sia-insert-block-below)` - Insert a code block below the cursor.
-- **Compose Longer Query**: `<Plug>(sia-reply)` - Open a split view to compose a longer query.
+- **View Context**: View each context added to the chat.
+- **Delete Instruction**: Remove instructions from the chat.
+- **Replace Block**: Apply the suggested edit when the cursor is on a code block.
+- **Replace All Blocks**: Apply suggested edits to all code blocks in the current response and open a quickfix list.
+- **Insert Block Above**: Insert a code block above the cursor.
+- **Insert Block Below**: Insert a code block below the cursor.
+- **Compose Longer Query**: Open a split view to compose a longer query.
 
 ### Accepting and Rejecting Suggestions
 
@@ -191,7 +190,7 @@ def range_with_step(start, end, step):
 =======
 from ranges import range_inclusive, range_exclusive, range_with_step
 >>>>>>> Sia
-````
+```
 
 If you are using `conflicting.nvim`, you can accept the suggestion from `Sia`
 with `Conflicting incoming` (or for all changes in the quickfix list with `:cdo
