@@ -136,7 +136,7 @@ local defaults = {
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
     split = {
-      cmd = "vsplit",
+      cmd = "vnew",
       wo = { wrap = true },
       block_action = "verbatim",
       automatic_block_action = false,
@@ -145,7 +145,7 @@ local defaults = {
       messages = {},
     },
     diff = {
-      cmd = "vsplit",
+      cmd = "vnew",
       wo = { "wrap", "linebreak", "breakindent", "breakindentopt", "showbreak" },
     },
     insert = {
