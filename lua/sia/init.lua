@@ -9,7 +9,10 @@ local HiddenStrategy = require("sia.strategy").HiddenStrategy
 local M = {}
 
 local highlight_groups = {
-  SiaResponseSelected = { link = "CursorLine" },
+  SiaSplitResponse = { link = "CursorLine" },
+  SiaInsert = { link = "DiffAdd" },
+  SiaReplace = { link = "DiffChange" },
+  SiaMessage = { link = "NonText" },
 }
 
 local function set_highlight_groups()

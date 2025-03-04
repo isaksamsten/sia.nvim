@@ -26,7 +26,6 @@ local providers = require("sia.provider")
 --- @field messages { on_start: string?, on_progress: string[]? }?
 
 --- @class sia.config.Replace
---- @field highlight string
 --- @field timeout number?
 
 --- @class sia.config.Instruction
@@ -152,7 +151,6 @@ local defaults = {
       placement = "cursor",
     },
     replace = {
-      highlight = "DiffAdd",
       timeout = 300,
     },
     actions = {

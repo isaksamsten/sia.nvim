@@ -5,8 +5,8 @@ local block = require("sia.blocks")
 local assistant = require("sia.assistant")
 local Message = require("sia.conversation").Message
 
-local DIFF_NS = vim.api.nvim_create_namespace("sia_chat")
-
+local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
+local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 local SPLIT_NS = vim.api.nvim_create_namespace("SiaSplitStrategy")
 
 --- @param tools sia.CompletedTools[]
@@ -50,10 +50,11 @@ end
 
 --- Write text to a buffer.
 --- @class sia.Writer
---- @field buf number?
+--- @field buf integer?
 --- @field start_line integer
---- @field line number
---- @field column number
+--- @field start_col integer
+--- @field line integer
+--- @field column integer
 --- @field cache string[]
 local Writer = {}
 Writer.__index = Writer
@@ -65,6 +66,7 @@ function Writer:new(buf, line, column)
   local obj = {
     buf = buf,
     start_line = line or 0,
+    start_col = column or 0,
     line = line or 0,
     column = column or 0,
     cache = {},
@@ -315,7 +317,7 @@ function SplitStrategy:_setup_autocommand()
     return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum - 1, 0, {
       hl_eol = true,
       end_line = resp.lnum_end,
-      hl_group = "SiaResponseSelected",
+      hl_group = "SiaSplitResponse",
     })
   end
   vim.api.nvim_create_autocmd("CursorMoved", {
@@ -358,7 +360,7 @@ function SplitStrategy:on_init()
     else
       self.canvas:render_last({ "", "---", "", "# Sia", "" })
     end
-    self.canvas:update_progress({ { "I'm thinking! Please wait...", "NonText" } })
+    self.canvas:update_progress({ { "I'm thinking! Please wait...", "SiaMessage" } })
   end
 end
 
@@ -588,10 +590,12 @@ function DiffStrategy:on_init()
   local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
   vim.api.nvim_buf_set_lines(self.buf, 0, 0, false, before)
 
-  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
-  vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, vim.api.nvim_buf_line_count(self.buf) - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "NonText" } } },
-    virt_lines_above = true,
+  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaMessage" } } },
+    virt_lines_above = context.pos[1] - 1 > 0,
+    hl_group = "SiaReplace",
+    end_line = context.pos[2],
   })
 end
 
@@ -601,7 +605,6 @@ end
 
 --- @param job number
 function DiffStrategy:on_start(job)
-  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
   set_abort_keymap(self.buf, job)
   self._writer = Writer:new(self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
 end
@@ -610,6 +613,11 @@ end
 function DiffStrategy:on_progress(content)
   if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
+    vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, math.max(0, self._writer.start_line - 1), self._writer.start_col, {
+      end_line = self._writer.line,
+      end_col = self._writer.column,
+      hl_group = "SiaInsert",
+    })
   end
 end
 
@@ -636,6 +644,7 @@ function DiffStrategy:on_complete(opts)
         end
         vim.bo[self.buf].modifiable = false
       end
+      vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
       if opts and opts.on_complete then
         opts.on_complete()
       end
@@ -669,10 +678,10 @@ function InsertStrategy:on_init()
   if padding_direction == "below" then
     self._line = line + 1
   end
-  local message = self._options.message or { "Please wait...", "NonText" }
-  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self._line - 1, 0, {
-    virt_text = { { "🤖 ", "Normal" }, message },
-    virt_text_pos = "overlay",
+  local message = self._options.message or { "Please wait...", "SiaMessage" }
+  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
+    virt_lines = { { { "🤖 ", "Normal" }, message } },
+    virt_lines_above = self._line - 1 > 0,
   })
 end
 
@@ -685,12 +694,12 @@ function InsertStrategy:on_start(job)
   end
   local content = vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
   self._cal = #content
-  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   set_abort_keymap(context.buf, job)
 end
 
 function InsertStrategy:on_error()
-  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
 end
 
 function InsertStrategy:on_progress(content)
@@ -703,6 +712,17 @@ function InsertStrategy:on_progress(content)
     self._writer = Writer:new(context.buf, self._line - 1, self._col)
   end
   self._writer:append(content)
+  vim.api.nvim_buf_set_extmark(
+    context.buf,
+    INSERT_NS,
+    math.max(0, self._writer.start_line - 1),
+    self._writer.start_col,
+    {
+      end_line = self._writer.line,
+      end_col = self._writer.column,
+      hl_group = "SiaInsert",
+    }
+  )
 end
 
 function InsertStrategy:on_complete(opts)
@@ -721,6 +741,7 @@ function InsertStrategy:on_complete(opts)
       if self._writer then
         self._writer = nil
       end
+      vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
       if opts and opts.on_complete then
         opts.on_complete()
       end
@@ -775,11 +796,11 @@ end
 
 function HiddenStrategy:on_init()
   local context = self.conversation.context
-  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
-  vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "NonText" } } },
-    virt_lines_above = true,
-    hl_group = "NonText",
+  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+  vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaMessage" } } },
+    virt_lines_above = context.pos[1] - 1 > 0,
+    hl_group = "SiaInsert",
     end_line = context.pos[2],
   })
 end
@@ -793,7 +814,7 @@ end
 
 function HiddenStrategy:on_error()
   local context = self.conversation.context
-  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   del_abort_keymap(context.buf)
 end
 
@@ -817,7 +838,7 @@ function HiddenStrategy:on_complete(opts)
       assistant.execute_strategy(self)
     end,
     on_no_tools = function()
-      vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
+      vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
       local messages = self.conversation:get_messages(function(message)
         return message.role == "assistant"
       end)

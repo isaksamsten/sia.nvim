@@ -240,9 +240,10 @@ from hello import hello
 2. Refrain from explaining your reasoning, unless the user requests it. Never add unrelated text to the output.
 3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
 4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
+5. Do not include markdown code fences or other wrappers surrounding the
+   code!
 5. **Always preserve** indentation for code.
-6. Never include the full provided context in your response. Only output the relevant requested information.
-7. **Do not include code fences** (e.g., triple backticks ``` or any other code delimiters) or any markdown formatting when outputting code. Output the code directly, without surrounding it with code fences or additional formatting.]],
+6. Never include the full provided context in your response. Only output the relevant requested information.]],
   },
   diff_system = {
     role = "system",

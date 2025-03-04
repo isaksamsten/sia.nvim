@@ -354,7 +354,7 @@ Requirements:
           return { "above", "start" }
         end
       end,
-      message = { "Generating documentation...", "Comment" },
+      message = { "Generating documentation...", "SiaMessage" },
     },
     cursor = "end", -- start or end
   }

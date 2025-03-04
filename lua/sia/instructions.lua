@@ -138,13 +138,14 @@ function M.current_buffer(global)
       content = function(ctx)
         local start_fence = ""
         local end_fence = ""
-        if global.fences ~= false then
+        if global.fences then
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
         return string.format(
-          "%s\n%s\n%s\n%s",
+          "%s (%s)\n%s\n%s\n%s",
           utils.get_filename(ctx.buf, ":p"),
+          vim.bo[ctx.buf].ft,
           start_fence,
           utils.get_code(1, -1, { buf = ctx.buf, show_line_numbers = global.show_line_numbers }),
           end_fence
@@ -184,7 +185,7 @@ function M.current_context(global)
       content = function(ctx)
         local start_fence = ""
         local end_fence = ""
-        if global.fences ~= false then
+        if global.fences then
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
@@ -194,13 +195,14 @@ function M.current_context(global)
           local code =
             utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
           return string.format(
-            [[The provided context line %d to line %d from %s:
+            [[The provided context line %d to line %d from %s (%s):
 %s
 %s
 %s]],
             ctx.pos[1],
             ctx.pos[2],
             utils.get_filename(ctx.buf, ":p"),
+            vim.bo[ctx.buf].ft,
             start_fence,
             code,
             end_fence

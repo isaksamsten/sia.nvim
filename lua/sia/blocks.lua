@@ -15,13 +15,13 @@ local ns_flash_id = vim.api.nvim_create_namespace("sia_flash") -- Create a names
 --- @param pos [integer, integer]
 --- @param timeout integer?
 --- @param hl_group string?
-local function flash_highlight(bufnr, pos, timeout, hl_group)
+local function flash_highlight(bufnr, pos, timeout)
   local extmark = vim.api.nvim_buf_set_extmark(
     bufnr,
     ns_flash_id,
     pos[1],
     0,
-    { end_line = pos[2] + 1, hl_eol = true, hl_group = hl_group or "DiffAdd" }
+    { end_line = pos[2] + 1, hl_eol = true, hl_group = "SiaInsert" }
   )
 
   local timer = vim.loop.new_timer()
@@ -60,7 +60,7 @@ end
 --- @param replace sia.config.Replace
 function M.insert_block_above(buf, line, block, replace)
   vim.api.nvim_buf_set_lines(buf, line - 1, line - 1, false, block.code)
-  flash_highlight(buf, { line - 1, line + #block.code - 1 }, replace.timeout, replace.highlight)
+  flash_highlight(buf, { line - 1, line + #block.code - 1 }, replace.timeout)
 end
 
 --- Insert the given block in the buffer below the specified line.
@@ -70,7 +70,7 @@ end
 --- @param replace sia.config.Replace
 function M.insert_block_below(buf, line, block, replace)
   vim.api.nvim_buf_set_lines(buf, line, line, false, block.code)
-  flash_highlight(buf, { line, line + #block.code - 1 }, replace.timeout, replace.highlight)
+  flash_highlight(buf, { line, line + #block.code - 1 }, replace.timeout)
 end
 
 --- Insert a block replacing the lines between start and end.
@@ -81,7 +81,7 @@ end
 --- @param replace sia.config.Replace
 function M.insert_block_at(buf, start_line, end_line, block, replace)
   vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, block.code)
-  flash_highlight(buf, { start_line - 1, start_line + #block.code - 2 }, replace.timeout, replace.highlight)
+  flash_highlight(buf, { start_line - 1, start_line + #block.code - 2 }, replace.timeout)
 end
 
 --- Parse fenced code blocks.
@@ -123,7 +123,7 @@ end
 --- Adds all edits to the quickfix list.
 --- @param block_action sia.BlockAction
 --- @param blocks sia.Block[]
---- @param opts {timeout: integer?, highlight: string?, apply_marker: boolean?}?
+--- @param opts {timeout: integer?, apply_marker: boolean?}?
 function M.replace_all_blocks(block_action, blocks, opts)
   opts = opts or {}
   if block_action then
@@ -144,7 +144,7 @@ function M.replace_all_blocks(block_action, blocks, opts)
         else
           local pos = block_action.apply_edit(edit)
           if pos then
-            flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, opts.timeout, opts.highlight)
+            flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, opts.timeout)
           end
         end
       end
@@ -166,7 +166,7 @@ end
 --- Given the specified action, find the target buffer and insert the block.
 --- @param action sia.BlockAction
 --- @param block sia.Block
---- @param opts {timeout: integer?, highlight: string?, apply_marker: boolean?}?
+--- @param opts {timeout: integer?, apply_marker: boolean?}?
 function M.replace_block(action, block, opts)
   opts = opts or {}
   if block.code then
@@ -177,7 +177,7 @@ function M.replace_block(action, block, opts)
       else
         local pos = action.apply_edit(edit)
         if pos then
-          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, opts.timeout, opts.highlight)
+          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, opts.timeout)
           vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf, marker = false } })
         end
       end
@@ -203,7 +203,7 @@ function M.insert_block(action, block, replace, padding)
         edit.search.pos = { start_range + 1, start_range }
         local pos = action.apply_edit(edit)
         if pos then
-          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout, replace.highlight)
+          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout)
           vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf, marker = false } })
         end
       end
