@@ -37,14 +37,14 @@ local providers = require("sia.provider")
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content ((fun(ctx: sia.Context?):string)|string|string[])?
 --- @field tool_calls sia.ToolCall[]?
---- @field _tool_call_id string?
+--- @field _tool_call sia.ToolCall?
 
 --- @class sia.config.Tool
 --- @field name string
 --- @field description string
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
---- @field execute fun(args:table, strategy: sia.Strategy, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
+--- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
 
 --- @class sia.config.Action
 --- @field instructions (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]
@@ -181,6 +181,7 @@ local defaults = {
         tools = {
           require("sia.tools").add_file,
           require("sia.tools").find_lsp_symbol,
+          require("sia.tools").documentation,
         },
         instructions = {
           "editblock_system",

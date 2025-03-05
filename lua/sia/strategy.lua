@@ -436,7 +436,7 @@ function SplitStrategy:on_complete(opts)
       end,
       on_tool_complete = function(tool, content)
         self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-        self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+        self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
       end,
       on_tools_complete = function()
         self.hide_header = true
@@ -631,7 +631,7 @@ function DiffStrategy:on_complete(opts)
   self:execute_tools({
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
@@ -737,7 +737,7 @@ function InsertStrategy:on_complete(opts)
     on_tool_start = function() end,
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
@@ -837,7 +837,7 @@ function HiddenStrategy:on_complete(opts)
     on_tool_start = function(tool) end,
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
+      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)

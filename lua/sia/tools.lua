@@ -30,15 +30,15 @@ local KINDS = {
   [26] = "TypeParameter",
 }
 
+--- @type sia.config.Tool
 M.find_lsp_symbol = {
   name = "find_lsp_symbol",
   description = "Search for LSP symbols and add their file and location to the context",
   parameters = {
-    kind = { type = "string", description = "The kind of symbol: Class, Function or Interface" },
     query = { type = "string", description = "The search query" },
   },
   required = { "query" },
-  execute = function(args, strategy, callback)
+  execute = function(args, conversation, callback)
     if not args.query then
       callback({ "Error: No query was provided" })
       return
@@ -49,26 +49,23 @@ M.find_lsp_symbol = {
       callback({ "Error: No LSP clients attached" })
       return
     end
-    local wanted_kinds = LSP_KINDS[args.kind] or { 12, 6, 5, 10, 23, 11 }
     local found = {}
     local done = {}
     for i, client in ipairs(clients) do
       local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
+
+      --- @diagnostic disable-next-line undefined-field
       params.query = args.query
       done[i] = false
 
-      client:request("workspace/symbol", params, function(err, resp)
+      client:request("workspace/symbol", params, function(err, symbols)
         if err then
           done[i] = true
           return
         end
-        for _, r in ipairs(resp) do
-          if args.kind == nil or vim.tbl_contains(wanted_kinds, r.kind) then
-            local uri = vim.uri_to_fname(r.location.uri)
-            if vim.startswith(uri, client.root_dir) then
-              table.insert(found, r)
-            end
-          end
+        for _, symbol in ipairs(symbols) do
+          local uri = vim.uri_to_fname(symbol.location.uri)
+          table.insert(found, { symbol = symbol, in_root = vim.startswith(uri, client.root_dir) })
         end
         done[i] = true
       end)
@@ -80,10 +77,22 @@ M.find_lsp_symbol = {
     end, 10)
 
     local message = {}
-    for _, symbol in ipairs(found) do
+    --- @diagnostic disable-next-line undefined-field
+    conversation.lsp_symbols = conversation.lsp_symbols or {}
+
+    for _, f in ipairs(found) do
+      local symbol = f.symbol
+      conversation.lsp_symbols[symbol.name] = symbol
       local rel_path = vim.fn.fnamemodify(vim.uri_to_fname(symbol.location.uri), ":.")
       local kind = KINDS[symbol.kind] or "Unkown"
-      table.insert(message, string.format("  • %s: %s in %s", kind, symbol.name, rel_path))
+      local item
+      if f.in_root then
+        item = string.format("  • %s: %s in %s", kind, symbol.name, rel_path)
+      else
+        item = string.format("  • %s: %s", kind, symbol.name)
+      end
+
+      table.insert(message, item)
     end
 
     if #message > 0 then
@@ -95,12 +104,89 @@ M.find_lsp_symbol = {
 }
 
 --- @type sia.config.Tool
+M.documentation = {
+  name = "symbol_docs",
+  description = "Get the documentation for a LSP symbol resolved through find_lsp_symbol",
+  parameters = { symbol = { type = "string", description = "The symbol to get documentation for" } },
+  required = { "symbol" },
+  execute = function(args, conversation, callback)
+    if not args.symbol then
+      callback({ "Error: No symbol provided" })
+      return
+    end
+
+    --- @diagnostic disable-next-line undefined-field
+    if conversation.lsp_symbols == nil then
+      callback({ "Error: No symbols have been added to the conversation yet." })
+      return
+    end
+
+    --- @diagnostic disable-next-line undefined-field
+    local symbol = conversation.lsp_symbols[args.symbol]
+
+    if symbol == nil then
+      callback({ "Error: The symbol " .. args.symbol .. " has not been addded to the conversation" })
+      return
+    end
+
+    local clients = vim.lsp.get_clients({ method = "textDocument/hover" })
+    if vim.tbl_isempty(clients) then
+      callback({ "Error: No LSP clients attached" })
+      return
+    end
+    local done = {}
+    local found = {}
+
+    local params = {
+      position = {
+        character = symbol.location.range.start.character,
+        line = symbol.location.range.start.line,
+      },
+      textDocument = {
+        uri = symbol.location.uri,
+      },
+    }
+
+    for i, client in ipairs(clients) do
+      done[i] = false
+
+      client:request("textDocument/hover", params, function(err, resp)
+        if err then
+          done[i] = true
+          return
+        end
+        table.insert(found, resp)
+        done[i] = true
+      end)
+    end
+
+    vim.wait(1000, function()
+      return vim.iter(done):all(function(v)
+        return v
+      end)
+    end, 10)
+
+    if #found == 0 then
+      callback({ "Error: No documentation found for " .. args.symbol })
+      return
+    end
+
+    local content = {}
+    for _, doc in ipairs(found) do
+      vim.list_extend(content, vim.lsp.util.convert_input_to_markdown_lines(doc.contents))
+    end
+
+    callback(content)
+  end,
+}
+
+--- @type sia.config.Tool
 M.add_file = {
   name = "add_file",
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },
-  execute = function(args, strategy, callback)
+  execute = function(args, conversation, callback)
     if not args.glob_pattern then
       callback({ "Error: No glob pattern provided." })
       return
@@ -119,7 +205,7 @@ M.add_file = {
         table.insert(missing_files, file)
       else
         table.insert(existing_files, file)
-        strategy.conversation:add_file(file)
+        conversation:add_file(file)
       end
     end
 
@@ -159,10 +245,9 @@ M.remove_file = {
   description = "Remove files from the list of files to be processed",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be deleted." } },
   required = { "glob_pattern" },
-  execute = function(args, split, callback)
+  execute = function(args, conversation, callback)
     if args.glob_pattern then
-      --- @cast split sia.SplitStrategy
-      split:remove_files({ args.glob_pattern })
+      conversation:remove_files({ args.glob_pattern })
       callback({ "I've removed the files matching " .. args.glob_pattern .. " from the conversation." })
     else
       callback({ "The glob pattern is missing" })

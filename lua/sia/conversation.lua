@@ -21,7 +21,7 @@
 --- @field hide boolean?
 --- @field content (string[]|string|(fun(ctx:sia.Context?):string))?
 --- @field tool_calls sia.ToolCall[]?
---- @field _tool_call_id string?
+--- @field _tool_call sia.ToolCall?
 --- @field persistent boolean?
 --- @field available (fun(ctx: sia.Context?):boolean)?
 --- @field description ((fun(ctx: sia.Context?):string)|string)?
@@ -44,8 +44,8 @@ function Message:from_table(instruction, args)
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
-  if instruction._tool_call_id then
-    obj._tool_call_id = instruction._tool_call_id
+  if instruction._tool_call then
+    obj._tool_call = instruction._tool_call
   end
   if args then
     obj.context = {
@@ -118,15 +118,15 @@ function Message:to_prompt()
   if self.tool_calls then
     prompt.tool_calls = self.tool_calls
   end
-  if self._tool_call_id then
-    prompt.tool_call_id = self._tool_call_id
+  if self._tool_call then
+    prompt.tool_call_id = self._tool_call.id
   end
   return prompt
 end
 
 --- @return boolean
 function Message:is_context()
-  return self.role == "user" and self.persistent == true and self:is_available()
+  return (self.role == "user" and self.persistent == true and self:is_available()) or self.role == "tool"
 end
 
 function Message:is_shown()
@@ -172,6 +172,10 @@ end
 
 --- @return string
 function Message:get_description()
+  if self.role == "tool" then
+    local f = self._tool_call["function"]
+    return "Tool: " .. f.name .. "(" .. f.arguments .. ")"
+  end
   if type(self.description) == "function" then
     return self.description(self.context)
   else
@@ -207,7 +211,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
---- @field tool_fn table<string, fun(arguments: table, strategy: sia.Strategy, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>?
+--- @field tool_fn table<string, fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -391,7 +395,7 @@ end
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
-    return self.tool_fn[name](arguments, strategy, callback)
+    return self.tool_fn[name](arguments, strategy.conversation, callback)
   end
 end
 
