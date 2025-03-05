@@ -351,14 +351,16 @@ function SplitStrategy:_setup_autocommand()
 end
 
 function SplitStrategy:on_init()
-  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+  if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     self.canvas:render_messages({ self.conversation:last_message() })
     self.canvas:render_model(self.conversation.model or require("sia.config").options.defaults.model)
-    if self.canvas:line_count() == 1 then
-      self.canvas:render_last({ "# Sia", "" })
-    else
-      self.canvas:render_last({ "", "---", "", "# Sia", "" })
+    if not self.hide_header then
+      if self.canvas:line_count() == 1 then
+        self.canvas:render_last({ "# Sia", "" })
+      else
+        self.canvas:render_last({ "", "---", "", "# Sia", "" })
+      end
     end
     self.canvas:update_progress({ { "I'm thinking! Please wait...", "SiaMessage" } })
   end
@@ -369,7 +371,7 @@ function SplitStrategy:on_error()
 end
 
 function SplitStrategy:on_start(job)
-  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+  if vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
     self.canvas:clear_extmarks()
     local line_count = vim.api.nvim_buf_line_count(self.buf)
@@ -378,7 +380,7 @@ function SplitStrategy:on_start(job)
 end
 
 function SplitStrategy:on_progress(content)
-  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+  if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
   end
 end
@@ -394,12 +396,12 @@ function SplitStrategy:get_win()
 end
 
 function SplitStrategy:on_complete(opts)
-  del_abort_keymap(self.buf)
   if not self._writer then
     return
   end
 
-  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    del_abort_keymap(self.buf)
     if #self._writer.cache > 0 then
       self.current_response = self.current_response + 1
       self.conversation:add_instruction(
@@ -433,13 +435,16 @@ function SplitStrategy:on_complete(opts)
         self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "Comment" } })
       end,
       on_tool_complete = function(tool, content)
-        self.canvas:clear_extmarks()
-        self.canvas:render_last(content)
         self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
         self.conversation:add_instruction({ role = "tool", content = content, _tool_call_id = tool.id })
       end,
       on_tools_complete = function()
-        assistant.execute_strategy(self)
+        self.hide_header = true
+        assistant.execute_strategy(self, {
+          on_complete = function()
+            self.hide_header = nil
+          end,
+        })
       end,
       on_no_tools = function()
         vim.bo[self.buf].modifiable = false
@@ -514,7 +519,7 @@ end
 function SplitStrategy.visible()
   local visible = {}
   for buf, _ in pairs(SplitStrategy._buffers) do
-    if vim.api.nvim_buf_is_loaded(buf) and vim.api.nvim_buf_is_valid(buf) then
+    if vim.api.nvim_buf_is_loaded(buf) then
       local win = vim.fn.bufwinid(buf)
       if win ~= -1 then
         table.insert(visible, { buf = buf, win = win })
@@ -528,7 +533,7 @@ end
 function SplitStrategy.all()
   local all = {}
   for buf, _ in pairs(SplitStrategy._buffers) do
-    if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+    if vim.api.nvim_buf_is_loaded(buf) then
       table.insert(all, { buf = buf })
     end
   end
@@ -611,7 +616,7 @@ end
 
 --- @param content string
 function DiffStrategy:on_progress(content)
-  if vim.api.nvim_buf_is_valid(self.buf) and vim.api.nvim_buf_is_loaded(self.buf) then
+  if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
     vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, math.max(0, self._writer.start_line - 1), self._writer.start_col, {
       end_line = self._writer.line,
@@ -632,7 +637,7 @@ function DiffStrategy:on_complete(opts)
       assistant.execute_strategy(self)
     end,
     on_no_tools = function()
-      if vim.api.nvim_buf_is_loaded(self.buf) and vim.api.nvim_buf_is_valid(self.buf) then
+      if vim.api.nvim_buf_is_loaded(self.buf) then
         local context = self.conversation.context
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
