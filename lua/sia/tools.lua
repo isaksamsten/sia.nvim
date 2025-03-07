@@ -35,12 +35,12 @@ M.find_lsp_symbol = {
   name = "find_lsp_symbol",
   description = "Search for LSP symbols and add their file and location to the context",
   parameters = {
-    query = { type = "string", description = "The search query" },
+    queries = { type = "array", items = { type = "string" }, description = "The search queries" },
   },
-  required = { "query" },
+  required = { "queries" },
   execute = function(args, conversation, callback)
-    if not args.query then
-      callback({ "Error: No query was provided" })
+    if not args.queries or #args.queries == 0 then
+      callback({ "Error: No queries were provided" })
       return
     end
 
@@ -54,21 +54,23 @@ M.find_lsp_symbol = {
     for i, client in ipairs(clients) do
       local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
 
-      --- @diagnostic disable-next-line undefined-field
-      params.query = args.query
-      done[i] = false
+      for _, query in ipairs(args.queries) do
+        --- @diagnostic disable-next-line undefined-field
+        params.query = query
+        done[i] = false
 
-      client:request("workspace/symbol", params, function(err, symbols)
-        if err then
+        client:request("workspace/symbol", params, function(err, symbols)
+          if err then
+            done[i] = true
+            return
+          end
+          for _, symbol in ipairs(symbols) do
+            local uri = vim.uri_to_fname(symbol.location.uri)
+            table.insert(found, { symbol = symbol, in_root = vim.startswith(uri, client.root_dir) })
+          end
           done[i] = true
-          return
-        end
-        for _, symbol in ipairs(symbols) do
-          local uri = vim.uri_to_fname(symbol.location.uri)
-          table.insert(found, { symbol = symbol, in_root = vim.startswith(uri, client.root_dir) })
-        end
-        done[i] = true
-      end)
+        end)
+      end
     end
     vim.wait(1000, function()
       return vim.iter(done):all(function(v)

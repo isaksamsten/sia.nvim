@@ -1,7 +1,7 @@
 --- @alias sia.Prompt {role: sia.config.Role, content: string?, tool_calls: sia.ToolCall[]?, tool_call_id: string? }
 --- @alias sia.Query { model: string?, temperature: number?, prompt: sia.Prompt, tools: sia.Tool[]?}
 --- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
---- @alias sia.ToolParameter { type: "number"|"string"?, enum: string[]?, description: string? }
+--- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
 --- @class sia.Context
 --- @field buf integer
