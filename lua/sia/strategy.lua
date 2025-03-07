@@ -374,7 +374,17 @@ function SplitStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
     self.canvas:clear_extmarks()
+
+    -- Make a new-line if the last line is non-empty
     local line_count = vim.api.nvim_buf_line_count(self.buf)
+    if line_count > 0 then
+      local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
+      if #last_line[1] > 0 then
+        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+        line_count = line_count + 1
+      end
+    end
+
     self._writer = Writer:new(self.buf, line_count - 1, 0)
   end
 end
