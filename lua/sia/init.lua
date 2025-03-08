@@ -159,7 +159,7 @@ function M.open_reply()
     vim.bo[buf].bufhidden = "hide"
     vim.bo[buf].swapfile = false
     vim.bo[buf].ft = "markdown"
-    vim.api.nvim_buf_set_name(buf, "*sia reply*")
+    vim.api.nvim_buf_set_name(buf, "*sia reply*" .. current.name)
     vim.api.nvim_win_set_height(win, 10)
 
     vim.keymap.set("n", "<CR>", function()
@@ -169,7 +169,7 @@ function M.open_reply()
         role = "user",
         content = lines,
       }
-      current:add_instruction(instruction, nil)
+      current.conversation:add_instruction(instruction, nil)
       require("sia.assistant").execute_strategy(current)
       vim.api.nvim_buf_delete(buf, { force = true })
     end, { buffer = buf })
@@ -319,7 +319,7 @@ function M.main(action, opts, model)
       strategy = SplitStrategy.by_buf(opts.buf)
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-        strategy:add_instruction(last_instruction, opts)
+        strategy.conversation:add_instruction(last_instruction, opts)
 
         -- The user might have explicitly changed the model with -m
         if model then

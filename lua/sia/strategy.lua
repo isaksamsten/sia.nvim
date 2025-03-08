@@ -395,12 +395,6 @@ function SplitStrategy:on_progress(content)
   end
 end
 
---- @param instruction sia.config.Instruction
---- @param args sia.Context?
-function SplitStrategy:add_instruction(instruction, args)
-  self.conversation:add_instruction(instruction, args)
-end
-
 function SplitStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
@@ -445,6 +439,7 @@ function SplitStrategy:on_complete(opts)
         self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "Comment" } })
       end,
       on_tool_complete = function(tool, content)
+        self.canvas:clear_extmarks()
         self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
         self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
       end,
