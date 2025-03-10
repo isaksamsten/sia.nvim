@@ -137,7 +137,7 @@ local defaults = {
     split = {
       cmd = "vnew",
       wo = { wrap = true },
-      block_action = "verbatim",
+      block_action = "search_replace",
       automatic_block_action = false,
     },
     hidden = {
