@@ -207,7 +207,7 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   local limit = opts.limit or 1
   local threshold = opts.threshold or 0
   local in_conflict = nil
-  if opts.ignore_conflicts or true then
+  if opts.ignore_conflicts ~= false then
     in_conflict = gen_in_conflict()
   end
 
@@ -216,7 +216,6 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   local top_matches = {}
   local min_top_score = 0
 
-  -- Count non-empty lines in needle once for all iterations
   local total_non_empty_needle = needle_len
   if ignore_whitespace then
     total_non_empty_needle = 0
@@ -271,8 +270,6 @@ function M.find_best_subsequence_span(needle, haystack, opts)
 
       -- Early pruning: if we can't reach the threshold or the current min score in top matches, abort this match
       if matched_lines > 0 then
-        local current_avg = sum_similarity / matched_lines
-
         -- Calculate best possible final average (if all remaining matches are perfect)
         local remaining = total_non_empty_needle - matched_lines
         local best_possible_avg = (sum_similarity + remaining) / total_non_empty_needle
