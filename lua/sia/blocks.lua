@@ -226,9 +226,9 @@ local function search_replace_action(b)
   end
 
   local marker = utils.partition_marker(b.code, {
-    before = "^<<<<<<?<?<?<?%s+SEARCH%s*",
-    delimiter = "^======?=?=?=?%s*$",
-    after = "^>>>>>>?>?>?>?>%s+REPLACE%s*",
+    before = "^<<<<<<?<?<?<?",
+    delimiter = "^======?=?=?=?",
+    after = "^>>>>>>?>?>?>?>",
   })
 
   -- If we didn't find a search/replace block try a more relaxed search
