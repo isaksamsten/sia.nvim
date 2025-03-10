@@ -1,6 +1,5 @@
 local M = {}
 
-local LSP_KINDS = { Function = { 12, 6 }, Class = { 5, 10, 23 }, Interface = { 11 } }
 local KINDS = {
   [1] = "File",
   [2] = "Module",
