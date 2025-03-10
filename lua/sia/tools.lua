@@ -59,7 +59,7 @@ M.find_lsp_symbol = {
         done[i] = false
 
         client:request("workspace/symbol", params, function(err, symbols)
-          if err then
+          if err or symbols == nil then
             done[i] = true
             return
           end
@@ -152,7 +152,7 @@ M.documentation = {
       done[i] = false
 
       client:request("textDocument/hover", params, function(err, resp)
-        if err then
+        if err or resp == nil then
           done[i] = true
           return
         end
