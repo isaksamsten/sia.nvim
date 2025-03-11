@@ -72,6 +72,7 @@ local providers = require("sia.provider")
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
+--- @field tools { enable: boolean, default: sia.config.Tool[]?}
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -94,6 +95,7 @@ local defaults = {
     openai = providers.openai,
     copilot = providers.copilot,
     gemini = providers.gemini,
+    anthropic = providers.anthropic,
   },
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },
@@ -118,14 +120,16 @@ local defaults = {
     },
     ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
-    ["copilot-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
-    ["copilot-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
-    ["copilot-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
+    ["copilot-3-5-sonnet"] = { "copilot", "claude-3.5-sonnet" },
+    ["copilot-3-7-sonnet"] = { "copilot", "claude-3.7-sonnet" },
+    ["copilot-3-7-sonnet-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
     ["copilot-o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["gemini-1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
     ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
     ["gemini-2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
     ["gemini-1.5-pro"] = { "gemini", "gemini-1.5-pro" },
+    ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest", max_tokens = 8224, n = 1 },
+    ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest", max_tokens = 8224, n = 1 },
   },
   instructions = {},
   --- @type sia.config.Defaults
@@ -153,6 +157,15 @@ local defaults = {
     replace = {
       timeout = 300,
     },
+    tools = {
+      enable = true,
+      default = {
+        require("sia.tools").add_file,
+        require("sia.tools").find_lsp_symbol,
+        require("sia.tools").documentation,
+        require("sia.tools").grep,
+      },
+    },
     actions = {
       insert = {
         mode = "insert",
@@ -177,11 +190,6 @@ local defaults = {
         temperature = 0.1,
         split = {
           block_action = "search_replace",
-        },
-        tools = {
-          require("sia.tools").add_file,
-          require("sia.tools").find_lsp_symbol,
-          require("sia.tools").documentation,
         },
         instructions = {
           "editblock_system",

@@ -96,4 +96,11 @@ M.gemini = {
   end,
 }
 
+M.anthropic = {
+  base_url = "https://api.anthropic.com/v1/chat/completions",
+  api_key = function()
+    return os.getenv("ANTHROPIC_API_KEY")
+  end,
+}
+
 return M

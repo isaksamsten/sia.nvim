@@ -13,15 +13,27 @@ local function call_provider(query, opts)
   local model = config.options.models[query.model or config.options.defaults.model]
   local provider = config.options.providers[model[1]]
 
-  --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?}
+  --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?, max_tokens: integer?}
   local data = {
     model = model[2],
     messages = query.prompt,
     tools = query.tools,
   }
 
+  if not config.options.defaults.tools.enable then
+    data.tools = nil
+  end
+
   if not model.reasoning_effort then
     data.temperature = query.temperature or config.options.defaults.temperature
+  end
+
+  if model.max_tokens then
+    data.max_tokens = model.max_tokens
+  end
+
+  if model.n then
+    data.n = model.n
   end
 
   if opts.stream then

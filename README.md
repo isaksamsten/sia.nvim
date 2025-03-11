@@ -80,8 +80,8 @@ TODO
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
 
-- `:SiaAdd` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
-- `:SiaAdd patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
+- `:SiaAdd file` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
+- `:SiaAdd file patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
 - `:SiaRemove patterns` - Removes files matching the specified patterns from the global file list; if run from a split, removes them from the current conversation.
 
 **Ranges**

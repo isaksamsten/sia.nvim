@@ -256,4 +256,38 @@ M.remove_file = {
   end,
 }
 
+M.grep = {
+  name = "grep",
+  description = "Grep for a pattern in files using rg",
+  parameters = {
+    glob = { type = "string", description = "Glob pattern for files to search" },
+    pattern = { type = "string", description = "Search pattern" },
+  },
+  required = { "pattern" },
+  execute = function(args, _, callback)
+    local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
+    if args.glob then
+      table.insert(command, "--glob")
+      table.insert(command, args.glob)
+    end
+
+    if args.pattern == nil then
+      callback({ "No pattern was given" })
+      return
+    end
+
+    table.insert(command, "--")
+    table.insert(command, args.pattern)
+
+    vim.system(command, {
+      text = true,
+      stderr = false,
+    }, function(obj)
+      local lines = vim.split(obj.stdout, "\n")
+      table.insert(lines, 1, "The following search results were returned")
+      callback(lines)
+    end)
+  end,
+}
+
 return M

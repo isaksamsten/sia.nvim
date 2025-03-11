@@ -246,9 +246,9 @@ function Conversation:new(action, args)
     --- @diagnostic disable-next-line: param-type-mismatch
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
-  obj.tools = action.tools
+  obj.tools = action.tools or require("sia.config").options.defaults.tools.default
   obj.tool_fn = {}
-  for _, tool in ipairs(action.tools or {}) do
+  for _, tool in ipairs(obj.tools or {}) do
     obj.tool_fn[tool.name] = tool.execute
   end
 

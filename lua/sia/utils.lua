@@ -151,7 +151,6 @@ function M.ensure_file_is_loaded(file)
       bufnr = vim.fn.bufadd(file)
       vim.fn.bufload(bufnr)
       vim.api.nvim_set_option_value("buflisted", true, { buf = bufnr })
-      vim.api.nvim_command("argadd " .. file)
     end)
     if not status then
       return nil

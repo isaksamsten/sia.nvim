@@ -166,8 +166,14 @@ function Strategy:on_error() end
 --- Collects a streaming function call response
 --- @param t table
 function Strategy:on_tool_call(t)
-  for _, v in ipairs(t) do
+  for i, v in ipairs(t) do
     local func = v["function"]
+    --- Patch for gemini models
+    if v.index == nil then
+      v.index = i
+      v.id = "tool_call_id_" .. v.index
+    end
+
     if not self.tools[v.index] then
       self.tools[v.index] = { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
     end
@@ -278,7 +284,6 @@ function SplitStrategy:new(conversation, options)
   obj.buf = buf
   obj._writer = nil
   obj.options = options
-  obj.blocks = {}
   obj.current_response = 0
   obj.response_tracker = {}
   obj.augroup = vim.api.nvim_create_augroup("SiaSplitStrategy" .. buf, { clear = false })
@@ -335,6 +340,9 @@ function SplitStrategy:_setup_autocommand()
       end
 
       if old_resp == nil or resp.message_id ~= old_resp.response.message_id then
+        if old_resp ~= nil then
+          pcall(vim.api.nvim_buf_del_extmark, self.buf, SPLIT_NS, old_resp.extmark)
+        end
         old_resp = { response = resp, extmark = set_extmark(resp) }
       end
     end,
@@ -399,6 +407,18 @@ function SplitStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
+function SplitStrategy:update_response_tracker(lnum)
+  local response_track = {
+    message_id = self.current_response,
+    lnum = lnum,
+    lnum_end = vim.api.nvim_buf_line_count(self.buf),
+  }
+
+  for i = lnum, response_track.lnum_end do
+    self.response_tracker[i] = response_track
+  end
+end
+
 function SplitStrategy:on_complete(opts)
   if not self._writer then
     return
@@ -406,6 +426,7 @@ function SplitStrategy:on_complete(opts)
 
   if vim.api.nvim_buf_is_loaded(self.buf) then
     del_abort_keymap(self.buf)
+    local start_line = self._writer.start_line
     if #self._writer.cache > 0 then
       self.current_response = self.current_response + 1
       self.conversation:add_instruction(
@@ -413,18 +434,6 @@ function SplitStrategy:on_complete(opts)
         nil,
         self.current_response
       )
-
-      local start_line = self._writer.start_line
-      local lnum_end = start_line + #self._writer.cache
-      local response_track = {
-        message_id = self.current_response,
-        lnum = start_line,
-        lnum_end = lnum_end,
-      }
-
-      for i = start_line, lnum_end do
-        self.response_tracker[i] = response_track
-      end
 
       if self.block_action and self.options.automatic_block_action then
         local blocks = block.parse_blocks(0, self._writer.cache)
@@ -448,6 +457,7 @@ function SplitStrategy:on_complete(opts)
         assistant.execute_strategy(self, {
           on_complete = function()
             self.hide_header = nil
+            self:update_response_tracker(start_line)
           end,
         })
       end,
@@ -471,6 +481,7 @@ function SplitStrategy:on_complete(opts)
             opts.on_complete()
           end
         end)
+        self:update_response_tracker(start_line)
       end,
     })
     self._writer = nil

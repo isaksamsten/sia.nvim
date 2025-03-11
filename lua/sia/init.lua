@@ -179,37 +179,127 @@ function M.open_reply()
   end
 end
 
+-- local symbol_cache = {
+--   last_arg = nil,
+--   symbols = nil,
+-- }
+
+--- @type table<string, { completion: (fun(s:string):string[]), execution: fun(args: string[], bang: boolean, c: sia.Conversation?):nil }>
+local add_commands = {
+  file = {
+    completion = function(lead)
+      return vim.fn.getcompletion(lead, "file")
+    end,
+    execution = function(args, bang, conversation)
+      if #args == 0 then
+        local files
+        if conversation then
+          files = conversation.files
+        else
+          files = utils.get_global_files()
+        end
+        print(table.concat(files, ", "))
+      else
+        if bang then
+          if conversation then
+            conversation.files = {}
+          else
+            utils.clear_global_files()
+          end
+        end
+        local files = utils.glob_pattern_to_files(args)
+
+        if conversation then
+          conversation:add_files(files)
+        else
+          utils.add_global_files(files)
+        end
+      end
+    end,
+  },
+  -- symbol = {
+  --   completion = function(arg)
+  --     local symbols
+  --     if symbol_cache.last_arg and symbol_cache.symbols and vim.startswith(arg, symbol_cache.last_arg) then
+  --       symbols = symbol_cache.symbols
+  --     else
+  --       symbols = require("sia.lsp").workspace_symbols({ arg })
+  --     end
+  --
+  --     local commands = {}
+  --     for _, symbol in ipairs(symbols or {}) do
+  --       table.insert(commands, symbol.symbol.name)
+  --     end
+  --
+  --     symbol_cache.last_arg = arg
+  --     symbol_cache.symbols = symbols
+  --
+  --     return commands
+  --   end,
+  --
+  --   execution = function(args, bang, conversation)
+  --     symbol_cache.last_arg = nil
+  --     symbol_cache.symbols = nil
+  --
+  --     if conversation == nil then
+  --       vim.notify("No conversation")
+  --     end
+  --     local symbols = require("sia.lsp").workspace_symbols({ args[1] })
+  --     print(vim.inspect(symbols))
+  --     if symbols and #symbols > 0 then
+  --       for _, symbol in ipairs(symbols or {}) do
+  --         symbol = symbol.symbol
+  --
+  --         local buf = vim.uri_to_bufnr(symbol.location.uri)
+  --         vim.fn.bufload(buf)
+  --         local pos = {
+  --           symbol.location.range.start.line,
+  --           symbol.location.range["end"].line,
+  --         }
+  --         conversation:add_instruction(require("sia.instructions").context(buf, pos))
+  --       end
+  --     else
+  --       vim.notify("No symbols")
+  --     end
+  --   end,
+  -- },
+}
+
 function M.setup(options)
   config.setup(options)
   require("sia.mappings").setup()
 
   vim.api.nvim_create_user_command("SiaAdd", function(args)
     local split = SplitStrategy.by_buf()
-    if #args.fargs == 0 then
-      local files
-      if split then
-        files = split.conversation.files
+    local fargs = args.fargs
+    local command = add_commands[table.remove(fargs, 1)]
+    if command then
+      command.execution(fargs, args.bang, split and split.conversation or nil)
+    end
+  end, {
+    nargs = "*",
+    bang = true,
+    bar = true,
+    complete = function(arg_lead, line, pos)
+      local complete = {}
+
+      if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
+        for command, _ in pairs(add_commands) do
+          if vim.startswith(command, arg_lead) then
+            complete[#complete + 1] = command
+          end
+        end
       else
-        files = utils.get_global_files()
-      end
-      print(table.concat(files, ", "))
-    else
-      if args.bang then
-        if split then
-          split.conversation.files = {}
-        else
-          utils.clear_global_files()
+        local command = add_commands[string.sub(line, 1, pos):match("SiaAdd%s+(%w*)")]
+        if command then
+          for _, subcmd in ipairs(command.completion(arg_lead)) do
+            complete[#complete + 1] = subcmd
+          end
         end
       end
-      local files = utils.glob_pattern_to_files(args.fargs)
-
-      if split then
-        split.conversation:add_files(files)
-      else
-        utils.add_global_files(files)
-      end
-    end
-  end, { nargs = "*", bang = true, bar = true, complete = "file" })
+      return complete
+    end,
+  })
 
   vim.api.nvim_create_user_command("SiaRemove", function(args)
     local split = SplitStrategy.by_buf()
