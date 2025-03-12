@@ -129,8 +129,8 @@ local defaults = {
     ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
     ["gemini-2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
     ["gemini-1.5-pro"] = { "gemini", "gemini-1.5-pro" },
-    ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest", max_tokens = 8224, n = 1 },
-    ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest", max_tokens = 8224, n = 1 },
+    ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest", max_tokens = 8192, n = 1 },
+    ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest", max_tokens = 8192, n = 1 },
   },
   instructions = {},
   --- @type sia.config.Defaults
