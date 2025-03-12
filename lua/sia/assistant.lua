@@ -20,7 +20,7 @@ local function call_provider(query, opts)
     tools = query.tools,
   }
 
-  if not config.options.defaults.tools.enable then
+  if not config.options.defaults.tools.enable or model.function_calling == false then
     data.tools = nil
   end
 

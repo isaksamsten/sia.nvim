@@ -96,6 +96,7 @@ local defaults = {
     copilot = providers.copilot,
     gemini = providers.gemini,
     anthropic = providers.anthropic,
+    ollama = providers.ollama,
   },
   models = {
     ["gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },

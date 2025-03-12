@@ -103,4 +103,11 @@ M.anthropic = {
   end,
 }
 
+M.ollama = {
+  base_url = "http://localhost:11434/v1/chat/completions",
+  api_key = function()
+    return "ollama"
+  end,
+}
+
 return M
