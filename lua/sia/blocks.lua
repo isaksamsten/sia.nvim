@@ -210,44 +210,40 @@ function M.insert_block(action, block, replace, padding)
     end)
   end
 end
--- We try a few ways for finding the search region in order of complexity.
--- First try with an exact match
--- pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = false })
--- if not pos then
---   -- If that fails, we try with a match ignoring empty lines
---   pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = true })
---   if not pos then
---
---     -- If that fails, we resort to an approximate match, without empty lines
---     pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.8 })
---     if not pos then
---       -- If that fails, we resort to an even more approximate match where we don't have a
---       -- hard threshold on specific lines but that the average score for the entire region
---       -- needs on average 0.90.
---       pos = matcher.find_best_subsequence_span(
---         search,
---         content,
---         { ignore_emptylines = true, threshold = 0.9, limit = 1 }
---       )
---       if #pos > 0 then
---         pos = pos[1].span
---       else
---         pos = nil
---       end
 
+-- Array of search methods, ordered by computational cost (least to most intensive)
+-- and prioritizing exact matches over fuzzy matches
 local search_method = {
+  -- Strategy 1: Strict exact match
+  -- Fastest: Simple string comparison with no preprocessing
+  -- Matches content exactly, including empty lines and indentation
   function(search, content)
     return matcher.find_subsequence_span(search, content, { ignore_emptylines = false })
   end,
+
+  -- Strategy 2: Exact match ignoring empty lines
+  -- Fast: Requires minimal preprocessing to handle empty lines
+  -- Like Strategy 1 but treats empty lines as optional
   function(search, content)
     return matcher.find_subsequence_span(search, content, { ignore_emptylines = true })
   end,
+
+  -- Strategy 3: Exact match ignoring whitespace
+  -- Moderate speed: Requires whitespace normalization
+  -- Matches content exactly but ignores both empty lines and indentation differences
   function(search, content)
     return matcher.find_subsequence_span(search, content, { ignore_emptylines = true, ignore_indent = true })
   end,
+
+  -- Strategy 4: Fuzzy match (80% similarity)
+  -- More intensive: Requires similarity calculations
+  -- Allows approximate matching with 80% similarity threshold, ignores empty lines
   function(search, content)
     return matcher.find_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.8 })
   end,
+
+  -- Strategy 5: Fuzzy match ignoring whitespace (80% similarity)
+  -- More intensive: Combines similarity calculation with whitespace normalization
   function(search, content)
     return matcher.find_subsequence_span(
       search,
@@ -255,6 +251,10 @@ local search_method = {
       { ignore_emptylines = true, ignore_indent = true, threshold = 0.8 }
     )
   end,
+
+  -- Strategy 6: Best match finder (90% similarity)
+  -- Most intensive: Calculates similarity scores for all possible matches
+  -- Finds the single best matching segment with high accuracy requirement
   function(search, content)
     local pos =
       matcher.find_best_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.9, limit = 1 })
@@ -264,6 +264,10 @@ local search_method = {
       return nil
     end
   end,
+
+  -- Strategy 7: Best match finder ignoring whitespace (90% similarity)
+  -- Most intensive: Combines full matching with whitespace normalization
+  -- Like Strategy 6 but also ignores indentation differences
   function(search, content)
     local pos = matcher.find_best_subsequence_span(
       search,
@@ -277,6 +281,7 @@ local search_method = {
     end
   end,
 }
+
 local function relaxed_search(search, content)
   for _, matchfn in ipairs(search_method) do
     local pos = matchfn(search, content)
