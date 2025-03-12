@@ -210,6 +210,82 @@ function M.insert_block(action, block, replace, padding)
     end)
   end
 end
+-- We try a few ways for finding the search region in order of complexity.
+-- First try with an exact match
+-- pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = false })
+-- if not pos then
+--   -- If that fails, we try with a match ignoring empty lines
+--   pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = true })
+--   if not pos then
+--
+--     -- If that fails, we resort to an approximate match, without empty lines
+--     pos = matcher.find_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.8 })
+--     if not pos then
+--       -- If that fails, we resort to an even more approximate match where we don't have a
+--       -- hard threshold on specific lines but that the average score for the entire region
+--       -- needs on average 0.90.
+--       pos = matcher.find_best_subsequence_span(
+--         search,
+--         content,
+--         { ignore_emptylines = true, threshold = 0.9, limit = 1 }
+--       )
+--       if #pos > 0 then
+--         pos = pos[1].span
+--       else
+--         pos = nil
+--       end
+
+local search_method = {
+  function(search, content)
+    return matcher.find_subsequence_span(search, content, { ignore_emptylines = false })
+  end,
+  function(search, content)
+    return matcher.find_subsequence_span(search, content, { ignore_emptylines = true })
+  end,
+  function(search, content)
+    return matcher.find_subsequence_span(search, content, { ignore_emptylines = true, ignore_indent = true })
+  end,
+  function(search, content)
+    return matcher.find_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.8 })
+  end,
+  function(search, content)
+    return matcher.find_subsequence_span(
+      search,
+      content,
+      { ignore_emptylines = true, ignore_indent = true, threshold = 0.8 }
+    )
+  end,
+  function(search, content)
+    local pos =
+      matcher.find_best_subsequence_span(search, content, { ignore_emptylines = true, threshold = 0.9, limit = 1 })
+    if #pos > 0 then
+      return pos[1].span
+    else
+      return nil
+    end
+  end,
+  function(search, content)
+    local pos = matcher.find_best_subsequence_span(
+      search,
+      content,
+      { ignore_emptylines = true, ignore_indent = true, threshold = 0.9, limit = 1 }
+    )
+    if #pos > 0 then
+      return pos[1].span
+    else
+      return nil
+    end
+  end,
+}
+local function relaxed_search(search, content)
+  for _, matchfn in ipairs(search_method) do
+    local pos = matchfn(search, content)
+    if pos then
+      return pos
+    end
+  end
+  return nil
+end
 
 --- @param b sia.Block
 --- @return sia.BlockEdit?
@@ -269,32 +345,7 @@ local function search_replace_action(b)
     elseif #search == 0 and #content > 1 then
       pos = { #content + 1, #content + 1 }
     else
-      -- We try a few ways for finding the search region in order of complexity.
-      -- First try with an exact match
-      pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = false })
-      if not pos then
-        -- If that fails, we try with a match ignoring empty lines
-        pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true })
-        if not pos then
-          -- If that fails, we resort to an approximate match, without empty lines
-          pos = matcher.find_subsequence_span(search, content, { ignore_whitespace = true, threshold = 0.8 })
-          if not pos then
-            -- If that fails, we resort to an even more approximate match where we don't have a
-            -- hard threshold on specific lines but that the average score for the entire region
-            -- needs on average 0.90.
-            pos = matcher.find_best_subsequence_span(
-              search,
-              content,
-              { ignore_whitespace = true, threshold = 0.9, limit = 1 }
-            )
-            if #pos > 0 then
-              pos = pos[1].span
-            else
-              pos = nil
-            end
-          end
-        end
-      end
+      pos = relaxed_search(search, content)
     end
 
     if pos then

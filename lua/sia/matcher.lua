@@ -106,18 +106,19 @@ end
 ---
 --- @param needle string[]
 --- @param haystack string[]
---- @param opts {threshold: number?, ignore_whitespace: boolean?, ignore_conflicts: boolean?}?
+--- @param opts {threshold: number?, ignore_emptylines: boolean?, ignore_indent: boolean?, ignore_conflicts: boolean?}?
 --- @return [integer, integer]? position the position in haystack of the first match.
 function M.find_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
-    return line:match("^%s*$") ~= nil -- Treat lines with only whitespace as empty
+    return line:match("^%s*$") ~= nil
   end
 
   opts = opts or {}
   local threshold = opts.threshold
-  local ignore_whitespace = opts.ignore_whitespace or false
+  local ignore_emptylines = opts.ignore_emptylines or false
+  local ignore_indent = opts.ignore_indent or false
   local in_conflict = nil
-  if opts.ignore_conflicts or true then
+  if opts.ignore_conflicts ~= false then
     in_conflict = gen_in_conflict()
   end
 
@@ -136,7 +137,7 @@ function M.find_subsequence_span(needle, haystack, opts)
     local start_pos = -1
 
     while haystack_idx <= haystack_len and needle_idx <= needle_len do
-      if ignore_whitespace then
+      if ignore_emptylines then
         local empty_needle = is_empty(needle[needle_idx])
         local empty_haystack = is_empty(haystack[haystack_idx])
         if empty_needle and empty_haystack then
@@ -156,14 +157,22 @@ function M.find_subsequence_span(needle, haystack, opts)
         start_pos = haystack_idx
       end
 
-      if needle[needle_idx] == haystack[haystack_idx] then
+      local needle_str = needle[needle_idx]
+      local haystack_str = haystack[haystack_idx]
+
+      if ignore_indent then
+        needle_str = needle_str:gsub("^%s+", "")
+        haystack_str = haystack_str:gsub("^%s+", "")
+      end
+
+      if needle_str == haystack_str then
         needle_idx = needle_idx + 1
         haystack_idx = haystack_idx + 1
         goto continue
       end
 
       if threshold then
-        local dist = M.similarity_ratio(needle[needle_idx], haystack[haystack_idx])
+        local dist = M.similarity_ratio(needle_str, haystack_str)
         if dist < threshold then
           break
         end
@@ -195,7 +204,7 @@ end
 ---
 --- @param needle string[]
 --- @param haystack string[]
---- @param opts {ignore_whitespace: boolean?, threshold: number?, limit: integer?, ignore_conflicts: boolean?}?
+--- @param opts {ignore_emptylines: boolean?, ignore_indent: boolean, threshold: number?, limit: integer?, ignore_conflicts: boolean?}?
 --- @return {span: [integer, integer], score: number}[]
 function M.find_best_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
@@ -203,7 +212,8 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   end
 
   opts = opts or {}
-  local ignore_whitespace = opts.ignore_whitespace or false
+  local ignore_whitespace = opts.ignore_emptylines or false
+  local ignore_indent = opts.ignore_indent or false
   local limit = opts.limit or 1
   local threshold = opts.threshold or 0
   local in_conflict = nil
@@ -259,10 +269,18 @@ function M.find_best_subsequence_span(needle, haystack, opts)
       end
 
       local similarity
-      if needle[needle_idx] == haystack[haystack_idx] then
+      local needle_str = needle[needle_idx]
+      local haystack_str = haystack[haystack_idx]
+
+      if ignore_indent then
+        needle_str = needle_str:gsub("%s+", "")
+        haystack_str = haystack_str:gsub("%s+", "")
+      end
+
+      if needle_str == haystack_str then
         similarity = 1.0
       else
-        similarity = M.similarity_ratio(needle[needle_idx], haystack[haystack_idx])
+        similarity = M.similarity_ratio(needle_str, haystack_str)
       end
 
       sum_similarity = sum_similarity + similarity
