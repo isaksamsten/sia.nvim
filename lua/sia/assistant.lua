@@ -63,11 +63,16 @@ local function call_provider(query, opts)
   table.insert(args, "--url " .. provider.base_url)
   table.insert(args, "--data " .. vim.fn.shellescape(vim.json.encode(data)))
   local command = "curl " .. table.concat(args, " ")
-
+  local api_key = provider.api_key()
+  if api_key == nil then
+    vim.notify("Sia: API key is not set for " .. model[1])
+    opts.on_exit(nil, -100, nil)
+    return
+  end
   vim.fn.jobstart(command, {
     clear_env = true,
     env = {
-      API_KEY = provider.api_key(),
+      API_KEY = api_key,
     },
     on_stdout = opts.on_stdout,
     on_exit = opts.on_exit,
@@ -154,7 +159,11 @@ function M.execute_strategy(strategy, opts)
         end
       end
     end,
-    on_exit = function(_, _, _)
+    on_exit = function(_, code, _)
+      if code == -100 then
+        strategy:on_error()
+        return
+      end
       local on_complete = opts.on_complete
       opts.on_complete = function()
         if on_complete ~= nil then
