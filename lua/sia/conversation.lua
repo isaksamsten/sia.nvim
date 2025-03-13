@@ -181,7 +181,14 @@ function Message:get_description()
   else
     local description = self.description
     --- @cast description string?
-    return description or "[No name]"
+    if description then
+      return description
+    end
+    local content = self:get_content()
+    if content and #content > 0 then
+      return self.role .. " " .. string.sub(content[1], 1, 40)
+    end
+    return self.role
   end
 end
 
@@ -324,9 +331,10 @@ function Conversation:add_instruction(instruction, args, index)
     end
   end
   if not contains then
-    table.insert(self.instructions, { instruction = instruction, context = args })
+    local instruction_option = { instruction = instruction, context = args, index = index }
+    table.insert(self.instructions, instruction_option)
     if index then
-      self.indexed_instructions[index] = { instruction = instruction, context = args }
+      self.indexed_instructions[index] = instruction_option
     end
     return true
   end
@@ -350,29 +358,69 @@ function Conversation:last_message()
   return messages[#messages]
 end
 
---- @return string[] descriptionb
+--- @param filter (fun(message: sia.Message):boolean)?
+--- @return string[] description
 --- @return integer[] mapping
-function Conversation:get_context_instructions()
-  local contexts = {}
+function Conversation:get_message_mappings(filter)
+  local descriptions = {}
   local mappings = {}
   for i, instruction in ipairs(self.instructions) do
-    local context = {}
+    local description = {}
     local tmp_messages = self:_to_message(instruction)
     for _, message in ipairs(tmp_messages or {}) do
-      if message:is_context() then
-        table.insert(context, message:get_description())
+      if filter == nil or filter(message) then
+        table.insert(description, message:get_description())
       end
     end
-    if #context > 0 then
+    if #description > 0 then
       mappings[#mappings + 1] = i
-      contexts[#contexts + 1] = table.concat(context, ", ")
+      descriptions[#descriptions + 1] = table.concat(description, ", ")
     end
   end
-  return contexts, mappings
+  return descriptions, mappings
 end
 
 function Conversation:remove_instruction(index)
-  table.remove(self.instructions, index)
+  local removed = table.remove(self.instructions, index)
+  if removed and removed.index then
+    self.indexed_instructions[removed.index] = nil
+  end
+end
+
+--- @param content string[]
+--- @return boolean success
+function Conversation:update_instruction(index, content)
+  if not self:is_instruction_editable(index) then
+    return false
+  end
+  local instruction_option = self.instructions[index]
+  if instruction_option then
+    instruction_option.instruction.content = content
+    if instruction_option.index then
+      self.indexed_instructions[instruction_option.index].instruction.content = content
+    end
+  end
+end
+
+function Conversation:is_instruction_editable(index)
+  local instruction_option = self.instructions[index]
+  if instruction_option == nil then
+    return false
+  end
+  if type(instruction_option.instruction) == "function" or type(instruction_option.instruction) == "string" then
+    return false
+  end
+
+  --- @diagnostic disable-next-line param-type-mismatch
+  if vim.islist(instruction_option.instruction) then
+    return false
+  end
+
+  if type(instruction_option.instruction.content) == "function" then
+    return false
+  end
+
+  return true
 end
 
 function Conversation:get_context_messages()
@@ -399,20 +447,30 @@ function Conversation:execute_tool(name, arguments, strategy, callback)
   end
 end
 
---- @param filter (fun(message: sia.Message):boolean)?
+--- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?}?
 --- @return sia.Message[] messages
-function Conversation:get_messages(filter)
-  return vim
-    .iter(self.instructions)
-    --- @param instruction {instruction: sia.InstructionOption, context: sia.Context? }
-    :map(function(instruction)
-      return self:_to_message(instruction)
-    end)
-    :flatten()
-    :filter(function(m)
-      return m:is_available() and (filter == nil or filter(m))
-    end)
-    :totable()
+--- @return integer[]? mappings if mapping is set to true
+function Conversation:get_messages(opts)
+  opts = opts or {}
+  local mappings = {}
+  local messages = {}
+  for i, instrop in ipairs(self.instructions) do
+    local message = self:_to_message(instrop)
+    if message then
+      for _, m in ipairs(message) do
+        if m:is_available() and (opts.filter == nil or opts.filter(m)) then
+          table.insert(messages, m)
+          table.insert(mappings, i)
+        end
+      end
+    end
+  end
+
+  if opts.mapping then
+    return messages, mappings
+  else
+    return messages
+  end
 end
 
 --- @param instruction_context {instruction: sia.InstructionOption, context: sia.Context?}?

@@ -308,7 +308,8 @@ function SplitStrategy:new(conversation, options)
   vim.api.nvim_buf_set_name(buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
-  obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1))
+  local model = obj.conversation.model or require("sia.config").options.defaults.model
+  obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
   obj:_setup_autocommand()
   return obj
@@ -319,18 +320,19 @@ function SplitStrategy:_setup_autocommand()
   local old_resp = nil
 
   local set_extmark = function(resp)
-    return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum - 1, 0, {
+    return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum, 0, {
       hl_eol = true,
       end_line = resp.lnum_end,
       hl_group = "SiaSplitResponse",
+      hl_mode = "combine",
     })
   end
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = self.augroup,
     buffer = self.buf,
     callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(0)[1] -- row
-      local resp = self.response_tracker[cursor]
+      local row = vim.api.nvim_win_get_cursor(0)[1]
+      local resp = self.response_tracker[row]
       if resp == nil then
         if old_resp then
           pcall(vim.api.nvim_buf_del_extmark, self.buf, SPLIT_NS, old_resp.extmark)
@@ -361,16 +363,12 @@ end
 function SplitStrategy:on_init()
   if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
-    self.canvas:render_messages({ self.conversation:last_message() })
-    self.canvas:render_model(self.conversation.model or require("sia.config").options.defaults.model)
+    local model = self.conversation.model or require("sia.config").options.defaults.model
+    self.canvas:render_messages({ self.conversation:last_message() }, model)
     if not self.hide_header then
-      if self.canvas:line_count() == 1 then
-        self.canvas:render_last({ "# Sia", "" })
-      else
-        self.canvas:render_last({ "", "---", "", "# Sia", "" })
-      end
+      self.canvas:render_assistant_header(model)
     end
-    self.canvas:update_progress({ { "I'm thinking! Please wait...", "SiaMessage" } })
+    self.canvas:update_progress({ { "I'm thinking! Please wait...", "SiaProgress" } })
   end
 end
 
@@ -613,7 +611,7 @@ function DiffStrategy:on_init()
 
   vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaMessage" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaProgress" } } },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaReplace",
     end_line = context.pos[2],
@@ -699,7 +697,7 @@ function InsertStrategy:on_init()
   if padding_direction == "below" then
     self._line = line + 1
   end
-  local message = self._options.message or { "Please wait...", "SiaMessage" }
+  local message = self._options.message or { "Please wait...", "SiaProgress" }
   vim.api.nvim_buf_set_extmark(self.conversation.context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
     virt_lines = { { { "🤖 ", "Normal" }, message } },
     virt_lines_above = self._line - 1 > 0,
@@ -819,7 +817,7 @@ function HiddenStrategy:on_init()
   local context = self.conversation.context
   vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaMessage" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaProgress" } } },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaInsert",
     end_line = context.pos[2],
@@ -860,9 +858,11 @@ function HiddenStrategy:on_complete(opts)
     end,
     on_no_tools = function()
       vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
-      local messages = self.conversation:get_messages(function(message)
-        return message.role == "assistant"
-      end)
+      local messages = self.conversation:get_messages({
+        filter = function(message)
+          return message.role == "assistant"
+        end,
+      })
       local content = Message.merge_content(messages)
       if content then
         self._options.callback(context, content)

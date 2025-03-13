@@ -12,7 +12,10 @@ local highlight_groups = {
   SiaSplitResponse = { link = "CursorLine" },
   SiaInsert = { link = "DiffAdd" },
   SiaReplace = { link = "DiffChange" },
-  SiaMessage = { link = "NonText" },
+  SiaProgress = { link = "NonText" },
+  SiaModel = { link = "NonText" },
+  SiaAssistant = { link = "DiffAdd" },
+  SiaUser = { link = "DiffChange" },
 }
 
 local function set_highlight_groups()
@@ -71,12 +74,12 @@ function M.insert(opts)
   end
 end
 
-function M.remove_context()
+function M.remove_message()
   local split = SplitStrategy.by_buf()
   if split then
-    local contexts, mappings = split.conversation:get_context_instructions()
+    local contexts, mappings = split.conversation:get_message_mappings()
     if #contexts == 0 then
-      vim.notify("Sia: No contexts available")
+      vim.notify("Sia: No messages in current conversation.")
       return
     end
     vim.ui.select(contexts, {
@@ -90,16 +93,18 @@ function M.remove_context()
   end
 end
 
-function M.preview_context()
+--- @param opts table?
+function M.show_messages(opts)
+  opts = opts or {}
   local split = SplitStrategy.by_buf()
   if split then
-    local contexts = split.conversation:get_context_messages()
+    local contexts, mappings = split.conversation:get_messages({ mapping = true })
     if #contexts == 0 then
-      vim.notify("Sia: No contexts available")
+      vim.notify("Sia: No messages in the current conversation.")
       return
     end
     vim.ui.select(contexts, {
-      prompt = "Peek context",
+      prompt = "Show message",
       --- @param message sia.Message
       format_item = function(message)
         return message:get_description()
@@ -113,21 +118,46 @@ function M.preview_context()
           local buf = vim.api.nvim_create_buf(false, true)
           vim.bo[buf].ft = "markdown"
           vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-          local win = vim.api.nvim_open_win(buf, true, {
-            relative = "win",
-            style = "minimal",
-            row = vim.o.lines - 3,
-            col = 0,
-            width = vim.api.nvim_win_get_width(0) - 1,
-            height = math.floor(vim.o.lines * 0.2),
-            border = "single",
-            title = item:get_description(),
-            title_pos = "center",
-          })
-          vim.wo[win].wrap = true
-          vim.keymap.set("n", "q", function()
-            vim.api.nvim_win_close(win, true)
-          end, { buffer = buf })
+          vim.bo[buf].modifiable = false
+          vim.api.nvim_buf_set_name(buf, item:get_description())
+          local win
+          if opts.peek then
+            win = vim.api.nvim_open_win(buf, true, {
+              relative = "win",
+              focusable = true,
+              style = "minimal",
+              anchor = "SW",
+              row = vim.o.lines,
+              col = 0,
+              width = vim.api.nvim_win_get_width(0) - 1,
+              height = math.floor(vim.o.lines * 0.2),
+              border = "single",
+              title = item:get_description(),
+              title_pos = "center",
+            })
+            vim.wo[win].wrap = true
+            vim.keymap.set("n", opts.close_key or "q", function()
+              vim.api.nvim_win_close(win, true)
+            end, { buffer = buf })
+          else
+            vim.bo[buf].buftype = "acwrite"
+            vim.bo[buf].modified = false
+            vim.api.nvim_win_set_buf(0, buf)
+            if opts.edit then
+              vim.bo[buf].modifiable = split.conversation:is_instruction_editable(mappings[idx])
+              vim.api.nvim_create_autocmd("BufWriteCmd", {
+                buffer = buf,
+                callback = function()
+                  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                  local updated = split.conversation:update_instruction(mappings[idx], lines)
+                  if updated then
+                    vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
+                  end
+                  vim.bo[buf].modified = false
+                end,
+              })
+            end
+          end
         end
       end
     end)
