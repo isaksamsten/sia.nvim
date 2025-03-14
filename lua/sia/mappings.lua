@@ -1,4 +1,3 @@
-local SplitStrategy = require("sia.strategy").SplitStrategy
 local utils = require("sia.utils")
 local M = {}
 
@@ -14,49 +13,14 @@ local function get_position(type)
   return start_pos, end_pos
 end
 
---- @param callback fun(strategy: sia.SplitStrategy):boolean
-M.add_instruction = function(callback)
-  --- @type {buf: integer, win: integer? }[]
-  local buffers = SplitStrategy.visible()
-
-  if #buffers == 0 then
-    buffers = SplitStrategy.all()
-  end
-
-  utils.select_buffer({
-    on_select = function(buffer)
-      local strategy = SplitStrategy.by_buf(buffer.buf)
-      if strategy then
-        if callback(strategy) then
-          vim.notify(string.format("Adding context to %s", strategy.name))
-        else
-          vim.notify(string.format("Context already exists %s", strategy.name))
-        end
-      end
-    end,
-    format_name = function(buf)
-      local strategy = SplitStrategy.by_buf(buf.buf)
-      if strategy then
-        return strategy.name
-      end
-    end,
-    on_nothing = function()
-      vim.notify("No *sia* buffers")
-    end,
-    source = buffers,
-  })
-end
-
+--- TODO: should this add it as a file instead?
 function _G.__sia_add_buffer()
-  M.add_instruction(function(strategy)
-    return strategy.conversation:add_instruction(
-      require("sia.instructions").current_buffer({ show_line_numbers = true, fences = true }),
-      {
-        buf = vim.api.nvim_get_current_buf(),
-        pos = vim.api.nvim_win_get_cursor(0),
-        cursor = vim.api.nvim_win_get_cursor(0),
-      }
-    )
+  require("sia.utils").with_split_strategy(function(strategy)
+    return strategy.conversation:add_instruction("current_buffer", {
+      buf = vim.api.nvim_get_current_buf(),
+      pos = vim.api.nvim_win_get_cursor(0),
+      cursor = vim.api.nvim_win_get_cursor(0),
+    })
   end)
 end
 
@@ -65,16 +29,13 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line > 0 then
-    M.add_instruction(function(strategy)
-      return strategy.conversation:add_instruction(
-        require("sia.instructions").current_context({ show_line_numbers = true, fences = true }),
-        {
-          buf = vim.api.nvim_get_current_buf(),
-          cursor = vim.api.nvim_win_get_cursor(0),
-          pos = { start_line, end_line },
-          mode = "v",
-        }
-      )
+    require("sia.utils").with_split_strategy(function(strategy)
+      return strategy.conversation:add_instruction("current_context", {
+        buf = vim.api.nvim_get_current_buf(),
+        cursor = vim.api.nvim_win_get_cursor(0),
+        pos = { start_line, end_line },
+        mode = "v",
+      })
     end)
   end
 end

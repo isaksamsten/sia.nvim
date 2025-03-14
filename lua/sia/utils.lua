@@ -1,5 +1,89 @@
 local M = {}
 
+--- @param args vim.api.keyset.create_user_command.command_args
+--- @return sia.ActionContext
+function M.create_context(args)
+  --- @type sia.ActionContext
+  local opts = {
+    win = vim.api.nvim_get_current_win(),
+    buf = vim.api.nvim_get_current_buf(),
+    cursor = vim.api.nvim_win_get_cursor(0),
+    start_line = args.line1,
+    end_line = args.line2,
+    pos = { args.line1, args.line2 },
+    bang = args.bang,
+  }
+  if args.count == -1 then
+    opts.mode = "n"
+  else
+    opts.mode = "v"
+  end
+  return opts
+end
+
+function M.is_range_commend(cmd_line)
+  local range_patterns = {
+    "^%s*%d+", -- Single line number (start), with optional leading spaces
+    "^%s*%d+,%d+", -- Line range (start,end), with optional leading spaces
+    "^%s*%d+[,+-]%d+", -- Line range with arithmetic (start+1, start-1)
+    "^%s*%d+,", -- Line range with open end (start,), with optional leading spaces
+    "^%s*%%", -- Whole file range (%), with optional leading spaces
+    "^%s*[$.]+", -- $, ., etc., with optional leading spaces
+    "^%s*[$.%d]+[%+%-]?%d*", -- Combined offsets (e.g., .+1, $-1)
+    "^%s*'[a-zA-Z]", -- Marks ('a, 'b), etc.
+    "^%s*[%d$%.']+,[%d$%.']+", -- Mixed patterns (e.g., ., 'a)
+    "^%s*['<>][<>]", -- Visual selection marks ('<, '>)
+    "^%s*'<[,]'?>", -- Combinations like '<,'>
+  }
+
+  for _, pattern in ipairs(range_patterns) do
+    if cmd_line:match(pattern) then
+      return true
+    end
+  end
+  return false
+end
+--- @class sia.utils.WithSplitStrategy
+--- @field on_select fun(strategy: sia.SplitStrategy):boolean
+--- @field on_none (fun():boolean)?
+--- @field only_visible boolean?
+
+--- @param opts sia.utils.WithSplitStrategy
+function M.with_split_strategy(opts)
+  local SplitStrategy = require("sia.strategy").SplitStrategy
+  local split = SplitStrategy.by_buf()
+  if split then
+    opts.on_select(split)
+    return
+  end
+  --- @type {buf: integer, win: integer? }[]
+  local buffers = SplitStrategy.visible()
+
+  if #buffers == 0 and not opts.only_visible then
+    buffers = SplitStrategy.all()
+  end
+
+  M.select_buffer({
+    on_select = function(buffer)
+      local strategy = SplitStrategy.by_buf(buffer.buf)
+      if strategy then
+        opts.on_select(strategy)
+      end
+    end,
+    format_name = function(buf)
+      local strategy = SplitStrategy.by_buf(buf.buf)
+      if strategy then
+        return strategy.name
+      end
+    end,
+    on_nothing = function()
+      if opts.on_none then
+        opts.on_none()
+      end
+    end,
+    source = buffers,
+  })
+end
 --- Create a new split with markdown content
 --- @param content string[] The content to insert in the split
 --- @param opts? {cmd: string?, ft: string?} Optional configuration

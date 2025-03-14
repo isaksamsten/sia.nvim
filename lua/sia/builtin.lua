@@ -252,6 +252,61 @@ Guidelines:
   4.	Always preserve the original indentation for code.
 	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
   },
+  diagnostics = {
+    {
+      role = "user",
+      id = function(ctx)
+        return { "diagnostics", ctx.buf, ctx.pos[1], ctx.pos[2] }
+      end,
+      persistent = true,
+      description = function(opts)
+        return string.format(
+          "Diagnostics on line %d to %d in %s",
+          opts.pos[1],
+          opts.pos[2],
+          require("sia.utils").get_filename(opts.buf)
+        )
+      end,
+      content = function(opts)
+        local utils = require("sia.utils")
+        local start_line, end_line = opts.pos[1], opts.pos[2]
+        local diagnostics = utils.get_diagnostics(start_line, end_line, { buf = opts.buf })
+        local concatenated_diagnostics = ""
+        for i, diagnostic in ipairs(diagnostics) do
+          concatenated_diagnostics = concatenated_diagnostics
+            .. i
+            .. ". Issue "
+            .. i
+            .. "\n  - Location: Line "
+            .. diagnostic.line_number
+            .. "\n  - Severity: "
+            .. diagnostic.severity
+            .. "\n  - Message: "
+            .. diagnostic.message
+            .. "\n"
+        end
+        if concatenated_diagnostics == "" then
+          return "No diagnostics found."
+        end
+
+        return string.format(
+          [[This is a list of the diagnostic messages in %s:
+                      %s
+                      ]],
+          utils.get_filename(opts.buf, ":p"),
+          concatenated_diagnostics
+        )
+      end,
+    },
+    {
+      role = "assistant",
+      content = "Ok",
+      persistent = true,
+      id = function(ctx)
+        return { "diagnostics_assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
+      end,
+    },
+  },
 }
 
 return M

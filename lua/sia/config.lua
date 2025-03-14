@@ -47,6 +47,8 @@ local providers = require("sia.provider")
 --- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
 
 --- @class sia.config.Action
+--- @field system (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]?
+--- @field examples (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]?
 --- @field instructions (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
 --- @field reminder (string|sia.config.Instruction)?
@@ -170,17 +172,19 @@ local defaults = {
     actions = {
       insert = {
         mode = "insert",
+        input = "require",
         temperature = 0.2,
+        system = { "insert_system" },
         instructions = {
-          "insert_system",
           "current_buffer",
         },
       },
       diff = {
         mode = "diff",
+        input = "require",
         temperature = 0.2,
+        system = { "diff_system" },
         instructions = {
-          "diff_system",
           require("sia.instructions").current_buffer({ fences = false }),
           require("sia.instructions").current_context({ fences = false }),
         },
@@ -192,10 +196,11 @@ local defaults = {
         split = {
           block_action = "search_replace",
         },
-        instructions = {
+        system = {
           "editblock_system",
           "git_files",
-          require("sia.instructions").files,
+        },
+        instructions = {
           "current_context",
         },
         reminder = "editblock_reminder",

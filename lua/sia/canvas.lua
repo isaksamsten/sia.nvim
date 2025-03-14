@@ -29,7 +29,6 @@ function Canvas:line_count() end
 --- @class sia.ChatCanvas : sia.Canvas
 --- @field buf integer
 --- @field progress_extmark integer?
---- @field models table<integer, string?>
 local ChatCanvas = {}
 ChatCanvas.__index = ChatCanvas
 
@@ -38,7 +37,6 @@ function ChatCanvas:new(buf)
   local obj = {
     buf = buf,
     progress_extmark = nil,
-    models = {},
   }
   setmetatable(obj, self)
   return obj
@@ -72,7 +70,9 @@ end
 
 function ChatCanvas:scroll_to_bottom()
   local win = self:get_win()
-  vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(self.buf), 0 })
+  if win ~= -1 then
+    vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(self.buf), 0 })
+  end
 end
 
 function ChatCanvas:_set_assistant_extmark(line, model)
@@ -119,9 +119,9 @@ function ChatCanvas:render_messages(messages, model)
         else
           vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "", heading, "" })
           if heading == "/sia" then
-            self:_set_assistant_extmark(line_count + 1, model)
+            self:_set_assistant_extmark(line_count + 2, model)
           else
-            self:_set_user_extmark(line_count + 1)
+            self:_set_user_extmark(line_count + 2)
           end
         end
         line_count = vim.api.nvim_buf_line_count(self.buf)

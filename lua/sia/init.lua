@@ -77,13 +77,13 @@ end
 function M.remove_message()
   local split = SplitStrategy.by_buf()
   if split then
-    local contexts, mappings = split.conversation:get_message_mappings()
+    local contexts, mappings = split.conversation:get_messages()
     if #contexts == 0 then
       vim.notify("Sia: No messages in current conversation.")
       return
     end
     vim.ui.select(contexts, {
-      prompt = "Delete context",
+      prompt = "Delete message",
       --- @param idx integer?
     }, function(_, idx)
       if idx then
@@ -115,11 +115,16 @@ function M.show_messages(opts)
       if item then
         local content = item:get_content()
         if content then
-          local buf = vim.api.nvim_create_buf(false, true)
-          vim.bo[buf].ft = "markdown"
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-          vim.bo[buf].modifiable = false
-          vim.api.nvim_buf_set_name(buf, item:get_description())
+          print(vim.inspect(content))
+          local buf_name = split.name .. " " .. item:get_description()
+          local buf = vim.fn.bufnr(buf_name)
+          if buf == -1 then
+            buf = vim.api.nvim_create_buf(false, true)
+            vim.bo[buf].ft = "markdown"
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
+            vim.bo[buf].modifiable = false
+            vim.api.nvim_buf_set_name(buf, buf_name)
+          end
           local win
           if opts.peek then
             win = vim.api.nvim_open_win(buf, true, {
@@ -132,7 +137,7 @@ function M.show_messages(opts)
               width = vim.api.nvim_win_get_width(0) - 1,
               height = math.floor(vim.o.lines * 0.2),
               border = "single",
-              title = item:get_description(),
+              title = buf_name,
               title_pos = "center",
             })
             vim.wo[win].wrap = true
@@ -154,6 +159,7 @@ function M.show_messages(opts)
                     vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
                   end
                   vim.bo[buf].modified = false
+                  split:redraw()
                 end,
               })
             end
@@ -209,90 +215,77 @@ function M.open_reply()
   end
 end
 
--- local symbol_cache = {
---   last_arg = nil,
---   symbols = nil,
--- }
+--- @class sia.AddCommand
+--- @field completion (fun(s:string):string[])
+--- @field execute_local fun(args: vim.api.keyset.create_user_command.command_args, c: sia.Conversation):nil
+--- @field execute_global (fun(args: vim.api.keyset.create_user_command.command_args):nil)?
+--- @field require_range boolean
+--- @field only_visible boolean?
 
---- @type table<string, { completion: (fun(s:string):string[]), execution: fun(args: string[], bang: boolean, c: sia.Conversation?):nil }>
+--- @type table<string, sia.AddCommand>
 local add_commands = {
   file = {
+    only_visible = true,
+    require_range = false,
     completion = function(lead)
       return vim.fn.getcompletion(lead, "file")
     end,
-    execution = function(args, bang, conversation)
-      if #args == 0 then
-        local files
-        if conversation then
-          files = conversation.files
-        else
-          files = utils.get_global_files()
-        end
+    execute_global = function(args)
+      local fargs = args.fargs
+      if #fargs == 0 then
+        local files = Conversation.pending_files
         print(table.concat(files, ", "))
       else
-        if bang then
-          if conversation then
-            conversation.files = {}
-          else
-            utils.clear_global_files()
-          end
+        if args.bang then
+          Conversation.clear_pending_files()
         end
-        local files = utils.glob_pattern_to_files(args)
+        local files = utils.glob_pattern_to_files(fargs)
+        Conversation.add_pending_files(files)
+      end
+    end,
+    execute_local = function(args, conversation)
+      local fargs = args.fargs
+      if #fargs == 0 then
+        local files = conversation.files
+        print(table.concat(files, ", "))
+      else
+        if args.bang then
+          conversation.files = {}
+        end
+        local files = utils.glob_pattern_to_files(fargs)
 
-        if conversation then
-          conversation:add_files(files)
-        else
-          utils.add_global_files(files)
-        end
+        conversation:add_files(files)
       end
     end,
   },
-  -- symbol = {
-  --   completion = function(arg)
-  --     local symbols
-  --     if symbol_cache.last_arg and symbol_cache.symbols and vim.startswith(arg, symbol_cache.last_arg) then
-  --       symbols = symbol_cache.symbols
-  --     else
-  --       symbols = require("sia.lsp").workspace_symbols({ arg })
-  --     end
-  --
-  --     local commands = {}
-  --     for _, symbol in ipairs(symbols or {}) do
-  --       table.insert(commands, symbol.symbol.name)
-  --     end
-  --
-  --     symbol_cache.last_arg = arg
-  --     symbol_cache.symbols = symbols
-  --
-  --     return commands
-  --   end,
-  --
-  --   execution = function(args, bang, conversation)
-  --     symbol_cache.last_arg = nil
-  --     symbol_cache.symbols = nil
-  --
-  --     if conversation == nil then
-  --       vim.notify("No conversation")
-  --     end
-  --     local symbols = require("sia.lsp").workspace_symbols({ args[1] })
-  --     print(vim.inspect(symbols))
-  --     if symbols and #symbols > 0 then
-  --       for _, symbol in ipairs(symbols or {}) do
-  --         symbol = symbol.symbol
-  --
-  --         local buf = vim.uri_to_bufnr(symbol.location.uri)
-  --         vim.fn.bufload(buf)
-  --         local pos = {
-  --           symbol.location.range.start.line,
-  --           symbol.location.range["end"].line,
-  --         }
-  --         conversation:add_instruction(require("sia.instructions").context(buf, pos))
-  --       end
-  --     else
-  --       vim.notify("No symbols")
-  --     end
-  --   end,
-  -- },
+  context = {
+    require_range = true,
+    only_visible = true,
+    completion = function(lead)
+      return {}
+    end,
+    execute_global = function(args)
+      local context = utils.create_context(args)
+      Conversation.add_pending_instruction("current_context", context)
+    end,
+    execute_local = function(args, conversation)
+      local context = utils.create_context(args)
+      conversation:add_instruction("current_context", context)
+    end,
+  },
+  diagnostics = {
+    require_range = true,
+    completion = function(_)
+      return {}
+    end,
+
+    execute_global = function(args)
+      Conversation.add_pending_instruction("diagnostics", utils.create_context(args))
+    end,
+    execute_local = function(args, conversation)
+      conversation:add_instruction("diagnostics", utils.create_context(args))
+    end,
+  },
 }
 
 function M.setup(options)
@@ -300,22 +293,34 @@ function M.setup(options)
   require("sia.mappings").setup()
 
   vim.api.nvim_create_user_command("SiaAdd", function(args)
-    local split = SplitStrategy.by_buf()
-    local fargs = args.fargs
-    local command = add_commands[table.remove(fargs, 1)]
+    local cmd_name = table.remove(args.fargs, 1)
+    local command = add_commands[cmd_name]
     if command then
-      command.execution(fargs, args.bang, split and split.conversation or nil)
+      utils.with_split_strategy({
+        on_select = function(split)
+          command.execute_local(args, split.conversation)
+        end,
+        on_none = function()
+          if command.execute_global then
+            command.execute_global(args)
+          else
+            vim.notify("No *sia* buffer")
+          end
+        end,
+      })
     end
   end, {
     nargs = "*",
     bang = true,
     bar = true,
+    range = true,
     complete = function(arg_lead, line, pos)
+      local is_range = utils.is_range_commend(line)
       local complete = {}
 
       if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
-        for command, _ in pairs(add_commands) do
-          if vim.startswith(command, arg_lead) then
+        for command, command_args in pairs(add_commands) do
+          if vim.startswith(command, arg_lead) and command_args.require_range == is_range then
             complete[#complete + 1] = command
           end
         end

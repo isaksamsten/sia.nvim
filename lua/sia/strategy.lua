@@ -299,11 +299,12 @@ function SplitStrategy:new(conversation, options)
   SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
 
   -- Ensure that the count has been incremented
-  if SplitStrategy.count() == 0 then
+  if SplitStrategy.count() == 1 then
     obj.name = "*sia*"
   else
     obj.name = "*sia " .. SplitStrategy.count() .. "*"
   end
+  print(obj.name)
 
   vim.api.nvim_buf_set_name(buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)
@@ -313,6 +314,14 @@ function SplitStrategy:new(conversation, options)
 
   obj:_setup_autocommand()
   return obj
+end
+
+function SplitStrategy:redraw()
+  vim.bo[self.buf].modifiable = true
+  self.canvas:clear()
+  local model = self.conversation.model or require("sia.config").options.defaults.model
+  self.canvas:render_messages(self.conversation:get_messages(), model)
+  vim.bo[self.buf].modifiable = false
 end
 
 function SplitStrategy:_setup_autocommand()
@@ -424,6 +433,7 @@ function SplitStrategy:on_complete(opts)
 
   if vim.api.nvim_buf_is_loaded(self.buf) then
     del_abort_keymap(self.buf)
+    self.canvas:scroll_to_bottom()
     local start_line = self._writer.start_line
     if #self._writer.cache > 0 then
       self.current_response = self.current_response + 1
@@ -572,7 +582,7 @@ end
 
 --- @return number count the number of split buffers
 function SplitStrategy.count()
-  return #SplitStrategy._buffers
+  return vim.tbl_count(SplitStrategy._buffers)
 end
 
 --- @class sia.DiffStrategy : sia.Strategy

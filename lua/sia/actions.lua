@@ -11,10 +11,11 @@ function M.edit()
       require("sia.tools").add_file,
     },
     input = "require",
-    instructions = {
+    system = {
       "editblock_system",
       "git_files",
-      require("sia.instructions").files,
+    },
+    instructions = {
       "current_context",
     },
     reminder = "editblock_reminder",
@@ -33,20 +34,22 @@ function M.replace()
         end
       end,
     },
-    instructions = {
+    system = {
       {
         role = "system",
         content = [[You are plugged in to an editor. The user will provide you with a context
-and instructions. The user will provide context inside markdown code
-fences togheter with a filetype and a file. You will replace the
-context the user provides in accordance to the instructions. The
-replacement will be inserted verbatim into a text editor so refrain
-from adding unncessary explantions or code fences. Also avoid formatting not
-suitable for the users file type.
+              and instructions. The user will provide context inside markdown code
+              fences togheter with a filetype and a file. You will replace the
+              context the user provides in accordance to the instructions. The
+              replacement will be inserted verbatim into a text editor so refrain
+              from adding unncessary explantions or code fences. Also avoid formatting not
+              suitable for the users file type.
 
-REMEMBER: NEVER USE CODE FENCES OR MARKDOWN CODE BLOCKS!
-]],
+              REMEMBER: NEVER USE CODE FENCES OR MARKDOWN CODE BLOCKS!
+              ]],
       },
+    },
+    instructions = {
       "current_context",
     },
     input = "require",
@@ -58,9 +61,8 @@ end
 function M.diagnostic()
   local utils = require("sia.utils")
   return {
+    system = { "editblock_system" },
     instructions = {
-      "editblock_system",
-      require("sia.instructions").files,
       "current_context",
       {
         role = "user",
@@ -121,7 +123,7 @@ end
 
 function M.commit()
   return {
-    instructions = {
+    system = {
       {
         role = "system",
         content = [[You are an AI assistant tasked with generating concise,
@@ -139,6 +141,8 @@ crafting the commit message:
 4. **Use an imperative tone**: Write the commit message as a command, e.g.,
    "Fix typo in README," "Add unit tests for validation logic." ]],
       },
+    },
+    instructions = {
       {
         role = "user",
         content = function()
@@ -161,7 +165,7 @@ end
 --- @return sia.config.Action
 function M.review()
   return {
-    instructions = {
+    system = {
       {
         role = "system",
         content = [[Your task is to review the provided code snippet, focusing specifically on its readability, maintainability and efficiency.
@@ -196,6 +200,8 @@ line=11-15: Excessive nesting makes the code hard to follow. Consider refactorin
 
 If the code snippet has no readability issues, simply confirm that the code is clear and well-written]],
       },
+    },
+    instructions = {
       "current_context_line_number",
       { role = "user", content = "Please review the provided context" },
     },
@@ -236,7 +242,7 @@ end
 --- @return sia.config.Action
 function M.explain()
   return {
-    instructions = {
+    system = {
       {
         role = "system",
         content = [[When asked to explain code, follow these steps:
@@ -251,7 +257,8 @@ If you need additional context to improve the explanation. Ask the user to add
 the file to the context using SiaAdd.]],
       },
       "git_files",
-      require("sia.instructions").files,
+    },
+    instructions = {
       "current_context_line_number",
       { role = "user", content = "Please explain the provided context" },
     },
@@ -263,10 +270,11 @@ end
 --- @return sia.config.Action
 function M.unittest()
   return {
-    instructions = {
+    system = {
       "editblock_system",
       "git_files",
-      require("sia.instructions").files,
+    },
+    instructions = {
       "current_context",
       {
         role = "user",
@@ -304,8 +312,10 @@ end
 --- @return sia.config.Action
 function M.doc()
   return {
-    instructions = {
+    system = {
       "insert_system",
+    },
+    instructions = {
       {
         role = "system",
         content = [[You are tasked with writing documentation for functions,
@@ -366,8 +376,10 @@ function M.fix(config)
   config = config or {}
   --- @type sia.config.Action
   local action = {
-    instructions = {
+    system = {
       "editblock_system",
+    },
+    instructions = {
       {
         role = "user",
         enabled = function(ctx)

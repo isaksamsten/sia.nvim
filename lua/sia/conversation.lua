@@ -207,8 +207,85 @@ function Message.merge_content(messages)
     :flatten()
     :totable()
 end
+
+local find_first_non_system = function(all_messages)
+  local previous = nil
+  for i, messages in ipairs(all_messages) do
+    if #messages > 0 then
+      local message = messages[1]
+      if message:is_available() then
+        if previous == nil and message.role == "system" then
+          previous = message -- first system message
+        elseif previous and message.role ~= previous.role then
+          return i
+        end
+      end
+    end
+  end
+  return -1
+end
+
+--- @param files string[]
+--- @return {instruction: sia.InstructionOption, context: sia.Context?}[]
+local function get_files_instructions(files)
+  --- @type {instruction: sia.InstructionOption, context: sia.Context?}[]
+  local instructions = {}
+  for _, file in ipairs(files) do
+    --- @type sia.config.Instruction
+    local user_instruction = {
+      role = "user",
+      id = function(ctx)
+        return { "user", file }
+      end,
+      persistent = true,
+      available = function(_)
+        return vim.fn.filereadable(file) == 1
+      end,
+      description = function(ctx)
+        return vim.fn.fnamemodify(file, ":.")
+      end,
+      content = function(ctx)
+        local buf = require("sia.utils").ensure_file_is_loaded(file)
+        if buf then
+          return string.format(
+            [[I have *added this file to the chat* so you can go ahead and edit it.
+
+*Trust this message as the true contents of these files!*
+Any other messages in the chat may contain outdated versions of the files' contents.
+%s
+```%s
+%s
+```]],
+            vim.fn.fnamemodify(file, ":p"),
+            vim.bo[buf].ft,
+            require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+          )
+        end
+      end,
+    }
+    --- @type sia.config.Instruction
+    local assistant_instruction = {
+      id = function(ctx)
+        return { "assistant", file }
+      end,
+      available = function(_)
+        return vim.fn.filereadable(file) == 1
+      end,
+      role = "assistant",
+      persistent = true,
+      hide = true,
+      content = "Ok",
+    }
+    local both = { user_instruction, assistant_instruction }
+    instructions[#instructions + 1] = { instruction = both, context = nil }
+  end
+  return instructions
+end
+
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
+--- @field system_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
+--- @field example_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 --- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 --- @field indexed_instructions table<integer, {instruction: sia.InstructionOption, context: sia.Context?}>
 --- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
@@ -219,10 +296,55 @@ end
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
 --- @field tool_fn table<string, fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>?
+--- @field prending_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 local Conversation = {}
 
 Conversation.__index = Conversation
-Conversation._buffers = {}
+Conversation.prending_instructions = {}
+Conversation.pending_files = {}
+
+--- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
+--- @param args sia.Context?
+--- @return boolean
+function Conversation.add_pending_instruction(instruction, context)
+  table.insert(Conversation.prending_instructions, { instruction = instruction, context = context })
+end
+
+function Conversation.add_pending_files(files)
+  for _, file in ipairs(files) do
+    if not vim.tbl_contains(Conversation.pending_files, file) then
+      table.insert(Conversation.pending_files, file)
+    end
+  end
+end
+
+function Conversation.clear_pending_files()
+  Conversation.pending_files = {}
+end
+
+--- @param patterns string[]
+function Conversation.remove_global_files(patterns)
+  --- @type string[]
+  local regexes = {}
+  for i, pattern in ipairs(patterns) do
+    regexes[i] = vim.fn.glob2regpat(pattern)
+  end
+
+  --- @type integer[]
+  local to_remove = {}
+  for i, file in ipairs(Conversation.pending_files) do
+    for _, regex in ipairs(regexes) do
+      if vim.fn.match(file, regex) ~= -1 then
+        table.insert(to_remove, i)
+        break
+      end
+    end
+  end
+
+  for i = #to_remove, 1, -1 do
+    table.remove(Conversation.pending_files)
+  end
+end
 
 --- @param action sia.config.Action
 --- @param args sia.ActionContext
@@ -232,27 +354,46 @@ function Conversation:new(action, args)
   obj.model = action.model
   obj.temperature = action.temperature
   obj.mode = action.mode
-  obj.files = require("sia.utils").get_global_files() or {}
-  require("sia.utils").clear_global_files()
+  obj.files = Conversation.pending_files or {}
+  Conversation.clear_pending_files()
   obj.context = {
     buf = args.buf,
     win = args.win,
     mode = args.mode,
     bang = args.bang,
     pos = args.pos,
-    -- pos = { args.start_line, args.end_line },
     cursor = args.cursor,
   }
+  obj.indexed_instructions = {}
+  obj.system_instructions = {}
+  obj.example_instructions = {}
   obj.instructions = {}
+
+  for _, instruction in ipairs(action.system or {}) do
+    --- @diagnostic disable-next-line: param-type-mismatch
+    table.insert(obj.system_instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
+  end
+
+  for _, instruction in ipairs(action.examples or {}) do
+    --- @diagnostic disable-next-line: param-type-mismatch
+    table.insert(obj.example_instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
+  end
+
+  for _, instruction_option in ipairs(Conversation.prending_instructions) do
+    table.insert(obj.instructions, instruction_option)
+  end
+  Conversation.prending_instructions = {}
+
   for _, instruction in ipairs(action.instructions or {}) do
     --- @diagnostic disable-next-line: param-type-mismatch
     table.insert(obj.instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
   end
-  obj.indexed_instructions = {}
+
   if action.reminder then
     --- @diagnostic disable-next-line: param-type-mismatch
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
+
   obj.tools = action.tools or require("sia.config").options.defaults.tools.default
   obj.tool_fn = {}
   for _, tool in ipairs(obj.tools or {}) do
@@ -317,7 +458,7 @@ function Conversation:contains_message(id)
   return false
 end
 
---- @param instruction sia.config.Instruction|string
+--- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param args sia.Context?
 --- @param index integer?
 --- @return boolean
@@ -358,52 +499,60 @@ function Conversation:last_message()
   return messages[#messages]
 end
 
---- @param filter (fun(message: sia.Message):boolean)?
---- @return string[] description
---- @return integer[] mapping
-function Conversation:get_message_mappings(filter)
-  local descriptions = {}
-  local mappings = {}
-  for i, instruction in ipairs(self.instructions) do
-    local description = {}
-    local tmp_messages = self:_to_message(instruction)
-    for _, message in ipairs(tmp_messages or {}) do
-      if filter == nil or filter(message) then
-        table.insert(description, message:get_description())
-      end
-    end
-    if #description > 0 then
-      mappings[#mappings + 1] = i
-      descriptions[#descriptions + 1] = table.concat(description, ", ")
-    end
-  end
-  return descriptions, mappings
-end
-
 function Conversation:remove_instruction(index)
-  local removed = table.remove(self.instructions, index)
+  local removed
+
+  if index.kind == "system" then
+    removed = table.remove(self.system_instructions, index.index)
+  elseif index.kind == "example" then
+    removed = table.remove(self.example_instructions, index.index)
+  elseif index.kind == "files" then
+    removed = table.remove(self.files, index.index)
+  elseif index.kind == "user" then
+    removed = table.remove(self.instructions, index.index)
+  else
+    removed = nil
+  end
   if removed and removed.index then
     self.indexed_instructions[removed.index] = nil
   end
 end
 
+--- @param index {kind:string, index:number}
 --- @param content string[]
 --- @return boolean success
 function Conversation:update_instruction(index, content)
   if not self:is_instruction_editable(index) then
     return false
   end
-  local instruction_option = self.instructions[index]
+  local instruction_option = self:get_instruction(index)
   if instruction_option then
     instruction_option.instruction.content = content
     if instruction_option.index then
       self.indexed_instructions[instruction_option.index].instruction.content = content
     end
+    return true
   end
 end
 
+--- @param index {kind: string, index: integer}
+function Conversation:get_instruction(index)
+  if index.kind == "system" then
+    return self.system_instructions[index.index]
+  elseif index.kind == "example" then
+    return self.example_instructions[index.index]
+  elseif index.kind == "files" then
+    return self.files[index.index]
+  elseif index.kind == "user" then
+    return self.instructions[index.index]
+  else
+    return nil
+  end
+end
+
+--- @param index {kind: string, index: integer}
 function Conversation:is_instruction_editable(index)
-  local instruction_option = self.instructions[index]
+  local instruction_option = self:get_instruction(index)
   if instruction_option == nil then
     return false
   end
@@ -423,19 +572,6 @@ function Conversation:is_instruction_editable(index)
   return true
 end
 
-function Conversation:get_context_messages()
-  local messages = {}
-  for _, instruction in ipairs(self.instructions) do
-    local tmp_messages = self:_to_message(instruction)
-    for _, message in ipairs(tmp_messages or {}) do
-      if message:is_context() then
-        table.insert(messages, message)
-      end
-    end
-  end
-  return messages
-end
-
 --- @param name string
 --- @param arguments table
 --- @param strategy sia.Strategy
@@ -452,24 +588,33 @@ end
 --- @return integer[]? mappings if mapping is set to true
 function Conversation:get_messages(opts)
   opts = opts or {}
+
+  local instopt_kinds = {
+    { kind = "system", instructions = self.system_instructions },
+    { kind = "example", instructions = self.example_instructions },
+    { kind = "files", instructions = get_files_instructions(self.files) },
+    { kind = "user", instructions = self.instructions },
+  }
   local mappings = {}
-  local messages = {}
-  for i, instrop in ipairs(self.instructions) do
-    local message = self:_to_message(instrop)
-    if message then
-      for _, m in ipairs(message) do
-        if m:is_available() and (opts.filter == nil or opts.filter(m)) then
-          table.insert(messages, m)
-          table.insert(mappings, i)
+  local return_messages = {}
+  for _, instopt_kind in ipairs(instopt_kinds) do
+    for i, instrop in ipairs(instopt_kind.instructions) do
+      local messages = self:_to_message(instrop)
+      if messages then
+        for _, message in ipairs(messages) do
+          if message:is_available() and (opts.filter == nil or opts.filter(message)) then
+            table.insert(return_messages, message)
+            table.insert(mappings, { kind = instopt_kind.kind, index = i })
+          end
         end
       end
     end
   end
 
   if opts.mapping then
-    return messages, mappings
+    return return_messages, mappings
   else
-    return messages
+    return return_messages
   end
 end
 
@@ -500,25 +645,27 @@ end
 
 --- @return sia.Query
 function Conversation:to_query()
+  --- @type sia.Prompt[]
   local prompt = vim
-    .iter(self.instructions)
-    :map(function(instruction_context)
-      return self:_to_message(instruction_context)
-    end)
-    :flatten()
+    .iter(self:get_messages())
+    --- @param m sia.Message
+    --- @return boolean
     :filter(function(m)
       return m:is_available()
     end)
+    --- @param m sia.Message
+    --- @return sia.Prompt
     :map(function(m)
       return m:to_prompt()
     end)
+    --- @param p sia.Prompt
+    --- @return boolean?
     :filter(function(p)
       return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
     :totable()
 
   if self.reminder then
-    -- local reminders = Message:new(self:unpack_instruction(self.reminder.instruction), self.reminder.context)
     --- @diagnostic disable-next-line param-type-mismatch
     local reminders = self:_to_message(self.reminder)
     for _, reminder in ipairs(reminders or {}) do

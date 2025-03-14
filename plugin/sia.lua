@@ -28,21 +28,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   --- @type sia.ActionContext
-  local opts = {
-    win = vim.api.nvim_get_current_win(),
-    buf = vim.api.nvim_get_current_buf(),
-    cursor = vim.api.nvim_win_get_cursor(0),
-    start_line = args.line1,
-    end_line = args.line2,
-    pos = { args.line1, args.line2 },
-    bang = args.bang,
-  }
-  if args.count == -1 then
-    opts.mode = "n"
-  else
-    opts.mode = "v"
-  end
-
+  local opts = utils.create_context(args)
   local action
   if vim.b.sia and #args.fargs == 0 then
     action = utils.resolve_action({ vim.b.sia }, opts)
@@ -93,29 +79,7 @@ end, {
     local has_bang = false
 
     if cmd_type == ":" then
-      local range_patterns = {
-        "^%s*%d+", -- Single line number (start), with optional leading spaces
-        "^%s*%d+,%d+", -- Line range (start,end), with optional leading spaces
-        "^%s*%d+[,+-]%d+", -- Line range with arithmetic (start+1, start-1)
-        "^%s*%d+,", -- Line range with open end (start,), with optional leading spaces
-        "^%s*%%", -- Whole file range (%), with optional leading spaces
-        "^%s*[$.]+", -- $, ., etc., with optional leading spaces
-        "^%s*[$.%d]+[%+%-]?%d*", -- Combined offsets (e.g., .+1, $-1)
-        "^%s*'[a-zA-Z]", -- Marks ('a, 'b), etc.
-        "^%s*[%d$%.']+,[%d$%.']+", -- Mixed patterns (e.g., ., 'a)
-        "^%s*['<>][<>]", -- Visual selection marks ('<, '>)
-        "^%s*'<[,]'?>", -- Combinations like '<,'>
-      }
-
-      for _, pattern in ipairs(range_patterns) do
-        if CmdLine:match(pattern) then
-          is_range = true
-          break
-        end
-      end
-      if CmdLine:match(".-%w+!%s+.*") then
-        has_bang = true
-      end
+      is_range = require("sia.utils").is_range_commend(CmdLine)
     end
 
     local match = string.match(string.sub(CmdLine, 1, CursorPos), "-m ([%w-_]*)$")

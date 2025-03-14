@@ -2,16 +2,6 @@ local SplitStrategy = require("sia.strategy").SplitStrategy
 local utils = require("sia.utils")
 local M = {}
 
---- @return string[] files
-local function get_local_or_global_files()
-  local split = SplitStrategy.by_buf()
-  if split then
-    return split.files
-  else
-    return utils.get_global_files()
-  end
-end
-
 --- @param conversation sia.Conversation
 --- @return sia.config.Instruction[]
 function M.files(conversation)
