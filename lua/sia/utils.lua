@@ -43,35 +43,35 @@ function M.is_range_commend(cmd_line)
   end
   return false
 end
---- @class sia.utils.WithSplitStrategy
---- @field on_select fun(strategy: sia.SplitStrategy):boolean
+--- @class sia.utils.WithChatStrategy
+--- @field on_select fun(strategy: sia.ChatStrategy):boolean
 --- @field on_none (fun():boolean)?
 --- @field only_visible boolean?
 
---- @param opts sia.utils.WithSplitStrategy
-function M.with_split_strategy(opts)
-  local SplitStrategy = require("sia.strategy").SplitStrategy
-  local split = SplitStrategy.by_buf()
-  if split then
-    opts.on_select(split)
+--- @param opts sia.utils.WithChatStrategy
+function M.with_chat_strategy(opts)
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+  local chat = ChatStrategy.by_buf()
+  if chat then
+    opts.on_select(chat)
     return
   end
   --- @type {buf: integer, win: integer? }[]
-  local buffers = SplitStrategy.visible()
+  local buffers = ChatStrategy.visible()
 
   if #buffers == 0 and not opts.only_visible then
-    buffers = SplitStrategy.all()
+    buffers = ChatStrategy.all()
   end
 
   M.select_buffer({
     on_select = function(buffer)
-      local strategy = SplitStrategy.by_buf(buffer.buf)
+      local strategy = ChatStrategy.by_buf(buffer.buf)
       if strategy then
         opts.on_select(strategy)
       end
     end,
     format_name = function(buf)
-      local strategy = SplitStrategy.by_buf(buf.buf)
+      local strategy = ChatStrategy.by_buf(buf.buf)
       if strategy then
         return strategy.name
       end
@@ -214,7 +214,7 @@ end
 --- @return sia.config.ActionMode
 function M.get_action_mode(opts)
   if vim.bo[opts.buf].ft == "sia" then
-    return "split"
+    return "chat"
   end
 
   if opts.bang and opts.mode == "n" then
@@ -222,7 +222,7 @@ function M.get_action_mode(opts)
   elseif opts.bang and opts.mode == "v" then
     return "diff"
   else
-    return "split"
+    return "chat"
   end
 end
 

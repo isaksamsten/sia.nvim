@@ -4,7 +4,7 @@ local providers = require("sia.provider")
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
---- @alias sia.config.ActionMode "split"|"diff"|"insert"|"hidden"
+--- @alias sia.config.ActionMode "chat"|"diff"|"insert"|"hidden"
 
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
@@ -15,7 +15,7 @@ local providers = require("sia.provider")
 --- @field wo [string]?
 --- @field cmd string?
 
---- @class sia.config.Split
+--- @class sia.config.Chat
 --- @field cmd string?
 --- @field block_action (string|sia.BlockAction)?
 --- @field automatic_block_action boolean?
@@ -62,14 +62,14 @@ local providers = require("sia.provider")
 --- @field range boolean?
 --- @field insert sia.config.Insert?
 --- @field diff sia.config.Diff?
---- @field split sia.config.Split?
+--- @field chat sia.config.Chat?
 --- @field hidden sia.config.Hidden?
 
 --- @class sia.config.Defaults
 --- @field model string
 --- @field temperature number
---- @field actions table<"diff"|"split"|"insert", sia.config.Action>
---- @field split sia.config.Split
+--- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
+--- @field chat sia.config.Chat
 --- @field replace sia.config.Replace
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
@@ -141,7 +141,7 @@ local defaults = {
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
-    split = {
+    chat = {
       cmd = "vnew",
       wo = { wrap = true },
       block_action = "search_replace",
@@ -190,10 +190,10 @@ local defaults = {
         },
       },
       --- @type sia.config.Action
-      split = {
-        mode = "split",
+      chat = {
+        mode = "chat",
         temperature = 0.1,
-        split = {
+        chat = {
           block_action = "search_replace",
         },
         system = {

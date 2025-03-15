@@ -7,7 +7,7 @@ local Message = require("sia.conversation").Message
 
 local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
-local SPLIT_NS = vim.api.nvim_create_namespace("SiaSplitStrategy")
+local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 
 --- @param tools sia.CompletedTools[]
 --- @param opts {on_confirm: (fun():nil), on_reject: (fun():nil)?}
@@ -245,28 +245,28 @@ end
 --- @field type string
 --- @field function { arguments: string, name: string }
 
---- Create a new split window tracking the chat.
---- @class sia.SplitStrategy : sia.Strategy
+--- Create a new chat window.
+--- @class sia.ChatStrategy : sia.Strategy
 --- @field buf integer the split view buffer
---- @field options sia.config.Split options for the split
+--- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field name string
 --- @field block_action sia.BlockAction
 --- @field current_response integer
 --- @field response_tracker table<integer, table?>
 --- @field _writer sia.Writer? the writer
-local SplitStrategy = setmetatable({}, { __index = Strategy })
-SplitStrategy.__index = SplitStrategy
+local ChatStrategy = setmetatable({}, { __index = Strategy })
+ChatStrategy.__index = ChatStrategy
 
---- @type table<integer, sia.SplitStrategy>
-SplitStrategy._buffers = {}
+--- @type table<integer, sia.ChatStrategy>
+ChatStrategy._buffers = {}
 
 --- @type table<integer, integer>
-SplitStrategy._order = {}
+ChatStrategy._order = {}
 
 --- @param conversation sia.Conversation
---- @param options sia.config.Split
-function SplitStrategy:new(conversation, options)
+--- @param options sia.config.Chat
+function ChatStrategy:new(conversation, options)
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(true, true)
@@ -286,7 +286,7 @@ function SplitStrategy:new(conversation, options)
   obj.options = options
   obj.current_response = 0
   obj.response_tracker = {}
-  obj.augroup = vim.api.nvim_create_augroup("SiaSplitStrategy" .. buf, { clear = false })
+  obj.augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = false })
 
   if type(options.block_action) == "table" then
     obj.block_action = options.block_action --[[@as sia.BlockAction]]
@@ -294,15 +294,15 @@ function SplitStrategy:new(conversation, options)
     obj.block_action = block.actions[options.block_action]
   end
 
-  --- @cast obj sia.SplitStrategy
-  SplitStrategy._buffers[obj.buf] = obj
-  SplitStrategy._order[#SplitStrategy._order + 1] = obj.buf
+  --- @cast obj sia.ChatStrategy
+  ChatStrategy._buffers[obj.buf] = obj
+  ChatStrategy._order[#ChatStrategy._order + 1] = obj.buf
 
   -- Ensure that the count has been incremented
-  if SplitStrategy.count() == 1 then
+  if ChatStrategy.count() == 1 then
     obj.name = "*sia*"
   else
-    obj.name = "*sia " .. SplitStrategy.count() .. "*"
+    obj.name = "*sia " .. ChatStrategy.count() .. "*"
   end
   print(obj.name)
 
@@ -316,7 +316,7 @@ function SplitStrategy:new(conversation, options)
   return obj
 end
 
-function SplitStrategy:redraw()
+function ChatStrategy:redraw()
   vim.bo[self.buf].modifiable = true
   self.canvas:clear()
   local model = self.conversation.model or require("sia.config").options.defaults.model
@@ -324,7 +324,7 @@ function SplitStrategy:redraw()
   vim.bo[self.buf].modifiable = false
 end
 
-function SplitStrategy:_setup_autocommand()
+function ChatStrategy:_setup_autocommand()
   --- @type {response: { message_id: integer, lnum: integer, lnum_end: integer}, extmark: integer}?
   local old_resp = nil
 
@@ -332,7 +332,7 @@ function SplitStrategy:_setup_autocommand()
     return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum, 0, {
       hl_eol = true,
       end_line = resp.lnum_end,
-      hl_group = "SiaSplitResponse",
+      hl_group = "SiaChatResponse",
       hl_mode = "combine",
     })
   end
@@ -363,13 +363,13 @@ function SplitStrategy:_setup_autocommand()
     group = self.augroup,
     buffer = self.buf,
     callback = function(args)
-      SplitStrategy.remove(args.buf)
+      ChatStrategy.remove(args.buf)
       pcall(vim.api.nvim_del_augroup_by_id, self.augroup)
     end,
   })
 end
 
-function SplitStrategy:on_init()
+function ChatStrategy:on_init()
   if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").options.defaults.model
@@ -381,11 +381,11 @@ function SplitStrategy:on_init()
   end
 end
 
-function SplitStrategy:on_error()
+function ChatStrategy:on_error()
   self.canvas:update_progress({ { "An error has occured...", "Error" } })
 end
 
-function SplitStrategy:on_start(job)
+function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
     self.canvas:clear_extmarks()
@@ -404,17 +404,17 @@ function SplitStrategy:on_start(job)
   end
 end
 
-function SplitStrategy:on_progress(content)
+function ChatStrategy:on_progress(content)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
   end
 end
 
-function SplitStrategy:get_win()
+function ChatStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
-function SplitStrategy:update_response_tracker(lnum)
+function ChatStrategy:update_response_tracker(lnum)
   local response_track = {
     message_id = self.current_response,
     lnum = lnum,
@@ -426,7 +426,7 @@ function SplitStrategy:update_response_tracker(lnum)
   end
 end
 
-function SplitStrategy:on_complete(opts)
+function ChatStrategy:on_complete(opts)
   if not self._writer then
     return
   end
@@ -498,7 +498,7 @@ end
 
 --- @param line integer
 --- @return sia.Block[]
-function SplitStrategy:find_all_blocks(line)
+function ChatStrategy:find_all_blocks(line)
   local resp = self.response_tracker[line]
   if resp == nil then
     return {}
@@ -514,35 +514,35 @@ end
 
 --- @param line integer
 --- @return sia.Block? block
-function SplitStrategy:find_block(line)
+function ChatStrategy:find_block(line)
   local blocks = self:find_all_blocks(line)
   return vim.iter(blocks):find(function(b)
     return b.pos[1] <= line - 1 and line - 1 <= b.pos[2]
   end)
 end
 
---- Get the SplitStrategy associated with buf
+--- Get the ChatStrategy associated with buf
 --- @param buf number? the buffer if nil use current
---- @return sia.SplitStrategy?
-function SplitStrategy.by_buf(buf)
-  return SplitStrategy._buffers[buf or vim.api.nvim_get_current_buf()]
+--- @return sia.ChatStrategy?
+function ChatStrategy.by_buf(buf)
+  return ChatStrategy._buffers[buf or vim.api.nvim_get_current_buf()]
 end
 
 --- @param index integer
---- @return sia.SplitStrategy?
-function SplitStrategy.by_order(index)
-  return SplitStrategy._buffers[SplitStrategy._order[index]]
+--- @return sia.ChatStrategy?
+function ChatStrategy.by_order(index)
+  return ChatStrategy._buffers[ChatStrategy._order[index]]
 end
 
---- @return sia.SplitStrategy?
-function SplitStrategy.last()
-  return SplitStrategy.by_order(#SplitStrategy._order)
+--- @return sia.ChatStrategy?
+function ChatStrategy.last()
+  return ChatStrategy.by_order(#ChatStrategy._order)
 end
 
 --- @return {buf: integer, win: integer}[]
-function SplitStrategy.visible()
+function ChatStrategy.visible()
   local visible = {}
-  for buf, _ in pairs(SplitStrategy._buffers) do
+  for buf, _ in pairs(ChatStrategy._buffers) do
     if vim.api.nvim_buf_is_loaded(buf) then
       local win = vim.fn.bufwinid(buf)
       if win ~= -1 then
@@ -554,9 +554,9 @@ function SplitStrategy.visible()
 end
 
 --- @return {buf: integer }[]
-function SplitStrategy.all()
+function ChatStrategy.all()
   local all = {}
-  for buf, _ in pairs(SplitStrategy._buffers) do
+  for buf, _ in pairs(ChatStrategy._buffers) do
     if vim.api.nvim_buf_is_loaded(buf) then
       table.insert(all, { buf = buf })
     end
@@ -565,24 +565,24 @@ function SplitStrategy.all()
 end
 
 --- @param buf integer the buffer number
-function SplitStrategy.remove(buf)
-  local strategy = SplitStrategy._buffers[buf]
+function ChatStrategy.remove(buf)
+  local strategy = ChatStrategy._buffers[buf]
   if strategy == nil then
     return
   end
 
-  SplitStrategy._buffers[buf] = nil
-  for i, b in ipairs(SplitStrategy._order) do
+  ChatStrategy._buffers[buf] = nil
+  for i, b in ipairs(ChatStrategy._order) do
     if b == buf then
-      table.remove(SplitStrategy._order, i)
+      table.remove(ChatStrategy._order, i)
       break
     end
   end
 end
 
---- @return number count the number of split buffers
-function SplitStrategy.count()
-  return vim.tbl_count(SplitStrategy._buffers)
+--- @return number count the number of chat buffers
+function ChatStrategy.count()
+  return vim.tbl_count(ChatStrategy._buffers)
 end
 
 --- @class sia.DiffStrategy : sia.Strategy
@@ -887,7 +887,7 @@ function HiddenStrategy:on_complete(opts)
 end
 
 M.HiddenStrategy = HiddenStrategy
-M.SplitStrategy = SplitStrategy
+M.ChatStrategy = ChatStrategy
 M.DiffStrategy = DiffStrategy
 M.InsertStrategy = InsertStrategy
 return M

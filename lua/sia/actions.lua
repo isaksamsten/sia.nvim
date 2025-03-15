@@ -109,11 +109,11 @@ function M.diagnostic()
         end,
       },
     },
-    mode = "split",
+    mode = "chat",
     tools = {
       require("sia.tools").add_file,
     },
-    split = {
+    chat = {
       block_action = "search_replace",
     },
     reminder = "editblock_reminder",
@@ -262,7 +262,7 @@ the file to the context using SiaAdd.]],
       "current_context_line_number",
       { role = "user", content = "Please explain the provided context" },
     },
-    mode = "split",
+    mode = "chat",
     range = true,
   }
 end
@@ -296,8 +296,8 @@ function M.unittest()
       },
     },
     capture = require("sia.capture").treesitter("@function.outer"),
-    mode = "split",
-    split = {
+    mode = "chat",
+    chat = {
       block_action = "search_replace",
     },
     reminder = "editblock_reminder",
@@ -370,7 +370,7 @@ Requirements:
   }
 end
 
---- @param config { split: boolean? }?
+--- @param config { chat: boolean? }?
 --- @return sia.config.Action
 function M.fix(config)
   config = config or {}
@@ -414,7 +414,7 @@ function M.fix(config)
     end,
   }
 
-  if not config.split then
+  if not config.chat then
     action.mode = "hidden"
     action.hidden = {
       callback = function(ctx, content)
@@ -422,8 +422,8 @@ function M.fix(config)
       end,
     }
   else
-    action.mode = "split"
-    action.split = {
+    action.mode = "chat"
+    action.chat = {
       cmd = "wincmd p | vnew",
       block_action = "search_replace",
     }

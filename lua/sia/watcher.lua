@@ -1,7 +1,7 @@
 local M = {}
 local SIA_WATCH_NS = vim.api.nvim_create_namespace("SiaWatch")
 
-local SplitStrategy = require("sia.strategy").SplitStrategy
+local ChatStrategy = require("sia.strategy").ChatStrategy
 local HiddenStrategy = require("sia.strategy").HiddenStrategy
 
 local Conversation = require("sia.conversation").Conversation
@@ -172,7 +172,7 @@ local process_request = vim.schedule_wrap(function(root_dir, opts)
   local strategy
   if opts.query.action == "?" then
     if cache.target_buf ~= nil and vim.api.nvim_buf_is_loaded(cache.target_buf) then
-      strategy = SplitStrategy.by_buf(cache.target_buf)
+      strategy = ChatStrategy.by_buf(cache.target_buf)
       strategy.conversation = conversation
 
       local win = vim.fn.bufwinid(cache.target_buf)
@@ -183,9 +183,9 @@ local process_request = vim.schedule_wrap(function(root_dir, opts)
         strategy.canvas:clear()
       end
     else
-      strategy = SplitStrategy:new(
+      strategy = ChatStrategy:new(
         conversation,
-        { automatic_block_action = true, block_action = "search_replace_edit", cmd = "split" }
+        { automatic_block_action = true, block_action = "search_replace_edit", cmd = "chat" }
       )
       cache.target_buf = strategy.buf
     end
@@ -386,7 +386,7 @@ function M.start(root_dir)
     schedule_watch_update(args.buf)
   end)
 
-  local augroup = vim.api.nvim_create_augroup("SiaSplit" .. root_dir, { clear = true })
+  local augroup = vim.api.nvim_create_augroup("SiaWatcher" .. root_dir, { clear = true })
   vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
     group = augroup,
     callback = track_buffer,

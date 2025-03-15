@@ -15,13 +15,15 @@ end
 
 --- TODO: should this add it as a file instead?
 function _G.__sia_add_buffer()
-  require("sia.utils").with_split_strategy(function(strategy)
-    return strategy.conversation:add_instruction("current_buffer", {
-      buf = vim.api.nvim_get_current_buf(),
-      pos = vim.api.nvim_win_get_cursor(0),
-      cursor = vim.api.nvim_win_get_cursor(0),
-    })
-  end)
+  require("sia.utils").with_chat_strategy({
+    on_select = function(strategy)
+      return strategy.conversation:add_instruction("current_buffer", {
+        buf = vim.api.nvim_get_current_buf(),
+        pos = vim.api.nvim_win_get_cursor(0),
+        cursor = vim.api.nvim_win_get_cursor(0),
+      })
+    end,
+  })
 end
 
 function _G.__sia_add_context(type)
@@ -29,14 +31,16 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line > 0 then
-    require("sia.utils").with_split_strategy(function(strategy)
-      return strategy.conversation:add_instruction("current_context", {
-        buf = vim.api.nvim_get_current_buf(),
-        cursor = vim.api.nvim_win_get_cursor(0),
-        pos = { start_line, end_line },
-        mode = "v",
-      })
-    end)
+    require("sia.utils").with_chat_strategy({
+      on_select = function(strategy)
+        return strategy.conversation:add_instruction("current_context", {
+          buf = vim.api.nvim_get_current_buf(),
+          cursor = vim.api.nvim_win_get_cursor(0),
+          pos = { start_line, end_line },
+          mode = "v",
+        })
+      end,
+    })
   end
 end
 

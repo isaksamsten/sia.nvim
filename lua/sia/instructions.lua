@@ -1,4 +1,3 @@
-local SplitStrategy = require("sia.strategy").SplitStrategy
 local utils = require("sia.utils")
 local M = {}
 

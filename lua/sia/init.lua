@@ -1,7 +1,7 @@
 local config = require("sia.config")
 local utils = require("sia.utils")
 local Conversation = require("sia.conversation").Conversation
-local SplitStrategy = require("sia.strategy").SplitStrategy
+local ChatStrategy = require("sia.strategy").ChatStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
 local InsertStrategy = require("sia.strategy").InsertStrategy
 local HiddenStrategy = require("sia.strategy").HiddenStrategy
@@ -9,7 +9,7 @@ local HiddenStrategy = require("sia.strategy").HiddenStrategy
 local M = {}
 
 local highlight_groups = {
-  SiaSplitResponse = { link = "CursorLine" },
+  SiaChatResponse = { link = "CursorLine" },
   SiaInsert = { link = "DiffAdd" },
   SiaReplace = { link = "DiffChange" },
   SiaProgress = { link = "NonText" },
@@ -29,13 +29,13 @@ end
 
 function M.replace(opts)
   opts = opts or {}
-  local split = SplitStrategy.by_buf()
-  if split then
+  local chat = ChatStrategy.by_buf()
+  if chat then
     local line = vim.api.nvim_win_get_cursor(0)[1]
-    local block = split:find_block(line)
+    local block = chat:find_block(line)
     if block then
       vim.schedule(function()
-        require("sia.blocks").replace_all_blocks(split.block_action, { block }, { apply_marker = opts.apply_marker })
+        require("sia.blocks").replace_all_blocks(chat.block_action, { block }, { apply_marker = opts.apply_marker })
       end)
     end
   end
@@ -43,13 +43,13 @@ end
 
 function M.replace_all(opts)
   opts = opts or {}
-  local split = SplitStrategy.by_buf()
+  local chat = ChatStrategy.by_buf()
   local line = vim.api.nvim_win_get_cursor(0)[1]
-  if split then
+  if chat then
     vim.schedule(function()
       require("sia.blocks").replace_all_blocks(
-        split.block_action,
-        split:find_all_blocks(line),
+        chat.block_action,
+        chat:find_all_blocks(line),
         { apply_marker = opts.apply_marker }
       )
     end)
@@ -57,27 +57,27 @@ function M.replace_all(opts)
 end
 
 function M.insert(opts)
-  local split = SplitStrategy.by_buf()
-  if split then
+  local chat = ChatStrategy.by_buf()
+  if chat then
     local padding = 0
     if opts.above then
       padding = 1
     end
 
     local line = vim.api.nvim_win_get_cursor(0)[1]
-    local block = split:find_block(line)
+    local block = chat:find_block(line)
     if block then
       vim.schedule(function()
-        require("sia.blocks").insert_block(split.block_action, block, config.options.defaults.replace, padding)
+        require("sia.blocks").insert_block(chat.block_action, block, config.options.defaults.replace, padding)
       end)
     end
   end
 end
 
 function M.remove_message()
-  local split = SplitStrategy.by_buf()
-  if split then
-    local contexts, mappings = split.conversation:get_messages()
+  local chat = ChatStrategy.by_buf()
+  if chat then
+    local contexts, mappings = chat.conversation:get_messages()
     if #contexts == 0 then
       vim.notify("Sia: No messages in current conversation.")
       return
@@ -87,7 +87,7 @@ function M.remove_message()
       --- @param idx integer?
     }, function(_, idx)
       if idx then
-        split.conversation:remove_instruction(mappings[idx])
+        chat.conversation:remove_instruction(mappings[idx])
       end
     end)
   end
@@ -96,9 +96,9 @@ end
 --- @param opts table?
 function M.show_messages(opts)
   opts = opts or {}
-  local split = SplitStrategy.by_buf()
-  if split then
-    local contexts, mappings = split.conversation:get_messages({ mapping = true })
+  local chat = ChatStrategy.by_buf()
+  if chat then
+    local contexts, mappings = chat.conversation:get_messages({ mapping = true })
     if #contexts == 0 then
       vim.notify("Sia: No messages in the current conversation.")
       return
@@ -116,7 +116,7 @@ function M.show_messages(opts)
         local content = item:get_content()
         if content then
           print(vim.inspect(content))
-          local buf_name = split.name .. " " .. item:get_description()
+          local buf_name = chat.name .. " " .. item:get_description()
           local buf = vim.fn.bufnr(buf_name)
           if buf == -1 then
             buf = vim.api.nvim_create_buf(false, true)
@@ -149,17 +149,17 @@ function M.show_messages(opts)
             vim.bo[buf].modified = false
             vim.api.nvim_win_set_buf(0, buf)
             if opts.edit then
-              vim.bo[buf].modifiable = split.conversation:is_instruction_editable(mappings[idx])
+              vim.bo[buf].modifiable = chat.conversation:is_instruction_editable(mappings[idx])
               vim.api.nvim_create_autocmd("BufWriteCmd", {
                 buffer = buf,
                 callback = function()
                   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                  local updated = split.conversation:update_instruction(mappings[idx], lines)
+                  local updated = chat.conversation:update_instruction(mappings[idx], lines)
                   if updated then
                     vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
                   end
                   vim.bo[buf].modified = false
-                  split:redraw()
+                  chat:redraw()
                 end,
               })
             end
@@ -171,7 +171,7 @@ function M.show_messages(opts)
 end
 
 function M.toggle()
-  local last = SplitStrategy.last()
+  local last = ChatStrategy.last()
   if last and vim.api.nvim_buf_is_valid(last.buf) then
     local win = vim.fn.bufwinid(last.buf)
     if win ~= -1 and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
@@ -186,7 +186,7 @@ end
 
 function M.open_reply()
   local buf = vim.api.nvim_get_current_buf()
-  local current = SplitStrategy.by_buf(buf)
+  local current = ChatStrategy.by_buf(buf)
   if current then
     vim.cmd("new")
     buf = vim.api.nvim_create_buf(false, true)
@@ -296,9 +296,9 @@ function M.setup(options)
     local cmd_name = table.remove(args.fargs, 1)
     local command = add_commands[cmd_name]
     if command then
-      utils.with_split_strategy({
-        on_select = function(split)
-          command.execute_local(args, split.conversation)
+      utils.with_chat_strategy({
+        on_select = function(chat)
+          command.execute_local(args, chat.conversation)
         end,
         on_none = function()
           if command.execute_global then
@@ -337,19 +337,19 @@ function M.setup(options)
   })
 
   vim.api.nvim_create_user_command("SiaRemove", function(args)
-    local split = SplitStrategy.by_buf()
-    if split then
-      split.conversation:remove_files(args.fargs)
+    local chat = ChatStrategy.by_buf()
+    if chat then
+      chat.conversation:remove_files(args.fargs)
     else
       utils.remove_global_files(args.fargs)
     end
   end, {
     nargs = "+",
     complete = function(arg_lead)
-      local split = SplitStrategy.by_buf()
+      local chat = ChatStrategy.by_buf()
       local files
-      if split then
-        files = split.conversation.files
+      if chat then
+        files = chat.conversation.files
       else
         files = utils.get_global_files()
       end
@@ -445,7 +445,7 @@ function M.main(action, opts, model)
   if vim.api.nvim_buf_is_loaded(opts.buf) then
     local strategy
     if vim.bo[opts.buf].filetype == "sia" then
-      strategy = SplitStrategy.by_buf(opts.buf)
+      strategy = ChatStrategy.by_buf(opts.buf)
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
         strategy.conversation:add_instruction(last_instruction, opts)
@@ -474,8 +474,8 @@ function M.main(action, opts, model)
         end
         strategy = HiddenStrategy:new(conversation, options)
       else
-        local options = vim.tbl_deep_extend("force", config.options.defaults.split, action.split or {})
-        strategy = SplitStrategy:new(conversation, options)
+        local options = vim.tbl_deep_extend("force", config.options.defaults.chat, action.chat or {})
+        strategy = ChatStrategy:new(conversation, options)
       end
     end
 

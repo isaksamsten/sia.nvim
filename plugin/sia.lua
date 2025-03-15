@@ -20,7 +20,6 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
   local model = find_and_remove_flag("-m", args.fargs)
-  local split = find_and_remove_flag("-s", args.fargs)
 
   if #args.fargs == 0 and not vim.b.sia then
     vim.notify("Sia: No prompt provided.", vim.log.levels.ERROR)
@@ -61,10 +60,6 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if utils.is_action_disabled(action) or not is_range_valid then
     vim.notify("Sia: The action /" .. args.fargs[1] .. " is not enabled in the current context.", vim.log.levels.ERROR)
     return
-  end
-
-  if action.mode == "split" and split ~= nil then
-    action.split.cmd = split
   end
 
   require("sia").main(action, opts, model)

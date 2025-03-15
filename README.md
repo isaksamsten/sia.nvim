@@ -75,37 +75,37 @@ TODO
 
 **Normal Mode**
 
-- `:Sia [query]` - Sends the query and opens a split view with the response.
+- `:Sia [query]` - Sends the query and opens a chat view with the response.
 - `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
 
-- `:SiaAdd file` - Displays the files in the global file list; if run from a split, shows the files associated with the current conversation.
-- `:SiaAdd file patterns` - Adds files matching the specified patterns to the global file list; if run from a split, adds them to the current conversation.
-- `:SiaRemove patterns` - Removes files matching the specified patterns from the global file list; if run from a split, removes them from the current conversation.
+- `:SiaAdd file` - Displays the files in the global file list; if run from a chat, shows the files associated with the current conversation.
+- `:SiaAdd file patterns` - Adds files matching the specified patterns to the global file list; if run from a chat, adds them to the current conversation.
+- `:SiaRemove patterns` - Removes files matching the specified patterns from the global file list; if run from a chat, removes them from the current conversation.
 
 **Ranges**
 
 Any range is supported. For example:
 
 - `:'<,'>Sia! [query]` - Sends the selected lines along with the query and diffs the response.
-- `:'<,'>Sia [query]` - Sends the selected lines and query, opening a split with the response.
+- `:'<,'>Sia [query]` - Sends the selected lines and query, opening a chat with the response.
 - `:'<,'>Sia /prompt [query]` - Executes the prompt with the extra query for the selected range.
 
 **Examples**
 
-- `:%Sia fix the test function` - Opens a split with a suggested fix for the test function.
-- `:Sia write snake in pygame` - Opens a split with the generated answer for the query.
+- `:%Sia fix the test function` - Opens a chat with a suggested fix for the test function.
+- `:Sia write snake in pygame` - Opens a chat with the generated answer for the query.
 - `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
 - `:SiaAdd a.py b.py | Sia move the function foo_a to b.py` - Moves the function `foo_a` from `a.py` to `b.py`.
-- `:%Sia /diagnostic` - Opens a split with a solution to diagnostics in the current file.
+- `:%Sia /diagnostic` - Opens a chat with a solution to diagnostics in the current file.
 
 ### Suggested Keybindings
 
 You can bind visual and operator mode selections to enhance your workflow with `sia.nvim`:
 
 - **Append Current Selection**:
-  - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible split.
+  - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible chat.
 - **Execute Default Prompt**:
   - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
 
@@ -128,7 +128,7 @@ keys = {
 
 ### Chat Mappings
 
-In the split view (with `ft=sia`), you can bind the following mappings for efficient interaction:
+In the chat view (with `ft=sia`), you can bind the following mappings for efficient interaction:
 
 ```lua
 keys = {
@@ -150,7 +150,7 @@ keys = {
 - **Replace All Blocks**: Apply suggested edits to all code blocks in the current response and open a quickfix list.
 - **Insert Block Above**: Insert a code block above the cursor.
 - **Insert Block Below**: Insert a code block below the cursor.
-- **Compose Longer Query**: Open a split view to compose a longer query.
+- **Compose Longer Query**: Open a chat view to compose a longer query.
 
 ### Accepting and Rejecting Suggestions
 
@@ -206,7 +206,7 @@ In Sia, you can execute various actions using the command `:Sia <action>`. The f
 
   - Example: `'<,'>Sia /edit optimize`
 
-- **diagnostic**: Open a split window with explanations for the diagnostics in the specified range.
+- **diagnostic**: Open a chat window with explanations for the diagnostics in the specified range.
 
   - Example: `'<,'>Sia /diagnostic`
 
@@ -218,11 +218,11 @@ In Sia, you can execute various actions using the command `:Sia <action>`. The f
 
   - Example: `'<,'>Sia /review`
 
-- **explain**: Open a split window explaining the current range.
+- **explain**: Open a chat window explaining the current range.
 
   - Example: `'<,'>Sia /explain focus on the counter`
 
-- **unittest**: Open a split window with unit tests for the current range or the captured function under the cursor.
+- **unittest**: Open a chat window with unit tests for the current range or the captured function under the cursor.
 
 - **doc**: Insert documentation for the function or class under the cursor.
 
@@ -240,8 +240,8 @@ simple action.
 require("sia").setup({
   actions = {
     yoda = {
-      mode = "split", -- Open in a split
-      split = { cmd = "split" }, -- We want an horizontal split
+      mode = "chat", -- Open in a chat
+      chat = { cmd = "split" }, -- We want an horizontal split
       instructions = {
         -- Custom system prompt
         {
@@ -254,7 +254,7 @@ require("sia").setup({
     },
 
     -- customize a built in instruction ()
-    fix = require("sia.actions").fix({split = true})
+    fix = require("sia.actions").fix({chat = true})
   }
 })
 ```
