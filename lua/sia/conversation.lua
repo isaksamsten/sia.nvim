@@ -162,7 +162,7 @@ function Message:get_content()
     local tmp = self.content
     --- @cast tmp string[]
     content = tmp
-  else
+  elseif self.content ~= nil then
     local tmp = self.content
     --- @cast tmp string
     content = vim.split(tmp, "\n", { trimempty = true })
@@ -187,6 +187,8 @@ function Message:get_description()
     local content = self:get_content()
     if content and #content > 0 then
       return self.role .. " " .. string.sub(content[1], 1, 40)
+    elseif self.tool_calls then
+      return self.role .. " calling tools..."
     end
     return self.role
   end
@@ -302,6 +304,7 @@ local Conversation = {}
 Conversation.__index = Conversation
 Conversation.prending_instructions = {}
 Conversation.pending_files = {}
+Conversation.pending_tools = {}
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param args sia.Context?
@@ -316,6 +319,10 @@ function Conversation.add_pending_files(files)
       table.insert(Conversation.pending_files, file)
     end
   end
+end
+
+function Conversation.add_pending_tool(tool)
+  table.insert(Conversation.pending_tools, tool)
 end
 
 function Conversation.clear_pending_files()
@@ -394,13 +401,27 @@ function Conversation:new(action, args)
     obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
   end
 
-  obj.tools = action.tools or require("sia.config").options.defaults.tools.default
+  obj.tools = {}
   obj.tool_fn = {}
-  for _, tool in ipairs(obj.tools or {}) do
-    obj.tool_fn[tool.name] = tool.execute
+  for _, tool in ipairs(action.tools or {}) do
+    obj:add_tool(tool)
   end
+  for _, tool in ipairs(Conversation.pending_tools) do
+    obj:add_tool(tool)
+  end
+  Conversation.pending_tools = {}
 
   return obj
+end
+
+function Conversation:add_tool(tool)
+  if type(tool) == "string" then
+    tool = require("sia.config").options.defaults.tools.choices[tool]
+  end
+  if tool ~= nil and self.tool_fn[tool.name] == nil then
+    self.tool_fn[tool.name] = tool.execute
+    table.insert(self.tools, tool)
+  end
 end
 
 --- @param files string[]

@@ -435,7 +435,7 @@ function ChatStrategy:on_complete(opts)
     del_abort_keymap(self.buf)
     self.canvas:scroll_to_bottom()
     local start_line = self._writer.start_line
-    if #self._writer.cache > 0 then
+    if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
       self.current_response = self.current_response + 1
       self.conversation:add_instruction(
         { role = "assistant", content = self._writer.cache },
@@ -457,8 +457,10 @@ function ChatStrategy:on_complete(opts)
       end,
       on_tool_complete = function(tool, content)
         self.canvas:clear_extmarks()
-        self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-        self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
+        self.conversation:add_instruction({
+          { role = "assistant", tool_calls = { tool } },
+          { role = "tool", content = content, _tool_call = tool },
+        })
       end,
       on_tools_complete = function()
         self.hide_header = true
@@ -654,8 +656,10 @@ function DiffStrategy:on_complete(opts)
   del_abort_keymap(self.buf)
   self:execute_tools({
     on_tool_complete = function(tool, content)
-      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
+      self.conversation:add_instruction({
+        { role = "assistant", tool_calls = { tool } },
+        { role = "tool", content = content, _tool_call = tool },
+      })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
@@ -760,8 +764,10 @@ function InsertStrategy:on_complete(opts)
   self:execute_tools({
     on_tool_start = function() end,
     on_tool_complete = function(tool, content)
-      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
+      self.conversation:add_instruction({
+        { role = "assistant", tool_calls = { tool } },
+        { role = "tool", content = content, _tool_call = tool },
+      })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)
@@ -860,8 +866,10 @@ function HiddenStrategy:on_complete(opts)
   self:execute_tools({
     on_tool_start = function(tool) end,
     on_tool_complete = function(tool, content)
-      self.conversation:add_instruction({ role = "assistant", tool_calls = { tool } })
-      self.conversation:add_instruction({ role = "tool", content = content, _tool_call = tool })
+      self.conversation:add_instruction({
+        { role = "assistant", tool_calls = { tool } },
+        { role = "tool", content = content, _tool_call = tool },
+      })
     end,
     on_tools_complete = function()
       assistant.execute_strategy(self)

@@ -164,11 +164,32 @@ function M.glob_pattern_to_files(patterns)
   return files
 end
 
+--- @param words string[]
+local function split_tools_and_prompt(words)
+  local config = require("sia.config")
+  local tools = {}
+  local prompt = {}
+  for _, word in ipairs(words) do
+    if word:sub(1, 1) == "#" then
+      local tool = config.options.defaults.tools.choices[word:sub(2)]
+      if tool then
+        table.insert(tools, word:sub(2))
+        table.insert(prompt, word:sub(2))
+      else
+        table.insert(prompt, word)
+      end
+    else
+      table.insert(prompt, word)
+    end
+  end
+  return tools, prompt
+end
+
 --- Resolves a given prompt based on configuration options and context.
 --- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
 --- based on the current file type and provided options.
 ---
---- @param argument [string]
+--- @param argument string[]
 --- @param opts sia.ActionContext
 --- @return sia.config.Action?
 function M.resolve_action(argument, opts)
@@ -187,12 +208,16 @@ function M.resolve_action(argument, opts)
     end
 
     if #argument > 1 and not (action.input and action.input == "ignore") then
-      table.insert(action.instructions, { role = "user", content = table.concat(argument, " ", 2) })
+      local tools, prompt = split_tools_and_prompt(argument)
+      action.tools = tools
+      table.insert(action.instructions, { role = "user", content = table.concat(prompt, " ", 2) })
     end
   else
     local action_mode = M.get_action_mode(opts)
     action = vim.deepcopy(config.options.defaults.actions[action_mode])
-    table.insert(action.instructions, { role = "user", content = table.concat(argument, " ") })
+    local tools, prompt = split_tools_and_prompt(argument)
+    action.tools = tools
+    table.insert(action.instructions, { role = "user", content = table.concat(prompt, " ") })
   end
 
   if action.modify_instructions then

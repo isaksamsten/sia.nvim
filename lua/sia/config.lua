@@ -74,7 +74,7 @@ local providers = require("sia.provider")
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
---- @field tools { enable: boolean, default: sia.config.Tool[]?}
+--- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -162,11 +162,11 @@ local defaults = {
     },
     tools = {
       enable = true,
-      default = {
-        require("sia.tools").add_file,
-        require("sia.tools").find_lsp_symbol,
-        require("sia.tools").documentation,
-        require("sia.tools").grep,
+      choices = {
+        files = require("sia.tools").add_file,
+        lsp_symbol = require("sia.tools").find_lsp_symbol,
+        lsp_docs = require("sia.tools").documentation,
+        grep = require("sia.tools").grep,
       },
     },
     actions = {

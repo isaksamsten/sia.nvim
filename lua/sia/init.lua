@@ -286,6 +286,29 @@ local add_commands = {
       conversation:add_instruction("diagnostics", utils.create_context(args))
     end,
   },
+  tool = {
+    require_range = false,
+    completion = function(lead)
+      local tools = require("sia.config").options.defaults.tools.choices or {}
+      local completion = {}
+      for name, _ in pairs(tools) do
+        if vim.startswith(name, lead) then
+          table.insert(completion, name)
+        end
+      end
+      return completion
+    end,
+    execute_global = function(args)
+      for _, tool in ipairs(args.fargs) do
+        Conversation.add_pending_tool(tool)
+      end
+    end,
+    execute_local = function(args, conversation)
+      for _, tool in ipairs(args.fargs) do
+        conversation:add_tool(tool)
+      end
+    end,
+  },
 }
 
 function M.setup(options)
@@ -449,6 +472,10 @@ function M.main(action, opts, model)
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
         strategy.conversation:add_instruction(last_instruction, opts)
+
+        for _, tool in ipairs(action.tools or {}) do
+          strategy.conversation:add_tool(tool)
+        end
 
         -- The user might have explicitly changed the model with -m
         if model then

@@ -105,6 +105,9 @@ end, {
           end
         end
         return complete
+      elseif vim.startswith(ArgLead, "#") then
+        local complete = { "#files", "#lsp" }
+        return complete
       end
     end
 
