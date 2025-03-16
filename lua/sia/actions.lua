@@ -138,6 +138,8 @@ crafting the commit message:
    change.
 3. **Keep it concise**: The commit message should be brief but informative,
    typically under 50 characters for the subject line.
+4. If the change requires it, write a longer message two linebreaks after the
+   subject line.
 4. **Use an imperative tone**: Write the commit message as a command, e.g.,
    "Fix typo in README," "Add unit tests for validation logic." ]],
       },
