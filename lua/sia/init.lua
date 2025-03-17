@@ -57,6 +57,7 @@ function M.replace_all(opts)
 end
 
 function M.insert(opts)
+  opts = opts or {}
   local chat = ChatStrategy.by_buf()
   if chat then
     local padding = 0

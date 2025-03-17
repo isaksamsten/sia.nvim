@@ -387,6 +387,9 @@ function M.select_other_buffer(current_buf, callback)
     end,
     source = "tab",
     on_select = callback,
+    on_nothing = function()
+      vim.notify("No other buffer")
+    end,
   })
 end
 

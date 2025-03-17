@@ -197,15 +197,16 @@ function M.insert_block(action, block, replace, padding)
         start_range = start_range - padding
       end
       local edit = action.find_edit(block)
-      if edit then
-        -- We need to manually set the buffer which will be edited
-        edit.buf = other.buf
-        edit.search.pos = { start_range + 1, start_range }
-        local pos = action.apply_edit(edit)
-        if pos then
-          flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout)
-          vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf, marker = false } })
-        end
+      if edit == nil then
+        edit = { search = { content = block.code }, replace = { content = block.code } }
+      end
+      -- We need to manually set the buffer which will be edited
+      edit.buf = other.buf
+      edit.search.pos = { start_range + 1, start_range }
+      local pos = action.apply_edit(edit)
+      if pos then
+        flash_highlight(edit.buf, { pos[1] - 1, pos[2] - 1 }, replace.timeout)
+        vim.api.nvim_exec_autocmds("User", { pattern = "SiaEditPost", data = { buf = edit.buf, marker = false } })
       end
     end)
   end
