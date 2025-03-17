@@ -520,6 +520,7 @@ function Conversation:last_message()
   return messages[#messages]
 end
 
+--- @param index {kind:string, index:number}
 function Conversation:remove_instruction(index)
   local removed
 
@@ -606,7 +607,7 @@ end
 
 --- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?}?
 --- @return sia.Message[] messages
---- @return integer[]? mappings if mapping is set to true
+--- @return {kind: string, index: integer}[]? mappings if mapping is set to true
 function Conversation:get_messages(opts)
   opts = opts or {}
 

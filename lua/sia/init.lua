@@ -87,7 +87,7 @@ function M.remove_message()
       prompt = "Delete message",
       --- @param idx integer?
     }, function(_, idx)
-      if idx then
+      if idx and mappings then
         chat.conversation:remove_instruction(mappings[idx])
       end
     end)
@@ -113,7 +113,7 @@ function M.show_messages(opts)
       --- @param item sia.Message?
       --- @param idx integer
     }, function(item, idx)
-      if item then
+      if item and mappings then
         local content = item:get_content()
         if content then
           print(vim.inspect(content))
