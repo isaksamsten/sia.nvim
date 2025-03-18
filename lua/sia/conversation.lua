@@ -162,9 +162,14 @@ function Message:get_content()
     local tmp = self.content
     --- @cast tmp string[]
     content = tmp
-  elseif self.content ~= nil then
+  elseif self.content ~= nil and type(self.content) == "string" then
     local tmp = self.content
     --- @cast tmp string
+    tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
+      filetype = vim.bo[self.context.buf].ft,
+      today = os.date("%Y-%m-%d"),
+    })
+
     content = vim.split(tmp, "\n", { trimempty = true })
   end
   return content
