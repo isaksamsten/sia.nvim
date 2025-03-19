@@ -393,7 +393,7 @@ function M.setup(options)
     if chat then
       chat.conversation:remove_files(args.fargs)
     else
-      utils.remove_global_files(args.fargs)
+      Conversation.remove_global_files(args.fargs)
     end
   end, {
     nargs = "+",
@@ -402,10 +402,12 @@ function M.setup(options)
       local files = {}
       if chat then
         files = chat.conversation.files
+      else
+        files = Conversation.pending_files
       end
       local matches = {}
       for _, file in ipairs(files) do
-        if vim.fn.match(file, "^" .. vim.fn.escape(arg_lead, "\\")) >= 0 then
+        if vim.fn.match(file.path, "^" .. vim.fn.escape(arg_lead, "\\")) >= 0 then
           table.insert(matches, file)
         end
       end
