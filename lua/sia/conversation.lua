@@ -165,10 +165,12 @@ function Message:get_content()
   elseif self.content ~= nil and type(self.content) == "string" then
     local tmp = self.content
     --- @cast tmp string
-    tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
-      filetype = vim.bo[self.context.buf].ft,
-      today = os.date("%Y-%m-%d"),
-    })
+    if self.context and vim.api.nvim_buf_is_loaded(self.context.buf) then
+      tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
+        filetype = vim.bo[self.context.buf].ft,
+        today = os.date("%Y-%m-%d"),
+      })
+    end
 
     content = vim.split(tmp, "\n", { trimempty = true })
   end
@@ -215,24 +217,7 @@ function Message.merge_content(messages)
     :totable()
 end
 
-local find_first_non_system = function(all_messages)
-  local previous = nil
-  for i, messages in ipairs(all_messages) do
-    if #messages > 0 then
-      local message = messages[1]
-      if message:is_available() then
-        if previous == nil and message.role == "system" then
-          previous = message -- first system message
-        elseif previous and message.role ~= previous.role then
-          return i
-        end
-      end
-    end
-  end
-  return -1
-end
-
---- @param files string[]
+--- @param files {path: string, pos: [integer, integer]?}[]
 --- @return {instruction: sia.InstructionOption, context: sia.Context?}[]
 local function get_files_instructions(files)
   --- @type {instruction: sia.InstructionOption, context: sia.Context?}[]
@@ -246,14 +231,15 @@ local function get_files_instructions(files)
       end,
       persistent = true,
       available = function(_)
-        return vim.fn.filereadable(file) == 1
+        return vim.fn.filereadable(file.path) == 1
       end,
       description = function(ctx)
-        return vim.fn.fnamemodify(file, ":.")
+        return vim.fn.fnamemodify(file.path, ":.")
       end,
       content = function(ctx)
-        local buf = require("sia.utils").ensure_file_is_loaded(file)
+        local buf = require("sia.utils").ensure_file_is_loaded(file.path)
         if buf then
+          local pos = file.pos or { 1, -1 }
           return string.format(
             [[I have *added this file to the chat* so you can go ahead and edit it.
 
@@ -263,9 +249,9 @@ Any other messages in the chat may contain outdated versions of the files' conte
 ```%s
 %s
 ```]],
-            vim.fn.fnamemodify(file, ":p"),
+            vim.fn.fnamemodify(file.path, ":p"),
             vim.bo[buf].ft,
-            require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+            require("sia.utils").get_code(pos[1], pos[2], { buf = buf, show_line_numbers = false })
           )
         end
       end,
@@ -276,7 +262,7 @@ Any other messages in the chat may contain outdated versions of the files' conte
         return { "assistant", file }
       end,
       available = function(_)
-        return vim.fn.filereadable(file) == 1
+        return vim.fn.filereadable(file.path) == 1
       end,
       role = "assistant",
       persistent = true,
@@ -298,7 +284,7 @@ end
 --- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
 --- @field tools sia.config.Tool[]?
 --- @field model string?
---- @field files string[]
+--- @field files { path: string, pos: [integer, integer]?}[]
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
@@ -433,12 +419,17 @@ end
 function Conversation:add_files(files)
   for _, file in ipairs(files) do
     if not vim.tbl_contains(self.files, file) then
-      self.files[#self.files + 1] = file
+      self.files[#self.files + 1] = { path = file }
     end
   end
 end
 
+--- @param file string|{path: string, pos: [integer, integer]?}
 function Conversation:add_file(file)
+  if type(file) == "string" then
+    file = { path = file }
+  end
+
   if not vim.tbl_contains(self.files, file) then
     self.files[#self.files + 1] = file
   end
@@ -456,7 +447,7 @@ function Conversation:remove_files(patterns)
   local to_remove = {}
   for i, file in ipairs(self.files) do
     for _, regex in ipairs(regexes) do
-      if vim.fn.match(file, regex) ~= -1 then
+      if vim.fn.match(file.path, regex) ~= -1 then
         table.insert(to_remove, i)
         break
       end

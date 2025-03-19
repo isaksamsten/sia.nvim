@@ -164,6 +164,7 @@ local defaults = {
       enable = true,
       choices = {
         files = require("sia.tools").add_file,
+        files = require("sia.tools").add_files_glob,
         lsp_symbol = require("sia.tools").find_lsp_symbol,
         lsp_docs = require("sia.tools").documentation,
         grep = require("sia.tools").grep,

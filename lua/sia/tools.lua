@@ -184,6 +184,8 @@ M.documentation = {
 --- @type sia.config.Tool
 M.add_file = {
   name = "add_file",
+M.add_files_glob = {
+  name = "add_files_glob",
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },

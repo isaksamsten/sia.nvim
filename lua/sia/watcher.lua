@@ -12,7 +12,7 @@ local default_action = {
   model = "gpt-4o",
   instructions = {},
   reminder = "editblock_reminder",
-  tools = { require("sia.tools").add_file },
+  tools = { require("sia.tools").add_files_glob },
 }
 
 local default_hl_groups = {

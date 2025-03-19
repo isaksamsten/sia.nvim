@@ -8,7 +8,7 @@ function M.edit()
       callback = require("sia.blocks").replace_blocks_callback,
     },
     tools = {
-      require("sia.tools").add_file,
+      require("sia.tools").add_files_glob,
     },
     input = "require",
     system = {
@@ -111,7 +111,7 @@ function M.diagnostic()
     },
     mode = "chat",
     tools = {
-      require("sia.tools").add_file,
+      require("sia.tools").add_files_glob,
     },
     chat = {
       block_action = "search_replace",
@@ -304,7 +304,7 @@ function M.unittest()
     },
     reminder = "editblock_reminder",
     tools = {
-      require("sia.tools").add_file,
+      require("sia.tools").add_files_glob,
     },
     range = true,
     wo = {},

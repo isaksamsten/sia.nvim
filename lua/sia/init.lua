@@ -238,30 +238,20 @@ local add_commands = {
     end,
     execute_global = function(args)
       local fargs = args.fargs
-      if #fargs == 0 then
-        local files = Conversation.pending_files
-        print(table.concat(files, ", "))
-      else
-        if args.bang then
-          Conversation.clear_pending_files()
-        end
-        local files = utils.glob_pattern_to_files(fargs)
-        Conversation.add_pending_files(files)
+      if args.bang then
+        Conversation.clear_pending_files()
       end
+      local files = utils.glob_pattern_to_files(fargs)
+      Conversation.add_pending_files(files)
     end,
     execute_local = function(args, conversation)
       local fargs = args.fargs
-      if #fargs == 0 then
-        local files = conversation.files
-        print(table.concat(files, ", "))
-      else
-        if args.bang then
-          conversation.files = {}
-        end
-        local files = utils.glob_pattern_to_files(fargs)
-
-        conversation:add_files(files)
+      if args.bang then
+        conversation.files = {}
       end
+      local files = utils.glob_pattern_to_files(fargs)
+
+      conversation:add_files(files)
     end,
   },
   context = {
