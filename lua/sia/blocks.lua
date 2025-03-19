@@ -316,7 +316,12 @@ local function search_replace_action(b)
   -- If we didn't find a search/replace block try a more relaxed search
   -- of any markers
   if not marker.before and not marker.after then
-    marker = utils.partition_marker(b.code)
+    --- sometimes the LLM make a mistake (add two delimiters)
+    marker = utils.partition_marker(b.code, {
+      before = "^<<<<<<?<?<?<?",
+      delimiter = "^======?=?=?=?",
+      after = "^======?=?=?=?=",
+    })
   end
 
   -- if we still don't find anything, we abort.

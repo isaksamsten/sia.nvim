@@ -546,7 +546,7 @@ function M.partition_marker(content, opts)
   if #all > 0 then
     return { all = all }
   else
-    return {}
+    return { before_tag = search_tag, after_tag = match, before = search, after = replace }
   end
 end
 
