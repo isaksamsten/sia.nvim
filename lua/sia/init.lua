@@ -78,17 +78,22 @@ end
 function M.remove_message()
   local chat = ChatStrategy.by_buf()
   if chat then
-    local contexts, mappings = chat.conversation:get_messages()
+    local contexts, mappings = chat.conversation:get_messages({ mapping = true })
     if #contexts == 0 then
       vim.notify("Sia: No messages in current conversation.")
       return
     end
     vim.ui.select(contexts, {
       prompt = "Delete message",
+      format_item = function(item)
+        return item:get_description()
+      end,
       --- @param idx integer?
     }, function(_, idx)
       if idx and mappings then
+        print(idx, mappings[idx])
         chat.conversation:remove_instruction(mappings[idx])
+        chat:redraw()
       end
     end)
   end
