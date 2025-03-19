@@ -1,5 +1,79 @@
 local utils = require("sia.utils")
+local lsp = require("sia.lsp")
 local M = {}
+
+function M.current_document_symbols()
+  return {
+    {
+      id = function(ctx)
+        return { "document_symbols", "user", ctx.buf }
+      end,
+      available = function(ctx)
+        return vim.api.nvim_buf_is_loaded(ctx.buf) and lsp.is_attached(ctx.buf, "textDocument/documentSymbol")
+      end,
+      role = "user",
+      persistent = true,
+      description = function(ctx)
+        return string.format("Symbols in %s", utils.get_filename(ctx.buf, ":."))
+      end,
+      content = function(ctx)
+        local content = {}
+        local shown = { 12, 6, 7, 9, 5, 11 }
+        local function print_symbols(symbols, indent)
+          indent = indent or 0
+          for _, symbol in ipairs(symbols or {}) do
+            local lnum = symbol.selectionRange["start"].line
+            local lnum_end = symbol.range["end"].line
+            if vim.tbl_contains(shown, symbol.kind) then
+              if symbol.kind == 5 or symbol.kind == 11 then
+                table.insert(
+                  content,
+                  lnum
+                    .. "-"
+                    .. lnum_end
+                    .. ": "
+                    .. string.rep(" ", indent)
+                    .. lsp.get_kind(symbol.kind)
+                    .. " "
+                    .. symbol.name
+                )
+                print_symbols(symbol.children, indent + 1)
+              else
+                table.insert(
+                  content,
+                  lnum
+                    .. "-"
+                    .. lnum_end
+                    .. ": "
+                    .. string.rep(" ", indent)
+                    .. lsp.get_kind(symbol.kind)
+                    .. " "
+                    .. symbol.name
+                )
+              end
+            end
+          end
+        end
+        local symbols = lsp.document_symbols(ctx.buf)
+        print_symbols(symbols)
+        return string.format(
+          "Here are the symbols in %s\n%s",
+          table.concat(content, "\n"),
+          utils.get_filename(ctx.buf, ":.")
+        )
+      end,
+    },
+    {
+      role = "assistant",
+      hide = true,
+      id = function(ctx)
+        return { "document_symbols", "assistant", ctx.buf }
+      end,
+      persistent = true,
+      content = "Ok",
+    },
+  }
+end
 
 --- @param conversation sia.Conversation
 --- @return sia.config.Instruction[]

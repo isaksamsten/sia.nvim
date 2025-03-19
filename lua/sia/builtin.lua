@@ -223,6 +223,7 @@ from hello import hello
       content = "Thanks for providing the list of files in the current git repository.",
     },
   },
+  current_document_symbols = require("sia.instructions").current_document_symbols(),
   current_buffer_line_number = require("sia.instructions").current_buffer({ show_line_numbers = true }),
   current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = false }),
   current_context_line_number = require("sia.instructions").current_context({ show_line_numbers = true }),

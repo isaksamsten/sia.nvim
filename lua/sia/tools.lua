@@ -181,9 +181,38 @@ M.documentation = {
   end,
 }
 
---- @type sia.config.Tool
 M.add_file = {
   name = "add_file",
+  description = "Add a file or part of file to be included in the conversation",
+  parameters = {
+    path = { type = "string", description = "The file path" },
+    start_line = { type = "integer", description = "The start line number" },
+    end_line = { type = "integer", description = "The end line number" },
+  },
+  required = { "path" },
+  execute = function(args, conversation, callback)
+    print(vim.inspect(args))
+    if not args.path then
+      callback({ "Error: No file path was provided" })
+      return
+    end
+
+    if vim.fn.filereadable(args.path) == 0 then
+      callback({ "Error: File cannot be found" })
+      return
+    end
+
+    local pos = nil
+    if args.start_line and args.end_line then
+      pos = { args.start_line, args.end_line }
+    end
+
+    conversation:add_file({ path = args.path, pos = pos })
+    callback({ "I've added " .. args.path .. " to the conversation" }, { description = { args.path } })
+  end,
+}
+
+--- @type sia.config.Tool
 M.add_files_glob = {
   name = "add_files_glob",
   description = "Add files to the list of files to be included in the conversation",

@@ -222,11 +222,12 @@ function M.open_reply()
 end
 
 --- @class sia.AddCommand
---- @field completion (fun(s:string):string[])
+--- @field completion (fun(s:string):string[])?
 --- @field execute_local fun(args: vim.api.keyset.create_user_command.command_args, c: sia.Conversation):nil
 --- @field execute_global (fun(args: vim.api.keyset.create_user_command.command_args):nil)?
 --- @field require_range boolean
 --- @field only_visible boolean?
+--- @field non_sia_buf boolean?
 
 --- @type table<string, sia.AddCommand>
 local add_commands = {
@@ -257,9 +258,6 @@ local add_commands = {
   context = {
     require_range = true,
     only_visible = true,
-    completion = function(lead)
-      return {}
-    end,
     execute_global = function(args)
       local context = utils.create_context(args)
       Conversation.add_pending_instruction("current_context", context)
@@ -271,10 +269,7 @@ local add_commands = {
   },
   diagnostics = {
     require_range = true,
-    completion = function(_)
-      return {}
-    end,
-
+    non_sia_buf = true,
     execute_global = function(args)
       Conversation.add_pending_instruction("diagnostics", utils.create_context(args))
     end,
@@ -305,6 +300,38 @@ local add_commands = {
       end
     end,
   },
+  buffer = {
+    require_range = false,
+    completion = function(lead)
+      return vim.fn.getcompletion(lead, "buffer")
+    end,
+    execute_local = function(args, conversation)
+      for _, bufname in ipairs(args.fargs) do
+        local buf = vim.fn.bufnr(bufname)
+        if buf ~= -1 then
+          conversation:add_instruction("current_buffer", { buf = buf, pos = { 0, 0 } })
+        end
+      end
+    end,
+    execute_global = function(args)
+      for _, bufname in ipairs(args.fargs) do
+        local buf = vim.fn.bufnr(bufname)
+        if buf ~= -1 then
+          Conversation.add_pending_instruction("current_buffer", { buf = buf, pos = { 0, 0 } })
+        end
+      end
+    end,
+  },
+  symbols = {
+    require_range = false,
+    non_sia_buf = true,
+    execute_global = function(args)
+      Conversation.add_pending_instruction("current_document_symbols", utils.create_context(args))
+    end,
+    execute_local = function(args, conversation)
+      conversation:add_instruction("current_document_symbols", utils.create_context(args))
+    end,
+  },
 }
 
 function M.setup(options)
@@ -315,6 +342,11 @@ function M.setup(options)
     local cmd_name = table.remove(args.fargs, 1)
     local command = add_commands[cmd_name]
     if command then
+      if command.non_sia_buf and vim.bo.ft == "sia" then
+        vim.notify("Not a valid context")
+        return
+      end
+
       utils.with_chat_strategy({
         on_select = function(chat)
           command.execute_local(args, chat.conversation)
@@ -339,13 +371,14 @@ function M.setup(options)
 
       if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
         for command, command_args in pairs(add_commands) do
-          if vim.startswith(command, arg_lead) and command_args.require_range == is_range then
+          local non_sia_buf = command_args.non_sia_buf == nil or (command_args.non_sia_buf and vim.bo.ft ~= "sia")
+          if non_sia_buf and vim.startswith(command, arg_lead) and command_args.require_range == is_range then
             complete[#complete + 1] = command
           end
         end
       else
         local command = add_commands[string.sub(line, 1, pos):match("SiaAdd%s+(%w*)")]
-        if command then
+        if command and command.completion then
           for _, subcmd in ipairs(command.completion(arg_lead)) do
             complete[#complete + 1] = subcmd
           end
@@ -366,11 +399,9 @@ function M.setup(options)
     nargs = "+",
     complete = function(arg_lead)
       local chat = ChatStrategy.by_buf()
-      local files
+      local files = {}
       if chat then
         files = chat.conversation.files
-      else
-        files = utils.get_global_files()
       end
       local matches = {}
       for _, file in ipairs(files) do
