@@ -38,6 +38,7 @@ local providers = require("sia.provider")
 --- @field content ((fun(ctx: sia.Context?):string)|string|string[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
+--- @field group integer?
 
 --- @class sia.config.Tool
 --- @field name string

@@ -861,7 +861,7 @@ function HiddenStrategy:on_complete(opts)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   if #self._writer.cache > 0 then
-    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache })
+    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache, group = 1 })
   end
   self:execute_tools({
     on_tool_start = function(tool) end,
@@ -878,7 +878,7 @@ function HiddenStrategy:on_complete(opts)
       vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
       local messages = self.conversation:get_messages({
         filter = function(message)
-          return message.role == "assistant"
+          return message.role == "assistant" and message.group == 1
         end,
       })
       local content = Message.merge_content(messages)

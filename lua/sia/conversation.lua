@@ -26,6 +26,7 @@
 --- @field available (fun(ctx: sia.Context?):boolean)?
 --- @field description ((fun(ctx: sia.Context?):string)|string)?
 --- @field context sia.Context?
+--- @field group integer?
 local Message = {}
 Message.__index = Message
 
@@ -41,6 +42,7 @@ function Message:from_table(instruction, args)
   obj.content = instruction.content
   obj.description = instruction.description
   obj.persistent = instruction.persistent
+  obj.group = instruction.group
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
