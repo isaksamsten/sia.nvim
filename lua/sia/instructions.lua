@@ -242,7 +242,7 @@ function M.current_context(global)
         return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
       end,
       available = function(ctx)
-        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
+        return vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode ~= "n"
       end,
       persistent = true,
       content = function(ctx)
