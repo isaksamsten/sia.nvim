@@ -10,8 +10,11 @@ Supports: OpenAI, Copilot and Gemini (and any other OpenAI API compliant LLM).
 Default configuration has the following models: `gpt-4.1`, `gpt-4.1-mini`,
 `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `o3-mini`, `copilot-gpt-4o`,
 `copilot-o3-mini`, `copilot-sonnet-3.5`, `gemini-1.5-flash-8b`,
-`gemini-1.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-pro`, `gemini-2-5-pro`,
-`claude-3-5-sonnet` and `claude-3-7-sonnet`
+`gemini-1.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-pro`, `gemini-2.5-pro`,
+`claude-3-5-sonnet` and `claude-3-7-sonnet`.
+
+Based on my experience, `claude-3-5-sonnet`, `gpt-4.1`, and `gemini-2.5-pro`
+are best suited for coding.
 
 ## ✨ Features
 
