@@ -309,6 +309,9 @@ end
 function Conversation.add_pending_files(files)
   for _, file in ipairs(files) do
     if not vim.tbl_contains(Conversation.pending_files, file) then
+      if type(file) == "string" then
+        file = { path = file }
+      end
       table.insert(Conversation.pending_files, file)
     end
   end
@@ -701,7 +704,9 @@ function Conversation:to_query()
 
   --- @type sia.Tool[]?
   local tools = nil
-  if self.tools then
+  -- We need to set tools to nil if there are no tools
+  -- so that unsupported models doesn't get confused.
+  if self.tools and #self.tools > 0 then
     tools = {}
     for _, tool in ipairs(self.tools) do
       tools[#tools + 1] = {
