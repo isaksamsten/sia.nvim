@@ -102,6 +102,13 @@ local defaults = {
     ollama = providers.ollama,
   },
   models = {
+    ["gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
+    ["gpt-4.1-mini"] = {
+      "openai",
+      "gpt-4.1-mini",
+      cost = { completion_tokens = 0.0000016, prompt_tokens = 0.0000004 },
+    },
+    ["gpt-4.1-nano"] = { "openai", "gpt-4.1-nano", cost = { completion_tokens = 0.0000004, prompt_tokens = 0.0000001 } },
     ["gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },
     ["gpt-4o-mini"] = { "openai", "gpt-4o-mini", cost = { completion_tokens = 0.00000015, prompt_tokens = 0.0000006 } },
     ["o3-mini"] = {
@@ -139,7 +146,7 @@ local defaults = {
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "gpt-4o", -- default
+    model = "gpt-4.1", -- default
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
