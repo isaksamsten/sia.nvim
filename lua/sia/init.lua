@@ -121,7 +121,6 @@ function M.show_messages(opts)
       if item and mappings then
         local content = item:get_content()
         if content then
-          print(vim.inspect(content))
           local buf_name = chat.name .. " " .. item:get_description()
           local buf = vim.fn.bufnr(buf_name)
           if buf == -1 then
