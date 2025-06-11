@@ -30,10 +30,10 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local opts = utils.create_context(args)
   local action
   if vim.b.sia and #args.fargs == 0 then
-    action = utils.resolve_action({ vim.b.sia }, opts)
-  else
-    action = utils.resolve_action(args.fargs, opts)
+    args.fargs = { vim.b.sia }
   end
+
+  action = utils.resolve_action(args.fargs, opts)
 
   if not action then
     return

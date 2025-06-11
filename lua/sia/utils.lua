@@ -467,8 +467,8 @@ function M.is_git_repo(has_staged)
   handle:close()
   if result:match("true") then
     if has_staged then
-      local exit_code = os.execute("git diff --cached --quiet")
-      return exit_code ~= nil and exit_code ~= 0
+      result = vim.system({ "git", "diff", "--cached", "--quiet" }, { text = true }):wait()
+      return result.code == 1
     else
       return true
     end
