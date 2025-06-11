@@ -23,6 +23,7 @@ function _G.__sia_add_buffer()
         cursor = vim.api.nvim_win_get_cursor(0),
       })
     end,
+    only_visible = true,
   })
 end
 
@@ -40,6 +41,7 @@ function _G.__sia_add_context(type)
           mode = "v",
         })
       end,
+      only_visible = true,
     })
   end
 end

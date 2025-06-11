@@ -357,6 +357,7 @@ function M.setup(options)
             vim.notify("No *sia* buffer")
           end
         end,
+        only_visible = true,
       })
     end
   end, {
