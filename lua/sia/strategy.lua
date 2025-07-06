@@ -304,7 +304,6 @@ function ChatStrategy:new(conversation, options)
   else
     obj.name = "*sia " .. ChatStrategy.count() .. "*"
   end
-  print(obj.name)
 
   vim.api.nvim_buf_set_name(buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)

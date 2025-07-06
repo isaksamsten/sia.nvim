@@ -191,7 +191,6 @@ M.add_file = {
   },
   required = { "path" },
   execute = function(args, conversation, callback)
-    print(vim.inspect(args))
     if not args.path then
       callback({ "Error: No file path was provided" })
       return
