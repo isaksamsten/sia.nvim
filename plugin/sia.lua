@@ -51,14 +51,14 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   if action.range == true and opts.mode ~= "v" then
-    vim.notify("Sia: The action /" .. args.fargs[1] .. " must be used with a range", vim.log.levels.ERROR)
+    vim.notify("Sia: The action " .. args.fargs[1] .. " must be used with a range", vim.log.levels.ERROR)
     return
   end
 
   local is_range = opts.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
-    vim.notify("Sia: The action /" .. args.fargs[1] .. " is not enabled in the current context.", vim.log.levels.ERROR)
+    vim.notify("Sia: The action " .. args.fargs[1] .. " is not enabled in the current context.", vim.log.levels.ERROR)
     return
   end
 
@@ -71,7 +71,6 @@ end, {
     local config = require("sia.config")
     local cmd_type = vim.fn.getcmdtype()
     local is_range = false
-    local has_bang = false
 
     if cmd_type == ":" then
       is_range = require("sia.utils").is_range_commend(CmdLine)

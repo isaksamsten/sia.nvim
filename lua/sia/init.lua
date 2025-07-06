@@ -91,7 +91,6 @@ function M.remove_message()
       --- @param idx integer?
     }, function(_, idx)
       if idx and mappings then
-        print(idx, mappings[idx])
         chat.conversation:remove_instruction(mappings[idx])
         chat:redraw()
       end
@@ -496,14 +495,26 @@ end
 function M.main(action, opts, model)
   if vim.api.nvim_buf_is_loaded(opts.buf) then
     local strategy
-    if vim.bo[opts.buf].filetype == "sia" then
-      strategy = ChatStrategy.by_buf(opts.buf)
+    local visible = ChatStrategy.visible()
+    if vim.bo[opts.buf].filetype == "sia" or #visible == 1 then
+      if #visible == 1 then
+        strategy = ChatStrategy.by_buf(visible[1].buf)
+      else
+        strategy = ChatStrategy.by_buf(opts.buf)
+      end
+
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
         strategy.conversation:add_instruction(last_instruction, opts)
 
         for _, tool in ipairs(action.tools or {}) do
           strategy.conversation:add_tool(tool)
+        end
+
+        if vim.bo[opts.buf].filetype ~= "sia" then
+          for _, instruction in ipairs(action.instructions or {}) do
+            strategy.conversation:add_instruction(instruction, opts)
+          end
         end
 
         -- The user might have explicitly changed the model with -m
