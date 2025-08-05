@@ -216,7 +216,7 @@ function M.resolve_action(argument, opts)
     local action_mode = M.get_action_mode(opts)
     action = vim.deepcopy(config.options.defaults.actions[action_mode])
     local tools, prompt = split_tools_and_prompt(argument)
-    action.tools = tools
+    action.tools = vim.tbl_extend("keep", action.tools or {}, tools)
     table.insert(action.instructions, { role = "user", content = table.concat(prompt, " ") })
   end
 

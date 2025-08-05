@@ -10,8 +10,15 @@ local M = {}
 --- @param opts sia.ProviderOpts
 local function call_provider(query, opts)
   local config = require("sia.config")
-  local model = config.options.models[query.model or config.options.defaults.model]
-  local provider = config.options.providers[model[1]]
+  local model
+  local provider
+  if query.model == nil or type(query.model) == "string" then
+    model = config.options.models[query.model or config.options.defaults.model]
+    provider = config.options.providers[model[1]]
+  else
+    model = { nil, query.model.name, function_calling = query.model.function_calling }
+    provider = query.model.provider
+  end
 
   --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?, max_tokens: integer?}
   local data = {
@@ -184,20 +191,22 @@ end
 --- @param query sia.Query
 --- @param callback fun(s:string?):nil
 function M.execute_query(query, callback)
+  local response = ""
   call_provider(query, {
     on_stdout = function(_, data, _)
       if data and data ~= nil then
-        data = table.concat(data, " ")
-        if data ~= "" then
-          local ok, json = pcall(vim.json.decode, data, { luanil = { object = true } })
-          if ok and json and json.choices and #json.choices > 0 then
+        response = response .. table.concat(data, " ")
+      end
+    end,
+    on_exit = function()
+      if response ~= "" then
+        local ok, json = pcall(vim.json.decode, response, { luanil = { object = true } })
+        if ok then
+          if json and json.choices and #json.choices > 0 then
             callback(json.choices[1].message.content)
           end
         end
       end
-    end,
-    on_exit = function()
-      callback()
     end,
     stream = false,
   })

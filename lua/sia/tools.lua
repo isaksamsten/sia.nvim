@@ -39,13 +39,13 @@ M.find_lsp_symbol = {
   required = { "queries" },
   execute = function(args, conversation, callback)
     if not args.queries or #args.queries == 0 then
-      callback({ "Error: No queries were provided" })
+      callback({ content = { "Error: No queries were provided" } })
       return
     end
 
     local clients = vim.lsp.get_clients({ method = "workspace/symbol" })
     if vim.tbl_isempty(clients) then
-      callback({ "Error: No LSP clients attached" })
+      callback({ content = { "Error: No LSP clients attached" } })
       return
     end
     local found = {}
@@ -97,9 +97,9 @@ M.find_lsp_symbol = {
     end
 
     if #message > 0 then
-      callback(message)
+      callback({ content = message })
     else
-      callback({ "Error: Can't find any matching symbols" })
+      callback({ content = { "Error: Can't find any matching symbols" } })
     end
   end,
 }
@@ -112,13 +112,13 @@ M.documentation = {
   required = { "symbol" },
   execute = function(args, conversation, callback)
     if not args.symbol then
-      callback({ "Error: No symbol provided" })
+      callback({ content = { "Error: No symbol provided" } })
       return
     end
 
     --- @diagnostic disable-next-line undefined-field
     if conversation.lsp_symbols == nil then
-      callback({ "Error: No symbols have been added to the conversation yet." })
+      callback({ content = { "Error: No symbols have been added to the conversation yet." } })
       return
     end
 
@@ -126,13 +126,13 @@ M.documentation = {
     local symbol = conversation.lsp_symbols[args.symbol]
 
     if symbol == nil then
-      callback({ "Error: The symbol " .. args.symbol .. " has not been addded to the conversation" })
+      callback({ content = { "Error: The symbol " .. args.symbol .. " has not been addded to the conversation" } })
       return
     end
 
     local clients = vim.lsp.get_clients({ method = "textDocument/hover" })
     if vim.tbl_isempty(clients) then
-      callback({ "Error: No LSP clients attached" })
+      callback({ content = { "Error: No LSP clients attached" } })
       return
     end
     local done = {}
@@ -168,7 +168,7 @@ M.documentation = {
     end, 10)
 
     if #found == 0 then
-      callback({ "Error: No documentation found for " .. args.symbol })
+      callback({ content = { "Error: No documentation found for " .. args.symbol } })
       return
     end
 
@@ -177,7 +177,7 @@ M.documentation = {
       vim.list_extend(content, vim.lsp.util.convert_input_to_markdown_lines(doc.contents))
     end
 
-    callback(content)
+    callback({ content = content })
   end,
 }
 
@@ -192,12 +192,12 @@ M.add_file = {
   required = { "path" },
   execute = function(args, conversation, callback)
     if not args.path then
-      callback({ "Error: No file path was provided" })
+      callback({ content = { "Error: No file path was provided" } })
       return
     end
 
     if vim.fn.filereadable(args.path) == 0 then
-      callback({ "Error: File cannot be found" })
+      callback({ content = { "Error: File cannot be found" } })
       return
     end
 
@@ -207,7 +207,10 @@ M.add_file = {
     end
 
     conversation:add_file({ path = args.path, pos = pos })
-    callback({ "I've added " .. args.path .. " to the conversation" }, { description = { args.path } })
+    callback({
+      content = { "I've added " .. args.path .. " to the conversation" },
+      confirmation = { description = { args.path } },
+    })
   end,
 }
 
@@ -219,13 +222,15 @@ M.add_files_glob = {
   required = { "glob_pattern" },
   execute = function(args, conversation, callback)
     if not args.glob_pattern then
-      callback({ "Error: No glob pattern provided." })
+      callback({ content = { "Error: No glob pattern provided." } })
       return
     end
 
     local files = require("sia.utils").glob_pattern_to_files(args.glob_pattern)
     if #files > 3 then
-      callback({ "Error: Glob pattern matches too many files (> 3). Please provide a more specific pattern." })
+      callback({
+        content = { "Error: Glob pattern matches too many files (> 3). Please provide a more specific pattern." },
+      })
       return
     end
 
@@ -259,13 +264,13 @@ M.add_files_glob = {
     end
 
     if #message == 0 then
-      callback({ "No matching files found for pattern: " .. args.glob_pattern })
+      callback({ content = { "No matching files found for pattern: " .. args.glob_pattern } })
     else
       local confirmation
       if #existing_files > 0 then
         confirmation = { description = existing_files }
       end
-      callback(message, confirmation)
+      callback({ content = message, confirmation = confirmation })
     end
   end,
 }
@@ -279,9 +284,9 @@ M.remove_file = {
   execute = function(args, conversation, callback)
     if args.glob_pattern then
       conversation:remove_files({ args.glob_pattern })
-      callback({ "I've removed the files matching " .. args.glob_pattern .. " from the conversation." })
+      callback({ content = { "I've removed the files matching " .. args.glob_pattern .. " from the conversation." } })
     else
-      callback({ "The glob pattern is missing" })
+      callback({ content = { "The glob pattern is missing" } })
     end
   end,
 }
@@ -302,7 +307,7 @@ M.grep = {
     end
 
     if args.pattern == nil then
-      callback({ "No pattern was given" })
+      callback({ content = { "No pattern was given" } })
       return
     end
 
@@ -315,7 +320,76 @@ M.grep = {
     }, function(obj)
       local lines = vim.split(obj.stdout, "\n")
       table.insert(lines, 1, "The following search results were returned")
-      callback(lines)
+      callback({ content = lines })
+    end)
+  end,
+}
+
+M.edit_file = {
+  name = "edit_file",
+  description = "Use this tool to make an edit to an existing file.\n\nThis will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.\nWhen writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.\n\nFor example:\n\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n\nYou should still bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.\nIf you plan on deleting a section, you must provide context before and after to delete it. If the initial code is ```code \\n Block 1 \\n Block 2 \\n Block 3 \\n code```, and you want to remove Block 2, you would output ```// ... existing code ... \\n Block 1 \\n  Block 3 \\n // ... existing code ...```.\nMake sure it is clear what the edit should be, and where it should be applied.\nMake edits to a file in a single edit_file call instead of multiple edit_file calls to the same file. The apply model can handle many distinct edits at once.",
+  parameters = {
+    target_file = {
+      type = "string",
+      description = "The target file to modify.",
+    },
+    instructions = {
+      type = "string",
+      description = "A single sentence instruction describing what you are going to do for the sketched edit. This is used to assist the less intelligent model in applying the edit. Use the first person to describe what you are going to do. Use it to disambiguate uncertainty in the edit.",
+    },
+    code_edit = {
+      type = "string",
+      description = "Specify ONLY the precise lines of code that you wish to edit. NEVER specify or write out unchanged code. Instead, represent all unchanged code using the comment of the language you're editing in - example: // ... existing code ...",
+    },
+  },
+  required = { "target_file", "instruction", "code_edit" },
+  execute = function(args, _, callback)
+    print(vim.inspect(args))
+    if not args.target_file then
+      callback({ content = { "No target_file was provided" } })
+      return
+    end
+
+    if vim.fn.filereadable(args.target_file) == 0 then
+      callback({ content = { "File " .. args.target_file .. " cannot be found" } })
+      return
+    end
+    local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
+    if not buf then
+      callback({ content = { "Cannot load " .. args.target_file } })
+      return
+    end
+    local initial_code = require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+
+    local assistant = require("sia.assistant")
+    assistant.execute_query({
+      model = {
+        model = {
+          name = "morph-v3-fast",
+          function_calling = false,
+        },
+        provider = require("sia.provider").morph,
+      },
+      prompt = {
+        {
+          role = "user",
+          content = string.format(
+            "<instruction>%s</instruction>\n<code>%s</code>\n<update>%s</update>",
+            args.instructions,
+            initial_code,
+            args.code_edit
+          ),
+        },
+      },
+    }, function(result)
+      if result then
+        local split = vim.split(result, "\n", { plain = true, trimempty = true })
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        callback({
+          content = { "I've successfully made the changes to the file " .. args.target_file },
+          modified = { buf },
+        })
+      end
     end)
   end,
 }

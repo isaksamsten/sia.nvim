@@ -213,16 +213,20 @@ local defaults = {
         mode = "chat",
         temperature = 0.1,
         chat = {
-          block_action = "search_replace",
+          block_action = "verbatim",
         },
         system = {
-          "editblock_system",
+          "default_system",
           "git_files",
         },
         instructions = {
           "current_context",
         },
-        reminder = "editblock_reminder",
+        tools = {
+          "grep",
+          "files",
+          require("sia.tools").edit_file,
+        },
       },
     },
   },

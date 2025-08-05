@@ -9,11 +9,11 @@ local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 
---- @param tools sia.CompletedTools[]
+--- @param completed_tools sia.CompletedTools[]
 --- @param opts {on_confirm: (fun():nil), on_reject: (fun():nil)?}
-local function request_user_confirmation(tools, opts)
+local function request_user_confirmation(completed_tools, opts)
   local require_confirmation = {}
-  for _, tool in ipairs(tools) do
+  for _, tool in ipairs(completed_tools) do
     if tool.confirmation then
       local descriptions = require_confirmation[tool.name]
       if descriptions == nil then
@@ -48,8 +48,9 @@ local function request_user_confirmation(tools, opts)
   end
 end
 
---- Write text to a buffer.
+--- Write text to a buffer via a canvas.
 --- @class sia.Writer
+--- @field canvas sia.Canvas?
 --- @field buf integer?
 --- @field start_line integer
 --- @field start_col integer
@@ -59,11 +60,13 @@ end
 local Writer = {}
 Writer.__index = Writer
 
+--- @param canvas sia.Canvas?
 --- @param buf integer?
 --- @param line integer?
 --- @param column integer?
-function Writer:new(buf, line, column)
+function Writer:new(canvas, buf, line, column)
   local obj = {
+    canvas = canvas,
     buf = buf,
     start_line = line or 0,
     start_col = column or 0,
@@ -78,7 +81,9 @@ end
 
 --- @param substring string
 function Writer:append_substring(substring)
-  if self.buf then
+  if self.canvas then
+    self.canvas:append_text_at(self.line, self.column, substring)
+  elseif self.buf then
     vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
   end
   self.cache[#self.cache] = self.cache[#self.cache] .. substring
@@ -86,7 +91,9 @@ function Writer:append_substring(substring)
 end
 
 function Writer:append_newline()
-  if self.buf then
+  if self.canvas then
+    self.canvas:append_newline_at(self.line)
+  elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   end
   self.line = self.line + 1
@@ -134,6 +141,7 @@ end
 --- @class sia.Strategy
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
+--- @field modified [integer]
 local Strategy = {}
 Strategy.__index = Strategy
 
@@ -142,6 +150,7 @@ function Strategy:new(conversation)
   local obj = setmetatable({}, self)
   obj.conversation = conversation
   obj.tools = {}
+  obj.modified = {}
   return obj
 end
 
@@ -186,15 +195,15 @@ function Strategy:on_tool_call(t)
   end
 end
 
---- @alias sia.CompletedTools { name: string, confirmation: { description: string[] }?  }
---- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun():nil) }
+--- @alias sia.CompletedTools { name: string, confirmation: { description: string[] }?, bufs: [integer]?  }
+--- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun(bufs: [integer]?):nil) }
 function Strategy:execute_tools(opts)
   if not vim.tbl_isempty(self.tools) then
     local tool_count = vim.tbl_count(self.tools)
 
     --- @type sia.CompletedTools[]
     local completed_tools = {}
-    for _, tool in pairs(self.tools) do
+    for x, tool in pairs(self.tools) do
       local func = tool["function"]
       if func then
         if opts.on_tool_start then
@@ -206,23 +215,27 @@ function Strategy:execute_tools(opts)
             func.name,
             arguments,
             self,
-            vim.schedule_wrap(function(content, confirmation)
+            vim.schedule_wrap(function(tool_result)
+              -- vim.tbl_extend("keep", self.modified, tool_result.modified)
               tool_count = tool_count - 1
               if opts.on_tool_complete then
-                opts.on_tool_complete(tool, content)
-                table.insert(completed_tools, { name = func.name, confirmation = confirmation })
+                opts.on_tool_complete(tool, tool_result.content)
+                table.insert(completed_tools, { name = func.name, confirmation = tool_result.confirmation })
               end
               if tool_count == 0 then
+                self.modified = {}
+                self.tools = {}
                 if opts.on_tools_complete then
                   request_user_confirmation(
                     completed_tools,
                     { on_confirm = opts.on_tools_complete, on_reject = opts.on_no_tools }
                   )
                 end
-                self.tools = {}
               end
             end)
           )
+        else
+          tool_count = tool_count - 1
         end
       end
     end
@@ -376,7 +389,7 @@ function ChatStrategy:on_init()
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
     end
-    self.canvas:update_progress({ { "I'm thinking! Please wait...", "SiaProgress" } })
+    self.canvas:update_progress({ { "I'm thinking! Please wait...", "NonText" } })
   end
 end
 
@@ -387,7 +400,7 @@ end
 function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
-    self.canvas:clear_extmarks()
+    -- self.canvas:clear_extmarks()
 
     -- Make a new-line if the last line is non-empty
     local line_count = vim.api.nvim_buf_line_count(self.buf)
@@ -399,7 +412,7 @@ function ChatStrategy:on_start(job)
       end
     end
 
-    self._writer = Writer:new(self.buf, line_count - 1, 0)
+    self._writer = Writer:new(self.canvas, self.buf, line_count - 1, 0)
   end
 end
 
@@ -452,10 +465,9 @@ function ChatStrategy:on_complete(opts)
 
     self:execute_tools({
       on_tool_start = function(tool)
-        self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "Comment" } })
+        self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "NonText" } })
       end,
       on_tool_complete = function(tool, content)
-        self.canvas:clear_extmarks()
         self.conversation:add_instruction({
           { role = "assistant", tool_calls = { tool } },
           { role = "tool", content = content, _tool_call = tool },
@@ -463,6 +475,7 @@ function ChatStrategy:on_complete(opts)
       end,
       on_tools_complete = function()
         self.hide_header = true
+        self.canvas:append({ "" })
         assistant.execute_strategy(self, {
           on_complete = function()
             self.hide_header = nil
@@ -471,6 +484,7 @@ function ChatStrategy:on_complete(opts)
         })
       end,
       on_no_tools = function()
+        self.canvas:clear_extmarks()
         vim.bo[self.buf].modifiable = false
         assistant.execute_query({
           model = "gpt-4o-mini",
@@ -636,7 +650,7 @@ end
 --- @param job number
 function DiffStrategy:on_start(job)
   set_abort_keymap(self.buf, job)
-  self._writer = Writer:new(self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
+  self._writer = Writer:new(nil, self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
 end
 
 --- @param content string
@@ -741,7 +755,7 @@ function InsertStrategy:on_progress(content)
       pcall(vim.cmd.undojoin)
     end)
   else
-    self._writer = Writer:new(context.buf, self._line - 1, self._col)
+    self._writer = Writer:new(nil, context.buf, self._line - 1, self._col)
   end
   self._writer:append(content)
   vim.api.nvim_buf_set_extmark(

@@ -18,6 +18,9 @@ function Canvas:scroll_to_bottom() end
 --- @param content string[][]
 function Canvas:update_progress(content) end
 
+--- @param content string[]
+function Canvas:append(content) end
+
 function Canvas:render_model(model) end
 
 function Canvas:clear_extmarks() end
@@ -48,7 +51,7 @@ function ChatCanvas:update_progress(content)
   table.insert(content, 1, { "🤖 ", "Normal" })
   self.progress_extmark = vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
     virt_lines = { content },
-    virt_lines_above = true,
+    virt_lines_above = false,
   })
 end
 
@@ -62,6 +65,7 @@ end
 
 function ChatCanvas:clear_extmarks()
   pcall(vim.api.nvim_buf_del_extmark, self.buf, PROGRESS_NS, self.progress_extmark)
+  self.progress_extmark = nil
 end
 
 function ChatCanvas:get_win()
@@ -151,6 +155,45 @@ end
 
 function ChatCanvas:line_count()
   return vim.api.nvim_buf_line_count(self.buf)
+end
+
+function ChatCanvas:append(content)
+  local buf = self.buf
+  if vim.api.nvim_buf_is_loaded(buf) then
+    vim.bo[buf].modifiable = true
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, content)
+    self:update_progress_position()
+  end
+end
+
+function ChatCanvas:update_progress_position()
+  if self.progress_extmark then
+    local new_line_count = vim.api.nvim_buf_line_count(self.buf)
+    pcall(vim.api.nvim_buf_set_extmark, self.buf, PROGRESS_NS, new_line_count - 1, 0, {
+      id = self.progress_extmark,
+      virt_lines = vim.api.nvim_buf_get_extmark_by_id(self.buf, PROGRESS_NS, self.progress_extmark, { details = true })[3].virt_lines,
+      virt_lines_above = false,
+    })
+  end
+end
+
+function ChatCanvas:append_text_at(line, col, text)
+  local buf = self.buf
+  if vim.api.nvim_buf_is_loaded(buf) then
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_text(buf, line, col, line, col, { text })
+    self:update_progress_position()
+  end
+end
+
+function ChatCanvas:append_newline_at(line)
+  local buf = self.buf
+  if vim.api.nvim_buf_is_loaded(buf) then
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, line + 1, line + 1, false, { "" })
+    self:update_progress_position()
+  end
 end
 
 M.ChatCanvas = ChatCanvas

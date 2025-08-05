@@ -1,5 +1,5 @@
 --- @alias sia.Prompt {role: sia.config.Role, content: string?, tool_calls: sia.ToolCall[]?, tool_call_id: string? }
---- @alias sia.Query { model: string?, temperature: number?, prompt: sia.Prompt, tools: sia.Tool[]?}
+--- @alias sia.Query { model: (string|table)?, temperature: number?, prompt: sia.Prompt[], tools: sia.Tool[]?}
 --- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
@@ -598,7 +598,7 @@ end
 --- @param name string
 --- @param arguments table
 --- @param strategy sia.Strategy
---- @param callback  fun(content: string[]?):nil
+--- @param callback  fun(opts: {content: string[]?, confirmation: string[]?, bufs: [integer]?}):nil
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
