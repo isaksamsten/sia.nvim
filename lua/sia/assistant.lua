@@ -48,39 +48,41 @@ local function call_provider(query, opts)
     data.stream_options = { include_usage = true }
   end
 
-  local args = {
-    "--silent",
-    "--no-buffer",
-    '--header "Authorization: Bearer $API_KEY"',
-    '--header "content-type: application/json"',
-  }
-  if string.find(provider.base_url, "githubcopilot") ~= nil then
-    table.insert(args, '--header "Copilot-Integration-Id: vscode-chat"')
-    table.insert(
-      args,
-      string.format(
-        '--header "editor-version: Neovim/%s.%s.%s"',
-        vim.version().major,
-        vim.version().minor,
-        vim.version().patch
-      )
-    )
-  end
-
-  table.insert(args, "--url " .. provider.base_url)
-  table.insert(args, "--data " .. vim.fn.shellescape(vim.json.encode(data)))
-  local command = "curl " .. table.concat(args, " ")
   local api_key = provider.api_key()
   if api_key == nil then
     vim.notify("Sia: API key is not set for " .. model[1])
     opts.on_exit(nil, -100, nil)
     return
   end
-  vim.fn.jobstart(command, {
+
+  local args = {
+    "curl",
+    "--silent",
+    "--no-buffer",
+    "--header",
+    string.format("Authorization: Bearer %s", api_key),
+    "--header",
+    "content-type: application/json",
+  }
+  if string.find(provider.base_url, "githubcopilot") ~= nil then
+    table.insert(args, "--header")
+    table.insert(args, "Copilot-Integration-Id: vscode-chat")
+    table.insert(args, "--header")
+    table.insert(
+      args,
+      string.format("editor-version: Neovim/%s.%s.%s", vim.version().major, vim.version().minor, vim.version().patch)
+    )
+  end
+
+  table.insert(args, "--url")
+  table.insert(args, provider.base_url)
+  table.insert(args, "--data")
+  table.insert(args, vim.json.encode(data))
+  vim.fn.jobstart(args, {
     clear_env = true,
-    env = {
-      API_KEY = api_key,
-    },
+    on_stderr = function(_, a, _)
+      -- print(vim.inspect(a))
+    end,
     on_stdout = opts.on_stdout,
     on_exit = opts.on_exit,
   })
@@ -194,7 +196,7 @@ function M.execute_query(query, callback)
   local response = ""
   call_provider(query, {
     on_stdout = function(_, data, _)
-      if data and data ~= nil then
+      if data ~= nil then
         response = response .. table.concat(data, " ")
       end
     end,
