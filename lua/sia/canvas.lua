@@ -162,7 +162,7 @@ function ChatCanvas:append(content)
   if vim.api.nvim_buf_is_loaded(buf) then
     vim.bo[buf].modifiable = true
     local line_count = vim.api.nvim_buf_line_count(buf)
-    vim.api.nvim_buf_set_lines(buf, line_count - 1, line_count, false, content)
+    vim.api.nvim_buf_set_lines(buf, line_count, line_count, false, content)
     self:update_progress_position()
   end
 end
