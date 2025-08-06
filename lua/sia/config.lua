@@ -53,7 +53,7 @@ local providers = require("sia.provider")
 --- @field instructions (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
 --- @field reminder (string|sia.config.Instruction)?
---- @field tools sia.config.Tool[]?
+--- @field tools (sia.config.Tool|string)[]?
 --- @field model string?
 --- @field temperature number?
 --- @field input sia.config.ActionInput?
@@ -181,10 +181,12 @@ local defaults = {
     tools = {
       enable = true,
       choices = {
-        file = require("sia.tools").add_file,
-        files = require("sia.tools").add_files_glob,
+        add_file = require("sia.tools").add_file,
+        add_files = require("sia.tools").add_files_glob,
         lsp_symbol = require("sia.tools").find_lsp_symbol,
         lsp_docs = require("sia.tools").documentation,
+        edit_file = require("sia.tools").edit_file,
+        list_files = require("sia.tools").list_files,
         grep = require("sia.tools").grep,
       },
     },
@@ -224,8 +226,10 @@ local defaults = {
         },
         tools = {
           "grep",
-          "files",
-          require("sia.tools").edit_file,
+          "add_file",
+          "add_files",
+          "edit_file",
+          "list_files",
         },
       },
     },

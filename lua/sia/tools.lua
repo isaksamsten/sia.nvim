@@ -1,5 +1,57 @@
 local M = {}
 
+---@class SiaNewToolOpts
+---@field name string
+---@field description string
+---@field required string[]
+---@field parameters table
+---@field confirm (string|fun(args:table):string)?
+---@field select { prompt: (string|fun(args:table):string)?, choices: string[]}?
+
+---@param opts SiaNewToolOpts
+---@param execute any
+---@return sia.config.Tool
+M.new_tool = function(opts, execute)
+  return {
+    name = opts.name,
+    parameters = opts.parameters,
+    description = opts.description,
+    required = opts.required,
+    execute = function(args, strategy, callback)
+      if opts.confirm ~= nil then
+        local text
+        if type(opts.confirm) == "function" then
+          text = opts.confirm(args)
+        else
+          text = opts.confirm
+        end
+        vim.ui.input({ prompt = string.format("%s. Confirm (Y/n)", text) }, function(resp)
+          if resp ~= nil and resp:lower() ~= "y" and resp:lower() ~= "yes" and resp ~= "" then
+            callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
+            return
+          end
+          execute(args, strategy, callback)
+        end)
+      elseif opts.select then
+        local prompt
+        if type(opts.select.prompt) == "function" then
+          prompt = opts.select.prompt(args)
+        else
+          prompt = opts.select.prompt
+        end
+        vim.ui.select(opts.select.choices, { prompt = prompt }, function(_, idx)
+          if idx == nil then
+            callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
+            return
+          end
+          execute(args, strategy, callback, idx)
+        end)
+      else
+        execute(args, strategy, callback)
+      end
+    end,
+  }
+end
 local KINDS = {
   [1] = "File",
   [2] = "Module",
@@ -181,7 +233,7 @@ M.documentation = {
   end,
 }
 
-M.add_file = {
+M.add_file = M.new_tool({
   name = "add_file",
   description = "Add a file or part of file to be included in the conversation",
   parameters = {
@@ -190,95 +242,94 @@ M.add_file = {
     end_line = { type = "integer", description = "The end line number" },
   },
   required = { "path" },
-  execute = function(args, conversation, callback)
-    if not args.path then
-      callback({ content = { "Error: No file path was provided" } })
-      return
-    end
-
-    if vim.fn.filereadable(args.path) == 0 then
-      callback({ content = { "Error: File cannot be found" } })
-      return
-    end
-
-    local pos = nil
-    if args.start_line and args.end_line then
-      pos = { args.start_line, args.end_line }
-    end
-
-    conversation:add_file({ path = args.path, pos = pos })
-    callback({
-      content = { "I've added " .. args.path .. " to the conversation" },
-      confirmation = { description = { args.path } },
-    })
+  confirm = function(args)
+    return string.format("Sia want's to add the file %s", args.path)
   end,
-}
+}, function(args, conversation, callback)
+  if not args.path then
+    callback({ content = { "Error: No file path was provided" } })
+    return
+  end
+
+  if vim.fn.filereadable(args.path) == 0 then
+    callback({ content = { "Error: File cannot be found" } })
+    return
+  end
+
+  local pos = nil
+  if args.start_line and args.end_line then
+    pos = { args.start_line, args.end_line }
+  end
+
+  conversation:add_file({ path = args.path, pos = pos })
+  callback({
+    content = { "I've added " .. args.path .. " to the conversation" },
+  })
+end)
 
 --- @type sia.config.Tool
-M.add_files_glob = {
+M.add_files_glob = M.new_tool({
   name = "add_files_glob",
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },
-  execute = function(args, conversation, callback)
-    if not args.glob_pattern then
-      callback({ content = { "Error: No glob pattern provided." } })
-      return
-    end
-
-    local files = require("sia.utils").glob_pattern_to_files(args.glob_pattern)
-    if #files > 3 then
-      callback({
-        content = { "Error: Glob pattern matches too many files (> 3). Please provide a more specific pattern." },
-      })
-      return
-    end
-
-    local missing_files = {}
-    local existing_files = {}
-    for _, file in ipairs(files) do
-      if vim.fn.filereadable(file) == 0 then
-        table.insert(missing_files, file)
-      else
-        table.insert(existing_files, file)
-        conversation:add_file(file)
-      end
-    end
-
-    local message = {}
-    if #existing_files > 0 then
-      table.insert(message, "Successfully added file" .. (#existing_files > 1 and "s" or "") .. ":")
-      for _, file in ipairs(existing_files) do
-        table.insert(message, "  • " .. file)
-      end
-    end
-
-    if #missing_files > 0 then
-      if #message > 0 then
-        table.insert(message, "")
-      end
-      table.insert(message, "Unable to locate file" .. (#missing_files > 1 and "s" or "") .. ":")
-      for _, file in ipairs(missing_files) do
-        table.insert(message, "  • " .. file)
-      end
-    end
-
-    if #message == 0 then
-      callback({ content = { "No matching files found for pattern: " .. args.glob_pattern } })
-    else
-      local confirmation
-      if #existing_files > 0 then
-        confirmation = { description = existing_files }
-      end
-      callback({ content = message, confirmation = confirmation })
-    end
+  confirm = function(args)
+    return string.format("Sia wants to add all files matching %s", args.glob_pattern)
   end,
-}
+}, function(args, conversation, callback)
+  if not args.glob_pattern then
+    callback({ content = { "Error: No glob pattern provided." } })
+    return
+  end
+
+  local files = require("sia.utils").glob_pattern_to_files(args.glob_pattern)
+  if #files > 3 then
+    callback({
+      content = { "Error: Glob pattern matches too many files (> 3). Please provide a more specific pattern." },
+    })
+    return
+  end
+
+  local missing_files = {}
+  local existing_files = {}
+  for _, file in ipairs(files) do
+    if vim.fn.filereadable(file) == 0 then
+      table.insert(missing_files, file)
+    else
+      table.insert(existing_files, file)
+      conversation:add_file(file)
+    end
+  end
+
+  local message = {}
+  if #existing_files > 0 then
+    table.insert(message, "Successfully added file" .. (#existing_files > 1 and "s" or "") .. ":")
+    for _, file in ipairs(existing_files) do
+      table.insert(message, "  • " .. file)
+    end
+  end
+
+  if #missing_files > 0 then
+    if #message > 0 then
+      table.insert(message, "")
+    end
+    table.insert(message, "Unable to locate file" .. (#missing_files > 1 and "s" or "") .. ":")
+    for _, file in ipairs(missing_files) do
+      table.insert(message, "  • " .. file)
+    end
+  end
+
+  if #message == 0 then
+    callback({ content = { "No matching files found for pattern: " .. args.glob_pattern } })
+  else
+    callback({ content = message })
+  end
+end)
 
 --- @type sia.config.Tool
 M.remove_file = {
   name = "remove_file",
-  description = "Remove files from the list of files to be processed",
+  description = "Remove files from the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be deleted." } },
   required = { "glob_pattern" },
   execute = function(args, conversation, callback)
@@ -291,7 +342,7 @@ M.remove_file = {
   end,
 }
 
-M.grep = {
+M.grep = M.new_tool({
   name = "grep",
   description = "Grep for a pattern in files using rg",
   parameters = {
@@ -299,33 +350,57 @@ M.grep = {
     pattern = { type = "string", description = "Search pattern" },
   },
   required = { "pattern" },
-  execute = function(args, _, callback)
-    local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
+  confirm = function(args)
+    local text = string.format("Sia wants search for %s", args.pattern)
     if args.glob then
-      table.insert(command, "--glob")
-      table.insert(command, args.glob)
+      text = string.format("%s in files matching %s", text, args.glob)
     end
+    return text
+  end,
+}, function(args, _, callback)
+  local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
+  if args.glob then
+    table.insert(command, "--glob")
+    table.insert(command, args.glob)
+  end
 
-    if args.pattern == nil then
-      callback({ content = { "No pattern was given" } })
+  if args.pattern == nil then
+    callback({ content = { "No pattern was given" } })
+    return
+  end
+
+  table.insert(command, "--")
+  table.insert(command, args.pattern)
+
+  vim.system(command, {
+    text = true,
+    stderr = false,
+  }, function(obj)
+    local lines = vim.split(obj.stdout, "\n")
+    table.insert(lines, 1, "The following search results were returned")
+    callback({ content = lines })
+  end)
+end)
+
+M.list_files = M.new_tool({
+  name = "list_files",
+  description = "Recursivley list files in the current project",
+  parameters = vim.empty_dict(),
+  required = {},
+  confirm = "Sia want to list all files in CWD",
+}, function(_, _, callback)
+  vim.system({ "fd", "--type", "f" }, { text = true }, function(obj)
+    local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
+    if #files == 0 or obj.code ~= 0 then
+      callback({ content = { "No files found (or fd is not installed)." } })
       return
     end
+    table.insert(files, 1, "Files in the current project (fd):")
+    callback({ content = files })
+  end)
+end)
 
-    table.insert(command, "--")
-    table.insert(command, args.pattern)
-
-    vim.system(command, {
-      text = true,
-      stderr = false,
-    }, function(obj)
-      local lines = vim.split(obj.stdout, "\n")
-      table.insert(lines, 1, "The following search results were returned")
-      callback({ content = lines })
-    end)
-  end,
-}
-
-M.edit_file = {
+M.edit_file = M.new_tool({
   name = "edit_file",
   description = "Use this tool to make an edit to an existing file.\n\nThis will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.\nWhen writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.\n\nFor example:\n\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n\nYou should still bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.\nIf you plan on deleting a section, you must provide context before and after to delete it. If the initial code is ```code \\n Block 1 \\n Block 2 \\n Block 3 \\n code```, and you want to remove Block 2, you would output ```// ... existing code ... \\n Block 1 \\n  Block 3 \\n // ... existing code ...```.\nMake sure it is clear what the edit should be, and where it should be applied.\nMake edits to a file in a single edit_file call instead of multiple edit_file calls to the same file. The apply model can handle many distinct edits at once.",
   parameters = {
@@ -343,55 +418,84 @@ M.edit_file = {
     },
   },
   required = { "target_file", "instruction", "code_edit" },
-  execute = function(args, _, callback)
-    print(vim.inspect(args))
-    if not args.target_file then
-      callback({ content = { "No target_file was provided" } })
-      return
-    end
+  select = {
+    prompt = function(args)
+      return string.format("Sia wants to edit %s. What should I do?", args.target_file)
+    end,
+    choices = {
+      "Accept changes",
+      "Diff changes",
+    },
+  },
+}, function(args, _, callback, choice)
+  if not args.target_file then
+    callback({ content = { "No target_file was provided" } })
+    return
+  end
 
-    if vim.fn.filereadable(args.target_file) == 0 then
-      callback({ content = { "File " .. args.target_file .. " cannot be found" } })
-      return
-    end
-    local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
-    if not buf then
-      callback({ content = { "Cannot load " .. args.target_file } })
-      return
-    end
-    local initial_code = require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+  local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
+  if not buf then
+    callback({ content = { "Cannot load " .. args.target_file } })
+    return
+  end
+  local initial_code = require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
 
-    local assistant = require("sia.assistant")
-    assistant.execute_query({
+  local assistant = require("sia.assistant")
+  assistant.execute_query({
+    model = {
       model = {
-        model = {
-          name = "morph-v3-fast",
-          function_calling = false,
-        },
-        provider = require("sia.provider").morph,
+        name = "morph-v3-fast",
+        function_calling = false,
       },
-      prompt = {
-        {
-          role = "user",
-          content = string.format(
-            "<instruction>%s</instruction>\n<code>%s</code>\n<update>%s</update>",
-            args.instructions,
-            initial_code,
-            args.code_edit
-          ),
-        },
+      provider = require("sia.provider").morph,
+    },
+    prompt = {
+      {
+        role = "user",
+        content = string.format(
+          "<instruction>%s</instruction>\n<code>%s</code>\n<update>%s</update>",
+          args.instructions,
+          initial_code,
+          args.code_edit
+        ),
       },
-    }, function(result)
-      if result then
-        local split = vim.split(result, "\n", { plain = true, trimempty = true })
+    },
+  }, function(result)
+    if result then
+      local split = vim.split(result, "\n", { plain = true, trimempty = true })
+      if choice == 1 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        callback({
-          content = { "I've successfully made the changes to the file " .. args.target_file },
-          modified = { buf },
-        })
+      elseif choice == 2 then
+        vim.cmd("tabnew")
+        local current_win = vim.api.nvim_get_current_win()
+        local other_buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_buf(current_win, buf)
+        vim.cmd("vsplit")
+        local other_win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(other_win, other_buf)
+        vim.bo[other_buf].buftype = "nofile"
+        vim.bo[other_buf].buflisted = false
+        vim.bo[other_buf].swapfile = false
+        vim.bo[other_buf].ft = vim.bo[buf].ft
+        vim.api.nvim_buf_set_name(other_buf, string.format("%s (incoming)", vim.api.nvim_buf_get_name(buf)))
+
+        vim.api.nvim_win_set_buf(other_win, other_buf)
+        vim.api.nvim_buf_set_lines(other_buf, 0, -1, false, split)
+        vim.api.nvim_set_current_win(current_win)
+        vim.cmd("diffthis")
+        vim.api.nvim_set_current_win(other_win)
+        vim.cmd("diffthis")
+        vim.bo[other_buf].modifiable = false
       end
-    end)
-  end,
-}
+      callback({
+        content = {
+          "The file has successfully been edited. Let's review it before we proceed with more edits. "
+            .. args.target_file,
+        },
+        modified = { buf },
+      })
+    end
+  end)
+end)
 
 return M

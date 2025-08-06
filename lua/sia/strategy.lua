@@ -9,45 +9,6 @@ local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 
---- @param completed_tools sia.CompletedTools[]
---- @param opts {on_confirm: (fun():nil), on_reject: (fun():nil)?}
-local function request_user_confirmation(completed_tools, opts)
-  local require_confirmation = {}
-  for _, tool in ipairs(completed_tools) do
-    if tool.confirmation then
-      local descriptions = require_confirmation[tool.name]
-      if descriptions == nil then
-        descriptions = {}
-      end
-      for _, description in pairs(tool.confirmation.description) do
-        table.insert(descriptions, description)
-      end
-      require_confirmation[tool.name] = descriptions
-    end
-  end
-
-  if not vim.tbl_isempty(require_confirmation) then
-    local bullet_list = {}
-    for name, confirmation in pairs(require_confirmation) do
-      table.insert(bullet_list, string.format("\n • %s (%s)", name, table.concat(confirmation, ", ")))
-    end
-
-    local prompt = string.format(
-      "The following tools require confirmation:%s\n\nDo you want to continue? (y/N): ",
-      table.concat(bullet_list)
-    )
-    vim.ui.input({ prompt = prompt }, function(input)
-      if input and (input:lower() == "y" or input:lower() == "yes") then
-        opts.on_confirm()
-      else
-        opts.on_reject()
-      end
-    end)
-  else
-    opts.on_confirm()
-  end
-end
-
 --- Write text to a buffer via a canvas.
 --- @class sia.Writer
 --- @field canvas sia.Canvas?
@@ -223,13 +184,9 @@ function Strategy:execute_tools(opts)
                 table.insert(completed_tools, { name = func.name, confirmation = tool_result.confirmation })
               end
               if tool_count == 0 then
-                self.modified = {}
                 self.tools = {}
                 if opts.on_tools_complete then
-                  request_user_confirmation(
-                    completed_tools,
-                    { on_confirm = opts.on_tools_complete, on_reject = opts.on_no_tools }
-                  )
+                  opts.on_tools_complete()
                 end
               end
             end)
@@ -282,7 +239,7 @@ ChatStrategy._order = {}
 function ChatStrategy:new(conversation, options)
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
-  local buf = vim.api.nvim_create_buf(true, true)
+  local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_win_set_buf(win, buf)
 
   if options.wo then
@@ -318,7 +275,7 @@ function ChatStrategy:new(conversation, options)
     obj.name = "*sia " .. ChatStrategy.count() .. "*"
   end
 
-  vim.api.nvim_buf_set_name(buf, obj.name)
+  pcall(vim.api.nvim_buf_set_name, buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").options.defaults.model
@@ -475,7 +432,6 @@ function ChatStrategy:on_complete(opts)
       end,
       on_tools_complete = function()
         self.hide_header = true
-        self.canvas:append({ "" })
         assistant.execute_strategy(self, {
           on_complete = function()
             self.hide_header = nil

@@ -193,7 +193,7 @@ function M.open_reply()
   local current = ChatStrategy.by_buf(buf)
   if current then
     vim.cmd("new")
-    buf = vim.api.nvim_create_buf(false, true)
+    buf = vim.api.nvim_get_current_buf()
     local win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(win, buf)
     vim.bo[buf].bufhidden = "hide"
@@ -496,7 +496,7 @@ function M.main(action, opts, model)
   if vim.api.nvim_buf_is_loaded(opts.buf) then
     local strategy
     local visible = ChatStrategy.visible()
-    if vim.bo[opts.buf].filetype == "sia" or #visible == 1 then
+    if action.mode == "chat" and (vim.bo[opts.buf].filetype == "sia" or #visible == 1) then
       if #visible == 1 then
         strategy = ChatStrategy.by_buf(visible[1].buf)
       else
