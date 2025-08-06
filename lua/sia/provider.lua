@@ -110,4 +110,11 @@ M.ollama = {
   end,
 }
 
+M.morph = {
+  base_url = "https://api.morphllm.com/v1/chat/completions",
+  api_key = function()
+    return os.getenv("MORPH_API_KEY")
+  end,
+}
+
 return M
