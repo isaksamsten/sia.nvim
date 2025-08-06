@@ -8,6 +8,7 @@
 --- @field win integer?
 --- @field pos [integer,integer]
 --- @field mode "n"|"v"?
+--- @field file boolean?
 --- @field bang boolean?
 --- @field cursor integer[]?
 
@@ -56,6 +57,7 @@ function Message:from_table(instruction, args)
       mode = args.mode,
       bang = args.bang,
       cursor = args.cursor,
+      file = args.file,
       pos = args.pos,
     }
   end
@@ -176,6 +178,11 @@ function Message:get_content()
 
     content = vim.split(tmp, "\n", { trimempty = true })
   end
+  if self.role == "tool" then
+    content = content or {}
+    table.insert(content, 1, self:get_description())
+  end
+
   return content
 end
 
@@ -366,6 +373,7 @@ function Conversation:new(action, args)
     bang = args.bang,
     pos = args.pos,
     cursor = args.cursor,
+    file = args.file,
   }
   obj.indexed_instructions = {}
   obj.system_instructions = {}

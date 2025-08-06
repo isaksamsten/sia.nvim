@@ -235,10 +235,16 @@ function M.current_context(global)
   return {
     {
       id = function(ctx)
-        return { "user", ctx.buf, ctx.pos[1], ctx.pos[2] }
+        if ctx.file then
+          return { "context user", ctx.buf }
+        end
+        return { "context user", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       role = "user",
       description = function(ctx)
+        if ctx.file then
+          return string.format("%s", utils.get_filename(ctx.buf, ":p"))
+        end
         return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
       end,
       available = function(ctx)
@@ -255,6 +261,10 @@ function M.current_context(global)
 
         if ctx.pos then
           local start_line, end_line = ctx.pos[1], ctx.pos[2]
+          if ctx.file then
+            start_line = 1
+            end_line = vim.api.nvim_buf_line_count(ctx.buf)
+          end
           local code =
             utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
           return string.format(
@@ -262,8 +272,8 @@ function M.current_context(global)
 %s
 %s
 %s]],
-            ctx.pos[1],
-            ctx.pos[2],
+            start_line,
+            end_line,
             utils.get_filename(ctx.buf, ":p"),
             vim.bo[ctx.buf].ft,
             start_fence,
@@ -277,7 +287,10 @@ function M.current_context(global)
       role = "assistant",
       hide = true,
       id = function(ctx)
-        return { "assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
+        if ctx.file then
+          return { "context assistant", ctx.buf }
+        end
+        return { "context assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       available = function(ctx)
         return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
