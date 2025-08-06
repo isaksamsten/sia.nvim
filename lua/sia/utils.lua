@@ -19,7 +19,6 @@ function M.create_context(args)
   else
     opts.mode = "v"
   end
-  print(args.line1, args.line2, vim.api.nvim_buf_line_count(opts.buf))
   if args.line1 == 1 and args.line2 == vim.api.nvim_buf_line_count(opts.buf) then
     opts.file = true
   end
