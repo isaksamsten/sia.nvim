@@ -117,4 +117,11 @@ M.morph = {
   end,
 }
 
+M.openrouter = {
+  base_url = "https://openrouter.ai/api/v1/chat/completions",
+  api_key = function()
+    return os.getenv("OPENROUTER_API_KEY")
+  end,
+}
+
 return M

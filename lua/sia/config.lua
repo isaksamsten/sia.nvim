@@ -100,6 +100,7 @@ local defaults = {
     gemini = providers.gemini,
     anthropic = providers.anthropic,
     ollama = providers.ollama,
+    openrouter = providers.openrouter,
   },
   models = {
     ["gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
@@ -151,6 +152,7 @@ local defaults = {
     ["claude-4-0-sonnet"] = { "anthropic", "claude-4-sonnet-20250514" },
     ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest" },
     ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest" },
+    ["claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
   },
   instructions = {},
   --- @type sia.config.Defaults

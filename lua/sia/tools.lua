@@ -443,11 +443,9 @@ M.edit_file = M.new_tool({
   local assistant = require("sia.assistant")
   assistant.execute_query({
     model = {
-      model = {
-        name = "morph-v3-fast",
-        function_calling = false,
-      },
-      provider = require("sia.provider").morph,
+      name = "morph/morph-v3-fast",
+      function_calling = false,
+      provider = require("sia.provider").openrouter,
     },
     prompt = {
       {
