@@ -25,7 +25,7 @@ M.new_tool = function(opts, execute)
         else
           text = opts.confirm
         end
-        vim.ui.input({ prompt = string.format("%s. Confirm (Y/n)", text) }, function(resp)
+        vim.ui.input({ prompt = string.format("%s. Ok? (Y/n)", text) }, function(resp)
           if resp ~= nil and resp:lower() ~= "y" and resp:lower() ~= "yes" and resp ~= "" then
             callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
             return
@@ -39,7 +39,7 @@ M.new_tool = function(opts, execute)
         else
           prompt = opts.select.prompt
         end
-        vim.ui.select(opts.select.choices, { prompt = prompt }, function(_, idx)
+        vim.ui.select(opts.select.choices, { prompt = string.format("%s. What should I do?", prompt) }, function(_, idx)
           if idx == nil then
             callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
             return
@@ -140,9 +140,9 @@ M.find_lsp_symbol = {
       local kind = KINDS[symbol.kind] or "Unkown"
       local item
       if f.in_root then
-        item = string.format("  • %s: %s in %s", kind, symbol.name, rel_path)
+        item = string.format("  - %s: %s in %s", kind, symbol.name, rel_path)
       else
-        item = string.format("  • %s: %s", kind, symbol.name)
+        item = string.format("  - %s: %s", kind, symbol.name)
       end
 
       table.insert(message, item)
@@ -305,7 +305,7 @@ M.add_files_glob = M.new_tool({
   if #existing_files > 0 then
     table.insert(message, "Successfully added file" .. (#existing_files > 1 and "s" or "") .. ":")
     for _, file in ipairs(existing_files) do
-      table.insert(message, "  • " .. file)
+      table.insert(message, "  - " .. file)
     end
   end
 
@@ -315,7 +315,7 @@ M.add_files_glob = M.new_tool({
     end
     table.insert(message, "Unable to locate file" .. (#missing_files > 1 and "s" or "") .. ":")
     for _, file in ipairs(missing_files) do
-      table.insert(message, "  • " .. file)
+      table.insert(message, "  - " .. file)
     end
   end
 
@@ -402,7 +402,49 @@ end)
 
 M.edit_file = M.new_tool({
   name = "edit_file",
-  description = "Use this tool to make an edit to an existing file.\n\nThis will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.\nWhen writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.\n\nFor example:\n\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n\nYou should still bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.\nIf you plan on deleting a section, you must provide context before and after to delete it. If the initial code is ```code \\n Block 1 \\n Block 2 \\n Block 3 \\n code```, and you want to remove Block 2, you would output ```// ... existing code ... \\n Block 1 \\n  Block 3 \\n // ... existing code ...```.\nMake sure it is clear what the edit should be, and where it should be applied.\nMake edits to a file in a single edit_file call instead of multiple edit_file calls to the same file. The apply model can handle many distinct edits at once.",
+  description = [[Use this tool to make an edit to an existing file.
+
+This will be read by a less intelligent model, which will quickly apply the
+edit. You should make it clear what the edit is, while also minimizing the
+unchanged code you write.
+When writing the edit, you should specify each
+edit in sequence, with the special comment // ... existing code ... to
+represent unchanged code in between edited lines.
+
+For example:
+
+// ...
+  existing code ...
+FIRST_EDIT
+// ... existing code ...
+SECOND_EDIT
+// ...
+  existing code ...
+THIRD_EDIT
+// ... existing code ...
+
+You should still bias towards repeating as few lines of the original file as
+possible to convey the change. But, each edit should contain sufficient context
+of unchanged lines around the code you're editing to resolve ambiguity.
+
+DO NOT omit spans of pre-existing code (or comments) without using the // ...
+existing code ... comment to indicate its absence. If you omit the existing
+code comment, the model may inadvertently delete these lines. If you plan on
+deleting a section, you must provide context before and after to delete it.
+If the initial code is, ```code
+ Block 1
+ Block 2
+ Block 3
+code```, and you want to remove Block 2, you would output
+```// ... existing code ...
+ Block 1
+ Block 3
+ // ... existing code ...
+```.
+Make sure it is clear what the edit should be, and where it should be applied.
+Make edits to a file in a single edit_file call instead of multiple edit_file
+calls to the same file. The apply model can handle many distinct edits at
+once.]],
   parameters = {
     target_file = {
       type = "string",
@@ -410,17 +452,24 @@ M.edit_file = M.new_tool({
     },
     instructions = {
       type = "string",
-      description = "A single sentence instruction describing what you are going to do for the sketched edit. This is used to assist the less intelligent model in applying the edit. Use the first person to describe what you are going to do. Use it to disambiguate uncertainty in the edit.",
+      description = [[A single sentence instruction describing what you are
+going to do for the sketched edit. This is used to assist the less
+intelligent model in applying the edit. Use the first person to describe
+what you are going to do. Use it to disambiguate uncertainty in the edit.
+      ]],
     },
     code_edit = {
       type = "string",
-      description = "Specify ONLY the precise lines of code that you wish to edit. NEVER specify or write out unchanged code. Instead, represent all unchanged code using the comment of the language you're editing in - example: // ... existing code ...",
+      description = [[Specify ONLY the precise lines of code that you wish to
+edit. NEVER specify or write out unchanged code. Instead, represent all
+unchanged code using the comment of the language you're editing in -
+example: // ... existing code ...  ]],
     },
   },
-  required = { "target_file", "instruction", "code_edit" },
+  required = { "target_file", "instructions", "code_edit" },
   select = {
     prompt = function(args)
-      return string.format("Sia wants to edit %s. What should I do?", args.target_file)
+      return string.format("Sia wants to edit %s", args.target_file)
     end,
     choices = {
       "Accept changes",

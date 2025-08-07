@@ -152,7 +152,8 @@ local defaults = {
     ["claude-4-0-sonnet"] = { "anthropic", "claude-4-sonnet-20250514" },
     ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest" },
     ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest" },
-    ["claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
+    ["anthropic/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
+    ["google/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
   },
   instructions = {},
   --- @type sia.config.Defaults
