@@ -160,16 +160,32 @@ end
 --- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun(bufs: [integer]?):nil) }
 function Strategy:execute_tools(opts)
   if not vim.tbl_isempty(self.tools) then
-    local tool_count = vim.tbl_count(self.tools)
-
     --- @type sia.CompletedTools[]
     local completed_tools = {}
-    for x, tool in pairs(self.tools) do
+
+    local tool_list = {}
+    for _, tool in pairs(self.tools) do
+      table.insert(tool_list, tool)
+    end
+
+    self.tools = {}
+
+    local current_tool_index = 1
+
+    local function process_next_tool()
+      if current_tool_index > #tool_list then
+        if opts.on_tools_complete then
+          opts.on_tools_complete()
+        end
+        return
+      end
+
+      local tool = tool_list[current_tool_index]
+      current_tool_index = current_tool_index + 1
+
       local func = tool["function"]
       if func then
-        if opts.on_tool_start then
-          opts.on_tool_start(tool)
-        end
+        opts.on_tool_start(tool)
         local status, arguments = pcall(vim.fn.json_decode, func.arguments)
         if status then
           self.conversation:execute_tool(
@@ -177,29 +193,29 @@ function Strategy:execute_tools(opts)
             arguments,
             self,
             vim.schedule_wrap(function(tool_result)
-              -- vim.tbl_extend("keep", self.modified, tool_result.modified)
-              tool_count = tool_count - 1
-              if opts.on_tool_complete then
+              if tool_result then
                 opts.on_tool_complete(tool, tool_result.content)
                 table.insert(completed_tools, { name = func.name, confirmation = tool_result.confirmation })
+              else
+                opts.on_tool_complete(tool, { "Could not find tool..." })
               end
-              if tool_count == 0 then
-                self.tools = {}
-                if opts.on_tools_complete then
-                  opts.on_tools_complete()
-                end
-              end
+              process_next_tool()
             end)
           )
         else
-          tool_count = tool_count - 1
+          local error_message = { "Could not parse tool arguments: " .. tostring(arguments) }
+          opts.on_tool_complete(tool, error_message)
+          process_next_tool()
         end
+      else
+        opts.on_tool_complete(tool, { "Tool is not a function" })
+        process_next_tool()
       end
     end
+
+    process_next_tool()
   else
-    if opts.on_no_tools then
-      opts.on_no_tools()
-    end
+    opts.on_no_tools()
   end
 end
 
@@ -346,20 +362,17 @@ function ChatStrategy:on_init()
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
     end
-    self.canvas:update_progress({ { "I'm thinking! Please wait...", "NonText" } })
+    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   end
 end
 
 function ChatStrategy:on_error()
-  self.canvas:update_progress({ { "An error has occured...", "Error" } })
+  self.canvas:update_progress({ { "Something went wrong. Please try again.", "Error" } })
 end
 
 function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     set_abort_keymap(self.buf, job)
-    -- self.canvas:clear_extmarks()
-
-    -- Make a new-line if the last line is non-empty
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
       local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
@@ -377,6 +390,11 @@ function ChatStrategy:on_progress(content)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
   end
+end
+
+function ChatStrategy:on_tool_call(tool)
+  self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
+  Strategy.on_tool_call(self, tool)
 end
 
 function ChatStrategy:get_win()
@@ -422,7 +440,10 @@ function ChatStrategy:on_complete(opts)
 
     self:execute_tools({
       on_tool_start = function(tool)
-        self.canvas:update_progress({ { "I'm calling '" .. tool["function"].name .. "'! Please wait...", "NonText" } })
+        local tool_name = tool["function"].name
+        local friendly_message = self.conversation:get_tool_message(tool_name)
+        local message = friendly_message or ("Using " .. tool_name .. " tool...")
+        self.canvas:update_progress({ { message, "NonText" } })
       end,
       on_tool_complete = function(tool, content)
         self.conversation:add_instruction({
@@ -443,7 +464,7 @@ function ChatStrategy:on_complete(opts)
         self.canvas:clear_extmarks()
         vim.bo[self.buf].modifiable = false
         assistant.execute_query({
-          model = "gpt-4o-mini",
+          model = "openai/gpt-4o-mini",
           prompt = {
             {
               role = "system",
@@ -592,7 +613,7 @@ function DiffStrategy:on_init()
 
   vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaProgress" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "Analyzing code changes...", "SiaProgress" } } },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaReplace",
     end_line = context.pos[2],
@@ -680,7 +701,7 @@ function InsertStrategy:on_init()
   if padding_direction == "below" then
     self._line = line + 1
   end
-  local message = self._options.message or { "Please wait...", "SiaProgress" }
+  local message = self._options.message or { "Generating response...", "SiaProgress" }
   vim.api.nvim_buf_set_extmark(self.conversation.context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
     virt_lines = { { { "🤖 ", "Normal" }, message } },
     virt_lines_above = self._line - 1 > 0,
@@ -802,7 +823,7 @@ function HiddenStrategy:on_init()
   local context = self.conversation.context
   vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "I'm thinking. Please wait...", "SiaProgress" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } } },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaInsert",
     end_line = context.pos[2],
@@ -854,7 +875,7 @@ function HiddenStrategy:on_complete(opts)
       if content then
         self._options.callback(context, content)
       else
-        vim.api.nvim_echo({ { "Sia: no response", "Error" } }, false, {})
+        vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
       end
       if opts and opts.on_complete then
         opts.on_complete()

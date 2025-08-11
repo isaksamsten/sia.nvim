@@ -297,7 +297,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context
---- @field tool_fn table<string, fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>?
+--- @field tool_fn table<string, {message: string?, action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
 --- @field prending_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 local Conversation = {}
 
@@ -418,12 +418,24 @@ function Conversation:new(action, args)
   return obj
 end
 
+--- @param name string
+--- @return string? message
+function Conversation:get_tool_message(name)
+  local tool = self.tool_fn[name]
+  if tool then
+    return tool.message
+  end
+
+  return nil
+end
+
+--- @param tool string|sia.config.Tool
 function Conversation:add_tool(tool)
   if type(tool) == "string" then
     tool = require("sia.config").options.defaults.tools.choices[tool]
   end
   if tool ~= nil and self.tool_fn[tool.name] == nil then
-    self.tool_fn[tool.name] = tool.execute
+    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute }
     table.insert(self.tools, tool)
   end
 end
@@ -606,11 +618,13 @@ end
 --- @param name string
 --- @param arguments table
 --- @param strategy sia.Strategy
---- @param callback  fun(opts: {content: string[]?, confirmation: string[]?, bufs: [integer]?}):nil
+--- @param callback  fun(opts: {content: string[]?, confirmation: string[]?, bufs: [integer]?}?):nil
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
-    return self.tool_fn[name](arguments, strategy.conversation, callback)
+    return self.tool_fn[name].action(arguments, strategy.conversation, callback)
+  else
+    callback(nil)
   end
 end
 

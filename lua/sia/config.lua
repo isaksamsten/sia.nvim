@@ -43,6 +43,7 @@ local providers = require("sia.provider")
 --- @class sia.config.Tool
 --- @field name string
 --- @field description string
+--- @field message string?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
 --- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
@@ -103,62 +104,70 @@ local defaults = {
     openrouter = providers.openrouter,
   },
   models = {
-    ["gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
-    ["gpt-4.1-mini"] = {
+    ["openai/gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
+    ["openai/gpt-4.1-mini"] = {
       "openai",
       "gpt-4.1-mini",
       cost = { completion_tokens = 0.0000016, prompt_tokens = 0.0000004 },
     },
-    ["gpt-4.1-nano"] = { "openai", "gpt-4.1-nano", cost = { completion_tokens = 0.0000004, prompt_tokens = 0.0000001 } },
-    ["gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },
-    ["gpt-4o-mini"] = { "openai", "gpt-4o-mini", cost = { completion_tokens = 0.00000015, prompt_tokens = 0.0000006 } },
-    ["o3"] = { "openai", "o3", reasoning_effort = "medium" },
-    ["o4-mini"] = { "openai", "o4-mini", reasoning_effort = "medium" },
-    ["o3-mini"] = {
+    ["openai/gpt-4.1-nano"] = {
+      "openai",
+      "gpt-4.1-nano",
+      cost = { completion_tokens = 0.0000004, prompt_tokens = 0.0000001 },
+    },
+    ["openai/gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },
+    ["openai/gpt-4o-mini"] = {
+      "openai",
+      "gpt-4o-mini",
+      cost = { completion_tokens = 0.00000015, prompt_tokens = 0.0000006 },
+    },
+    ["openai/o3"] = { "openai", "o3", reasoning_effort = "medium" },
+    ["openai/o4-mini"] = { "openai", "o4-mini", reasoning_effort = "medium" },
+    ["openai/o3-mini"] = {
       "openai",
       "o3-mini",
       reasoning_effort = "medium",
       cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
     },
-    ["o3-mini-low"] = {
+    ["openai/o3-mini-low"] = {
       "openai",
       "o3-mini",
       reasoning_effort = "low",
       cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
     },
-    ["o3-mini-high"] = {
+    ["openai/o3-mini-high"] = {
       "openai",
       "o3-mini",
       reasoning_effort = "high",
       cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
     },
-    ["chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
-    ["copilot-gpt-4o"] = { "copilot", "gpt-4o" },
-    ["copilot-gpt-4.1"] = { "copilot", "gpt-4.1" },
-    ["copilot-gpt-4.1-mini"] = { "copilot", "gpt-4.1-mini" },
-    ["copilot-gpt-4.1-nano"] = { "copilot", "gpt-4.1-nano" },
-    ["copilot-o3"] = { "copilot", "o3", reasoning_effort = "medium" },
-    ["copilot-o4-mini"] = { "copilot", "o4-mini", reasoning_effort = "medium" },
-    ["copilot-3-5-sonnet"] = { "copilot", "claude-3.5-sonnet" },
-    ["copilot-3-7-sonnet"] = { "copilot", "claude-3.7-sonnet" },
-    ["copilot-4-0-sonnet"] = { "copilot", "claude-sonnet-4" },
-    ["copilot-3-7-sonnet-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
-    ["copilot-o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
-    ["gemini-1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
-    ["gemini-1.5-flash"] = { "gemini", "gemini-1.5-flash" },
-    ["gemini-2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
-    ["gemini-1.5-pro"] = { "gemini", "gemini-1.5-pro" },
-    ["gemini-2.5-pro"] = { "gemini", "gemini-2.5-pro-exp-03-25" },
-    ["claude-4-0-sonnet"] = { "anthropic", "claude-4-sonnet-20250514" },
-    ["claude-3-7-sonnet"] = { "anthropic", "claude-3-7-sonnet-latest" },
-    ["claude-3-5-sonnet"] = { "anthropic", "claude-3-5-sonnet-latest" },
-    ["anthropic/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
-    ["google/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
+    ["openai/chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
+    ["copilot/gpt-4o"] = { "copilot", "gpt-4o" },
+    ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1" },
+    ["copilot/gpt-4.1-mini"] = { "copilot", "gpt-4.1-mini" },
+    ["copilot/gpt-4.1-nano"] = { "copilot", "gpt-4.1-nano" },
+    ["copilot/o3"] = { "copilot", "o3", reasoning_effort = "medium" },
+    ["copilot/o4-mini"] = { "copilot", "o4-mini", reasoning_effort = "medium" },
+    ["copilot/claude-sonnet-3.5"] = { "copilot", "claude-3.5-sonnet" },
+    ["copilot/claude-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
+    ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
+    ["copilot/claude-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
+    ["copilot/o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
+    ["gemini/1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
+    ["gemini/1.5-flash"] = { "gemini", "gemini-1.5-flash" },
+    ["gemini/2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
+    ["gemini/1.5-pro"] = { "gemini", "gemini-1.5-pro" },
+    ["gemini/2.5-pro"] = { "gemini", "gemini-2.5-pro-exp-03-25" },
+    ["anthropic/claude-sonnet-4"] = { "anthropic", "claude-4-sonnet-20250514" },
+    ["anthropic/claude-sonnet-3.7"] = { "anthropic", "claude-3-7-sonnet-latest" },
+    ["anthropic/claude-sonnet-3.5"] = { "anthropic", "claude-3-5-sonnet-latest" },
+    ["openrouter/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
+    ["openrouter/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
   },
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "gpt-4.1", -- default
+    model = "copilot/claude-sonnet-4",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert

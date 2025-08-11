@@ -1,8 +1,128 @@
 local M = {}
 
+local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
+-- Track extmarks per buffer with their line positions for selective clearing
+local diff_extmarks = {}
+
+---@param buf number Buffer handle
+---@param old_content string Original content
+---@param new_content string New content after changes
+local function highlight_diff_changes(buf, old_content, new_content)
+  -- TODO: use vim.text.diff
+  local diff_result = vim.text.diff(old_content, new_content, {
+    result_type = "indices",
+    algorithm = "myers",
+  })
+
+  if not diff_result then
+    return
+  end
+
+  -- Initialize tracking for this buffer if needed
+  if not diff_extmarks[buf] then
+    diff_extmarks[buf] = {}
+  end
+
+  -- Collect line ranges that will be affected by new extmarks
+  local affected_lines = {}
+  for _, hunk in ipairs(diff_result) do
+    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+
+    -- Lines that will have virtual lines above them (for deleted content)
+    if old_count > 0 then
+      local line_idx = math.max(0, new_start - 1)
+      affected_lines[line_idx] = true
+    end
+
+    -- Lines that will be highlighted (for added/changed content)
+    if new_count > 0 then
+      for i = 0, new_count - 1 do
+        local line_idx = new_start - 1 + i
+        affected_lines[line_idx] = true
+      end
+    end
+  end
+
+  -- Clear only extmarks on lines that will be affected by new highlights
+  for line_idx in pairs(affected_lines) do
+    if diff_extmarks[buf][line_idx] then
+      for _, extmark_id in ipairs(diff_extmarks[buf][line_idx]) do
+        vim.api.nvim_buf_del_extmark(buf, diff_ns, extmark_id)
+      end
+      diff_extmarks[buf][line_idx] = nil
+    end
+  end
+
+  local old_lines = vim.split(old_content, "\n", { plain = true })
+
+  for _, hunk in ipairs(diff_result) do
+    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+
+    if old_count > 0 then
+      local old_text_lines = {}
+      for i = 0, old_count - 1 do
+        local old_line_idx = old_start + i
+        if old_line_idx <= #old_lines then
+          table.insert(old_text_lines, old_lines[old_line_idx])
+        end
+      end
+
+      local line_idx = math.max(0, new_start - 1)
+      if line_idx <= vim.api.nvim_buf_line_count(buf) then
+        local virt_lines = {}
+        for _, old_line in ipairs(old_text_lines) do
+          table.insert(virt_lines, { { old_line, "DiffDelete" } })
+        end
+
+        local extmark_id = vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+          virt_lines = virt_lines,
+          virt_lines_above = true,
+          priority = 100,
+        })
+        if not diff_extmarks[buf][line_idx] then
+          diff_extmarks[buf][line_idx] = {}
+        end
+        table.insert(diff_extmarks[buf][line_idx], extmark_id)
+      end
+    end
+
+    if new_count > 0 then
+      for i = 0, new_count - 1 do
+        local line_idx = new_start - 1 + i
+        if line_idx < vim.api.nvim_buf_line_count(buf) then
+          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
+          local extmark_id = vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+            end_col = 0,
+            hl_group = hl_group,
+            line_hl_group = hl_group,
+            priority = 100,
+          })
+          if not diff_extmarks[buf][line_idx] then
+            diff_extmarks[buf][line_idx] = {}
+          end
+          table.insert(diff_extmarks[buf][line_idx], extmark_id)
+        end
+      end
+    end
+  end
+
+  local augroup = vim.api.nvim_create_augroup("sia_diff_clear_" .. buf, { clear = true })
+  vim.api.nvim_create_autocmd("InsertEnter", {
+    group = augroup,
+    buffer = buf,
+    once = true,
+    callback = function()
+      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+      vim.api.nvim_del_augroup_by_id(augroup)
+    end,
+  })
+end
+
 ---@class SiaNewToolOpts
 ---@field name string
 ---@field description string
+---@field auto_apply (fun():integer?)?
+---@field message string?
 ---@field required string[]
 ---@field parameters table
 ---@field confirm (string|fun(args:table):string)?
@@ -12,8 +132,13 @@ local M = {}
 ---@param execute any
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
+  local auto_apply = opts.auto_apply or function()
+    return nil
+  end
+
   return {
     name = opts.name,
+    message = opts.message,
     parameters = opts.parameters,
     description = opts.description,
     required = opts.required,
@@ -25,27 +150,39 @@ M.new_tool = function(opts, execute)
         else
           text = opts.confirm
         end
-        vim.ui.input({ prompt = string.format("%s. Ok? (Y/n)", text) }, function(resp)
-          if resp ~= nil and resp:lower() ~= "y" and resp:lower() ~= "yes" and resp ~= "" then
-            callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
-            return
+        vim.ui.input(
+          { prompt = string.format("%s\nProceed? [Y/n] (default: Yes, Esc to cancel): ", text) },
+          function(resp)
+            if resp ~= nil and resp:lower() ~= "y" and resp:lower() ~= "yes" and resp ~= "" then
+              callback({ content = string.format("User declined to execute %s.", opts.name) })
+              return
+            end
+            execute(args, strategy, callback)
           end
-          execute(args, strategy, callback)
-        end)
+        )
       elseif opts.select then
-        local prompt
-        if type(opts.select.prompt) == "function" then
-          prompt = opts.select.prompt(args)
+        local auto_applied_choice = auto_apply()
+        if auto_applied_choice then
+          execute(args, strategy, callback, auto_applied_choice)
         else
-          prompt = opts.select.prompt
-        end
-        vim.ui.select(opts.select.choices, { prompt = string.format("%s. What should I do?", prompt) }, function(_, idx)
-          if idx == nil then
-            callback({ content = string.format("I don't want you to call %s right now.", opts.name) })
-            return
+          local prompt
+          if type(opts.select.prompt) == "function" then
+            prompt = opts.select.prompt(args)
+          else
+            prompt = opts.select.prompt
           end
-          execute(args, strategy, callback, idx)
-        end)
+          vim.ui.select(
+            opts.select.choices,
+            { prompt = string.format("%s\nChoose an action (Esc to cancel):", prompt) },
+            function(_, idx)
+              if idx == nil then
+                callback({ content = string.format("User cancelled %s operation.", opts.name) })
+                return
+              end
+              execute(args, strategy, callback, idx)
+            end
+          )
+        end
       else
         execute(args, strategy, callback)
       end
@@ -235,6 +372,7 @@ M.documentation = {
 
 M.add_file = M.new_tool({
   name = "add_file",
+  message = "Reading file contents...",
   description = "Add a file or part of file to be included in the conversation",
   parameters = {
     path = { type = "string", description = "The file path" },
@@ -270,6 +408,7 @@ end)
 --- @type sia.config.Tool
 M.add_files_glob = M.new_tool({
   name = "add_files_glob",
+  message = "Loading multiple files...",
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },
@@ -344,6 +483,7 @@ M.remove_file = {
 
 M.grep = M.new_tool({
   name = "grep",
+  message = "Searching through files...",
   description = "Grep for a pattern in files using rg",
   parameters = {
     glob = { type = "string", description = "Glob pattern for files to search" },
@@ -377,7 +517,7 @@ M.grep = M.new_tool({
     stderr = false,
   }, function(obj)
     local lines = vim.split(obj.stdout, "\n")
-    table.insert(lines, 1, "The following search results were returned")
+    table.insert(lines, 1, "The following search results were returned:")
     callback({ content = lines })
   end)
 end)
@@ -385,6 +525,7 @@ end)
 M.list_files = M.new_tool({
   name = "list_files",
   description = "Recursivley list files in the current project",
+  message = "Exploring project structure...",
   parameters = vim.empty_dict(),
   required = {},
   confirm = "Sia want to list all files in CWD",
@@ -400,8 +541,12 @@ M.list_files = M.new_tool({
   end)
 end)
 
+--- @type integer?
+local edit_file_auto_apply = nil
+
 M.edit_file = M.new_tool({
   name = "edit_file",
+  message = "Making code changes...",
   description = [[Use this tool to make an edit to an existing file.
 
 This will be read by a less intelligent model, which will quickly apply the
@@ -467,13 +612,21 @@ example: // ... existing code ...  ]],
     },
   },
   required = { "target_file", "instructions", "code_edit" },
+  auto_apply = function()
+    return edit_file_auto_apply
+  end,
   select = {
     prompt = function(args)
-      return string.format("Sia wants to edit %s", args.target_file)
+      if args.instructions then
+        return string.format("%s\nReady to edit %s?", args.instructions, args.target_file)
+      else
+        return string.format("Ready to edit %s?", args.target_file)
+      end
     end,
     choices = {
-      "Accept changes",
-      "Diff changes",
+      "Apply changes immediately",
+      "Apply changes immediately and remember this choice",
+      "Apply changes and preview them in diff view",
     },
   },
 }, function(args, _, callback, choice)
@@ -510,39 +663,63 @@ example: // ... existing code ...  ]],
   }, function(result)
     if result then
       local split = vim.split(result, "\n", { plain = true, trimempty = true })
-      if choice == 1 then
+      if choice == 1 or choice == 2 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-      elseif choice == 2 then
-        vim.cmd("tabnew")
-        local current_win = vim.api.nvim_get_current_win()
-        local other_buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_buf(current_win, buf)
-        vim.cmd("vsplit")
-        local other_win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(other_win, other_buf)
-        vim.bo[other_buf].buftype = "nofile"
-        vim.bo[other_buf].buflisted = false
-        vim.bo[other_buf].swapfile = false
-        vim.bo[other_buf].ft = vim.bo[buf].ft
-        vim.api.nvim_buf_set_name(other_buf, string.format("%s (incoming)", vim.api.nvim_buf_get_name(buf)))
+        highlight_diff_changes(buf, initial_code, result)
 
-        vim.api.nvim_win_set_buf(other_win, other_buf)
-        vim.api.nvim_buf_set_lines(other_buf, 0, -1, false, split)
-        vim.api.nvim_set_current_win(current_win)
+        if choice == 2 then
+          edit_file_auto_apply = 1
+        end
+      elseif choice == 3 then
+        local timestamp = os.date("%H:%M:%S")
+        vim.cmd("tabnew")
+        local left_buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(
+          left_buf,
+          0,
+          -1,
+          false,
+          vim.split(initial_code, "\n", { plain = true, trimempty = true })
+        )
+        vim.api.nvim_buf_set_name(
+          left_buf,
+          string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp)
+        )
+        vim.bo[left_buf].buftype = "nofile"
+        vim.bo[left_buf].buflisted = false
+        vim.bo[left_buf].swapfile = false
+        vim.bo[left_buf].ft = vim.bo[buf].ft
+
+        vim.cmd("vsplit")
+        local right_win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(right_win, buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        vim.api.nvim_set_current_win(right_win)
         vim.cmd("diffthis")
-        vim.api.nvim_set_current_win(other_win)
+        vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
         vim.cmd("diffthis")
-        vim.bo[other_buf].modifiable = false
+        vim.bo[left_buf].modifiable = false
+        vim.api.nvim_set_current_win(right_win)
       end
+      local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
+      local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
+      table.insert(diff, 1, success_msg)
       callback({
-        content = {
-          "The file has successfully been edited. Let's review it before we proceed with more edits. "
-            .. args.target_file,
-        },
+        content = diff,
         modified = { buf },
       })
+    else
+      callback({ content = { string.format("Failed to edit %s", args.target_file) } })
     end
   end)
 end)
+
+M.agent = {
+  name = "call_agent",
+  description = "Outsoure a task to another model",
+  parameters = {
+    model = {},
+  },
+}
 
 return M
