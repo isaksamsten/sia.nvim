@@ -167,7 +167,7 @@ local defaults = {
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "copilot/claude-sonnet-4",
+    model = "openrouter/claude-sonnet-4",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -199,7 +199,12 @@ local defaults = {
         lsp_docs = require("sia.tools").documentation,
         edit_file = require("sia.tools").edit_file,
         list_files = require("sia.tools").list_files,
+        get_diagnostics = require("sia.tools").get_diagnostics,
         grep = require("sia.tools").grep,
+        git_commit = require("sia.tools").git_commit,
+        git_diff = require("sia.tools").git_diff,
+        git_unstage = require("sia.tools").git_unstage,
+        git_status = require("sia.tools").git_status,
       },
     },
     actions = {
@@ -242,6 +247,11 @@ local defaults = {
           "add_files",
           "edit_file",
           "list_files",
+          "get_diagnostics",
+          "git_status",
+          -- "git_unstage",
+          "git_commit",
+          "git_diff",
         },
       },
     },

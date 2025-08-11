@@ -76,7 +76,11 @@ function _G.__sia_execute(type)
   if action and not utils.is_action_disabled(action) then
     require("sia").main(action, args)
   else
-    vim.notify("Sia: Unavailable action")
+    vim.api.nvim_echo(
+      { { "Sia: No available action selected. Please ensure the action is enabled.", "ErrorMsg" } },
+      true,
+      {}
+    )
   end
 end
 

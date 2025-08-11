@@ -1,123 +1,5 @@
 local M = {}
 
-local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
--- Track extmarks per buffer with their line positions for selective clearing
-local diff_extmarks = {}
-
----@param buf number Buffer handle
----@param old_content string Original content
----@param new_content string New content after changes
-local function highlight_diff_changes(buf, old_content, new_content)
-  -- TODO: use vim.text.diff
-  local diff_result = vim.text.diff(old_content, new_content, {
-    result_type = "indices",
-    algorithm = "myers",
-  })
-
-  if not diff_result then
-    return
-  end
-
-  -- Initialize tracking for this buffer if needed
-  if not diff_extmarks[buf] then
-    diff_extmarks[buf] = {}
-  end
-
-  -- Collect line ranges that will be affected by new extmarks
-  local affected_lines = {}
-  for _, hunk in ipairs(diff_result) do
-    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
-
-    -- Lines that will have virtual lines above them (for deleted content)
-    if old_count > 0 then
-      local line_idx = math.max(0, new_start - 1)
-      affected_lines[line_idx] = true
-    end
-
-    -- Lines that will be highlighted (for added/changed content)
-    if new_count > 0 then
-      for i = 0, new_count - 1 do
-        local line_idx = new_start - 1 + i
-        affected_lines[line_idx] = true
-      end
-    end
-  end
-
-  -- Clear only extmarks on lines that will be affected by new highlights
-  for line_idx in pairs(affected_lines) do
-    if diff_extmarks[buf][line_idx] then
-      for _, extmark_id in ipairs(diff_extmarks[buf][line_idx]) do
-        vim.api.nvim_buf_del_extmark(buf, diff_ns, extmark_id)
-      end
-      diff_extmarks[buf][line_idx] = nil
-    end
-  end
-
-  local old_lines = vim.split(old_content, "\n", { plain = true })
-
-  for _, hunk in ipairs(diff_result) do
-    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
-
-    if old_count > 0 then
-      local old_text_lines = {}
-      for i = 0, old_count - 1 do
-        local old_line_idx = old_start + i
-        if old_line_idx <= #old_lines then
-          table.insert(old_text_lines, old_lines[old_line_idx])
-        end
-      end
-
-      local line_idx = math.max(0, new_start - 1)
-      if line_idx <= vim.api.nvim_buf_line_count(buf) then
-        local virt_lines = {}
-        for _, old_line in ipairs(old_text_lines) do
-          table.insert(virt_lines, { { old_line, "DiffDelete" } })
-        end
-
-        local extmark_id = vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-          virt_lines = virt_lines,
-          virt_lines_above = true,
-          priority = 100,
-        })
-        if not diff_extmarks[buf][line_idx] then
-          diff_extmarks[buf][line_idx] = {}
-        end
-        table.insert(diff_extmarks[buf][line_idx], extmark_id)
-      end
-    end
-
-    if new_count > 0 then
-      for i = 0, new_count - 1 do
-        local line_idx = new_start - 1 + i
-        if line_idx < vim.api.nvim_buf_line_count(buf) then
-          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
-          local extmark_id = vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-            end_col = 0,
-            hl_group = hl_group,
-            line_hl_group = hl_group,
-            priority = 100,
-          })
-          if not diff_extmarks[buf][line_idx] then
-            diff_extmarks[buf][line_idx] = {}
-          end
-          table.insert(diff_extmarks[buf][line_idx], extmark_id)
-        end
-      end
-    end
-  end
-
-  local augroup = vim.api.nvim_create_augroup("sia_diff_clear_" .. buf, { clear = true })
-  vim.api.nvim_create_autocmd("InsertEnter", {
-    group = augroup,
-    buffer = buf,
-    once = true,
-    callback = function()
-      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-      vim.api.nvim_del_augroup_by_id(augroup)
-    end,
-  })
-end
-
 ---@class SiaNewToolOpts
 ---@field name string
 ---@field description string
@@ -665,7 +547,7 @@ example: // ... existing code ...  ]],
       local split = vim.split(result, "\n", { plain = true, trimempty = true })
       if choice == 1 or choice == 2 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        highlight_diff_changes(buf, initial_code, result)
+        require("sia").highlight_diff_changes(buf, initial_code, result)
 
         if choice == 2 then
           edit_file_auto_apply = 1
@@ -711,6 +593,306 @@ example: // ... existing code ...  ]],
     else
       callback({ content = { string.format("Failed to edit %s", args.target_file) } })
     end
+  end)
+end)
+
+M.get_diagnostics = M.new_tool({
+  name = "get_diagnostics",
+  message = "Retrieving diagnostics...",
+  description = "Get LSP diagnostics for a specific file",
+  parameters = {
+    file = { type = "string", description = "The file path to get diagnostics for" },
+  },
+  required = { "file" },
+  confirm = function(args)
+    return string.format("Sia wants to get diagnostics for %s", args.file)
+  end,
+}, function(args, _, callback)
+  if not args.file then
+    callback({ content = { "Error: No file path was provided" } })
+    return
+  end
+
+  if vim.fn.filereadable(args.file) == 0 then
+    callback({ content = { "Error: File cannot be found or is not readable" } })
+    return
+  end
+  local buf = require("sia.utils").ensure_file_is_loaded(args.file)
+  if not buf then
+    callback({ content = { "Error: Cannot load file into buffer" } })
+    return
+  end
+
+  local diagnostics = vim.diagnostic.get(buf)
+  if #diagnostics == 0 then
+    callback({ content = { string.format("No diagnostics found for %s", args.file) } })
+    return
+  end
+
+  local content = { string.format("Diagnostics for %s:", args.file), "" }
+
+  local severity_names = {
+    [vim.diagnostic.severity.ERROR] = "ERROR",
+    [vim.diagnostic.severity.WARN] = "WARNING",
+    [vim.diagnostic.severity.INFO] = "INFO",
+    [vim.diagnostic.severity.HINT] = "HINT",
+  }
+
+  for _, diagnostic in ipairs(diagnostics) do
+    local severity = severity_names[diagnostic.severity] or "UNKNOWN"
+    local line = diagnostic.lnum + 1 -- Convert to 1-based line numbers
+    local col = diagnostic.col + 1 -- Convert to 1-based column numbers
+    local source = diagnostic.source and string.format(" [%s]", diagnostic.source) or ""
+
+    table.insert(content, string.format("  Line %d:%d %s%s: %s", line, col, severity, source, diagnostic.message))
+  end
+
+  callback({ content = content })
+end)
+
+M.git_status = M.new_tool({
+  name = "git_status",
+  message = "Checking git status...",
+  description = "Get current git status showing staged, unstaged, and untracked files",
+  parameters = vim.empty_dict(),
+  required = {},
+  confirm = "Sia wants to check git status",
+}, function(args, _, callback)
+  vim.system({ "git", "status", "--porcelain" }, { text = true }, function(obj)
+    if obj.code ~= 0 then
+      callback({ content = { "Error: Not a git repository or git not available" } })
+      return
+    end
+
+    local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
+    if #lines == 0 then
+      callback({ content = { "Working tree clean - no changes detected" } })
+      return
+    end
+
+    local content = { "Git status:", "" }
+    for _, line in ipairs(lines) do
+      local status = line:sub(1, 2)
+      local file = line:sub(4)
+      local desc = ""
+
+      if status == "??" then
+        desc = "untracked"
+      elseif status == "A " then
+        desc = "added"
+      elseif status == "M " then
+        desc = "modified"
+      elseif status == " M" then
+        desc = "modified (unstaged)"
+      elseif status == "MM" then
+        desc = "modified (staged and unstaged)"
+      elseif status == "D " then
+        desc = "deleted"
+      else
+        desc = "other"
+      end
+
+      table.insert(content, string.format("  %s: %s", desc, file))
+    end
+
+    callback({ content = content })
+  end)
+end)
+
+M.git_diff = M.new_tool({
+  name = "git_diff",
+  message = "Getting git diff...",
+  description = "Show git diff for specific files or all changes",
+  parameters = {
+    file = { type = "string", description = "Specific file to diff (optional)" },
+    staged = { type = "boolean", description = "Show staged changes instead of unstaged" },
+  },
+  required = { "staged" },
+  confirm = function(args)
+    local text = "Sia wants to show git diff"
+    if args.file then
+      text = string.format("%s for %s", text, args.file)
+    end
+    if args.staged then
+      text = string.format("%s (staged changes)", text)
+    end
+    return text
+  end,
+}, function(args, _, callback)
+  local cmd = { "git", "diff" }
+
+  if args.staged then
+    table.insert(cmd, "--staged")
+  end
+
+  if args.file then
+    table.insert(cmd, args.file)
+  end
+
+  vim.system(cmd, { text = true }, function(obj)
+    if obj.code ~= 0 then
+      callback({ content = { "Error running git diff" } })
+      return
+    end
+
+    local lines = vim.split(obj.stdout or "", "\n")
+    if #lines <= 1 then
+      callback({ content = { "No changes to show" } })
+      return
+    end
+
+    table.insert(lines, 1, "Git diff:")
+    callback({ content = lines })
+  end)
+end)
+
+M.git_commit = M.new_tool({
+  name = "git_commit",
+  message = "Preparing commit...",
+  description = "Commit staged changes with a generated or custom commit message",
+  parameters = {
+    message = { type = "string", description = "Commit message" },
+    files = {
+      type = "array",
+      items = { type = "string" },
+      description = "Specific files to stage and commit (optional)",
+    },
+  },
+  confirm = function(args)
+    return string.format("Sia wants to commit changes.")
+  end,
+  required = { "message" },
+}, function(args, _, callback)
+  local function execute_commit(message, cb)
+    vim.system({ "git", "commit", "-m", message }, { text = true }, function(commit_obj)
+      if commit_obj.code ~= 0 then
+        cb({ content = { "Error: Commit failed", commit_obj.stderr or "Unknown error" } })
+        return
+      end
+
+      local message_split = vim.split(message, "\n")
+      table.insert(message_split, 1, "Successfully committed changes:")
+
+      cb({ content = message_split })
+    end)
+  end
+
+  local function proceed_with_commit()
+    vim.system({ "git", "diff", "--staged", "--name-only" }, { text = true }, function(obj)
+      if obj.code ~= 0 then
+        callback({ content = { "Error: Not a git repository" } })
+        return
+      end
+
+      local staged_files = vim.split(obj.stdout or "", "\n", { trimempty = true })
+      if #staged_files == 0 then
+        callback({ content = { "Error: No staged changes to commit" } })
+        return
+      end
+
+      local commit_message = args.message
+      execute_commit(commit_message, callback)
+    end)
+  end
+
+  if args.files then
+    local staged_count = 0
+    local total_files = #args.files
+
+    for _, file in ipairs(args.files) do
+      vim.system({ "git", "add", file }, { text = true }, function(obj)
+        staged_count = staged_count + 1
+        if obj.code ~= 0 then
+          callback({ content = { string.format("Error staging file: %s", file) } })
+          return
+        end
+
+        if staged_count == total_files then
+          proceed_with_commit()
+        end
+      end)
+    end
+  else
+    proceed_with_commit()
+  end
+end)
+
+M.git_unstage = M.new_tool({
+  name = "git_unstage",
+  message = "Unstaging files...",
+  description = "Unstage files from the staging area (does not delete changes, just moves them back to unstaged)",
+  parameters = {
+    files = {
+      type = "array",
+      items = { type = "string" },
+      description = "Specific files to unstage (optional - unstages all if not provided)",
+    },
+  },
+  required = {},
+  confirm = function(args)
+    if args.files and #args.files > 0 then
+      return string.format("Sia wants to unstage: %s", table.concat(args.files, ", "))
+    else
+      return "Sia wants to unstage all staged files"
+    end
+  end,
+}, function(args, _, callback)
+  vim.system({ "git", "diff", "--staged", "--name-only" }, { text = true }, function(obj)
+    if obj.code ~= 0 then
+      callback({ content = { "Error: Not a git repository" } })
+      return
+    end
+
+    local staged_files = vim.split(obj.stdout or "", "\n", { trimempty = true })
+    if #staged_files == 0 then
+      callback({ content = { "No staged files to unstage" } })
+      return
+    end
+
+    local files_to_unstage = {}
+    if args.files and #args.files > 0 then
+      for _, file in ipairs(args.files) do
+        local found = false
+        for _, staged_file in ipairs(staged_files) do
+          if file == staged_file then
+            found = true
+            break
+          end
+        end
+        if found then
+          table.insert(files_to_unstage, file)
+        else
+          callback({ content = { string.format("Warning: %s is not currently staged", file) } })
+          return
+        end
+      end
+    else
+      files_to_unstage = staged_files
+    end
+
+    if #files_to_unstage == 0 then
+      callback({ content = { "No valid files to unstage" } })
+      return
+    end
+
+    local cmd = { "git", "reset", "HEAD" }
+    for _, file in ipairs(files_to_unstage) do
+      table.insert(cmd, file)
+    end
+
+    vim.system(cmd, { text = true }, function(reset_obj)
+      if reset_obj.code ~= 0 then
+        callback({ content = { "Error unstaging files:", reset_obj.stderr or "Unknown error" } })
+        return
+      end
+
+      local content = { "Successfully unstaged files:" }
+      for _, file in ipairs(files_to_unstage) do
+        table.insert(content, "  " .. file)
+      end
+
+      callback({ content = content })
+    end)
   end)
 end)
 

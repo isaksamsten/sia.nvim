@@ -27,6 +27,113 @@ local function set_highlight_groups()
   end
 end
 
+local edit_tool_old_contents = {}
+
+local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
+
+---@param buf number Buffer handle
+---@param old_content string Original content
+---@param new_content string New content after changes
+function M.highlight_diff_changes(buf, old_content, new_content)
+  if not edit_tool_old_contents[buf] then
+    edit_tool_old_contents[buf] = old_content
+  end
+  local baseline = edit_tool_old_contents[buf]
+  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+
+  local diff_result = vim.text.diff(baseline, new_content, {
+    result_type = "indices",
+    algorithm = "myers",
+  })
+
+  if not diff_result then
+    return
+  end
+
+  local old_lines = vim.split(baseline, "\n", { plain = true })
+
+  for _, hunk in ipairs(diff_result) do
+    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+
+    if old_count > 0 then
+      local old_text_lines = {}
+      for i = 0, old_count - 1 do
+        local old_line_idx = old_start + i
+        if old_line_idx <= #old_lines then
+          table.insert(old_text_lines, old_lines[old_line_idx])
+        end
+      end
+
+      local line_idx = math.max(0, new_start - 1)
+      if line_idx <= vim.api.nvim_buf_line_count(buf) then
+        local virt_lines = {}
+        for _, old_line in ipairs(old_text_lines) do
+          table.insert(virt_lines, { { old_line, "DiffDelete" } })
+        end
+
+        vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+          virt_lines = virt_lines,
+          virt_lines_above = true,
+          priority = 100,
+        })
+      end
+    end
+
+    if new_count > 0 then
+      for i = 0, new_count - 1 do
+        local line_idx = new_start - 1 + i
+        if line_idx < vim.api.nvim_buf_line_count(buf) then
+          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
+          vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+            end_col = 0,
+            hl_group = hl_group,
+            line_hl_group = hl_group,
+            priority = 100,
+          })
+        end
+      end
+    end
+  end
+
+  vim.api.nvim_echo({ { "Sia: Use SiaAccept or SiaReject to clear diff highlights", "Normal" } }, false, {})
+
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+      edit_tool_old_contents[buf] = nil
+    end,
+  })
+end
+
+--- @param opts { buf: number? }?
+function M.accept_diff(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  if edit_tool_old_contents[buf] then
+    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+    edit_tool_old_contents[buf] = nil
+    vim.api.nvim_echo({ { "Sia: Diff accepted", "Normal" } }, false, {})
+  else
+    vim.api.nvim_echo({ { "Sia: No diff changes to accept", "WarningMsg" } }, false, {})
+  end
+end
+
+--- @param opts { buf: number? }?
+function M.reject_diff(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  if edit_tool_old_contents[buf] then
+    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(edit_tool_old_contents[buf], "\n"))
+    edit_tool_old_contents[buf] = nil
+    vim.api.nvim_echo({ { "Sia: Diff rejected, changes reverted", "Normal" } }, false, {})
+  else
+    vim.api.nvim_echo({ { "Sia: No diff changes to reject", "WarningMsg" } }, false, {})
+  end
+end
+
 function M.replace(opts)
   opts = opts or {}
   local chat = ChatStrategy.by_buf()
@@ -336,12 +443,20 @@ function M.setup(options)
   config.setup(options)
   require("sia.mappings").setup()
 
+  vim.api.nvim_create_user_command("SiaAccept", function()
+    M.accept_diff()
+  end, {})
+
+  vim.api.nvim_create_user_command("SiaReject", function()
+    M.reject_diff()
+  end, {})
+
   vim.api.nvim_create_user_command("SiaAdd", function(args)
     local cmd_name = table.remove(args.fargs, 1)
     local command = add_commands[cmd_name]
     if command then
       if command.non_sia_buf and vim.bo.ft == "sia" then
-        vim.notify("Not a valid context")
+        vim.notify("Sia: Not a valid context")
         return
       end
 
@@ -537,7 +652,7 @@ function M.main(action, opts, model)
       elseif conversation.mode == "hidden" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.hidden, action.hidden or {})
         if not options.callback then
-          vim.notify("Hidden strategy requires a callback function", vim.log.levels.ERROR)
+          vim.notify("Sia: Hidden strategy requires a callback function", vim.log.levels.ERROR)
           return
         end
         strategy = HiddenStrategy:new(conversation, options)
