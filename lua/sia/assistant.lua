@@ -72,6 +72,13 @@ local function call_provider(query, opts)
       args,
       string.format("editor-version: Neovim/%s.%s.%s", vim.version().major, vim.version().minor, vim.version().patch)
     )
+    table.insert(args, "--header")
+    local intiator = "user"
+    local last = query.prompt[#query.prompt]
+    if last and last.role == "tool" then
+      intiator = "agent"
+    end
+    table.insert(args, "X-Initiator: " .. intiator)
   end
 
   table.insert(args, "--url")
@@ -80,9 +87,7 @@ local function call_provider(query, opts)
   table.insert(args, vim.json.encode(data))
   vim.fn.jobstart(args, {
     clear_env = true,
-    on_stderr = function(_, a, _)
-      -- print(vim.inspect(a))
-    end,
+    on_stderr = function(_, a, _) end,
     on_stdout = opts.on_stdout,
     on_exit = opts.on_exit,
   })
