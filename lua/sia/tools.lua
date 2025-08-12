@@ -10,6 +10,9 @@ local M = {}
 ---@field confirm (string|fun(args:table):string)?
 ---@field select { prompt: (string|fun(args:table):string)?, choices: string[]}?
 
+--- @type table<string, boolean>
+local auto_confirm = {}
+
 ---@param opts SiaNewToolOpts
 ---@param execute any
 ---@return sia.config.Tool
@@ -26,6 +29,11 @@ M.new_tool = function(opts, execute)
     required = opts.required,
     execute = function(args, strategy, callback)
       if opts.confirm ~= nil then
+        if auto_confirm[opts.name] then
+          execute(args, strategy, callback)
+          return
+        end
+
         local text
         if type(opts.confirm) == "function" then
           text = opts.confirm(args)
@@ -33,13 +41,22 @@ M.new_tool = function(opts, execute)
           text = opts.confirm
         end
         vim.ui.input(
-          { prompt = string.format("%s\nProceed? [Y/n] (default: Yes, Esc to cancel): ", text) },
+          { prompt = string.format("%s\nProceed and send to AI? [Y/n/a] ([Y]es, [n]o or Esc, [a]lways): ", text) },
           function(resp)
-            if resp ~= nil and resp:lower() ~= "y" and resp:lower() ~= "yes" and resp ~= "" then
-              callback({ content = string.format("User declined to execute %s.", opts.name) })
+            if resp == nil then
+              callback({ content = string.format("User cancelled %s operation.", opts.name) })
               return
             end
-            execute(args, strategy, callback)
+
+            local response = resp:lower()
+            if response == "a" or response == "always" then
+              auto_confirm[opts.name] = true
+              execute(args, strategy, callback)
+            elseif response == "n" or response == "no" then
+              callback({ content = string.format("User declined to execute %s.", opts.name) })
+            else
+              execute(args, strategy, callback)
+            end
           end
         )
       elseif opts.select then
@@ -255,15 +272,21 @@ M.documentation = {
 M.add_file = M.new_tool({
   name = "add_file",
   message = "Reading file contents...",
-  description = "Add a file or part of file to be included in the conversation",
+  description = [[Add a file or part of file to be included in the conversation.
+- If adding a part of the file, specify both start_line and end_line.
+- If adding a complete file, skip both start_line and end_line.
+]],
   parameters = {
     path = { type = "string", description = "The file path" },
-    start_line = { type = "integer", description = "The start line number" },
-    end_line = { type = "integer", description = "The end line number" },
+    start_line = { type = "integer", description = "The start line number. Ignore if adding the complete file." },
+    end_line = { type = "integer", description = "The end line number. Ignore if adding the complete file." },
   },
   required = { "path" },
   confirm = function(args)
-    return string.format("Sia want's to add the file %s", args.path)
+    if args.start_line and args.end_line then
+      return string.format("Add lines %d-%d from %s to the conversation", args.start_line, args.end_line, args.path)
+    end
+    return string.format("Add %s to the conversation", args.path)
   end,
 }, function(args, conversation, callback)
   if not args.path then
@@ -295,7 +318,7 @@ M.add_files_glob = M.new_tool({
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
   required = { "glob_pattern" },
   confirm = function(args)
-    return string.format("Sia wants to add all files matching %s", args.glob_pattern)
+    return string.format("Add all files matching pattern '%s' to the conversation", args.glob_pattern)
   end,
 }, function(args, conversation, callback)
   if not args.glob_pattern then
@@ -373,11 +396,10 @@ M.grep = M.new_tool({
   },
   required = { "pattern" },
   confirm = function(args)
-    local text = string.format("Sia wants search for %s", args.pattern)
     if args.glob then
-      text = string.format("%s in files matching %s", text, args.glob)
+      return string.format("Search for '%s' in files matching '%s'", args.pattern, args.glob)
     end
-    return text
+    return string.format("Search for '%s' in all files", args.pattern)
   end,
 }, function(args, _, callback)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
@@ -410,7 +432,7 @@ M.list_files = M.new_tool({
   message = "Exploring project structure...",
   parameters = vim.empty_dict(),
   required = {},
-  confirm = "Sia want to list all files in CWD",
+  confirm = "List all files in the current directory",
 }, function(_, _, callback)
   vim.system({ "fd", "--type", "f" }, { text = true }, function(obj)
     local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
@@ -429,49 +451,60 @@ local edit_file_auto_apply = nil
 M.edit_file = M.new_tool({
   name = "edit_file",
   message = "Making code changes...",
-  description = [[Use this tool to make an edit to an existing file.
+  description = [[Edit an existing file by specifying precise changes.
 
-This will be read by a less intelligent model, which will quickly apply the
-edit. You should make it clear what the edit is, while also minimizing the
-unchanged code you write.
-When writing the edit, you should specify each
-edit in sequence, with the special comment // ... existing code ... to
-represent unchanged code in between edited lines.
+KEY PRINCIPLES:
+- Make ALL edits to a file in a single tool call (use multiple edit blocks if needed)
+- Only specify lines you're changing - represent unchanged code with comments
 
-For example:
+EDIT SYNTAX:
+Use "... existing code ..." comments to represent unchanged sections:
 
 // ...
   existing code ...
+NEW_OR_MODIFIED_CODE_HERE
+// ... existing code ...
+ANOTHER_EDIT_HERE
+// ... existing code ...
+
+EXAMPLES:
+
+Adding a new function:
+```
+// ... existing code ...
+function newFunction() {
+  return "hello";
+}
+// ... existing code ...
+```
+
+Modifying existing code:
+```
+// ... existing code ...
+const updated = "new value";  // was: const old = "old value";
+// ... existing code ...
+```
+
+Deleting code (provide context before and after):
+```
+// ... existing code ...
+function keepThis() {}
+function alsoKeepThis() {}
+// ... existing code ...
+```
+
+Multiple changes in one call:
+```
+// ... existing code ...
 FIRST_EDIT
 // ... existing code ...
 SECOND_EDIT
-// ...
-  existing code ...
+// ... existing code ...
 THIRD_EDIT
 // ... existing code ...
+```
 
-You should still bias towards repeating as few lines of the original file as
-possible to convey the change. But, each edit should contain sufficient context
-of unchanged lines around the code you're editing to resolve ambiguity.
-
-DO NOT omit spans of pre-existing code (or comments) without using the // ...
-existing code ... comment to indicate its absence. If you omit the existing
-code comment, the model may inadvertently delete these lines. If you plan on
-deleting a section, you must provide context before and after to delete it.
-If the initial code is, ```code
- Block 1
- Block 2
- Block 3
-code```, and you want to remove Block 2, you would output
-```// ... existing code ...
- Block 1
- Block 3
- // ... existing code ...
-```.
-Make sure it is clear what the edit should be, and where it should be applied.
-Make edits to a file in a single edit_file call instead of multiple edit_file
-calls to the same file. The apply model can handle many distinct edits at
-once.]],
+The apply model will handle multiple distinct edits efficiently in a single operation.]],
   parameters = {
     target_file = {
       type = "string",
@@ -500,9 +533,9 @@ example: // ... existing code ...  ]],
   select = {
     prompt = function(args)
       if args.instructions then
-        return string.format("%s\nReady to edit %s?", args.instructions, args.target_file)
+        return string.format("%s\nEdit %s", args.instructions, args.target_file)
       else
-        return string.format("Ready to edit %s?", args.target_file)
+        return string.format("Edit %s", args.target_file)
       end
     end,
     choices = {
@@ -605,7 +638,7 @@ M.get_diagnostics = M.new_tool({
   },
   required = { "file" },
   confirm = function(args)
-    return string.format("Sia wants to get diagnostics for %s", args.file)
+    return string.format("Get diagnostics for %s", args.file)
   end,
 }, function(args, _, callback)
   if not args.file then
@@ -656,7 +689,7 @@ M.git_status = M.new_tool({
   description = "Get current git status showing staged, unstaged, and untracked files",
   parameters = vim.empty_dict(),
   required = {},
-  confirm = "Sia wants to check git status",
+  confirm = "Check git status",
 }, function(args, _, callback)
   vim.system({ "git", "status", "--porcelain" }, { text = true }, function(obj)
     if obj.code ~= 0 then
@@ -709,14 +742,19 @@ M.git_diff = M.new_tool({
   },
   required = { "staged" },
   confirm = function(args)
-    local text = "Sia wants to show git diff"
     if args.file then
-      text = string.format("%s for %s", text, args.file)
+      if args.staged then
+        return string.format("Show staged changes for %s", args.file)
+      else
+        return string.format("Show unstaged changes for %s", args.file)
+      end
+    else
+      if args.staged then
+        return "Show all staged changes"
+      else
+        return "Show all unstaged changes"
+      end
     end
-    if args.staged then
-      text = string.format("%s (staged changes)", text)
-    end
-    return text
   end,
 }, function(args, _, callback)
   local cmd = { "git", "diff" }
@@ -759,7 +797,7 @@ M.git_commit = M.new_tool({
     },
   },
   confirm = function(args)
-    return string.format("Sia wants to commit changes.")
+    return string.format("Commit changes with message: '%s'", args.message)
   end,
   required = { "message" },
 }, function(args, _, callback)
@@ -831,9 +869,9 @@ M.git_unstage = M.new_tool({
   required = {},
   confirm = function(args)
     if args.files and #args.files > 0 then
-      return string.format("Sia wants to unstage: %s", table.concat(args.files, ", "))
+      return string.format("Unstage files: %s", table.concat(args.files, ", "))
     else
-      return "Sia wants to unstage all staged files"
+      return "Unstage all staged files"
     end
   end,
 }, function(args, _, callback)

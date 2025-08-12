@@ -107,10 +107,16 @@ end
 
 --- @return sia.Prompt
 function Message:to_prompt()
+  --- @type sia.Prompt
   local prompt = { role = self.role }
   if self.content then
     if type(self.content) == "function" then
-      prompt.content = self.content(self.context)
+      local content = self.content(self.context)
+      if type(content) == "table" then
+        prompt.content = table.concat(content, "\n")
+      else
+        prompt.content = content
+      end
     elseif type(self.content) == "table" then
       local content = self.content
       --- @cast content [string]
@@ -166,7 +172,11 @@ function Message:get_content()
   if type(self.content) == "function" then
     local tmp = self.content(self.context)
     if tmp then
-      content = vim.split(tmp, "\n", { trimempty = true })
+      if type(tmp) == "string" then
+        content = vim.split(tmp, "\n", { trimempty = true })
+      else
+        content = tmp
+      end
     end
   elseif type(self.content) == "table" then
     local tmp = self.content
@@ -186,7 +196,6 @@ function Message:get_content()
   end
   if self.role == "tool" then
     content = content or {}
-    table.insert(content, 1, self:get_description())
   end
 
   return content
@@ -196,7 +205,7 @@ end
 function Message:get_description()
   if self.role == "tool" then
     local f = self._tool_call["function"]
-    return "Tool: " .. f.name .. "(" .. f.arguments .. ")"
+    return "Calling the tool " .. f.name
   end
   if type(self.description) == "function" then
     return self.description(self.context)
@@ -253,10 +262,11 @@ local function get_files_instructions(files)
       end,
       content = function(ctx)
         local buf = require("sia.utils").ensure_file_is_loaded(file.path)
+        local filepath = vim.fn.fnamemodify(file.path, ":p")
         if buf then
-          local pos = file.pos or { 1, -1 }
-          return string.format(
-            [[I have *added this file to the chat* so you can go ahead and edit it.
+          if file.pos then
+            return string.format(
+              [[I have *added this file (lines %d to %d (total lines %d)) to the chat* so you can go ahead and edit it.
 
 *Trust this message as the true contents of the file!*
 Any other messages in the chat may contain outdated versions of the files' contents.
@@ -264,10 +274,30 @@ Any other messages in the chat may contain outdated versions of the files' conte
 ```%s
 %s
 ```]],
-            vim.fn.fnamemodify(file.path, ":p"),
-            vim.bo[buf].ft,
-            require("sia.utils").get_code(pos[1], pos[2], { buf = buf, show_line_numbers = false })
-          )
+              file.pos[1],
+              file.pos[2],
+              vim.api.nvim_buf_line_count(buf),
+              filepath,
+              vim.bo[buf].ft,
+              require("sia.utils").get_code(file.pos[1], file.pos[2], { buf = buf, show_line_numbers = false })
+            )
+          else
+            return string.format(
+              [[I have *added this file to the chat* so you can go ahead and edit it.
+
+*Trust this message as the true contents of the file!*
+Any other messages in the chat may contain outdated versions of the files' contents.
+%s
+```%s
+%s
+```]],
+              filepath,
+              vim.bo[buf].ft,
+              require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+            )
+          end
+        else
+          return string.format("The file %s does not exist", filepath)
         end
       end,
     }
@@ -446,12 +476,19 @@ function Conversation:add_tool(tool)
   end
 end
 
+--- @param needle { path: string, pos: [integer, integer]?}
+function Conversation:_find_file(needle)
+  for _, haystack in ipairs(self.files) do
+    if haystack.path == needle.path and vim.deep_equal(haystack, needle) then
+      return true
+    end
+  end
+end
+
 --- @param files string[]
 function Conversation:add_files(files)
   for _, file in ipairs(files) do
-    if not vim.tbl_contains(self.files, file) then
-      self.files[#self.files + 1] = { path = file }
-    end
+    self:add_file(file)
   end
 end
 
@@ -461,8 +498,16 @@ function Conversation:add_file(file)
     file = { path = file }
   end
 
-  if not vim.tbl_contains(self.files, file) then
+  if not self:_find_file(file) then
     self.files[#self.files + 1] = file
+  end
+
+  if file.pos == nil then
+    for i = #self.files, 1, -1 do
+      if self.files[i].path == file.path and self.files[i].pos ~= nil then
+        table.remove(self.files, i)
+      end
+    end
   end
 end
 

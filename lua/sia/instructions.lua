@@ -248,7 +248,7 @@ function M.current_context(global)
         return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
       end,
       available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode ~= "n"
+        return vim.api.nvim_buf_is_loaded(ctx.buf)
       end,
       persistent = true,
       content = function(ctx)
@@ -258,44 +258,50 @@ function M.current_context(global)
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
-
-        local start_line, end_line = ctx.pos[1], ctx.pos[2]
-        local instruction = string.format(
-          [[
+        if ctx.mode == "v" or ctx.file then
+          local start_line, end_line = ctx.pos[1], ctx.pos[2]
+          local instruction = string.format(
+            [[
 I have *added this file (lines %d to %d) to the chat* so you can go ahead and edit it.
 
 *Trust this message as the true contents of the file!*
 Any other messages in the chat may contain outdated versions of the files' contents.
 %s]],
-          start_line,
-          end_line,
-          utils.get_filename(ctx.buf, ":p")
-        )
-        if ctx.file then
-          start_line = 1
-          end_line = vim.api.nvim_buf_line_count(ctx.buf)
-          instruction = string.format(
-            [[
+            start_line,
+            end_line,
+            utils.get_filename(ctx.buf, ":p")
+          )
+          if ctx.file then
+            start_line = 1
+            end_line = vim.api.nvim_buf_line_count(ctx.buf)
+            instruction = string.format(
+              [[
 I have *added this file to the chat* so you can go ahead and edit it.
 
 *Trust this message as the true contents of the file!*
 Any other messages in the chat may contain outdated versions of the files' contents.
 %s]],
-            utils.get_filename(ctx.buf, ":p")
-          )
-        end
-        local code =
-          utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
-        return string.format(
-          [[%s
+              utils.get_filename(ctx.buf, ":p")
+            )
+          end
+          local code =
+            utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
+          return string.format(
+            [[%s
 %s
 %s
 %s]],
-          instruction,
-          start_fence,
-          code,
-          end_fence
-        )
+            instruction,
+            start_fence,
+            code,
+            end_fence
+          )
+        else
+          return string.format(
+            "The conversation was initiated from the file: %s. This is only a snapshot and I might discuss other files later",
+            utils.get_filename(ctx.buf, ":p")
+          )
+        end
       end,
     },
     {
@@ -308,7 +314,7 @@ Any other messages in the chat may contain outdated versions of the files' conte
         return { "context assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
       end,
       available = function(ctx)
-        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) and ctx and ctx.mode == "v"
+        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf)
       end,
       persistent = true,
       content = "Ok",
