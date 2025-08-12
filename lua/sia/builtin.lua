@@ -135,6 +135,10 @@ rather than automatically making more tool calls.
 
 When you identify a problem or improvement opportunity, discuss it with the
 USER before taking action.
+
+If the user does not explicitly restrict tool calls, call them to gather
+additional information. If the USER has already provided files, do not try
+to add them again.
 </information_gathering>
       ]],
     },
@@ -303,7 +307,8 @@ from hello import hello
       persistent = true,
       description = "AGENTS.md",
       available = function()
-        return vim.fn.filereadable(vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")) == 1
+        local file = vim.fn.filereadable(vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md"))
+        return file == 1
       end,
       content = function(ctx)
         local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")

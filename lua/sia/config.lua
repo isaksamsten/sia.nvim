@@ -168,7 +168,7 @@ local defaults = {
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "openrouter/glm-4.5",
+    model = "copilot/o3-mini",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
