@@ -2,42 +2,6 @@
 --- We can use these as string-names for instructions when building actions.
 --- Users can provide their own in `instructions` in the config.
 local M = {
-  watch_user_assist = {
-    hide = true,
-    role = "user",
-    content = [[
-I've written your instructions in comments in the code and marked them with "Sia"
-You can see the "Sia" comments shown below (marked with █).
-Find them in the code files I've shared with you, and follow their instructions.
-
-Instructions:
- - Marked lines ending with Sia! corresponds to instructions
- - Marked lines ending with only Sia corresponds to additional context that can
- be used complete the instruction.
- - **IMPORTANT** After completing those instructions, also be sure to remove all the "Sia"
- comments from the code too.
-]],
-  },
-  watch_user_question = {
-    hide = true,
-    role = "user",
-    content = [[Act as an expert code analyst.
-Answer questions about the supplied code.
-
-Describe code changes however you like. Don't use SEARCH/REPLACE blocks!
-
-Find the "Sia" comments below (marked with █) in the code files I've shared with you.
-They contain my questions that I need you to answer and other instructions for you.
-
-
-Instructions:
- - Marked lines ending with Sia? corresponds to questions
- - Marked lines ending with only Sia corresponds to additional context that can
- be used to answer the questions.
-
-]],
-  },
-
   editblock_reminder = {
     role = "system",
     content = [[# *SEARCH/REPLACE block* Rules:
@@ -297,32 +261,71 @@ from hello import hello
       content = "Understood. I will no longer consider the above files for editing.",
     },
   },
-  git_files = {
+  directory_structure = {
     {
       role = "user",
       persistent = true,
       description = "List the files in the current git repository.",
       available = function()
-        return require("sia.utils").is_git_repo()
+        return vim.fn.executable("git") == 1 or vim.fn.executable("fd") == 1 or vim.fn.executable("find")
       end,
       content = function(ctx)
-        return string.format(
-          "This is the current directory hierarchy:\n:%s",
-          vim.fn.system("git ls-tree -r --name-only HEAD")
-        )
+        if require("sia.utils").is_git_repo() then
+          return string.format(
+            "Below is the current directory structure as reported by Git (it skips files in .gitignore):\n:%s",
+            vim.fn.system("git ls-tree -r --name-only HEAD")
+          )
+        elseif vim.fn.executable("fd") == 1 then
+          return string.format(
+            "Below is the current directory structure as reported by fd (it skips files in .gitignore):\n%s",
+            vim.fn.system("fd --type -f")
+          )
+        else
+          return string.format(
+            "Below is the current directory structure as reported by find:\n%s",
+            vim.fn.system("find . -type f -not -path './.git/*'")
+          )
+        end
       end,
     },
     {
       role = "assistant",
       hide = true,
+      available = function()
+        return vim.fn.executable("git") == 1 or vim.fn.executable("fd") == 1 or vim.fn.executable("find")
+      end,
       content = "Thanks for providing the list of files in the current git repository.",
+    },
+  },
+  agents_md = {
+    {
+      role = "user",
+      persistent = true,
+      description = "AGENTS.md",
+      available = function()
+        return vim.fn.filereadable(vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")) == 1
+      end,
+      content = function(ctx)
+        local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
+        local memories = vim.fn.readfile(filename)
+        table.insert(memories, 1, "Always follow these instructions:")
+        return memories
+      end,
+    },
+    {
+      role = "assistant",
+      available = function()
+        return vim.fn.filereadable(vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")) == 1
+      end,
+      hide = true,
+      content = "Thanks for providing a list of instructions, I will follow them",
     },
   },
   current_document_symbols = require("sia.instructions").current_document_symbols(),
   current_buffer_line_number = require("sia.instructions").current_buffer({ show_line_numbers = true }),
   current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = false }),
   current_context_line_number = require("sia.instructions").current_context({ show_line_numbers = true }),
-  current_context = require("sia.instructions").current_context({ show_line_numbers = false }),
+  current_context = require("sia.instructions").current_context({ show_line_numbers = false, fences = true }),
   insert_system = {
     role = "system",
     content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.

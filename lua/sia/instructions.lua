@@ -259,28 +259,43 @@ function M.current_context(global)
           end_fence = "```"
         end
 
-        if ctx.pos then
-          local start_line, end_line = ctx.pos[1], ctx.pos[2]
-          if ctx.file then
-            start_line = 1
-            end_line = vim.api.nvim_buf_line_count(ctx.buf)
-          end
-          local code =
-            utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
-          return string.format(
-            [[The provided context line %d to line %d from %s (%s):
+        local start_line, end_line = ctx.pos[1], ctx.pos[2]
+        local instruction = string.format(
+          [[
+I have *added this file (lines %d to %d) to the chat* so you can go ahead and edit it.
+
+*Trust this message as the true contents of the file!*
+Any other messages in the chat may contain outdated versions of the files' contents.
+%s]],
+          start_line,
+          end_line,
+          utils.get_filename(ctx.buf, ":p")
+        )
+        if ctx.file then
+          start_line = 1
+          end_line = vim.api.nvim_buf_line_count(ctx.buf)
+          instruction = string.format(
+            [[
+I have *added this file to the chat* so you can go ahead and edit it.
+
+*Trust this message as the true contents of the file!*
+Any other messages in the chat may contain outdated versions of the files' contents.
+%s]],
+            utils.get_filename(ctx.buf, ":p")
+          )
+        end
+        local code =
+          utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
+        return string.format(
+          [[%s
 %s
 %s
 %s]],
-            start_line,
-            end_line,
-            utils.get_filename(ctx.buf, ":p"),
-            vim.bo[ctx.buf].ft,
-            start_fence,
-            code,
-            end_fence
-          )
-        end
+          instruction,
+          start_fence,
+          code,
+          end_fence
+        )
       end,
     },
     {

@@ -13,7 +13,7 @@ function M.edit()
     input = "require",
     system = {
       "editblock_system",
-      "git_files",
+      "directory_structure",
     },
     instructions = {
       "current_context",
@@ -258,7 +258,7 @@ function M.explain()
 If you need additional context to improve the explanation. Ask the user to add
 the file to the context using SiaAdd.]],
       },
-      "git_files",
+      "directory_structure",
     },
     instructions = {
       "current_context_line_number",
@@ -274,7 +274,7 @@ function M.unittest()
   return {
     system = {
       "editblock_system",
-      "git_files",
+      "directory_structure",
     },
     instructions = {
       "current_context",

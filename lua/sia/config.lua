@@ -163,11 +163,12 @@ local defaults = {
     ["anthropic/claude-sonnet-3.5"] = { "anthropic", "claude-3-5-sonnet-latest" },
     ["openrouter/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
     ["openrouter/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
+    ["openrouter/glm-4.5"] = { "openrouter", "z-ai/glm-4.5" },
   },
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "openrouter/claude-sonnet-4",
+    model = "openrouter/glm-4.5",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -236,7 +237,8 @@ local defaults = {
         },
         system = {
           "default_system",
-          "git_files",
+          "directory_structure",
+          "agents_md",
         },
         instructions = {
           "current_context",

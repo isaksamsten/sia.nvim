@@ -120,7 +120,13 @@ function Message:to_prompt()
     end
   end
   if self.tool_calls then
-    prompt.tool_calls = self.tool_calls
+    prompt.tool_calls = {}
+    for _, tool_call in ipairs(self.tool_calls) do
+      table.insert(
+        prompt.tool_calls,
+        { id = tool_call.id, type = tool_call.type, ["function"] = tool_call["function"] }
+      )
+    end
   end
   if self._tool_call then
     prompt.tool_call_id = self._tool_call.id
@@ -252,7 +258,7 @@ local function get_files_instructions(files)
           return string.format(
             [[I have *added this file to the chat* so you can go ahead and edit it.
 
-*Trust this message as the true contents of these files!*
+*Trust this message as the true contents of the file!*
 Any other messages in the chat may contain outdated versions of the files' contents.
 %s
 ```%s
