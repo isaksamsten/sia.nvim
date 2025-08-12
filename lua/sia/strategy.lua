@@ -17,6 +17,7 @@ local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 --- @field start_col integer
 --- @field line integer
 --- @field column integer
+--- @field persistent boolean
 --- @field cache string[]
 local Writer = {}
 Writer.__index = Writer
@@ -25,7 +26,11 @@ Writer.__index = Writer
 --- @param buf integer?
 --- @param line integer?
 --- @param column integer?
-function Writer:new(canvas, buf, line, column)
+--- @param persistent boolean?
+function Writer:new(canvas, buf, line, column, persistent)
+  if persistent == nil then
+    persistent = true
+  end
   local obj = {
     canvas = canvas,
     buf = buf,
@@ -33,6 +38,7 @@ function Writer:new(canvas, buf, line, column)
     start_col = column or 0,
     line = line or 0,
     column = column or 0,
+    persistent = persistent,
     cache = {},
   }
   obj.cache[1] = ""
@@ -43,7 +49,11 @@ end
 --- @param substring string
 function Writer:append_substring(substring)
   if self.canvas then
-    self.canvas:append_text_at(self.line, self.column, substring)
+    if self.persistent then
+      self.canvas:append_text_at(self.line, self.column, substring)
+    else
+      self.canvas:append_text_extmark_at(self.line, self.column, substring)
+    end
   elseif self.buf then
     vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
   end
@@ -53,7 +63,11 @@ end
 
 function Writer:append_newline()
   if self.canvas then
-    self.canvas:append_newline_at(self.line)
+    if self.persistent then
+      self.canvas:append_newline_at(self.line)
+    else
+      self.canvas:append_newline_extmark_at(self.line)
+    end
   elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   end
@@ -124,6 +138,10 @@ function Strategy:on_start(job) end
 --- Callback triggered on each streaming content.
 --- @param content string
 function Strategy:on_progress(content) end
+
+--- Callback triggered when the model is reasoning
+--- @param content string
+function Strategy:on_reasoning(content) end
 
 --- Callback triggered when the strategy is completed.
 --- @param opts { on_complete: fun(): nil }
@@ -241,6 +259,7 @@ end
 --- @field current_response integer
 --- @field response_tracker table<integer, table?>
 --- @field _writer sia.Writer? the writer
+--- @field _reasoning_writer sia.Writer? reasoning writer
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -372,6 +391,7 @@ end
 
 function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
+    self.canvas:clear_reasoning()
     set_abort_keymap(self.buf, job)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
@@ -383,7 +403,12 @@ function ChatStrategy:on_start(job)
     end
 
     self._writer = Writer:new(self.canvas, self.buf, line_count - 1, 0)
+    self._reasoning_writer = Writer:new(self.canvas, nil, line_count - 1, 0, false)
   end
+end
+
+function ChatStrategy:on_reasoning(content)
+  self._reasoning_writer:append(content)
 end
 
 function ChatStrategy:on_progress(content)

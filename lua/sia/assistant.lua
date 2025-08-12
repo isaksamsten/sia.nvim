@@ -151,7 +151,9 @@ function M.execute_strategy(strategy, opts)
               if obj.choices and #obj.choices > 0 then
                 local delta = obj.choices[1].delta
                 if delta then
-                  if delta.content then
+                  if delta.reasoning then
+                    strategy:on_reasoning(delta.reasoning)
+                  elseif delta.content then
                     strategy:on_progress(delta.content)
                     vim.api.nvim_exec_autocmds("User", {
                       pattern = "SiaProgress",
