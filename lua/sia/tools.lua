@@ -3,23 +3,28 @@ local M = {}
 ---@class SiaNewToolOpts
 ---@field name string
 ---@field description string
----@field auto_apply (fun():integer?)?
+---@field auto_apply (fun(args: table):integer?)?
 ---@field message string?
 ---@field required string[]
 ---@field parameters table
 ---@field confirm (string|fun(args:table):string)?
 ---@field select { prompt: (string|fun(args:table):string)?, choices: string[]}?
 
---- @type table<string, boolean>
+--- @type table<string, boolean?>
 local auto_confirm = {}
 
 ---@param opts SiaNewToolOpts
 ---@param execute any
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
-  local auto_apply = opts.auto_apply or function()
-    return nil
-  end
+  local auto_apply = opts.auto_apply
+    or function(_)
+      if auto_confirm[opts.name] then
+        return 1
+      else
+        return nil
+      end
+    end
 
   return {
     name = opts.name,
@@ -29,7 +34,7 @@ M.new_tool = function(opts, execute)
     required = opts.required,
     execute = function(args, strategy, callback)
       if opts.confirm ~= nil then
-        if auto_confirm[opts.name] then
+        if auto_apply(args) then
           execute(args, strategy, callback)
           return
         end
@@ -60,7 +65,7 @@ M.new_tool = function(opts, execute)
           end
         )
       elseif opts.select then
-        local auto_applied_choice = auto_apply()
+        local auto_applied_choice = auto_apply(args)
         if auto_applied_choice then
           execute(args, strategy, callback, auto_applied_choice)
         else
@@ -527,7 +532,11 @@ example: // ... existing code ...  ]],
     },
   },
   required = { "target_file", "instructions", "code_edit" },
-  auto_apply = function()
+  auto_apply = function(args)
+    local file = vim.fs.basename(args.target_file)
+    if file == "AGENTS.md" then
+      return 1
+    end
     return edit_file_auto_apply
   end,
   select = {
@@ -581,6 +590,13 @@ example: // ... existing code ...  ]],
       if choice == 1 or choice == 2 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
         require("sia").highlight_diff_changes(buf, initial_code, result)
+
+        local file = vim.fs.basename(args.target_file)
+        if file == "AGENTS.md" then
+          vim.api.nvim_buf_call(buf, function()
+            vim.cmd("write")
+          end)
+        end
 
         if choice == 2 then
           edit_file_auto_apply = 1

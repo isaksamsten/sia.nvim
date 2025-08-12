@@ -65,6 +65,17 @@ NEVER lie or make things up.
 Refrain from apologizing all the time when results are unexpected.
 </communication>
 
+<memory>
+If the current working directory contains a file called AGENTS.md, it will be
+automatically added to your context. This file serves multiple purposes:
+
+1. Recording the user's code style preferences (naming conventions, preferred libraries, etc.)
+2. Maintaining useful information about the codebase structure and organization
+
+When learning about code style preferences or important codebase
+information, use the edit_file tool to add it to the AGENTS.md file.
+</memory>
+
 <tool_calling>
 ALWAYS follow the tool call schema exactly as specified and make sure to
 provide all necessary parameters. The conversation may reference tools that are
@@ -313,8 +324,17 @@ from hello import hello
       content = function(ctx)
         local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
         local memories = vim.fn.readfile(filename)
-        table.insert(memories, 1, "Always follow these instructions:")
-        return memories
+        return string.format(
+          [[Always follow the instructions stored in %s.
+Remember that you can edit this file and that the instructions below are the latest instructions in AGENTS.md.
+You DO NOT have to add this file to the conversation to edit it.
+```markdown
+%s
+```
+]],
+          vim.fn.fnamemodify(filename, ":p"),
+          table.concat(memories, "\n")
+        )
       end,
     },
     {
