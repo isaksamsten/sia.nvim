@@ -95,13 +95,11 @@ function Writer:append(content)
 end
 
 --- @param buf integer
---- @param job integer
-local function set_abort_keymap(buf, job)
+--- @param callback fun():nil
+local function set_abort_keymap(buf, callback)
   if vim.api.nvim_buf_is_valid(buf) then
     vim.api.nvim_buf_set_keymap(buf, "n", "x", "", {
-      callback = function()
-        vim.fn.jobstop(job)
-      end,
+      callback = callback,
     })
   end
 end
@@ -390,7 +388,9 @@ end
 function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self.canvas:clear_reasoning()
-    set_abort_keymap(self.buf, job)
+    set_abort_keymap(self.buf, function()
+      vim.fn.jobstop(job)
+    end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
       local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
@@ -649,7 +649,9 @@ end
 
 --- @param job number
 function DiffStrategy:on_start(job)
-  set_abort_keymap(self.buf, job)
+  set_abort_keymap(self.buf, function()
+    vim.fn.jobstop(job)
+  end)
   self._writer = Writer:new(nil, self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
 end
 
@@ -741,7 +743,9 @@ function InsertStrategy:on_start(job)
   local content = vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
   self._cal = #content
   vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
-  set_abort_keymap(context.buf, job)
+  set_abort_keymap(context.buf, function()
+    vim.fn.jobstop(job)
+  end)
 end
 
 function InsertStrategy:on_error()
@@ -861,7 +865,9 @@ end
 function HiddenStrategy:on_start(job)
   local context = self.conversation.context
   if context then
-    set_abort_keymap(context.buf, job)
+    set_abort_keymap(context.buf, function()
+      vim.fn.jobstop(job)
+    end)
   end
   self._writer = Writer:new()
 end
