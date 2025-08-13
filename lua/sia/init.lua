@@ -529,6 +529,16 @@ function M.setup(options)
     end,
   })
 
+  local running_jobs = {}
+
+  vim.api.nvim_create_user_command("SiaAbort", function()
+    for _, job in ipairs(running_jobs) do
+      vim.fn.jobstop(job)
+    end
+    running_jobs = {}
+    vim.api.nvim_echo({ { "Sia: Aborted all running jobs", "Normal" } }, false, {})
+  end, {})
+
   vim.treesitter.language.register("markdown", "sia")
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
@@ -556,6 +566,25 @@ function M.setup(options)
     pattern = "*",
     callback = function(args)
       set_highlight_groups()
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "SiaStart",
+    callback = function(args)
+      table.insert(running_jobs, args.data.job)
+    end,
+  })
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "SiaComplete",
+    callback = function(args)
+      local job = args.data.job
+      for i, j in ipairs(running_jobs) do
+        if j == job then
+          table.remove(running_jobs, i)
+          break
+        end
+      end
     end,
   })
 

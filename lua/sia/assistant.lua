@@ -129,7 +129,7 @@ function M.execute_strategy(strategy, opts)
           vim.api.nvim_exec_autocmds("User", {
             pattern = "SiaStart",
             --- @diagnostic disable-next-line: undefined-field
-            data = { buf = strategy.buf },
+            data = { buf = strategy.buf, job = job_id },
           })
         end
       end
@@ -175,7 +175,7 @@ function M.execute_strategy(strategy, opts)
         end
       end
     end,
-    on_exit = function(_, code, _)
+    on_exit = function(jobid, code, _)
       if code == -100 then
         strategy:on_error()
         return
@@ -188,7 +188,7 @@ function M.execute_strategy(strategy, opts)
         vim.api.nvim_exec_autocmds("User", {
           pattern = "SiaComplete",
           --- @diagnostic disable-next-line: undefined-field
-          data = { buf = strategy.buf },
+          data = { buf = strategy.buf, job = jobid },
         })
       end
       strategy:on_complete(opts)
