@@ -332,7 +332,8 @@ end
 --- @field files { path: string, pos: [integer, integer]?}[]
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
---- @field context sia.Context
+--- @field context sia.Context?
+--- @field ignore_tool_confirm boolean?
 --- @field tool_fn table<string, {message: string?, action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
 --- @field prending_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
 local Conversation = {}
@@ -393,7 +394,7 @@ function Conversation.remove_global_files(patterns)
 end
 
 --- @param action sia.config.Action
---- @param args sia.ActionContext
+--- @param args sia.ActionContext?
 --- @return sia.Conversation
 function Conversation:new(action, args)
   local obj = setmetatable({}, self)
@@ -402,19 +403,24 @@ function Conversation:new(action, args)
   obj.mode = action.mode
   obj.files = Conversation.pending_files or {}
   Conversation.clear_pending_files()
-  obj.context = {
-    buf = args.buf,
-    win = args.win,
-    mode = args.mode,
-    bang = args.bang,
-    pos = args.pos,
-    cursor = args.cursor,
-    file = args.file,
-  }
+  if args then
+    obj.context = {
+      buf = args.buf,
+      win = args.win,
+      mode = args.mode,
+      bang = args.bang,
+      pos = args.pos,
+      cursor = args.cursor,
+      file = args.file,
+    }
+  else
+    obj.context = nil
+  end
   obj.indexed_instructions = {}
   obj.system_instructions = {}
   obj.example_instructions = {}
   obj.instructions = {}
+  obj.ignore_tool_confirm = action.ignore_tool_confirm
 
   for _, instruction in ipairs(action.system or {}) do
     --- @diagnostic disable-next-line: param-type-mismatch

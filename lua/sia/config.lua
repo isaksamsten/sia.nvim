@@ -22,7 +22,7 @@ local providers = require("sia.provider")
 --- @field wo table<string, any>?
 
 --- @class sia.config.Hidden
---- @field callback (fun(ctx:sia.Context, content:string[]):nil)?
+--- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
 --- @field messages { on_start: string?, on_progress: string[]? }?
 
 --- @class sia.config.Replace
@@ -55,6 +55,7 @@ local providers = require("sia.provider")
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
 --- @field reminder (string|sia.config.Instruction)?
 --- @field tools (sia.config.Tool|string)[]?
+--- @field ignore_tool_confirm boolean?
 --- @field model string?
 --- @field temperature number?
 --- @field input sia.config.ActionInput?
@@ -206,6 +207,7 @@ local defaults = {
         git_diff = require("sia.tools").git_diff,
         git_unstage = require("sia.tools").git_unstage,
         git_status = require("sia.tools").git_status,
+        call_agent = require("sia.tools").call_agent,
       },
     },
     actions = {
@@ -251,6 +253,7 @@ local defaults = {
           "list_files",
           "get_diagnostics",
           "git_status",
+          "call_agent",
           -- "git_unstage",
           "git_commit",
           "git_diff",

@@ -32,10 +32,13 @@ M.new_tool = function(opts, execute)
     parameters = opts.parameters,
     description = opts.description,
     required = opts.required,
-    execute = function(args, strategy, callback)
+    execute = function(args, conversation, callback)
+      if conversation.ignore_tool_confirm then
+        opts.confirm = nil
+      end
       if opts.confirm ~= nil then
         if auto_apply(args) then
-          execute(args, strategy, callback)
+          execute(args, conversation, callback)
           return
         end
 
@@ -56,18 +59,18 @@ M.new_tool = function(opts, execute)
             local response = resp:lower()
             if response == "a" or response == "always" then
               auto_confirm[opts.name] = true
-              execute(args, strategy, callback)
+              execute(args, conversation, callback)
             elseif response == "n" or response == "no" then
               callback({ content = string.format("User declined to execute %s.", opts.name) })
             else
-              execute(args, strategy, callback)
+              execute(args, conversation, callback)
             end
           end
         )
       elseif opts.select then
         local auto_applied_choice = auto_apply(args)
         if auto_applied_choice then
-          execute(args, strategy, callback, auto_applied_choice)
+          execute(args, conversation, callback, auto_applied_choice)
         else
           local prompt
           if type(opts.select.prompt) == "function" then
@@ -83,12 +86,12 @@ M.new_tool = function(opts, execute)
                 callback({ content = string.format("User cancelled %s operation.", opts.name) })
                 return
               end
-              execute(args, strategy, callback, idx)
+              execute(args, conversation, callback, idx)
             end
           )
         end
       else
-        execute(args, strategy, callback)
+        execute(args, conversation, callback)
       end
     end,
   }
@@ -463,10 +466,9 @@ KEY PRINCIPLES:
 - Only specify lines you're changing - represent unchanged code with comments
 
 EDIT SYNTAX:
-Use "... existing code ..." comments to represent unchanged sections:
+Use "// ... existing code ..." comments to represent unchanged sections:
 
-// ...
-  existing code ...
+// ... existing code ...
 NEW_OR_MODIFIED_CODE_HERE
 // ... existing code ...
 ANOTHER_EDIT_HERE
@@ -486,7 +488,7 @@ function newFunction() {
 Modifying existing code:
 ```
 // ... existing code ...
-const updated = "new value";  // was: const old = "old value";
+const updated = "new value";
 // ... existing code ...
 ```
 
@@ -950,12 +952,75 @@ M.git_unstage = M.new_tool({
   end)
 end)
 
-M.agent = {
+M.call_agent = {
   name = "call_agent",
-  description = "Outsoure a task to another model",
+  message = "Launching autonomous agent...",
+  description = [[Launch a new agent that has access to the following tools: list_files, grep, add_file and add_files.
+When you are searching for a keyword or file and are not confident that you
+will find the right match on the first try, use the Agent tool to perform the
+search for you. For example:
+
+1. If you are searching for a keyword like "config" or "logger", the Agent tool is appropriate
+2. If you want to read a specific file path, use the add_file or add_files tool
+   instead of the call_agent tool, to find the match more quickly
+3. If you are searching for a specific class definition like "class Foo", use
+   the grep tool instead, to find the match more quickly
+
+Usage notes:
+
+1. Launch multiple agents concurrently whenever possible, to maximize
+   performance; to do that, use a single message with multiple tool uses
+2. When the agent is done, it will return a single message back to you. The
+   result returned by the agent is not visible to the user. To show the user
+   the result, you should send a text message back to the user with a concise
+   summary of the result.
+3. Each agent invocation is stateless. You will not be able to send additional
+   messages to the agent, nor will the agent be able to communicate with you
+   outside of its final report. Therefore, your prompt should contain a highly
+   detailed task description for the agent to perform autonomously and you
+   should specify exactly what information the agent should return back to you
+   in its final and only message to you.
+4. The agent's outputs should generally be trusted
+5. IMPORTANT: The agent can not modify files. If you want to use these tools,
+   use them directly instead of going through the agent.]],
   parameters = {
-    model = {},
+    prompt = {
+      type = "string",
+      description = "The task for the agent to perform",
+    },
   },
+  required = { "prompt" },
+  execute = function(args, _, callback)
+    local HiddenStrategy = require("sia.strategy").HiddenStrategy
+    local Conversation = require("sia.conversation").Conversation
+    local conversation = Conversation:new({
+      mode = "hidden",
+      system = {
+        {
+          role = "system",
+          content = [[You are a autonomous agent. You perform the user request
+and use tools to provide an answer. You cannot interact; you perform
+the requested action using the tools at your disposal and provide a
+response]],
+        },
+      },
+      instructions = {
+        { role = "user", content = args.prompt },
+      },
+      ignore_tool_confirm = true,
+      tools = {
+        "grep",
+        "add_file",
+        "add_files",
+      },
+    }, nil)
+    local strategy = HiddenStrategy:new(conversation, {
+      callback = function(_, reply)
+        callback({ content = reply })
+      end,
+    })
+    require("sia.assistant").execute_strategy(strategy, nil)
+  end,
 }
 
 return M

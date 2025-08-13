@@ -188,19 +188,19 @@ function Strategy:execute_tools(opts)
 
     self.tools = {}
 
-    local current_tool_index = 1
+    local total_tools = #tool_list
+    local completed_count = 0
 
-    local function process_next_tool()
-      if current_tool_index > #tool_list then
+    local function on_tool_finished()
+      completed_count = completed_count + 1
+      if completed_count == total_tools then
         if opts.on_tools_complete then
           opts.on_tools_complete()
         end
-        return
       end
+    end
 
-      local tool = tool_list[current_tool_index]
-      current_tool_index = current_tool_index + 1
-
+    for _, tool in ipairs(tool_list) do
       local func = tool["function"]
       if func then
         opts.on_tool_start(tool)
@@ -217,21 +217,19 @@ function Strategy:execute_tools(opts)
               else
                 opts.on_tool_complete(tool, { "Could not find tool..." })
               end
-              process_next_tool()
+              on_tool_finished()
             end)
           )
         else
           local error_message = { "Could not parse tool arguments: " .. tostring(arguments) }
           opts.on_tool_complete(tool, error_message)
-          process_next_tool()
+          on_tool_finished()
         end
       else
         opts.on_tool_complete(tool, { "Tool is not a function" })
-        process_next_tool()
+        on_tool_finished()
       end
     end
-
-    process_next_tool()
   else
     opts.on_no_tools()
   end
@@ -616,7 +614,7 @@ function DiffStrategy:new(conversation, options)
   local obj = setmetatable(Strategy:new(conversation), self)
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
-  local buf = vim.api.nvim_create_buf(false, true)
+  local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_win_set_buf(win, buf)
 
   obj.buf = buf
@@ -638,7 +636,7 @@ function DiffStrategy:on_init()
 
   vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "Analyzing code changes...", "SiaProgress" } } },
+    virt_lines = { { { "🤖 ", "Normal" }, { "Analyzing changes...", "SiaProgress" } } },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaReplace",
     end_line = context.pos[2],
@@ -846,26 +844,32 @@ end
 
 function HiddenStrategy:on_init()
   local context = self.conversation.context
-  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
-  vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } } },
-    virt_lines_above = context.pos[1] - 1 > 0,
-    hl_group = "SiaInsert",
-    end_line = context.pos[2],
-  })
+  if context then
+    vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+    vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
+      virt_lines = { { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } } },
+      virt_lines_above = context.pos[1] - 1 > 0,
+      hl_group = "SiaInsert",
+      end_line = context.pos[2],
+    })
+  end
 end
 
 --- @param job number
 function HiddenStrategy:on_start(job)
   local context = self.conversation.context
-  set_abort_keymap(context.buf, job)
+  if context then
+    set_abort_keymap(context.buf, job)
+  end
   self._writer = Writer:new()
 end
 
 function HiddenStrategy:on_error()
   local context = self.conversation.context
-  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
-  del_abort_keymap(context.buf)
+  if context then
+    vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+    del_abort_keymap(context.buf)
+  end
 end
 
 function HiddenStrategy:on_progress(content)
@@ -874,7 +878,9 @@ end
 
 function HiddenStrategy:on_complete(opts)
   local context = self.conversation.context
-  del_abort_keymap(context.buf)
+  if context then
+    del_abort_keymap(context.buf)
+  end
   if #self._writer.cache > 0 then
     self.conversation:add_instruction({ role = "assistant", content = self._writer.cache, group = 1 })
   end
@@ -890,7 +896,9 @@ function HiddenStrategy:on_complete(opts)
       assistant.execute_strategy(self)
     end,
     on_no_tools = function()
-      vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+      if context then
+        vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+      end
       local messages = self.conversation:get_messages({
         filter = function(message)
           return message.role == "assistant" and message.group == 1
