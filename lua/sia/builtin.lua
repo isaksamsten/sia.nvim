@@ -98,6 +98,10 @@ edits. Avoid making multiple edits to the same file by thinking through the
 complete change first.
 </tool_calling>
 
+<tools>
+{{tool_instructions}}
+</tools>
+
 <use_parallel_tool_calls>
 For maximum efficiency, whenever you perform multiple independent operations,
 invoke all relevant tools simultaneously rather than sequentially. Prioritize

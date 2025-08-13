@@ -105,8 +105,9 @@ function Message:new(instruction, args)
   end
 end
 
+--- @param conversation sia.Conversation?
 --- @return sia.Prompt
-function Message:to_prompt()
+function Message:to_prompt(conversation)
   --- @type sia.Prompt
   local prompt = { role = self.role }
   if self.content then
@@ -136,6 +137,25 @@ function Message:to_prompt()
   end
   if self._tool_call then
     prompt.tool_call_id = self._tool_call.id
+  end
+  if self.role == "system" and conversation then
+    --- @type string[]
+    local tool_instructions = {}
+    if vim.tbl_count(conversation.tools) > 0 then
+      for _, tool in ipairs(conversation.tools) do
+        if tool.system_prompt then
+          tool_instructions[#tool_instructions + 1] =
+            string.format("<%s>\n%s</%s>", tool.name, tool.system_prompt, tool.name)
+        end
+      end
+    end
+
+    if #tool_instructions > 0 then
+      local tool_prompt = table.concat(tool_instructions)
+      prompt.content = string.gsub(prompt.content, "%{%{(%w+)%}%}", {
+        tool_instructions = tool_prompt,
+      })
+    end
   end
   return prompt
 end
@@ -758,7 +778,7 @@ function Conversation:to_query()
     --- @param m sia.Message
     --- @return sia.Prompt
     :map(function(m)
-      return m:to_prompt()
+      return m:to_prompt(self)
     end)
     --- @param p sia.Prompt
     --- @return boolean?

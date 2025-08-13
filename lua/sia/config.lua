@@ -43,6 +43,7 @@ local providers = require("sia.provider")
 --- @class sia.config.Tool
 --- @field name string
 --- @field description string
+--- @field system_prompt string?
 --- @field message string?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
@@ -207,7 +208,7 @@ local defaults = {
         git_diff = require("sia.tools").git_diff,
         git_unstage = require("sia.tools").git_unstage,
         git_status = require("sia.tools").git_status,
-        call_agent = require("sia.tools").call_agent,
+        dispatch_agent = require("sia.tools").dispatch_agent,
       },
     },
     actions = {
@@ -253,7 +254,7 @@ local defaults = {
           "list_files",
           "get_diagnostics",
           "git_status",
-          "call_agent",
+          "dispatch_agent",
           -- "git_unstage",
           "git_commit",
           "git_diff",

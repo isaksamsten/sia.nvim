@@ -852,6 +852,8 @@ function HiddenStrategy:on_init()
       hl_group = "SiaInsert",
       end_line = context.pos[2],
     })
+  else
+    vim.api.nvim_echo({ { "🤖 Processing in background...", "SiaProgress" } }, false, {})
   end
 end
 
@@ -884,8 +886,19 @@ function HiddenStrategy:on_complete(opts)
   if #self._writer.cache > 0 then
     self.conversation:add_instruction({ role = "assistant", content = self._writer.cache, group = 1 })
   end
+
   self:execute_tools({
-    on_tool_start = function(tool) end,
+    on_tool_start = function(tool)
+      local tool_name = tool["function"].name
+      local friendly_message = self.conversation:get_tool_message(tool_name)
+      local message = friendly_message or ("Using " .. tool_name .. " tool...")
+      if context then
+        local lnum = context.pos[2]
+        vim.api.nvim_buf_set_lines(context.buf, lnum, lnum, false, { "🤖 " .. message })
+      else
+        vim.api.nvim_echo({ { "🤖 " .. message, "SiaProgress" } }, false, {})
+      end
+    end,
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },

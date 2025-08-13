@@ -5,6 +5,7 @@ local M = {}
 ---@field description string
 ---@field auto_apply (fun(args: table):integer?)?
 ---@field message string?
+---@field system_prompt string?
 ---@field required string[]
 ---@field parameters table
 ---@field confirm (string|fun(args:table):string)?
@@ -30,6 +31,7 @@ M.new_tool = function(opts, execute)
     name = opts.name,
     message = opts.message,
     parameters = opts.parameters,
+    system_prompt = opts.system_prompt,
     description = opts.description,
     required = opts.required,
     execute = function(args, conversation, callback)
@@ -396,6 +398,12 @@ M.remove_file = {
 
 M.grep = M.new_tool({
   name = "grep",
+  system_prompt = [[- Fast content search
+- Searches files using regluar expressions as supported by rg
+- Supports glob patterns to specify files
+- The root of the search is always the current working directory
+- When you are doing an open ended search that may require multiple rounds of
+globbing and grepping, use the dispatch_agent tool instead]],
   message = "Searching through files...",
   description = "Grep for a pattern in files using rg",
   parameters = {
@@ -952,17 +960,17 @@ M.git_unstage = M.new_tool({
   end)
 end)
 
-M.call_agent = {
-  name = "call_agent",
+M.dispatch_agent = {
+  name = "dispatch_agent",
   message = "Launching autonomous agent...",
-  description = [[Launch a new agent that has access to the following tools: list_files, grep, add_file and add_files.
-When you are searching for a keyword or file and are not confident that you
-will find the right match on the first try, use the Agent tool to perform the
+  description = [[Launch a new agent that has access to the following tools: list_files, grep, add_file and add_files.]],
+  system_prompt = [[When you are searching for a keyword or file and are not confident that you
+will find the right match on the first try, use the dispatch_agent tool to perform the
 search for you. For example:
 
-1. If you are searching for a keyword like "config" or "logger", the Agent tool is appropriate
+1. If you are searching for a keyword like "config" or "logger", the dispatch_agent tool is appropriate
 2. If you want to read a specific file path, use the add_file or add_files tool
-   instead of the call_agent tool, to find the match more quickly
+   instead of the dispatch_agent tool, to find the match more quickly
 3. If you are searching for a specific class definition like "class Foo", use
    the grep tool instead, to find the match more quickly
 
