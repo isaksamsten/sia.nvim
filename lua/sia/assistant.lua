@@ -83,8 +83,14 @@ local function call_provider(query, opts)
 
   table.insert(args, "--url")
   table.insert(args, provider.base_url)
-  table.insert(args, "--data")
-  table.insert(args, vim.json.encode(data))
+  table.insert(args, "--data-binary")
+
+  local tmpfile = vim.fn.tempname()
+  local ok = vim.fn.writefile({ vim.json.encode(data) }, tmpfile)
+  if ok ~= 0 then
+    error("Failed to write request to temp file")
+  end
+  table.insert(args, "@" .. tmpfile)
   vim.fn.jobstart(args, {
     clear_env = true,
     on_stderr = function(_, a, _) end,
