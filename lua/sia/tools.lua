@@ -14,6 +14,31 @@ local M = {}
 --- @type table<string, boolean?>
 local auto_confirm = {}
 
+---@param buf integer
+---@param original_content string[]
+---@param target_file string
+local function show_diff_preview(buf, original_content, target_file)
+  local timestamp = os.date("%H:%M:%S")
+  vim.cmd("tabnew")
+  local left_buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, original_content)
+  vim.api.nvim_buf_set_name(left_buf, string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp))
+  vim.bo[left_buf].buftype = "nofile"
+  vim.bo[left_buf].buflisted = false
+  vim.bo[left_buf].swapfile = false
+  vim.bo[left_buf].ft = vim.bo[buf].ft
+
+  vim.cmd("vsplit")
+  local right_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(right_win, buf)
+  vim.api.nvim_set_current_win(right_win)
+  vim.cmd("diffthis")
+  vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
+  vim.cmd("diffthis")
+  vim.bo[left_buf].modifiable = false
+  vim.api.nvim_set_current_win(right_win)
+end
+
 ---@param opts SiaNewToolOpts
 ---@param execute any
 ---@return sia.config.Tool
@@ -473,7 +498,7 @@ end)
 --- @type integer?
 local edit_file_auto_apply = nil
 
-M.edit_file = M.new_tool({
+M.edit_file_agent = M.new_tool({
   name = "edit_file",
   message = "Making code changes...",
   description = [[Edit an existing file by specifying precise changes.
@@ -621,35 +646,8 @@ example: // ... existing code ...  ]],
           edit_file_auto_apply = 1
         end
       elseif choice == 3 then
-        local timestamp = os.date("%H:%M:%S")
-        vim.cmd("tabnew")
-        local left_buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_buf_set_lines(
-          left_buf,
-          0,
-          -1,
-          false,
-          vim.split(initial_code, "\n", { plain = true, trimempty = true })
-        )
-        vim.api.nvim_buf_set_name(
-          left_buf,
-          string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp)
-        )
-        vim.bo[left_buf].buftype = "nofile"
-        vim.bo[left_buf].buflisted = false
-        vim.bo[left_buf].swapfile = false
-        vim.bo[left_buf].ft = vim.bo[buf].ft
-
-        vim.cmd("vsplit")
-        local right_win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(right_win, buf)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        vim.api.nvim_set_current_win(right_win)
-        vim.cmd("diffthis")
-        vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
-        vim.cmd("diffthis")
-        vim.bo[left_buf].modifiable = false
-        vim.api.nvim_set_current_win(right_win)
+        show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }), args.target_file)
       end
       local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
       local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
@@ -1039,5 +1037,149 @@ response]],
     require("sia.assistant").execute_strategy(strategy)
   end,
 }
+
+local edit_auto_apply = nil
+M.edit_file = M.new_tool({
+  name = "edit_file",
+  description = "Tool for editing files",
+  system_prompt = [[This is a tool for editing files.
+
+Before using this tool:
+
+1. Use the add_file tool to understand the file's contents and context
+
+To make a file edit, provide the following:
+1. file_path: The path to the file to modify
+2. old_string: The text to replace (must be unique within the file, and must
+   match the file contents exactly, including all whitespace and indentation)
+3. new_string: The edited text to replace the old_string
+
+The tool will replace ONE occurrence of old_string with new_string in the
+specified file.
+
+CRITICAL REQUIREMENTS FOR USING THIS TOOL:
+
+1. UNIQUENESS: The old_string MUST uniquely identify the specific instance you
+   want to change. This means:
+  - Include AT LEAST 3-5 lines of context BEFORE the change point
+  - Include AT LEAST 3-5 lines of context AFTER the change point
+  - Include all whitespace, indentation, and surrounding code exactly as it appears in the file
+
+2. SINGLE INSTANCE: This tool can only change ONE instance at a time. If you need to change multiple instances:
+  - Make separate calls to this tool for each instance
+  Each call must uniquely identify its specific instance using extensive context
+
+3. VERIFICATION: Before using this tool:
+  - Check how many instances of the target text exist in the file
+  - If multiple instances exist, gather enough context to uniquely identify each one
+  - Plan separate tool calls for each instance
+
+WARNING: If you do not follow these requirements:
+- The tool will fail if old_string matches multiple locations
+- The tool will fail if old_string doesn't match exactly (including whitespace)
+- You may change the wrong instance if you don't include enough context
+
+When making edits:
+- Ensure the edit results in idiomatic, correct code
+- Do not leave the code in a broken state
+
+If you want to create a new file, use:
+- A new file path, including dir name if needed
+- An empty old_string
+- The new file's contents as new_string
+
+Remember: when making multiple file edits in a row to the same file, you should
+prefer to send all edits in a single message with multiple calls to this tool,
+rather than multiple messages with a single call each.
+]],
+  parameters = {
+
+    target_file = {
+      type = "string",
+      description = "The file path to the file to modify",
+    },
+    old_string = {
+      type = "string",
+      description = "The text to replace",
+    },
+    new_string = {
+      type = "string",
+      description = "The text to replace with",
+    },
+  },
+  required = { "target_file", "old_string", "new_string" },
+  auto_apply = function(args)
+    local file = vim.fs.basename(args.target_file)
+    if file == "AGENTS.md" then
+      return 1
+    end
+    return edit_auto_apply
+  end,
+  select = {
+    prompt = function(args)
+      return string.format("Edit %s", args.target_file)
+    end,
+    choices = {
+      "Apply changes immediately",
+      "Apply changes immediately and remember this choice",
+      "Apply changes and preview them in diff view",
+    },
+  },
+}, function(args, _, callback, choice)
+  if not args.target_file then
+    callback({ content = { "No target_file was provided" } })
+    return
+  end
+
+  local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
+  if not buf then
+    callback({ content = { "Cannot load " .. args.target_file } })
+    return
+  end
+  local matching = require("sia.matcher")
+
+  local old_string = vim.split(args.old_string, "\n")
+  local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local initial_code = table.concat(old_content, "\n")
+
+  local matches = matching.find_best_subsequence_span(old_string, old_content)
+  if #matches == 1 then
+    local new_string = vim.split(args.new_string, "\n")
+    local span = matches[1].span
+
+    if choice == 1 or choice == 2 then
+      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+      local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local result = table.concat(new_content, "\n")
+      require("sia").highlight_diff_changes(buf, initial_code, result)
+
+      local file = vim.fs.basename(args.target_file)
+      if file == "AGENTS.md" then
+        vim.api.nvim_buf_call(buf, function()
+          vim.cmd("write")
+        end)
+      end
+
+      if choice == 2 then
+        edit_auto_apply = 1
+      end
+    elseif choice == 3 then
+      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+      show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }), args.target_file)
+    end
+
+    local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local result = table.concat(new_content, "\n")
+    local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
+    local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
+    table.insert(diff, 1, success_msg)
+    callback({
+      content = diff,
+      modified = { buf },
+    })
+  else
+    callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
+  end
+end)
 
 return M

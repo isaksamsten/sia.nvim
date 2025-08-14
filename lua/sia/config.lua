@@ -170,7 +170,7 @@ local defaults = {
   instructions = {},
   --- @type sia.config.Defaults
   defaults = {
-    model = "copilot/o3-mini",
+    model = "openai/gpt-4.1",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
@@ -255,7 +255,6 @@ local defaults = {
           "get_diagnostics",
           "git_status",
           "dispatch_agent",
-          -- "git_unstage",
           "git_commit",
           "git_diff",
         },

@@ -539,6 +539,37 @@ function M.setup(options)
     vim.api.nvim_echo({ { "Sia: Aborted all running jobs", "Normal" } }, false, {})
   end, {})
 
+  vim.api.nvim_create_user_command("SiaCompact", function()
+    local chat = ChatStrategy.by_buf()
+
+    if chat then
+      local prompt = {
+        {
+          role = "system",
+          content = [[Your task is to compact the conversation. Retain all
+relevant details (e.g., file details) and output a summary. The summar will be used to
+continue the conversation.
+]],
+        },
+      }
+      for _, message in ipairs(chat.conversation:get_messages({ kind = "user" })) do
+        table.insert(prompt, message:to_prompt())
+      end
+      require("sia.assistant").execute_query({
+        prompt = prompt,
+      }, function(content)
+        chat.conversation:clear_user_instructions()
+        chat.conversation:clear_files()
+        chat.conversation:add_instruction({
+          role = "user",
+          content = string.format("This is a summary of the conversation which has been removed:\n %s", content),
+        })
+      end)
+    else
+      -- echo that not called from a chat
+    end
+  end, {})
+
   vim.treesitter.language.register("markdown", "sia")
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
@@ -575,6 +606,7 @@ function M.setup(options)
       table.insert(running_jobs, args.data.job)
     end,
   })
+
   vim.api.nvim_create_autocmd("User", {
     pattern = "SiaComplete",
     callback = function(args)

@@ -1,5 +1,6 @@
 local M = {}
 
+local ERROR_API_KEY_MISSING = -100
 --- @class sia.ProviderOpts
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
 --- @field on_exit (fun(_: any, code:number, _:any?):nil)
@@ -51,7 +52,7 @@ local function call_provider(query, opts)
   local api_key = provider.api_key()
   if api_key == nil then
     vim.notify("Sia: API key is not set for " .. model[1])
-    opts.on_exit(nil, -100, nil)
+    opts.on_exit(nil, ERROR_API_KEY_MISSING, nil)
     return
   end
 
@@ -121,6 +122,7 @@ function M.execute_strategy(strategy)
     local query = strategy:get_query()
     local first_on_stdout = true
     local incomplete = nil
+    local error_initialize = false
 
     call_provider(query, {
       on_stdout = function(job_id, responses, _)
@@ -128,7 +130,6 @@ function M.execute_strategy(strategy)
           first_on_stdout = false
           local response = table.concat(responses, " ")
           local status, json = pcall(vim.json.decode, response, { luanil = { object = true } })
-          local error_initialize = false
           if status then
             if json.error then
               vim.api.nvim_exec_autocmds("User", {
@@ -138,6 +139,7 @@ function M.execute_strategy(strategy)
               error_initialize = true
               strategy.is_busy = false
               strategy:on_error()
+              vim.fn.jobstop(job_id)
             end
           end
           if not error_initialize then
@@ -192,7 +194,11 @@ function M.execute_strategy(strategy)
         end
       end,
       on_exit = function(jobid, code, _)
-        if code == -100 then
+        if error_initialize then
+          return
+        end
+
+        if code == ERROR_API_KEY_MISSING or code == 143 or code == 137 then
           strategy:on_error()
           strategy.is_busy = false
           return

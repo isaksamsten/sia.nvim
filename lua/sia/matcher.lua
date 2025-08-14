@@ -215,7 +215,7 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   local ignore_whitespace = opts.ignore_emptylines or false
   local ignore_indent = opts.ignore_indent or false
   local limit = opts.limit or 1
-  local threshold = opts.threshold or 0
+  local threshold = opts.threshold
   local in_conflict = nil
   if opts.ignore_conflicts ~= false then
     in_conflict = gen_in_conflict()
@@ -280,14 +280,22 @@ function M.find_best_subsequence_span(needle, haystack, opts)
       if needle_str == haystack_str then
         similarity = 1.0
       else
-        similarity = M.similarity_ratio(needle_str, haystack_str)
+        if threshold then
+          similarity = M.similarity_ratio(needle_str, haystack_str)
+          if similarity < threshold then
+            goto next_start_position
+          end
+        else
+          -- No threshold set, only accept exact matches
+          goto next_start_position
+        end
       end
 
       sum_similarity = sum_similarity + similarity
       matched_lines = matched_lines + 1
 
       -- Early pruning: if we can't reach the threshold or the current min score in top matches, abort this match
-      if matched_lines > 0 then
+      if matched_lines > 0 and threshold then
         -- Calculate best possible final average (if all remaining matches are perfect)
         local remaining = total_non_empty_needle - matched_lines
         local best_possible_avg = (sum_similarity + remaining) / total_non_empty_needle
@@ -307,7 +315,7 @@ function M.find_best_subsequence_span(needle, haystack, opts)
     if needle_idx == needle_len + 1 and start_pos ~= -1 and matched_lines > 0 then
       local avg_score = sum_similarity / matched_lines
 
-      if avg_score >= threshold then
+      if not threshold or avg_score >= threshold then
         local match = {
           span = { start_pos, haystack_idx - 1 },
           score = avg_score,

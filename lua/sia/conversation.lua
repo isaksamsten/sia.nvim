@@ -129,10 +129,9 @@ function Message:to_prompt(conversation)
   if self.tool_calls then
     prompt.tool_calls = {}
     for _, tool_call in ipairs(self.tool_calls) do
-      table.insert(
-        prompt.tool_calls,
-        { id = tool_call.id, type = tool_call.type, ["function"] = tool_call["function"] }
-      )
+      if tool_call.type == "function" then
+        table.insert(prompt.tool_calls, { id = tool_call.id, type = "function", ["function"] = tool_call["function"] })
+      end
     end
   end
   if self._tool_call then
@@ -145,14 +144,14 @@ function Message:to_prompt(conversation)
       for _, tool in ipairs(conversation.tools) do
         if tool.system_prompt then
           tool_instructions[#tool_instructions + 1] =
-            string.format("<%s>\n%s</%s>", tool.name, tool.system_prompt, tool.name)
+            string.format("<%s>\n%s\n</%s>", tool.name, tool.system_prompt, tool.name)
         end
       end
     end
 
     if #tool_instructions > 0 then
-      local tool_prompt = table.concat(tool_instructions)
-      prompt.content = string.gsub(prompt.content, "%{%{(%w+)%}%}", {
+      local tool_prompt = table.concat(tool_instructions, "\n")
+      prompt.content = string.gsub(prompt.content, "%{%{([%w_]+)%}%}", {
         tool_instructions = tool_prompt,
       })
     end
@@ -560,6 +559,15 @@ function Conversation:remove_files(patterns)
     table.remove(self.files, to_remove[i])
   end
 end
+
+function Conversation:clear_files()
+  self.files = {}
+end
+
+function Conversation:clear_user_instructions()
+  self.instructions = {}
+end
+
 --- @param id table?
 --- @return boolean
 function Conversation:contains_message(id)
@@ -705,7 +713,7 @@ function Conversation:execute_tool(name, arguments, strategy, callback)
   end
 end
 
---- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?}?
+--- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?, kind: string?}?
 --- @return sia.Message[] messages
 --- @return {kind: string, index: integer}[]? mappings if mapping is set to true
 function Conversation:get_messages(opts)
@@ -720,13 +728,15 @@ function Conversation:get_messages(opts)
   local mappings = {}
   local return_messages = {}
   for _, instopt_kind in ipairs(instopt_kinds) do
-    for i, instrop in ipairs(instopt_kind.instructions) do
-      local messages = self:_to_message(instrop)
-      if messages then
-        for _, message in ipairs(messages) do
-          if message:is_available() and (opts.filter == nil or opts.filter(message)) then
-            table.insert(return_messages, message)
-            table.insert(mappings, { kind = instopt_kind.kind, index = i })
+    if opts.kind == nil or opts.kind == instopt_kind.kind then
+      for i, instrop in ipairs(instopt_kind.instructions) do
+        local messages = self:_to_message(instrop)
+        if messages then
+          for _, message in ipairs(messages) do
+            if message:is_available() and (opts.filter == nil or opts.filter(message)) then
+              table.insert(return_messages, message)
+              table.insert(mappings, { kind = instopt_kind.kind, index = i })
+            end
           end
         end
       end
@@ -765,11 +775,12 @@ function Conversation:unpack_instruction(instruction)
   end
 end
 
+--- @param kind string?
 --- @return sia.Query
-function Conversation:to_query()
+function Conversation:to_query(kind)
   --- @type sia.Prompt[]
   local prompt = vim
-    .iter(self:get_messages())
+    .iter(self:get_messages({ kind = kind }))
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
