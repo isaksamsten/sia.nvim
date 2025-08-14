@@ -282,6 +282,11 @@ M.documentation = {
 M.add_file = M.new_tool({
   name = "add_file",
   message = "Reading file contents...",
+  system_prompt = [[Use the tool to add contents to the conversation.
+
+- If a the complete file has already been added to the conversation, do NOT
+  add a subset of the file again. The files you add will always contain the
+  current content.]],
   description = [[Add a file or part of file to be included in the conversation.
 - If adding a part of the file, specify both start_line and end_line.
 - If adding a complete file, skip both start_line and end_line.
@@ -323,6 +328,10 @@ end)
 --- @type sia.config.Tool
 M.add_files_glob = M.new_tool({
   name = "add_files_glob",
+  system_prompt = [[Use the tool to add contents to the conversation.
+
+- If a the complete file has already been added to the conversation, do NOT
+  add file again. The files you add will always contain the current content.]],
   message = "Loading multiple files...",
   description = "Add files to the list of files to be included in the conversation",
   parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
@@ -1027,7 +1036,7 @@ response]],
         callback({ content = reply })
       end,
     })
-    require("sia.assistant").execute_strategy(strategy, nil)
+    require("sia.assistant").execute_strategy(strategy)
   end,
 }
 

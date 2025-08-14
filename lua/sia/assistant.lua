@@ -100,107 +100,129 @@ local function call_provider(query, opts)
 end
 
 --- @param strategy sia.Strategy
---- @param opts { on_complete: fun(): nil }?
-function M.execute_strategy(strategy, opts)
-  opts = opts or {}
-  local config = require("sia.config")
-  local query = strategy:get_query()
-  local first_on_stdout = true
-  local incomplete = nil
-  strategy:on_init()
-  vim.api.nvim_exec_autocmds("User", {
-    pattern = "SiaInit",
-    --- @diagnostic disable-next-line: undefined-field
-    data = { buf = strategy.buf },
-  })
-  call_provider(query, {
-    on_stdout = function(job_id, responses, _)
-      if first_on_stdout then
-        first_on_stdout = false
-        local response = table.concat(responses, " ")
-        local status, json = pcall(vim.json.decode, response, { luanil = { object = true } })
-        local error_initialize = false
-        if status then
-          if json.error then
-            vim.api.nvim_exec_autocmds("User", {
-              pattern = "SiaError",
-              data = json.error,
-            })
-            error_initialize = true
-            strategy:on_error()
-          end
-        end
-        if not error_initialize then
-          strategy:on_start(job_id)
-          vim.api.nvim_exec_autocmds("User", {
-            pattern = "SiaStart",
-            --- @diagnostic disable-next-line: undefined-field
-            data = { buf = strategy.buf, job = job_id },
-          })
-        end
-      end
+function M.execute_strategy(strategy)
+  if strategy.is_busy then
+    return
+  end
 
-      for _, resp in pairs(responses) do
-        if resp and resp ~= "" then
-          if incomplete then
-            resp = incomplete .. resp
-            incomplete = nil
+  strategy.is_busy = true
+  local config = require("sia.config")
+
+  local function execute_round(is_initial)
+    if is_initial then
+      strategy:on_init()
+      vim.api.nvim_exec_autocmds("User", {
+        pattern = "SiaInit",
+        --- @diagnostic disable-next-line: undefined-field
+        data = { buf = strategy.buf },
+      })
+    end
+
+    local query = strategy:get_query()
+    local first_on_stdout = true
+    local incomplete = nil
+
+    call_provider(query, {
+      on_stdout = function(job_id, responses, _)
+        if first_on_stdout then
+          first_on_stdout = false
+          local response = table.concat(responses, " ")
+          local status, json = pcall(vim.json.decode, response, { luanil = { object = true } })
+          local error_initialize = false
+          if status then
+            if json.error then
+              vim.api.nvim_exec_autocmds("User", {
+                pattern = "SiaError",
+                data = json.error,
+              })
+              error_initialize = true
+              strategy.is_busy = false
+              strategy:on_error()
+            end
           end
-          resp = string.match(resp, "^data: (.+)$")
-          if resp and resp ~= "[DONE]" then
-            local status, obj = pcall(vim.json.decode, resp, { luanil = { object = true } })
-            if not status then
-              incomplete = "data: " .. resp
-            else
-              if obj.usage then
-                local model = config.options.models[query.model or config.options.defaults.model]
-                vim.api.nvim_exec_autocmds("User", {
-                  pattern = "SiaUsageReport",
-                  data = { usage = obj.usage, model = { name = model[2], cost = model.cost } },
-                })
-              end
-              if obj.choices and #obj.choices > 0 then
-                local delta = obj.choices[1].delta
-                if delta then
-                  if delta.reasoning then
-                    strategy:on_reasoning(delta.reasoning)
-                  elseif delta.content then
-                    strategy:on_progress(delta.content)
-                    vim.api.nvim_exec_autocmds("User", {
-                      pattern = "SiaProgress",
-                      --- @diagnostic disable-next-line: undefined-field
-                      data = { buf = strategy.buf, content = delta.content },
-                    })
-                  elseif delta.tool_calls then
-                    strategy:on_tool_call(delta.tool_calls)
+          if not error_initialize then
+            strategy:on_start(job_id)
+            vim.api.nvim_exec_autocmds("User", {
+              pattern = "SiaStart",
+              --- @diagnostic disable-next-line: undefined-field
+              data = { buf = strategy.buf, job = job_id },
+            })
+          end
+        end
+
+        for _, resp in pairs(responses) do
+          if resp and resp ~= "" then
+            if incomplete then
+              resp = incomplete .. resp
+              incomplete = nil
+            end
+            resp = string.match(resp, "^data: (.+)$")
+            if resp and resp ~= "[DONE]" then
+              local status, obj = pcall(vim.json.decode, resp, { luanil = { object = true } })
+              if not status then
+                incomplete = "data: " .. resp
+              else
+                if obj.usage then
+                  local model = config.options.models[query.model or config.options.defaults.model]
+                  vim.api.nvim_exec_autocmds("User", {
+                    pattern = "SiaUsageReport",
+                    data = { usage = obj.usage, model = { name = model[2], cost = model.cost } },
+                  })
+                end
+                if obj.choices and #obj.choices > 0 then
+                  local delta = obj.choices[1].delta
+                  if delta then
+                    if delta.reasoning then
+                      strategy:on_reasoning(delta.reasoning)
+                    elseif delta.content then
+                      strategy:on_progress(delta.content)
+                      vim.api.nvim_exec_autocmds("User", {
+                        pattern = "SiaProgress",
+                        --- @diagnostic disable-next-line: undefined-field
+                        data = { buf = strategy.buf, content = delta.content },
+                      })
+                    elseif delta.tool_calls then
+                      strategy:on_tool_call(delta.tool_calls)
+                    end
                   end
                 end
               end
             end
           end
         end
-      end
-    end,
-    on_exit = function(jobid, code, _)
-      if code == -100 then
-        strategy:on_error()
-        return
-      end
-      local on_complete = opts.on_complete
-      opts.on_complete = function()
-        if on_complete ~= nil then
-          on_complete()
+      end,
+      on_exit = function(jobid, code, _)
+        if code == -100 then
+          strategy:on_error()
+          strategy.is_busy = false
+          return
         end
-        vim.api.nvim_exec_autocmds("User", {
-          pattern = "SiaComplete",
-          --- @diagnostic disable-next-line: undefined-field
-          data = { buf = strategy.buf, job = jobid },
+
+        local continue_execution = function()
+          execute_round(false)
+        end
+
+        local finish = function()
+          strategy.is_busy = false
+          vim.api.nvim_exec_autocmds("User", {
+            pattern = "SiaComplete",
+            --- @diagnostic disable-next-line: undefined-field
+            data = { buf = strategy.buf, job = jobid },
+          })
+        end
+
+        -- Pass control functions to strategy
+        strategy:on_complete({
+          continue_execution = continue_execution,
+          finish = finish,
+          job = jobid,
         })
-      end
-      strategy:on_complete(opts)
-    end,
-    stream = true,
-  })
+      end,
+      stream = true,
+    })
+  end
+
+  execute_round(true)
 end
 
 --- @param query sia.Query

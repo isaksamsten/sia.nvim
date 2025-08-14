@@ -112,6 +112,7 @@ local function del_abort_keymap(buf)
 end
 
 --- @class sia.Strategy
+--- @field is_busy boolean?
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
@@ -142,8 +143,8 @@ function Strategy:on_progress(content) end
 function Strategy:on_reasoning(content) end
 
 --- Callback triggered when the strategy is completed.
---- @param opts { on_complete: fun(): nil }
-function Strategy:on_complete(opts) end
+--- @param control { continue_execution: (fun():nil), finish: (fun():nil), job: number? }
+function Strategy:on_complete(control) end
 
 function Strategy:on_error() end
 
@@ -254,6 +255,7 @@ end
 --- @field block_action sia.BlockAction
 --- @field current_response integer
 --- @field response_tracker table<integer, table?>
+--- @field _is_named boolean
 --- @field _writer sia.Writer? the writer
 --- @field _reasoning_writer sia.Writer? reasoning writer
 local ChatStrategy = setmetatable({}, { __index = Strategy })
@@ -313,6 +315,7 @@ function ChatStrategy:new(conversation, options)
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
   obj:_setup_autocommand()
+  obj._is_named = false
   return obj
 end
 
@@ -436,7 +439,7 @@ function ChatStrategy:update_response_tracker(lnum)
   end
 end
 
-function ChatStrategy:on_complete(opts)
+function ChatStrategy:on_complete(control)
   if not self._writer then
     return
   end
@@ -475,35 +478,36 @@ function ChatStrategy:on_complete(opts)
         })
       end,
       on_tools_complete = function()
-        self.hide_header = true
-        assistant.execute_strategy(self, {
-          on_complete = function()
-            self.hide_header = nil
-            self:update_response_tracker(start_line)
-          end,
-        })
+        self.hide_header = nil
+        self:update_response_tracker(start_line)
+        control.continue_execution()
       end,
       on_no_tools = function()
         self.canvas:clear_extmarks()
         vim.bo[self.buf].modifiable = false
-        assistant.execute_query({
-          model = "openai/gpt-4o-mini",
-          prompt = {
-            {
-              role = "system",
-              content = "Summarize the interaction. Make it suitable for a buffer name in neovim using three to five words separated by spaces. Only output the name, nothing else.",
+        if not self._is_named then
+          assistant.execute_query({
+            model = "openai/gpt-4o-mini",
+            prompt = {
+              {
+                role = "system",
+                content = [[Summarize the interaction. Make it suitable for a
+buffer name in neovim using three to five words separated by
+spaces. Only output the name, nothing else.]],
+              },
+              { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
             },
-            { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
-          },
-        }, function(resp)
-          if resp then
-            self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-            pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
-          end
-          if opts and opts.on_complete then
-            opts.on_complete()
-          end
-        end)
+          }, function(resp)
+            if resp then
+              self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+              pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+            end
+            self._is_named = true
+            control.finish()
+          end)
+        else
+          control.finish()
+        end
         self:update_response_tracker(start_line)
       end,
     })
@@ -667,7 +671,7 @@ function DiffStrategy:on_progress(content)
   end
 end
 
-function DiffStrategy:on_complete(opts)
+function DiffStrategy:on_complete(control)
   del_abort_keymap(self.buf)
   self:execute_tools({
     on_tool_complete = function(tool, content)
@@ -677,7 +681,7 @@ function DiffStrategy:on_complete(opts)
       })
     end,
     on_tools_complete = function()
-      assistant.execute_strategy(self)
+      control.continue_execution()
     end,
     on_no_tools = function()
       if vim.api.nvim_buf_is_loaded(self.buf) then
@@ -693,9 +697,7 @@ function DiffStrategy:on_complete(opts)
         vim.bo[self.buf].modifiable = false
       end
       vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
-      if opts and opts.on_complete then
-        opts.on_complete()
-      end
+      control.finish()
     end,
   })
 end
@@ -775,7 +777,7 @@ function InsertStrategy:on_progress(content)
   )
 end
 
-function InsertStrategy:on_complete(opts)
+function InsertStrategy:on_complete(control)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   self:execute_tools({
@@ -787,16 +789,14 @@ function InsertStrategy:on_complete(opts)
       })
     end,
     on_tools_complete = function()
-      assistant.execute_strategy(self)
+      control.continue_execution()
     end,
     on_no_tools = function()
       if self._writer then
         self._writer = nil
       end
       vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
-      if opts and opts.on_complete then
-        opts.on_complete()
-      end
+      control.finish()
     end,
   })
 end
@@ -884,7 +884,7 @@ function HiddenStrategy:on_progress(content)
   self._writer:append(content)
 end
 
-function HiddenStrategy:on_complete(opts)
+function HiddenStrategy:on_complete(control)
   local context = self.conversation.context
   if context then
     del_abort_keymap(context.buf)
@@ -912,7 +912,7 @@ function HiddenStrategy:on_complete(opts)
       })
     end,
     on_tools_complete = function()
-      assistant.execute_strategy(self)
+      control.continue_execution()
     end,
     on_no_tools = function()
       if context then
@@ -929,9 +929,7 @@ function HiddenStrategy:on_complete(opts)
       else
         vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
       end
-      if opts and opts.on_complete then
-        opts.on_complete()
-      end
+      control.finish()
     end,
   })
 end
