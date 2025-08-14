@@ -539,31 +539,82 @@ function M.setup(options)
     vim.api.nvim_echo({ { "Sia: Aborted all running jobs", "Normal" } }, false, {})
   end, {})
 
+  --- Compact a conversation by summarizing previous messages
+  --- @param conversation table The conversation object to compact
+  --- @param reason string? Optional reason for compacting (used in summary message)
+  --- @param callback function? Optional callback to execute after compacting
+  M.compact_conversation = function(conversation, reason, callback)
+    local prompt = {
+      {
+        role = "system",
+        content = [[You are tasked with compacting a conversation by creating a comprehensive summary that preserves all essential information for continuing the conversation.
+
+CRITICAL REQUIREMENTS:
+1. Preserve ALL technical details: file paths, function names, class names, variable names, configuration settings
+2. Maintain the chronological order of decisions and changes made
+3. Include specific code snippets or patterns that were discussed or implemented
+4. Preserve any architectural decisions, design patterns, or coding standards established
+5. Keep track of any bugs identified, solutions attempted, and their outcomes
+6. Maintain context about the codebase structure and relationships between components
+
+SUMMARY STRUCTURE:
+- **Project Context**: Brief description of the project and its purpose
+- **Files Modified**: List all files that were created, modified, or discussed with specific changes
+- **Key Decisions**: Important architectural, design, or implementation decisions made
+- **Code Changes**: Specific functions, classes, or code blocks that were added/modified
+- **Outstanding Issues**: Any unresolved problems, TODOs, or areas needing attention
+- **Technical Details**: Configuration changes, dependencies, or environment setup
+
+OUTPUT FORMAT:
+Write a clear, structured summary using markdown formatting. Be concise but comprehensive - the summary should allow someone to understand the full context and continue working on the project without losing important details.
+
+The summary will replace the conversation history, so ensure no critical information is lost.]],
+      },
+    }
+
+    for _, message in ipairs(conversation:get_messages({ kind = "user" })) do
+      table.insert(prompt, message:to_prompt())
+    end
+
+    require("sia.assistant").execute_query({
+      prompt = prompt,
+    }, function(content)
+      if content then
+        conversation:clear_user_instructions()
+        conversation:clear_files()
+
+        local summary_content
+        if reason then
+          summary_content = string.format(
+            "This is a summary of the previous conversation which has been compacted due to topic change (%s):\n\n%s",
+            reason,
+            content
+          )
+        else
+          summary_content = string.format("This is a summary of the conversation which has been removed:\n %s", content)
+        end
+
+        conversation:add_instruction({
+          role = "user",
+          content = summary_content,
+        })
+
+        if callback then
+          callback(content)
+        end
+      elseif callback then
+        callback(nil)
+      end
+    end)
+  end
+
   vim.api.nvim_create_user_command("SiaCompact", function()
     local chat = ChatStrategy.by_buf()
 
     if chat then
-      local prompt = {
-        {
-          role = "system",
-          content = [[Your task is to compact the conversation. Retain all
-relevant details (e.g., file details) and output a summary. The summar will be used to
-continue the conversation.
-]],
-        },
-      }
-      for _, message in ipairs(chat.conversation:get_messages({ kind = "user" })) do
-        table.insert(prompt, message:to_prompt())
-      end
-      require("sia.assistant").execute_query({
-        prompt = prompt,
-      }, function(content)
-        chat.conversation:clear_user_instructions()
-        chat.conversation:clear_files()
-        chat.conversation:add_instruction({
-          role = "user",
-          content = string.format("This is a summary of the conversation which has been removed:\n %s", content),
-        })
+      chat.is_busy = true
+      M.compact_conversation(chat.conversation, "Requested by user", function(_)
+        chat.is_busy = false
       end)
     else
       -- echo that not called from a chat

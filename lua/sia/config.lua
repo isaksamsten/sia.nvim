@@ -166,6 +166,8 @@ local defaults = {
     ["openrouter/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
     ["openrouter/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
     ["openrouter/glm-4.5"] = { "openrouter", "z-ai/glm-4.5" },
+    ["openrouter/quen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
+    ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
   },
   instructions = {},
   --- @type sia.config.Defaults
@@ -209,6 +211,7 @@ local defaults = {
         git_unstage = require("sia.tools").git_unstage,
         git_status = require("sia.tools").git_status,
         dispatch_agent = require("sia.tools").dispatch_agent,
+        compact = require("sia.tools").compact_conversation,
       },
     },
     actions = {
@@ -255,6 +258,7 @@ local defaults = {
           "get_diagnostics",
           "git_status",
           "dispatch_agent",
+          "compact",
           "git_commit",
           "git_diff",
         },
