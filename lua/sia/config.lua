@@ -44,7 +44,8 @@ local providers = require("sia.provider")
 --- @field name string
 --- @field description string
 --- @field system_prompt string?
---- @field message string?
+--- @field is_interactive (fun(args: table):boolean)?
+--- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
 --- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
@@ -251,21 +252,44 @@ local defaults = {
         },
         tools = {
           "grep",
-          "add_file",
-          "add_files",
           "edit_file",
           "list_files",
           "get_diagnostics",
-          "git_status",
           "dispatch_agent",
           "compact",
-          "git_commit",
-          "git_diff",
         },
       },
     },
   },
   actions = {
+    agent = {
+      mode = "chat",
+      temperature = 0.1,
+      chat = {
+        block_action = "verbatim",
+      },
+      system = {
+        "default_system",
+        "directory_structure",
+        "agents_md",
+      },
+      instructions = {
+        "current_context",
+      },
+      tools = {
+        "grep",
+        "add_file",
+        "add_files",
+        "edit_file",
+        "list_files",
+        "get_diagnostics",
+        "git_status",
+        "dispatch_agent",
+        "compact",
+        "git_commit",
+        "git_diff",
+      },
+    },
     edit = require("sia.actions").edit(),
     diagnostic = require("sia.actions").diagnostic(),
     commit = require("sia.actions").commit(),

@@ -353,8 +353,7 @@ end
 --- @field mode sia.config.ActionMode?
 --- @field context sia.Context?
 --- @field ignore_tool_confirm boolean?
---- @field tool_fn table<string, {message: string?, action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
---- @field prending_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
+--- @field tool_fn table<string, {is_interactive:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -496,7 +495,7 @@ function Conversation:add_tool(tool)
     tool = require("sia.config").options.defaults.tools.choices[tool]
   end
   if tool ~= nil and self.tool_fn[tool.name] == nil then
-    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute }
+    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute, is_interactive = tool.is_interactive }
     table.insert(self.tools, tool)
   end
 end

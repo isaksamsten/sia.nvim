@@ -173,25 +173,86 @@ function Strategy:on_tool_call(t)
   end
 end
 
---- @alias sia.CompletedTools { name: string, confirmation: { description: string[] }?, bufs: [integer]?  }
---- @param opts { on_tool_start: (fun(tool: sia.ToolCall):nil), on_tool_complete: (fun(tool: sia.ToolCall, output: string[]):nil), on_tools_complete: (fun():nil), on_no_tools: (fun(bufs: [integer]?):nil) }
+--- @class sia.ParsedTool
+--- @field name string?
+--- @field arguments table?
+--- @field tool_call sia.ToolCall
+
+--- @class sia.ExecuteToolsOpts
+--- @field on_tool_start? fun(tool: sia.ToolCall) # (deprecated, use on_tool_status_update)
+--- @field on_tool_complete fun(tool: sia.ToolCall, output: string[])
+--- @field on_tools_complete fun()
+--- @field on_no_tools fun(bufs: [integer]?)
+--- @field on_tool_status_update? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
+
+--- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
   if not vim.tbl_isempty(self.tools) then
-    --- @type sia.CompletedTools[]
-    local completed_tools = {}
+    --- @type sia.ParsedTool
+    local non_interactive_tools = {}
+    --- @type sia.ParsedTool
+    local interactive_tools = {}
+    local all_tools = {}
 
-    local tool_list = {}
+    local index = 1
     for _, tool in pairs(self.tools) do
-      table.insert(tool_list, tool)
+      local tool_name = nil
+      local tool_args = nil
+      --- @type string?
+      local tool_message = nil
+      local is_interactive = false
+      local fun = tool["function"]
+      if fun then
+        tool_name = fun.name
+        local status, args = pcall(vim.fn.json_decode, fun.arguments)
+        if status then
+          tool_args = args
+          local tool_fn = self.conversation.tool_fn[fun.name]
+          if tool_fn then
+            if tool_fn.message ~= nil then
+              if type(tool_fn.message) == "string" then
+                tool_message = tool_fn.message --- @as string
+              else
+                tool_message = tool_fn.message(args)
+              end
+            end
+            is_interactive = tool_fn.is_interactive ~= nil and tool_fn.is_interactive(self.conversation, tool_args)
+          end
+        end
+      end
+      local parsed_tool =
+        { index = index, message = tool_message, name = tool_name, arguments = tool_args, tool_call = tool }
+      all_tools[index] = { tool = parsed_tool, status = "pending" }
+      index = index + 1
+      if is_interactive then
+        table.insert(interactive_tools, parsed_tool)
+      else
+        table.insert(non_interactive_tools, parsed_tool)
+      end
     end
 
     self.tools = {}
 
-    local total_tools = #tool_list
+    if opts.on_tool_status_update then
+      opts.on_tool_status_update(all_tools)
+    end
+
+    local total_tools = #interactive_tools + #non_interactive_tools
     local completed_count = 0
 
-    local function on_tool_finished()
+    --- @param index integer
+    local function update_status(index, status)
+      all_tools[index].status = status
+      if opts.on_tool_status_update then
+        opts.on_tool_status_update(all_tools)
+      end
+    end
+
+    --- @param index integer
+    local function on_tool_finished(index)
       completed_count = completed_count + 1
+      update_status(index, "done")
+      print(index, completed_count, total_tools)
       if completed_count == total_tools then
         if opts.on_tools_complete then
           opts.on_tools_complete()
@@ -199,35 +260,77 @@ function Strategy:execute_tools(opts)
       end
     end
 
-    for _, tool in ipairs(tool_list) do
-      local func = tool["function"]
-      if func then
-        opts.on_tool_start(tool)
-        local status, arguments = pcall(vim.fn.json_decode, func.arguments)
-        if status then
+    -- Non-interactive tools
+    for i, tool in ipairs(non_interactive_tools) do
+      vim.schedule(function()
+        update_status(tool.index, "running")
+        if tool.name then
+          if tool.arguments then
+            self.conversation:execute_tool(
+              tool.name,
+              tool.arguments,
+              self,
+              vim.schedule_wrap(function(tool_result)
+                if tool_result then
+                  opts.on_tool_complete(tool.tool_call, tool_result.content)
+                else
+                  opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
+                end
+                on_tool_finished(tool.index)
+              end)
+            )
+          else
+            local error_message = { "Could not parse tool arguments" }
+            opts.on_tool_complete(tool.tool_call, error_message)
+            on_tool_finished(tool.index)
+          end
+        else
+          opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
+          on_tool_finished(tool.index)
+        end
+      end)
+    end
+
+    -- Interactive tools
+    local current_tool_index = 1
+    local function process_next_tool()
+      if current_tool_index > #interactive_tools then
+        return
+      end
+      local tool = interactive_tools[current_tool_index]
+      update_status(tool.index, "running")
+      current_tool_index = current_tool_index + 1
+      if tool.name then
+        if tool.arguments then
           self.conversation:execute_tool(
-            func.name,
-            arguments,
+            tool.name,
+            tool.arguments,
             self,
             vim.schedule_wrap(function(tool_result)
               if tool_result then
-                opts.on_tool_complete(tool, tool_result.content)
-                table.insert(completed_tools, { name = func.name, confirmation = tool_result.confirmation })
+                opts.on_tool_complete(tool.tool_call, tool_result.content)
               else
-                opts.on_tool_complete(tool, { "Could not find tool..." })
+                opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
               end
-              on_tool_finished()
+              on_tool_finished(tool.index)
+              process_next_tool()
             end)
           )
         else
-          local error_message = { "Could not parse tool arguments: " .. tostring(arguments) }
-          opts.on_tool_complete(tool, error_message)
-          on_tool_finished()
+          local error_message = { "Could not parse tool arguments" }
+          opts.on_tool_complete(tool.tool_call, error_message)
+          on_tool_finished(tool.index)
+          process_next_tool()
         end
       else
-        opts.on_tool_complete(tool, { "Tool is not a function" })
-        on_tool_finished()
+        opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
+        on_tool_finished(tool.index)
+        process_next_tool()
       end
+    end
+
+    if #interactive_tools > 0 then
+      process_next_tool()
     end
   else
     opts.on_no_tools()
@@ -380,7 +483,6 @@ function ChatStrategy:on_init()
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
     end
-    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   end
 end
 
@@ -391,6 +493,7 @@ end
 function ChatStrategy:on_start(job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self.canvas:clear_reasoning()
+    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
       vim.fn.jobstop(job)
     end)
@@ -465,11 +568,18 @@ function ChatStrategy:on_complete(control)
     end
 
     self:execute_tools({
-      on_tool_start = function(tool)
-        local tool_name = tool["function"].name
-        local friendly_message = self.conversation:get_tool_message(tool_name)
-        local message = friendly_message or ("Using " .. tool_name .. " tool...")
-        self.canvas:update_progress({ { message, "NonText" } })
+      on_tool_status_update = function(statuses)
+        local status_icons = { pending = " ", running = " ", done = " " }
+        local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
+        local lines = {}
+        for _, s in ipairs(statuses) do
+          local icon = status_icons[s.status] or ""
+          local friendly_message = s.tool.message
+          local label = friendly_message or (s.tool.name or "tool")
+          local hl = status_hl[s.status] or "NonText"
+          table.insert(lines, { { icon, hl }, { label, "NonText" } })
+        end
+        self.canvas:update_tool_progress(lines)
       end,
       on_tool_complete = function(tool, content)
         self.conversation:add_instruction({
@@ -480,6 +590,9 @@ function ChatStrategy:on_complete(control)
       on_tools_complete = function()
         self.hide_header = nil
         self:update_response_tracker(start_line)
+        vim.defer_fn(function()
+          self.canvas:clear_extmarks()
+        end, 500)
         control.continue_execution()
       end,
       on_no_tools = function()

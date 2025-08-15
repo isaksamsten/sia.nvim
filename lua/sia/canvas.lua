@@ -2,10 +2,7 @@ local M = {}
 
 local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
 local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
-local MODEL_NS = vim.api.nvim_create_namespace("sia_chat_model")
 local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
-local TEXT_EXT_NS = vim.api.nvim_create_namespace("sia_chat_text_ext")
-local NEWLINE_EXT_NS = vim.api.nvim_create_namespace("sia_chat_newline_ext")
 
 --- @class sia.Canvas
 local Canvas = {}
@@ -20,6 +17,9 @@ function Canvas:scroll_to_bottom() end
 
 --- @param content string[][]
 function Canvas:update_progress(content) end
+
+--- @param content string[][][]
+function Canvas:update_tool_progress(content) end
 
 --- @param content string[]
 function Canvas:append(content) end
@@ -54,6 +54,14 @@ function ChatCanvas:new(buf)
   return obj
 end
 
+function ChatCanvas:update_tool_progress(content)
+  local buf = self.buf
+  self:clear_extmarks()
+  self.progress_extmark = vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
+    virt_lines = content,
+    virt_lines_above = false,
+  })
+end
 function ChatCanvas:update_progress(content)
   local buf = self.buf
   self:clear_extmarks()

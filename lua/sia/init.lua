@@ -414,7 +414,7 @@ local add_commands = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          conversation:add_instruction("current_buffer", { buf = buf, pos = { 0, 0 } })
+          conversation:add_instruction("current_context", { buf = buf, pos = { 0, 0 }, file = true })
         end
       end
     end,
@@ -422,7 +422,7 @@ local add_commands = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          Conversation.add_pending_instruction("current_buffer", { buf = buf, pos = { 0, 0 } })
+          Conversation.add_pending_instruction("current_context", { buf = buf, pos = { 0, 0 }, file = true })
         end
       end
     end,

@@ -4,7 +4,7 @@ local M = {}
 ---@field name string
 ---@field description string
 ---@field auto_apply (fun(args: table):integer?)?
----@field message string?
+---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
 ---@field required string[]
 ---@field parameters table
@@ -57,6 +57,15 @@ M.new_tool = function(opts, execute)
     message = opts.message,
     parameters = opts.parameters,
     system_prompt = opts.system_prompt,
+    is_interactive = function(conversation, args)
+      if conversation.ignore_tool_confirm then
+        return false
+      end
+      if opts.confirm ~= nil or opts.select ~= nil then
+        return auto_apply(args) == nil
+      end
+      return false
+    end,
     description = opts.description,
     required = opts.required,
     execute = function(args, conversation, callback)
@@ -438,7 +447,9 @@ M.grep = M.new_tool({
 - The root of the search is always the current working directory
 - When you are doing an open ended search that may require multiple rounds of
 globbing and grepping, use the dispatch_agent tool instead]],
-  message = "Searching through files...",
+  message = function(args)
+    return string.format("Searching through files for %s...", args.pattern)
+  end,
   description = "Grep for a pattern in files using rg",
   parameters = {
     glob = { type = "string", description = "Glob pattern for files to search" },
@@ -1033,20 +1044,24 @@ search for you. For example:
 
 Usage notes:
 
-1. Launch multiple agents concurrently whenever possible, to maximize
+1. When a task involves multiple related queries or actions that can be
+   efficiently handled together, prefer dispatching a single agent with a
+   comprehensive prompt rather than multiple agents with overlapping or similar
+   tasks.
+2. Launch multiple agents concurrently whenever possible, to maximize
    performance; to do that, use a single message with multiple tool uses
-2. When the agent is done, it will return a single message back to you. The
+3. When the agent is done, it will return a single message back to you. The
    result returned by the agent is not visible to the user. To show the user
    the result, you should send a text message back to the user with a concise
    summary of the result.
-3. Each agent invocation is stateless. You will not be able to send additional
+4. Each agent invocation is stateless. You will not be able to send additional
    messages to the agent, nor will the agent be able to communicate with you
    outside of its final report. Therefore, your prompt should contain a highly
    detailed task description for the agent to perform autonomously and you
    should specify exactly what information the agent should return back to you
    in its final and only message to you.
-4. The agent's outputs should generally be trusted
-5. IMPORTANT: The agent can not modify files. If you want to use these tools,
+5. The agent's outputs should generally be trusted
+6. IMPORTANT: The agent can not modify files. If you want to use these tools,
    use them directly instead of going through the agent.]],
   parameters = {
     prompt = {
