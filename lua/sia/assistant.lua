@@ -100,6 +100,21 @@ local function call_provider(query, opts)
   })
 end
 
+local function extract_error(json)
+  if json.error then
+    return json.error
+  end
+
+  if vim.islist(json) then
+    for _, part in ipairs(json) do
+      if part.error then
+        return part.error
+      end
+    end
+  end
+  return nil
+end
+
 --- @param strategy sia.Strategy
 function M.execute_strategy(strategy)
   if strategy.is_busy then
@@ -131,10 +146,11 @@ function M.execute_strategy(strategy)
           local response = table.concat(responses, " ")
           local status, json = pcall(vim.json.decode, response, { luanil = { object = true } })
           if status then
-            if json.error then
+            local m_err = extract_error(json)
+            if m_err then
               vim.api.nvim_exec_autocmds("User", {
                 pattern = "SiaError",
-                data = json.error,
+                data = m_err,
               })
               error_initialize = true
               strategy.is_busy = false
