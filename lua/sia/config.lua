@@ -86,6 +86,7 @@ local providers = require("sia.provider")
 --- @class sia.config.Provider
 --- @field base_url string
 --- @field api_key fun():string?
+--- @field format_messages fun(model:string, prompt:sia.Prompt[]):nil
 
 --- @class sia.config.Options
 --- @field models sia.config.Models

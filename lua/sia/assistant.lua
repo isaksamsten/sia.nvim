@@ -21,10 +21,15 @@ local function call_provider(query, opts)
     provider = query.model.provider
   end
 
+  local prompt = query.prompt
+  if provider.format_messages then
+    provider.format_messages(model[2], prompt)
+  end
+
   --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?, max_tokens: integer?}
   local data = {
     model = model[2],
-    messages = query.prompt,
+    messages = prompt,
     tools = query.tools,
   }
 

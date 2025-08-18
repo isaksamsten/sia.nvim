@@ -117,10 +117,41 @@ M.morph = {
   end,
 }
 
+local OR_CACHING = { "anthropic/claude-sonnet-4" }
 M.openrouter = {
   base_url = "https://openrouter.ai/api/v1/chat/completions",
   api_key = function()
     return os.getenv("OPENROUTER_API_KEY")
+  end,
+  --- @param model string
+  --- @param prompt sia.Prompt[]
+  format_messages = function(model, prompts)
+    local new_prompts = {}
+    if vim.list_contains(OR_CACHING, model) then
+      local last_system_idx = nil
+      local last_user_idx = nil
+      for i = #prompts, 1, -1 do
+        if prompts[i].role == "system" then
+          last_system_idx = i
+          break
+        end
+      end
+      for i = #prompts, 1, -1 do
+        if prompts[i].role == "user" then
+          last_user_idx = i
+          break
+        end
+      end
+      for i, prompt in ipairs(prompts) do
+        if i == last_system_idx then
+          prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
+        elseif i == last_user_idx then
+          prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
+        end
+
+        table.insert(new_prompts, prompt)
+      end
+    end
   end,
 }
 

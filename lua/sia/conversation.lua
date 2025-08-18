@@ -1,4 +1,9 @@
---- @alias sia.Prompt {role: sia.config.Role, content: string?, tool_calls: sia.ToolCall[]?, tool_call_id: string? }
+--- @class sia.Prompt
+--- @field role sia.config.Role
+--- @field content (string|{type:string, text: string, cache_control: {type: "ephemeral"}?})?
+--- @field tool_calls sia.ToolCall[]?
+--- @field tool_call_id string?
+
 --- @alias sia.Query { model: (string|table)?, temperature: number?, prompt: sia.Prompt[], tools: sia.Tool[]?}
 --- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
