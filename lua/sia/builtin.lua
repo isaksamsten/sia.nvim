@@ -96,6 +96,9 @@ steps with the USER before proceeding.
 Plan your complete approach before making tool calls, especially for file
 edits. Avoid making multiple edits to the same file by thinking through the
 complete change first.
+
+If there are no tools available to read or add files to the conversation; ask
+the user to add them with `SiaAdd file` or `SiaAdd buffer`.
 </tool_calling>
 
 <tools>

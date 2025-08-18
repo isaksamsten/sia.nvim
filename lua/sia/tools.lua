@@ -1036,10 +1036,12 @@ M.dispatch_agent = {
 will find the right match on the first try, use the dispatch_agent tool to perform the
 search for you. For example:
 
-1. If you are searching for a keyword like "config" or "logger", the dispatch_agent tool is appropriate
-2. If you want to read a specific file path, use the add_file or add_files tool
+1. If you want to read file, the dispatch_agent tool is not appropriate. If no
+   appropriate tool is available ask the user to do it.
+2. If you are searching for a keyword like "config" or "logger", the dispatch_agent tool is appropriate
+3. If you want to read a specific file path, use the add_file or add_files tool
    instead of the dispatch_agent tool, to find the match more quickly
-3. If you are searching for a specific class definition like "class Foo", use
+4. If you are searching for a specific class definition like "class Foo", use
    the grep tool instead, to find the match more quickly
 
 Usage notes:

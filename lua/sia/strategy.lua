@@ -179,7 +179,6 @@ end
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field on_tool_start? fun(tool: sia.ToolCall) # (deprecated, use on_tool_status_update)
 --- @field on_tool_complete fun(tool: sia.ToolCall, output: string[])
 --- @field on_tools_complete fun()
 --- @field on_no_tools fun(bufs: [integer]?)
@@ -252,7 +251,6 @@ function Strategy:execute_tools(opts)
     local function on_tool_finished(index)
       completed_count = completed_count + 1
       update_status(index, "done")
-      print(index, completed_count, total_tools)
       if completed_count == total_tools then
         if opts.on_tools_complete then
           opts.on_tools_complete()
@@ -512,7 +510,7 @@ function ChatStrategy:on_start(job)
 end
 
 function ChatStrategy:on_reasoning(content)
-  self._reasoning_writer:append(content)
+  -- self._reasoning_writer:append(content)
 end
 
 function ChatStrategy:on_progress(content)
@@ -787,6 +785,27 @@ end
 function DiffStrategy:on_complete(control)
   del_abort_keymap(self.buf)
   self:execute_tools({
+    -- on_tool_status_update = function(statuses)
+    --   local status_icons = { pending = " ", running = " ", done = " " }
+    --   local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
+    --   local lines = {}
+    --   for _, s in ipairs(statuses) do
+    --     local icon = status_icons[s.status] or ""
+    --     local friendly_message = s.tool.message
+    --     local label = friendly_message or (s.tool.name or "tool")
+    --     local hl = status_hl[s.status] or "NonText"
+    --     table.insert(lines, { { icon, hl }, { label, "NonText" } })
+    --   end
+    --   if #lines > 0 then
+    --     vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
+    --     vim.api.nvim_buf_set_extmark(self.conversation.context.buf, DIFF_NS, self.conversation.context.pos[1] - 1, 0, {
+    --       virt_lines = lines,
+    --       virt_lines_above = self.conversation.context.pos[1] - 1 > 0,
+    --       hl_group = "SiaReplace",
+    --       end_line = self.conversation.context.pos[2],
+    --     })
+    --   end
+    -- end,
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
@@ -894,7 +913,25 @@ function InsertStrategy:on_complete(control)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   self:execute_tools({
-    on_tool_start = function() end,
+    -- on_tool_status_update = function(statuses)
+    --   local status_icons = { pending = " ", running = " ", done = " " }
+    --   local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
+    --   local lines = {}
+    --   for _, s in ipairs(statuses) do
+    --     local icon = status_icons[s.status] or ""
+    --     local friendly_message = s.tool.message
+    --     local label = friendly_message or (s.tool.name or "tool")
+    --     local hl = status_hl[s.status] or "NonText"
+    --     table.insert(lines, { { icon, hl }, { label, "NonText" } })
+    --   end
+    --   if #lines > 0 then
+    --     vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+    --     vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
+    --       virt_lines = lines,
+    --       virt_lines_above = self._line - 1 > 0,
+    --     })
+    --   end
+    -- end,
     on_tool_complete = function(tool, content)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
@@ -1007,15 +1044,23 @@ function HiddenStrategy:on_complete(control)
   end
 
   self:execute_tools({
-    on_tool_start = function(tool)
-      local tool_name = tool["function"].name
-      local friendly_message = self.conversation:get_tool_message(tool_name)
-      local message = friendly_message or ("Using " .. tool_name .. " tool...")
-      if context then
-        local lnum = context.pos[2]
-        vim.api.nvim_buf_set_lines(context.buf, lnum, lnum, false, { "🤖 " .. message })
-      else
-        vim.api.nvim_echo({ { "🤖 " .. message, "SiaProgress" } }, false, {})
+    on_tool_status_update = function(statuses)
+      local running_tools = vim.tbl_filter(function(s)
+        return s.status == "running"
+      end, statuses)
+      if #running_tools > 0 then
+        local tool = running_tools[1].tool
+        local friendly_message = tool.message
+        local message = friendly_message or ("Using " .. (tool.name or "tool") .. "...")
+        if context then
+          vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+          vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, context.pos[1] - 1, 0, {
+            virt_lines = { { { "🤖 ", "Normal" }, { message, "SiaProgress" } } },
+            virt_lines_above = context.pos[1] - 1 > 0,
+          })
+        else
+          vim.api.nvim_echo({ { "🤖 " .. message, "SiaProgress" } }, false, {})
+        end
       end
     end,
     on_tool_complete = function(tool, content)
