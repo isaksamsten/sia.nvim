@@ -1,7 +1,6 @@
 local M = {}
 local utils = require("sia.utils")
 local ChatCanvas = require("sia.canvas").ChatCanvas
-local block = require("sia.blocks")
 local assistant = require("sia.assistant")
 local Message = require("sia.conversation").Message
 
@@ -179,13 +178,14 @@ end
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field on_tool_complete fun(tool: sia.ToolCall, output: string[])
---- @field on_tools_complete fun()
---- @field on_no_tools fun(bufs: [integer]?)
+--- @field on_tool_complete fun(tool: sia.ToolCall, output: string[], context: sia.Context?)
+--- @field on_tools_complete fun(args: {cancel: boolean})
+--- @field on_no_tools fun(args: {cancel: boolean})
 --- @field on_tool_status_update? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
 
 --- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
+  local tool_cancel = false
   if not vim.tbl_isempty(self.tools) then
     --- @type sia.ParsedTool
     local non_interactive_tools = {}
@@ -248,12 +248,14 @@ function Strategy:execute_tools(opts)
     end
 
     --- @param index integer
-    local function on_tool_finished(index)
+    --- @param cancel boolean?
+    local function on_tool_finished(index, cancel)
       completed_count = completed_count + 1
+      tool_cancel = cancel or false
       update_status(index, "done")
       if completed_count == total_tools then
         if opts.on_tools_complete then
-          opts.on_tools_complete()
+          opts.on_tools_complete({ cancel = tool_cancel })
         end
       end
     end
@@ -269,22 +271,25 @@ function Strategy:execute_tools(opts)
               tool.arguments,
               self,
               vim.schedule_wrap(function(tool_result)
+                local cancel
                 if tool_result then
-                  opts.on_tool_complete(tool.tool_call, tool_result.content)
+                  opts.on_tool_complete(tool.tool_call, tool_result.content, tool_result.context)
+                  cancel = tool_result.cancel
                 else
                   opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
+                  cancel = true
                 end
-                on_tool_finished(tool.index)
+                on_tool_finished(tool.index, cancel)
               end)
             )
           else
             local error_message = { "Could not parse tool arguments" }
             opts.on_tool_complete(tool.tool_call, error_message)
-            on_tool_finished(tool.index)
+            on_tool_finished(tool.index, true)
           end
         else
           opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
-          on_tool_finished(tool.index)
+          on_tool_finished(tool.index, true)
         end
       end)
     end
@@ -305,24 +310,27 @@ function Strategy:execute_tools(opts)
             tool.arguments,
             self,
             vim.schedule_wrap(function(tool_result)
+              local cancel
               if tool_result then
-                opts.on_tool_complete(tool.tool_call, tool_result.content)
+                opts.on_tool_complete(tool.tool_call, tool_result.content, tool_result.context)
+                cancel = tool_result.cancel
               else
                 opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
+                cancel = true
               end
-              on_tool_finished(tool.index)
+              on_tool_finished(tool.index, cancel)
               process_next_tool()
             end)
           )
         else
           local error_message = { "Could not parse tool arguments" }
           opts.on_tool_complete(tool.tool_call, error_message)
-          on_tool_finished(tool.index)
+          on_tool_finished(tool.index, true)
           process_next_tool()
         end
       else
         opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
-        on_tool_finished(tool.index)
+        on_tool_finished(tool.index, true)
         process_next_tool()
       end
     end
@@ -331,7 +339,7 @@ function Strategy:execute_tools(opts)
       process_next_tool()
     end
   else
-    opts.on_no_tools()
+    opts.on_no_tools({ cancel = tool_cancel })
   end
 end
 
@@ -353,9 +361,6 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field name string
---- @field block_action sia.BlockAction
---- @field current_response integer
---- @field response_tracker table<integer, table?>
 --- @field _is_named boolean
 --- @field _writer sia.Writer? the writer
 --- @field _reasoning_writer sia.Writer? reasoning writer
@@ -388,15 +393,6 @@ function ChatStrategy:new(conversation, options)
   obj.buf = buf
   obj._writer = nil
   obj.options = options
-  obj.current_response = 0
-  obj.response_tracker = {}
-  obj.augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = false })
-
-  if type(options.block_action) == "table" then
-    obj.block_action = options.block_action --[[@as sia.BlockAction]]
-  else
-    obj.block_action = block.actions[options.block_action]
-  end
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -415,7 +411,6 @@ function ChatStrategy:new(conversation, options)
   local model = obj.conversation.model or require("sia.config").options.defaults.model
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
-  obj:_setup_autocommand()
   obj._is_named = false
   return obj
 end
@@ -426,51 +421,6 @@ function ChatStrategy:redraw()
   local model = self.conversation.model or require("sia.config").options.defaults.model
   self.canvas:render_messages(self.conversation:get_messages(), model)
   vim.bo[self.buf].modifiable = false
-end
-
-function ChatStrategy:_setup_autocommand()
-  --- @type {response: { message_id: integer, lnum: integer, lnum_end: integer}, extmark: integer}?
-  local old_resp = nil
-
-  local set_extmark = function(resp)
-    return vim.api.nvim_buf_set_extmark(self.buf, SPLIT_NS, resp.lnum, 0, {
-      hl_eol = true,
-      end_line = resp.lnum_end,
-      hl_group = "SiaChatResponse",
-      hl_mode = "combine",
-    })
-  end
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    group = self.augroup,
-    buffer = self.buf,
-    callback = function()
-      local row = vim.api.nvim_win_get_cursor(0)[1]
-      local resp = self.response_tracker[row]
-      if resp == nil then
-        if old_resp then
-          pcall(vim.api.nvim_buf_del_extmark, self.buf, SPLIT_NS, old_resp.extmark)
-        end
-        old_resp = nil
-        return
-      end
-
-      if old_resp == nil or resp.message_id ~= old_resp.response.message_id then
-        if old_resp ~= nil then
-          pcall(vim.api.nvim_buf_del_extmark, self.buf, SPLIT_NS, old_resp.extmark)
-        end
-        old_resp = { response = resp, extmark = set_extmark(resp) }
-      end
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-    group = self.augroup,
-    buffer = self.buf,
-    callback = function(args)
-      ChatStrategy.remove(args.buf)
-      pcall(vim.api.nvim_del_augroup_by_id, self.augroup)
-    end,
-  })
 end
 
 function ChatStrategy:on_init()
@@ -528,18 +478,6 @@ function ChatStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
-function ChatStrategy:update_response_tracker(lnum)
-  local response_track = {
-    message_id = self.current_response,
-    lnum = lnum,
-    lnum_end = vim.api.nvim_buf_line_count(self.buf),
-  }
-
-  for i = lnum, response_track.lnum_end do
-    self.response_tracker[i] = response_track
-  end
-end
-
 function ChatStrategy:on_complete(control)
   if not self._writer then
     return
@@ -548,21 +486,8 @@ function ChatStrategy:on_complete(control)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     del_abort_keymap(self.buf)
     self.canvas:scroll_to_bottom()
-    local start_line = self._writer.start_line
     if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
-      self.current_response = self.current_response + 1
-      self.conversation:add_instruction(
-        { role = "assistant", content = self._writer.cache },
-        nil,
-        self.current_response
-      )
-
-      if self.block_action and self.options.automatic_block_action then
-        local blocks = block.parse_blocks(0, self._writer.cache)
-        vim.schedule(function()
-          require("sia.blocks").replace_all_blocks(self.block_action, blocks)
-        end)
-      end
+      self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
     end
 
     self:execute_tools({
@@ -579,22 +504,28 @@ function ChatStrategy:on_complete(control)
         end
         self.canvas:update_tool_progress(lines)
       end,
-      on_tool_complete = function(tool, content)
+      on_tool_complete = function(tool, content, tool_context)
         self.conversation:add_instruction({
           { role = "assistant", tool_calls = { tool } },
           { role = "tool", content = content, _tool_call = tool },
-        })
+        }, tool_context)
       end,
-      on_tools_complete = function()
+      on_tools_complete = function(opts)
         self.hide_header = nil
-        self:update_response_tracker(start_line)
         vim.defer_fn(function()
           self.canvas:clear_extmarks()
         end, 500)
-        control.continue_execution()
+        if opts.cancel then
+          control.finish()
+        else
+          control.continue_execution()
+        end
       end,
-      on_no_tools = function()
+      on_no_tools = function(opts)
         self.canvas:clear_extmarks()
+        if opts.cancel then
+          self.canvas:update_progress({ { "The tool call was cancelled. Manually resume conversation" } })
+        end
         vim.bo[self.buf].modifiable = false
         if not self._is_named then
           assistant.execute_query({
@@ -619,36 +550,10 @@ spaces. Only output the name, nothing else.]],
         else
           control.finish()
         end
-        self:update_response_tracker(start_line)
       end,
     })
     self._writer = nil
   end
-end
-
---- @param line integer
---- @return sia.Block[]
-function ChatStrategy:find_all_blocks(line)
-  local resp = self.response_tracker[line]
-  if resp == nil then
-    return {}
-  end
-
-  local content = Message.merge_content(self.conversation:get_indexed_message(resp.message_id))
-  if content == nil then
-    return {}
-  end
-
-  return block.parse_blocks(resp.lnum - 1, content)
-end
-
---- @param line integer
---- @return sia.Block? block
-function ChatStrategy:find_block(line)
-  local blocks = self:find_all_blocks(line)
-  return vim.iter(blocks):find(function(b)
-    return b.pos[1] <= line - 1 and line - 1 <= b.pos[2]
-  end)
 end
 
 --- Get the ChatStrategy associated with buf
@@ -806,11 +711,11 @@ function DiffStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, content)
+    on_tool_complete = function(tool, content, tool_context)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
         { role = "tool", content = content, _tool_call = tool },
-      })
+      }, tool_context)
     end,
     on_tools_complete = function()
       control.continue_execution()
@@ -932,11 +837,11 @@ function InsertStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, content)
+    on_tool_complete = function(tool, content, tool_context)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
         { role = "tool", content = content, _tool_call = tool },
-      })
+      }, tool_context)
     end,
     on_tools_complete = function()
       control.continue_execution()
@@ -1063,11 +968,11 @@ function HiddenStrategy:on_complete(control)
         end
       end
     end,
-    on_tool_complete = function(tool, content)
+    on_tool_complete = function(tool, content, tool_context)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
         { role = "tool", content = content, _tool_call = tool },
-      })
+      }, tool_context)
     end,
     on_tools_complete = function()
       control.continue_execution()

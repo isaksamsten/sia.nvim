@@ -13,7 +13,6 @@
 --- @field win integer?
 --- @field pos [integer,integer]
 --- @field mode "n"|"v"?
---- @field file boolean?
 --- @field bang boolean?
 --- @field cursor integer[]?
 
@@ -22,58 +21,92 @@
 --- @field end_line integer?
 
 --- @class sia.Message
---- @field id (fun(ctx:sia.Context?):table?)?
 --- @field role sia.config.Role
+--- @field context sia.Context?
 --- @field hide boolean?
---- @field content (string[]|string|(fun(ctx:sia.Context?):string))?
+--- @field content string[]?
+--- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
---- @field persistent boolean?
---- @field available (fun(ctx: sia.Context?):boolean)?
---- @field description ((fun(ctx: sia.Context?):string)|string)?
---- @field context sia.Context?
+--- @field description string?
 --- @field group integer?
 local Message = {}
 Message.__index = Message
 
 --- @param instruction sia.config.Instruction
---- @param args sia.Context?
+--- @param context sia.Context?
+--- @return string[]? content
+local function make_content(instruction, context)
+  --- @type string[]?
+  local content
+  if type(instruction.content) == "function" then
+    local tmp = instruction.content(context)
+    if tmp then
+      if type(tmp) == "string" then
+        content = vim.split(tmp, "\n", { trimempty = true })
+      else
+        content = tmp
+      end
+    end
+  elseif type(instruction.content) == "table" then
+    local tmp = instruction.content
+    --- @cast tmp string[]
+    content = tmp
+  elseif instruction.content ~= nil and type(instruction.content) == "string" then
+    local tmp = instruction.content
+    --- @cast tmp string
+    if context and vim.api.nvim_buf_is_loaded(context.buf) then
+      tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
+        filetype = vim.bo[context.buf].ft,
+        today = os.date("%Y-%m-%d"),
+      })
+    end
+
+    content = vim.split(tmp, "\n", { trimempty = true })
+  end
+  if instruction.role == "tool" then
+    content = content or {}
+  end
+
+  return content
+end
+
+--- @param instruction sia.config.Instruction
+--- @param context sia.Context?
+--- @return string?
+local function make_description(instruction, context)
+  if type(instruction.description) == "function" then
+    return instruction.description(context)
+  end
+  return nil
+end
+
+--- @param instruction sia.config.Instruction
+--- @param context sia.Context?
 --- @return sia.Message
-function Message:from_table(instruction, args)
+function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
-  obj.id = instruction.id
   obj.role = instruction.role
-  obj.hide = instruction.hide
-  obj.available = instruction.available
-  obj.content = instruction.content
-  obj.description = instruction.description
-  obj.persistent = instruction.persistent
-  obj.group = instruction.group
+  obj.context = context
+  obj.live_content = instruction.live_content
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
   if instruction._tool_call then
     obj._tool_call = instruction._tool_call
   end
-  if args then
-    obj.context = {
-      buf = args.buf,
-      win = args.win,
-      mode = args.mode,
-      bang = args.bang,
-      cursor = args.cursor,
-      file = args.file,
-      pos = args.pos,
-    }
-  end
+
+  obj.hide = instruction.hide
+  obj.content = make_content(instruction, context)
+  obj.description = make_description(instruction, context)
   return obj
 end
 
 --- Create a new message from a stored instruction
 --- @param str string|string[]
---- @param args sia.Context?
+--- @param context sia.Context?
 --- @return sia.Message[]?
-function Message:from_string(str, args)
+function Message:from_string(str, context)
   if type(str) == "string" then
     local instruction = require("sia.config").options.instructions[str]
     if not instruction then
@@ -83,54 +116,57 @@ function Message:from_string(str, args)
       if vim.islist(instruction) then
         local messages = {}
         for _, step in ipairs(instruction) do
-          table.insert(messages, Message:from_table(step, args))
+          table.insert(messages, Message:from_table(step, context))
         end
         return messages
       end
-      return { Message:from_table(instruction, args) }
+      return { Message:from_table(instruction, context) }
     end
   end
 end
 
 --- Create a new message from an Instruction or a stored instruction.
 --- @param instruction sia.config.Instruction|string|sia.config.Instruction[]
---- @param args sia.Context?
+--- @param context sia.Context?
 --- @return sia.Message[]?
-function Message:new(instruction, args)
+function Message:new(instruction, context)
   if type(instruction) == "string" then
-    return Message:from_string(instruction, args)
+    return Message:from_string(instruction, context)
   elseif vim.islist(instruction) then
     local messages = {}
     for _, step in ipairs(instruction) do
-      table.insert(messages, Message:from_table(step, args))
+      table.insert(messages, Message:from_table(step, context))
     end
     return messages
   else
-    return { Message:from_table(instruction, args) }
+    return { Message:from_table(instruction, context) }
   end
 end
 
+--- @return string[]?
+function Message:get_content()
+  if self.content then
+    return self.content
+  elseif self.live_content then
+    local content = self.live_content()
+    if content then
+      return vim.split(content, "\n")
+    end
+  else
+    return nil
+  end
+end
 --- @param conversation sia.Conversation?
 --- @return sia.Prompt
 function Message:to_prompt(conversation)
   --- @type sia.Prompt
   local prompt = { role = self.role }
-  if self.content then
-    if type(self.content) == "function" then
-      local content = self.content(self.context)
-      if type(content) == "table" then
-        prompt.content = table.concat(content, "\n")
-      else
-        prompt.content = content
-      end
-    elseif type(self.content) == "table" then
-      local content = self.content
-      --- @cast content [string]
-      prompt.content = table.concat(content, "\n")
-    else
-      prompt.content = self.content
-    end
+
+  local content = self:get_content()
+  if content then
+    prompt.content = table.concat(content, "\n")
   end
+
   if self.tool_calls then
     prompt.tool_calls = {}
     for _, tool_call in ipairs(self.tool_calls) do
@@ -164,13 +200,8 @@ function Message:to_prompt(conversation)
   return prompt
 end
 
---- @return boolean
-function Message:is_context()
-  return (self.role == "user" and self.persistent == true and self:is_available()) or self.role == "tool"
-end
-
 function Message:is_shown()
-  return not (self.hide == true or self.persistent == true or self.role == "system" or self.role == "tool")
+  return not (self.hide == true or self.role == "system" or self.role == "tool")
 end
 
 --- @return boolean
@@ -189,180 +220,44 @@ function Message:get_id()
   return nil
 end
 
---- @return string[]? content
-function Message:get_content()
-  --- @type string[]?
-  local content
-  if type(self.content) == "function" then
-    local tmp = self.content(self.context)
-    if tmp then
-      if type(tmp) == "string" then
-        content = vim.split(tmp, "\n", { trimempty = true })
-      else
-        content = tmp
-      end
-    end
-  elseif type(self.content) == "table" then
-    local tmp = self.content
-    --- @cast tmp string[]
-    content = tmp
-  elseif self.content ~= nil and type(self.content) == "string" then
-    local tmp = self.content
-    --- @cast tmp string
-    if self.context and vim.api.nvim_buf_is_loaded(self.context.buf) then
-      tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
-        filetype = vim.bo[self.context.buf].ft,
-        today = os.date("%Y-%m-%d"),
-      })
-    end
-
-    content = vim.split(tmp, "\n", { trimempty = true })
-  end
-  if self.role == "tool" then
-    content = content or {}
-  end
-
-  return content
-end
-
 --- @return string
 function Message:get_description()
   if self.role == "tool" then
     local f = self._tool_call["function"]
     return "Calling the tool " .. f.name
   end
-  if type(self.description) == "function" then
-    return self.description(self.context)
-  else
-    local description = self.description
-    --- @cast description string?
-    if description then
-      return description
-    end
-    local content = self:get_content()
-    if content and #content > 0 then
-      return self.role .. " " .. string.sub(content[1], 1, 40)
-    elseif self.tool_calls then
-      return self.role .. " calling tools..."
-    end
-    return self.role
-  end
-end
-
---- @param messages sia.Message[]?
---- @return string[]? content
-function Message.merge_content(messages)
-  if messages == nil then
-    return nil
+  local description = self.description
+  --- @cast description string?
+  if description then
+    return description
   end
 
-  return vim
-    .iter(messages)
-    :map(function(m)
-      return m:get_content()
-    end)
-    :flatten()
-    :totable()
-end
-
---- @param files {path: string, pos: [integer, integer]?}[]
---- @return {instruction: sia.InstructionOption, context: sia.Context?}[]
-local function get_files_instructions(files)
-  --- @type {instruction: sia.InstructionOption, context: sia.Context?}[]
-  local instructions = {}
-  for _, file in ipairs(files) do
-    --- @type sia.config.Instruction
-    local user_instruction = {
-      role = "user",
-      id = function(ctx)
-        return { "user", file }
-      end,
-      persistent = true,
-      available = function(_)
-        return vim.fn.filereadable(file.path) == 1
-      end,
-      description = function(ctx)
-        return vim.fn.fnamemodify(file.path, ":.")
-      end,
-      content = function(ctx)
-        local buf = require("sia.utils").ensure_file_is_loaded(file.path)
-        local filepath = vim.fn.fnamemodify(file.path, ":p")
-        if buf then
-          if file.pos then
-            return string.format(
-              [[I have *added this file (lines %d to %d (total lines %d)) to the chat* so you can go ahead and edit it.
-
-*Trust this message as the true contents of the file!*
-Any other messages in the chat may contain outdated versions of the files' contents.
-%s
-```%s
-%s
-```]],
-              file.pos[1],
-              file.pos[2],
-              vim.api.nvim_buf_line_count(buf),
-              filepath,
-              vim.bo[buf].ft,
-              require("sia.utils").get_code(file.pos[1], file.pos[2], { buf = buf, show_line_numbers = false })
-            )
-          else
-            return string.format(
-              [[I have *added this file to the chat* so you can go ahead and edit it.
-
-*Trust this message as the true contents of the file!*
-Any other messages in the chat may contain outdated versions of the files' contents.
-%s
-```%s
-%s
-```]],
-              filepath,
-              vim.bo[buf].ft,
-              require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
-            )
-          end
-        else
-          return string.format("The file %s does not exist", filepath)
-        end
-      end,
-    }
-    --- @type sia.config.Instruction
-    local assistant_instruction = {
-      id = function(ctx)
-        return { "assistant", file }
-      end,
-      available = function(_)
-        return vim.fn.filereadable(file.path) == 1
-      end,
-      role = "assistant",
-      persistent = true,
-      hide = true,
-      content = "Ok",
-    }
-    local both = { user_instruction, assistant_instruction }
-    instructions[#instructions + 1] = { instruction = both, context = nil }
+  local content = self:get_content()
+  if content and #content > 0 then
+    return self.role .. " " .. string.sub(content[1], 1, 40)
+  elseif self.tool_calls then
+    return self.role .. " calling tools..."
   end
-  return instructions
+  return self.role
 end
 
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
---- @field system_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
---- @field example_instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
---- @field instructions {instruction: sia.InstructionOption, context: sia.Context?}[]
+--- @field context sia.Context?
+--- @field system_messages sia.Message[]
+--- @field messages sia.Message[]
 --- @field indexed_instructions table<integer, {instruction: sia.InstructionOption, context: sia.Context?}>
---- @field reminder { instruction: (string|sia.config.Instruction)?, context: sia.Context? }
 --- @field tools sia.config.Tool[]?
 --- @field model string?
 --- @field files { path: string, pos: [integer, integer]?}[]
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
---- @field context sia.Context?
 --- @field ignore_tool_confirm boolean?
 --- @field tool_fn table<string, {is_interactive:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
 local Conversation = {}
 
 Conversation.__index = Conversation
-Conversation.prending_instructions = {}
+Conversation.pending_messages = {}
 Conversation.pending_files = {}
 Conversation.pending_tools = {}
 
@@ -370,17 +265,8 @@ Conversation.pending_tools = {}
 --- @param args sia.Context?
 --- @return boolean
 function Conversation.add_pending_instruction(instruction, context)
-  table.insert(Conversation.prending_instructions, { instruction = instruction, context = context })
-end
-
-function Conversation.add_pending_files(files)
-  for _, file in ipairs(files) do
-    if not vim.tbl_contains(Conversation.pending_files, file) then
-      if type(file) == "string" then
-        file = { path = file }
-      end
-      table.insert(Conversation.pending_files, file)
-    end
+  for _, message in ipairs(Message:new(instruction, context) or {}) do
+    table.insert(Conversation.pending_messages, message)
   end
 end
 
@@ -388,86 +274,34 @@ function Conversation.add_pending_tool(tool)
   table.insert(Conversation.pending_tools, tool)
 end
 
-function Conversation.clear_pending_files()
-  Conversation.pending_files = {}
-end
-
---- @param patterns string[]
-function Conversation.remove_global_files(patterns)
-  --- @type string[]
-  local regexes = {}
-  for i, pattern in ipairs(patterns) do
-    regexes[i] = vim.fn.glob2regpat(pattern)
-  end
-
-  --- @type integer[]
-  local to_remove = {}
-  for i, file in ipairs(Conversation.pending_files) do
-    for _, regex in ipairs(regexes) do
-      if vim.fn.match(file, regex) ~= -1 then
-        table.insert(to_remove, i)
-        break
-      end
-    end
-  end
-
-  for i = #to_remove, 1, -1 do
-    table.remove(Conversation.pending_files)
-  end
-end
-
 --- @param action sia.config.Action
---- @param args sia.ActionContext?
+--- @param context sia.Context?
 --- @return sia.Conversation
-function Conversation:new(action, args)
+function Conversation:new(action, context)
   local obj = setmetatable({}, self)
+  obj.context = context
   obj.model = action.model
   obj.temperature = action.temperature
   obj.mode = action.mode
-  obj.files = Conversation.pending_files or {}
-  Conversation.clear_pending_files()
-  if args then
-    obj.context = {
-      buf = args.buf,
-      win = args.win,
-      mode = args.mode,
-      bang = args.bang,
-      pos = args.pos,
-      cursor = args.cursor,
-      file = args.file,
-    }
-  else
-    obj.context = nil
-  end
+
   obj.indexed_instructions = {}
-  obj.system_instructions = {}
-  obj.example_instructions = {}
-  obj.instructions = {}
+  obj.system_messages = {}
+  obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
 
   for _, instruction in ipairs(action.system or {}) do
-    --- @diagnostic disable-next-line: param-type-mismatch
-    table.insert(obj.system_instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
+    for _, message in ipairs(Message:new(instruction, context) or {}) do
+      table.insert(obj.messages, message)
+    end
   end
 
-  for _, instruction in ipairs(action.examples or {}) do
-    --- @diagnostic disable-next-line: param-type-mismatch
-    table.insert(obj.example_instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
+  for _, message in ipairs(Conversation.pending_messages) do
+    table.insert(obj.messages, message)
   end
-
-  for _, instruction_option in ipairs(Conversation.prending_instructions) do
-    table.insert(obj.instructions, instruction_option)
-  end
-  Conversation.prending_instructions = {}
+  Conversation.pending_messages = {}
 
   for _, instruction in ipairs(action.instructions or {}) do
-    --- @diagnostic disable-next-line: param-type-mismatch
-    table.insert(obj.instructions, { instruction = vim.deepcopy(instruction), context = obj.context })
-  end
-
-  if action.reminder then
-    --- @diagnostic disable-next-line: param-type-mismatch
-    obj.reminder = { instruction = vim.deepcopy(action.reminder), context = obj.context }
+    obj:add_instruction(instruction, context, { ignore_duplicates = true })
   end
 
   obj.tools = {}
@@ -481,17 +315,6 @@ function Conversation:new(action, args)
   Conversation.pending_tools = {}
 
   return obj
-end
-
---- @param name string
---- @return string? message
-function Conversation:get_tool_message(name)
-  local tool = self.tool_fn[name]
-  if tool then
-    return tool.message
-  end
-
-  return nil
 end
 
 --- @param tool string|sia.config.Tool
@@ -514,120 +337,97 @@ function Conversation:_find_file(needle)
   end
 end
 
---- @param files string[]
-function Conversation:add_files(files)
-  for _, file in ipairs(files) do
-    self:add_file(file)
-  end
-end
-
---- @param file string|{path: string, pos: [integer, integer]?}
-function Conversation:add_file(file)
-  if type(file) == "string" then
-    file = { path = file }
-  end
-
-  if not self:_find_file(file) then
-    self.files[#self.files + 1] = file
-  end
-
-  if file.pos == nil then
-    for i = #self.files, 1, -1 do
-      if self.files[i].path == file.path and self.files[i].pos ~= nil then
-        table.remove(self.files, i)
-      end
-    end
-  end
-end
-
---- @param patterns string[]
-function Conversation:remove_files(patterns)
-  --- @type string[]
-  local regexes = {}
-  for i, pattern in ipairs(patterns) do
-    regexes[i] = vim.fn.glob2regpat(pattern)
-  end
-
-  --- @type integer[]
-  local to_remove = {}
-  for i, file in ipairs(self.files) do
-    for _, regex in ipairs(regexes) do
-      if vim.fn.match(file.path, regex) ~= -1 then
-        table.insert(to_remove, i)
-        break
-      end
-    end
-  end
-
-  for i = #to_remove, 1, -1 do
-    table.remove(self.files, to_remove[i])
-  end
-end
-
-function Conversation:clear_files()
-  self.files = {}
-end
-
 function Conversation:clear_user_instructions()
-  self.instructions = {}
+  self.messages = {}
 end
 
---- @param id table?
+--- Check if the new interval completely encompasses an existing interval
+--- Returns true if the existing interval should be masked (new is superset of existing)
+--- @param new_interval sia.Context
+--- @param existing_interval sia.Context
 --- @return boolean
-function Conversation:contains_message(id)
-  if id then
-    for _, other in ipairs(self.instructions) do
-      local messages = self:_to_message(other)
-      for _, message in ipairs(messages or {}) do
-        local message_id = message:get_id()
-        if message_id and vim.deep_equal(message_id, id) then
-          return true
+local function should_mask_existing(new_interval, existing_interval)
+  -- Different buffers don't overlap
+  if new_interval.buf ~= existing_interval.buf then
+    return false
+  end
+
+  -- If new interval has no pos (entire file), mask any existing content for this buffer
+  if not new_interval.pos then
+    return true
+  end
+
+  -- If existing interval has no pos (entire file), don't mask it unless new is also entire file
+  if not existing_interval.pos then
+    return false
+  end
+
+  local new_start, new_end = new_interval.pos[1], new_interval.pos[2]
+  local existing_start, existing_end = existing_interval.pos[1], existing_interval.pos[2]
+
+  -- Mask existing if new completely encompasses it (new is superset of existing)
+  return new_start <= existing_start and existing_end <= new_end
+end
+
+--- Update overlapping messages with replacement content
+--- @param context sia.Context?
+function Conversation:_update_overlapping_messages(context)
+  if not context or not context.buf then
+    return
+  end
+
+  local new_interval = { buf = context.buf, pos = context.pos }
+
+  for i, message in ipairs(self.messages) do
+    if
+      message.context
+      and message.context.buf
+      and message.content
+      and (message.role == "user" or message.role == "tool")
+    then
+      local existing_interval = { buf = message.context.buf, pos = message.context.pos }
+
+      if should_mask_existing(new_interval, existing_interval) then
+        local buf_name = vim.api.nvim_buf_get_name(existing_interval.buf)
+        local file_name = vim.fn.fnamemodify(buf_name, ":t")
+
+        if existing_interval.pos then
+          local start_line, end_line = existing_interval.pos[1], existing_interval.pos[2]
+          message.content = {
+            string.format(
+              "[SUPERSEDED] Content from %s lines %d-%d has been replaced by more comprehensive context below",
+              file_name,
+              start_line,
+              end_line
+            ),
+          }
+        else
+          message.content = {
+            string.format("[SUPERSEDED] Full content of %s has been replaced by updated context below", file_name),
+          }
         end
       end
     end
   end
-  return false
 end
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
---- @param args sia.Context?
---- @param index integer?
---- @return boolean
-function Conversation:add_instruction(instruction, args, index)
-  local tmp_messages = Message:new(instruction, args)
-  local contains = false
-  for _, message in ipairs(tmp_messages or {}) do
-    local message_id = message:get_id()
-    if self:contains_message(message_id) then
-      contains = true
-    end
-  end
-  if not contains then
-    local instruction_option = { instruction = instruction, context = args, index = index }
-    table.insert(self.instructions, instruction_option)
-    if index then
-      self.indexed_instructions[index] = instruction_option
-    end
-    return true
+--- @param context sia.Context?
+--- @param opts { ignore_duplicates: boolean?}?
+function Conversation:add_instruction(instruction, context, opts)
+  opts = opts or {}
+  if opts.ignore_duplicates ~= true then
+    self:_update_overlapping_messages(context)
   end
 
-  return false
-end
-
---- @param index integer
---- @return sia.Message[]?
-function Conversation:get_indexed_message(index)
-  return self:_to_message(self.indexed_instructions[index])
+  for _, message in ipairs(Message:new(instruction, context) or {}) do
+    table.insert(self.messages, message)
+  end
 end
 
 --- @return sia.Message message
 function Conversation:last_message()
-  local instruction = self.instructions[#self.instructions]
-  local messages = self:_to_message(instruction)
-  if not messages then
-    error("No messages found")
-  end
-  return messages[#messages]
+  return self.messages[#self.messages]
 end
 
 --- @param index {kind:string, index:number}
@@ -635,13 +435,13 @@ function Conversation:remove_instruction(index)
   local removed
 
   if index.kind == "system" then
-    removed = table.remove(self.system_instructions, index.index)
+    removed = table.remove(self.system_messages, index.index)
   elseif index.kind == "example" then
-    removed = table.remove(self.example_instructions, index.index)
+    removed = table.remove(self.example_messages, index.index)
   elseif index.kind == "files" then
     removed = table.remove(self.files, index.index)
   elseif index.kind == "user" then
-    removed = table.remove(self.instructions, index.index)
+    removed = table.remove(self.messages, index.index)
   else
     removed = nil
   end
@@ -670,13 +470,13 @@ end
 --- @param index {kind: string, index: integer}
 function Conversation:get_instruction(index)
   if index.kind == "system" then
-    return self.system_instructions[index.index]
+    return self.system_messages[index.index]
   elseif index.kind == "example" then
-    return self.example_instructions[index.index]
+    return self.example_messages[index.index]
   elseif index.kind == "files" then
     return self.files[index.index]
   elseif index.kind == "user" then
-    return self.instructions[index.index]
+    return self.messages[index.index]
   else
     return nil
   end
@@ -723,25 +523,18 @@ end
 function Conversation:get_messages(opts)
   opts = opts or {}
 
-  local instopt_kinds = {
-    { kind = "system", instructions = self.system_instructions },
-    { kind = "example", instructions = self.example_instructions },
-    { kind = "files", instructions = get_files_instructions(self.files) },
-    { kind = "user", instructions = self.instructions },
+  local message_kinds = {
+    { kind = "system", messages = self.system_messages },
+    { kind = "user", messages = self.messages },
   }
   local mappings = {}
   local return_messages = {}
-  for _, instopt_kind in ipairs(instopt_kinds) do
-    if opts.kind == nil or opts.kind == instopt_kind.kind then
-      for i, instrop in ipairs(instopt_kind.instructions) do
-        local messages = self:_to_message(instrop)
-        if messages then
-          for _, message in ipairs(messages) do
-            if message:is_available() and (opts.filter == nil or opts.filter(message)) then
-              table.insert(return_messages, message)
-              table.insert(mappings, { kind = instopt_kind.kind, index = i })
-            end
-          end
+  for _, message_kind in ipairs(message_kinds) do
+    if opts.kind == nil or opts.kind == message_kind.kind then
+      for i, message in ipairs(message_kind.messages) do
+        if opts.filter == nil or opts.filter(message) then
+          table.insert(return_messages, message)
+          table.insert(mappings, { kind = message_kind.kind, index = i })
         end
       end
     end
@@ -752,23 +545,6 @@ function Conversation:get_messages(opts)
   else
     return return_messages
   end
-end
-
---- @param instruction_context {instruction: sia.InstructionOption, context: sia.Context?}?
---- @return sia.Message[]?
-function Conversation:_to_message(instruction_context)
-  if instruction_context == nil then
-    return nil
-  end
-
-  local instruction
-  if type(instruction_context.instruction) == "function" then
-    instruction = instruction_context.instruction(self)
-  else
-    instruction = instruction_context.instruction
-  end
-  --- @cast instruction sia.config.Instruction|string|sia.config.Instruction[]
-  return Message:new(instruction, instruction_context.context)
 end
 
 function Conversation:unpack_instruction(instruction)
@@ -784,12 +560,8 @@ end
 function Conversation:to_query(kind)
   --- @type sia.Prompt[]
   local prompt = vim
-    .iter(self:get_messages({ kind = kind }))
-    --- @param m sia.Message
-    --- @return boolean
-    :filter(function(m)
-      return m:is_available()
-    end)
+    .iter({ self.system_messages, self.messages })
+    :flatten()
     --- @param m sia.Message
     --- @return sia.Prompt
     :map(function(m)
@@ -801,20 +573,6 @@ function Conversation:to_query(kind)
       return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
     :totable()
-
-  if self.reminder then
-    --- @diagnostic disable-next-line param-type-mismatch
-    local reminders = self:_to_message(self.reminder)
-    for _, reminder in ipairs(reminders or {}) do
-      if reminder:is_available() then
-        if #prompt == 0 or prompt[#prompt].role ~= "user" then
-          table.insert(prompt, #prompt + 1, reminder:to_prompt())
-        else
-          table.insert(prompt, #prompt, reminder:to_prompt())
-        end
-      end
-    end
-  end
 
   --- @type sia.Tool[]?
   local tools = nil

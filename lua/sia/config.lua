@@ -29,16 +29,13 @@ local providers = require("sia.provider")
 --- @field timeout number?
 
 --- @class sia.config.Instruction
---- @field id (fun(ctx:sia.Context?):table?)|nil
 --- @field role sia.config.Role
---- @field persistent boolean?
---- @field available (fun(ctx:sia.Context?):boolean)?
 --- @field hide boolean?
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content ((fun(ctx: sia.Context?):string)|string|string[])?
+--- @field live_content (fun():string?)?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
---- @field group integer?
 
 --- @class sia.config.Tool
 --- @field name string
@@ -51,11 +48,9 @@ local providers = require("sia.provider")
 --- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
 
 --- @class sia.config.Action
---- @field system (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]?
---- @field examples (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]?
---- @field instructions (string|sia.config.Instruction|(fun(i:sia.Conversation?):sia.config.Instruction[]))[]
+--- @field system (string|sia.config.Instruction)[]?
+--- @field instructions (string|sia.config.Instruction)[]
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
---- @field reminder (string|sia.config.Instruction)?
 --- @field tools (sia.config.Tool|string)[]?
 --- @field ignore_tool_confirm boolean?
 --- @field model string?
@@ -70,9 +65,14 @@ local providers = require("sia.provider")
 --- @field chat sia.config.Chat?
 --- @field hidden sia.config.Hidden?
 
+--- @class sia.config.AutoNaming
+--- @field enabled boolean
+--- @field model string
+
 --- @class sia.config.Defaults
 --- @field model string
 --- @field temperature number
+--- @field auto_naming sia.config.AutoNaming
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
 --- @field replace sia.config.Replace
@@ -178,6 +178,10 @@ local defaults = {
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
+    auto_naming = {
+      enabled = true,
+      model = "openai/gpt-4o-mini",
+    },
     chat = {
       cmd = "vnew",
       wo = { wrap = true },
@@ -200,11 +204,10 @@ local defaults = {
     tools = {
       enable = true,
       choices = {
-        add_file = require("sia.tools").add_file,
-        add_files = require("sia.tools").add_files_glob,
+        read = require("sia.tools").read,
         lsp_symbol = require("sia.tools").find_lsp_symbol,
         lsp_docs = require("sia.tools").documentation,
-        edit_file = require("sia.tools").edit_file,
+        edit = require("sia.tools").edit_file,
         list_files = require("sia.tools").list_files,
         get_diagnostics = require("sia.tools").get_diagnostics,
         grep = require("sia.tools").grep,
@@ -253,7 +256,8 @@ local defaults = {
         },
         tools = {
           "grep",
-          "edit_file",
+          "edit",
+          "read",
           "list_files",
           "get_diagnostics",
           "dispatch_agent",
@@ -279,9 +283,8 @@ local defaults = {
       },
       tools = {
         "grep",
-        "add_file",
-        "add_files",
-        "edit_file",
+        "read",
+        "edit",
         "list_files",
         "get_diagnostics",
         "git_status",
@@ -291,15 +294,9 @@ local defaults = {
         "git_diff",
       },
     },
-    edit = require("sia.actions").edit(),
-    diagnostic = require("sia.actions").diagnostic(),
     commit = require("sia.actions").commit(),
     review = require("sia.actions").review(),
-    explain = require("sia.actions").explain(),
-    unittest = require("sia.actions").unittest(),
     doc = require("sia.actions").doc(),
-    fix = require("sia.actions").fix(),
-    replace = require("sia.actions").replace(),
   },
   report_usage = true,
 }

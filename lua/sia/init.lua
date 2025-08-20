@@ -134,54 +134,6 @@ function M.reject_diff(opts)
   end
 end
 
-function M.replace(opts)
-  opts = opts or {}
-  local chat = ChatStrategy.by_buf()
-  if chat then
-    local line = vim.api.nvim_win_get_cursor(0)[1]
-    local block = chat:find_block(line)
-    if block then
-      vim.schedule(function()
-        require("sia.blocks").replace_all_blocks(chat.block_action, { block }, { apply_marker = opts.apply_marker })
-      end)
-    end
-  end
-end
-
-function M.replace_all(opts)
-  opts = opts or {}
-  local chat = ChatStrategy.by_buf()
-  local line = vim.api.nvim_win_get_cursor(0)[1]
-  if chat then
-    vim.schedule(function()
-      require("sia.blocks").replace_all_blocks(
-        chat.block_action,
-        chat:find_all_blocks(line),
-        { apply_marker = opts.apply_marker }
-      )
-    end)
-  end
-end
-
-function M.insert(opts)
-  opts = opts or {}
-  local chat = ChatStrategy.by_buf()
-  if chat then
-    local padding = 0
-    if opts.above then
-      padding = 1
-    end
-
-    local line = vim.api.nvim_win_get_cursor(0)[1]
-    local block = chat:find_block(line)
-    if block then
-      vim.schedule(function()
-        require("sia.blocks").insert_block(chat.block_action, block, config.options.defaults.replace, padding)
-      end)
-    end
-  end
-end
-
 function M.remove_message()
   local chat = ChatStrategy.by_buf()
   if chat then
@@ -345,19 +297,19 @@ local add_commands = {
     execute_global = function(args)
       local fargs = args.fargs
       if args.bang then
-        Conversation.clear_pending_files()
+        -- Conversation.clear_pending_files()
       end
       local files = utils.glob_pattern_to_files(fargs)
-      Conversation.add_pending_files(files)
+      -- Conversation.add_pending_instruction("current_context", {
     end,
     execute_local = function(args, conversation)
       local fargs = args.fargs
       if args.bang then
-        conversation.files = {}
+        -- conversation.files = {}
       end
       local files = utils.glob_pattern_to_files(fargs)
 
-      conversation:add_files(files)
+      -- conversation:add_files(files)
     end,
   },
   context = {
@@ -370,16 +322,6 @@ local add_commands = {
     execute_local = function(args, conversation)
       local context = utils.create_context(args)
       conversation:add_instruction("current_context", context)
-    end,
-  },
-  diagnostics = {
-    require_range = true,
-    non_sia_buf = true,
-    execute_global = function(args)
-      Conversation.add_pending_instruction("diagnostics", utils.create_context(args))
-    end,
-    execute_local = function(args, conversation)
-      conversation:add_instruction("diagnostics", utils.create_context(args))
     end,
   },
   tool = {
@@ -581,7 +523,6 @@ The summary will replace the conversation history, so ensure no critical informa
     }, function(content)
       if content then
         conversation:clear_user_instructions()
-        conversation:clear_files()
 
         local summary_content
         if reason then
@@ -732,9 +673,6 @@ function M.main(action, opts, model)
       end
 
       if strategy then
-        local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-        strategy.conversation:add_instruction(last_instruction, opts)
-
         for _, tool in ipairs(action.tools or {}) do
           strategy.conversation:add_tool(tool)
         end
@@ -743,6 +681,9 @@ function M.main(action, opts, model)
           for _, instruction in ipairs(action.instructions or {}) do
             strategy.conversation:add_instruction(instruction, opts)
           end
+        else
+          local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
+          strategy.conversation:add_instruction(last_instruction, opts)
         end
 
         -- The user might have explicitly changed the model with -m

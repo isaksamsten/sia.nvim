@@ -88,7 +88,7 @@ M.new_tool = function(opts, execute)
           { prompt = string.format("%s\nProceed and send to AI? [Y/n/a] ([Y]es, [n]o or Esc, [a]lways): ", text) },
           function(resp)
             if resp == nil then
-              callback({ content = string.format("User cancelled %s operation.", opts.name) })
+              callback({ content = string.format("User cancelled %s operation.", opts.name), cancel = true })
               return
             end
 
@@ -313,30 +313,35 @@ M.documentation = {
   end,
 }
 
-M.add_file = M.new_tool({
-  name = "add_file",
+M.read = M.new_tool({
+  name = "read",
   message = "Reading file contents...",
-  system_prompt = [[Use the tool to add contents to the conversation.
+  system_prompt = [[Reads a file from the local filesystem.
 
-- If a the complete file has already been added to the conversation, do NOT
-  add a subset of the file again. The files you add will always contain the
-  current content.]],
-  description = [[Add a file or part of file to be included in the conversation.
-- If adding a part of the file, specify both start_line and end_line.
-- If adding a complete file, skip both start_line and end_line.
-]],
+You can optionally specify a start line and an end line (especially handy for long
+files), but it's recommended to read the whole file by not providing these
+parameters. ]],
+  description = [[Reads a file from the local filesystem.]],
   parameters = {
     path = { type = "string", description = "The file path" },
-    start_line = { type = "integer", description = "The start line number. Ignore if adding the complete file." },
-    end_line = { type = "integer", description = "The end line number. Ignore if adding the complete file." },
+    start_line = { type = "integer", description = "The start line number. Ignore if reading the complete file." },
+    end_line = {
+      type = "integer",
+      description = "The end line number. Ignore if reading the complete file. If missing, read until end of file.",
+    },
   },
   required = { "path" },
   confirm = function(args)
-    if args.start_line and args.end_line then
-      return string.format("Add lines %d-%d from %s to the conversation", args.start_line, args.end_line, args.path)
+    if args.start_line then
+      if args.end_line then
+        return string.format("Add lines %d-%d from %s to the conversation", args.start_line, args.end_line, args.path)
+      else
+        return string.format("Add lines %d-until end from %s to the conversation", args.start_line, args.path)
+      end
     end
     return string.format("Add %s to the conversation", args.path)
   end,
+  --- @param conversation sia.Conversation
 }, function(args, conversation, callback)
   if not args.path then
     callback({ content = { "Error: No file path was provided" } })
@@ -349,13 +354,26 @@ M.add_file = M.new_tool({
   end
 
   local pos = nil
-  if args.start_line and args.end_line then
-    pos = { args.start_line, args.end_line }
+  if args.start_line then
+    if args.end_line then
+      pos = { args.start_line, args.end_line }
+    else
+      pos = { args.start_line, -1 }
+    end
   end
 
-  conversation:add_file({ path = args.path, pos = pos })
+  local buf = require("sia.utils").ensure_file_is_loaded(args.path)
+  local content
+
+  if pos then
+    content = vim.api.nvim_buf_get_lines(buf, pos[1], pos[2], false)
+  else
+    content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  end
+
   callback({
-    content = { "I've added " .. args.path .. " to the conversation" },
+    content = content,
+    context = { buf = buf, pos = pos },
   })
 end)
 
@@ -445,6 +463,8 @@ M.grep = M.new_tool({
 - Searches files using regluar expressions as supported by rg
 - Supports glob patterns to specify files
 - The root of the search is always the current working directory
+- Do not use search to get the content of a file, use tools or ask the user to
+  add the information.
 - When you are doing an open ended search that may require multiple rounds of
 globbing and grepping, use the dispatch_agent tool instead]],
   message = function(args)
@@ -510,7 +530,7 @@ end)
 local edit_file_auto_apply = nil
 
 M.edit_file_agent = M.new_tool({
-  name = "edit_file",
+  name = "edit",
   message = "Making code changes...",
   description = [[Edit an existing file by specifying precise changes.
 
@@ -1031,15 +1051,15 @@ end)
 M.dispatch_agent = {
   name = "dispatch_agent",
   message = "Launching autonomous agent...",
-  description = [[Launch a new agent that has access to the following tools: list_files, grep, add_file and add_files.]],
+  description = [[Launch a new agent that has access to the following tools: list_files, grep, read tools.
   system_prompt = [[When you are searching for a keyword or file and are not confident that you
 will find the right match on the first try, use the dispatch_agent tool to perform the
 search for you. For example:
 
-1. If you want to read file, the dispatch_agent tool is not appropriate. If no
+1. If you want to read file, the dispatch_agent tool is NOT appropriate. If no
    appropriate tool is available ask the user to do it.
 2. If you are searching for a keyword like "config" or "logger", the dispatch_agent tool is appropriate
-3. If you want to read a specific file path, use the add_file or add_files tool
+3. If you want to read a specific file path, use the read tool
    instead of the dispatch_agent tool, to find the match more quickly
 4. If you are searching for a specific class definition like "class Foo", use
    the grep tool instead, to find the match more quickly
@@ -1091,9 +1111,9 @@ response]],
       },
       ignore_tool_confirm = true,
       tools = {
+        "list_files",
         "grep",
-        "add_file",
-        "add_files",
+        "read",
       },
     }, nil)
     local strategy = HiddenStrategy:new(conversation, {
@@ -1107,13 +1127,13 @@ response]],
 
 local edit_auto_apply = nil
 M.edit_file = M.new_tool({
-  name = "edit_file",
+  name = "edit",
   description = "Tool for editing files",
   system_prompt = [[This is a tool for editing files.
 
 Before using this tool:
 
-1. Use the add_file tool to understand the file's contents and context
+1. Use the read tool to understand the file's contents and context
 
 To make a file edit, provide the following:
 1. file_path: The path to the file to modify
@@ -1205,7 +1225,7 @@ rather than multiple messages with a single call each.
   end
   local matching = require("sia.matcher")
 
-  local old_string = vim.split(args.old_string, "\n")
+  local old_string = vim.split(args.old_string, "\n", { trimempty = true })
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local initial_code = table.concat(old_content, "\n")
 

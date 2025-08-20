@@ -1,184 +1,5 @@
 local utils = require("sia.utils")
-local lsp = require("sia.lsp")
 local M = {}
-
-function M.current_document_symbols()
-  return {
-    {
-      id = function(ctx)
-        return { "document_symbols", "user", ctx.buf }
-      end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(ctx.buf) and lsp.is_attached(ctx.buf, "textDocument/documentSymbol")
-      end,
-      role = "user",
-      persistent = true,
-      description = function(ctx)
-        return string.format("Symbols in %s", utils.get_filename(ctx.buf, ":."))
-      end,
-      content = function(ctx)
-        local content = {}
-        local shown = { 12, 6, 7, 9, 5, 11 }
-        local function print_symbols(symbols, indent)
-          indent = indent or 0
-          for _, symbol in ipairs(symbols or {}) do
-            local lnum = symbol.selectionRange["start"].line
-            local lnum_end = symbol.range["end"].line
-            if vim.tbl_contains(shown, symbol.kind) then
-              if symbol.kind == 5 or symbol.kind == 11 then
-                table.insert(
-                  content,
-                  lnum
-                    .. "-"
-                    .. lnum_end
-                    .. ": "
-                    .. string.rep(" ", indent)
-                    .. lsp.get_kind(symbol.kind)
-                    .. " "
-                    .. symbol.name
-                )
-                print_symbols(symbol.children, indent + 1)
-              else
-                table.insert(
-                  content,
-                  lnum
-                    .. "-"
-                    .. lnum_end
-                    .. ": "
-                    .. string.rep(" ", indent)
-                    .. lsp.get_kind(symbol.kind)
-                    .. " "
-                    .. symbol.name
-                )
-              end
-            end
-          end
-        end
-        local symbols = lsp.document_symbols(ctx.buf)
-        print_symbols(symbols)
-        return string.format(
-          "Here are the symbols in %s\n%s",
-          table.concat(content, "\n"),
-          utils.get_filename(ctx.buf, ":.")
-        )
-      end,
-    },
-    {
-      role = "assistant",
-      hide = true,
-      id = function(ctx)
-        return { "document_symbols", "assistant", ctx.buf }
-      end,
-      persistent = true,
-      content = "Ok",
-    },
-  }
-end
-
---- @param conversation sia.Conversation
---- @return sia.config.Instruction[]
-function M.files(conversation)
-  local files = utils.get_global_files()
-  if conversation.files then
-    files = conversation.files
-  end
-
-  --- @type sia.config.Instruction[]
-  local instructions = {}
-  for _, file in ipairs(files) do
-    --- @type sia.config.Instruction
-    local user_instruction = {
-      role = "user",
-      id = function(ctx)
-        return { "user", file }
-      end,
-      persistent = true,
-      available = function(_)
-        return vim.fn.filereadable(file) == 1
-      end,
-      description = function(ctx)
-        return vim.fn.fnamemodify(file, ":.")
-      end,
-      content = function(ctx)
-        local buf = utils.ensure_file_is_loaded(file)
-        if buf then
-          return string.format(
-            [[I have *added this file to the chat* so you can go ahead and edit it.
-
-*Trust this message as the true contents of these files!*
-Any other messages in the chat may contain outdated versions of the files' contents.
-%s
-```%s
-%s
-```]],
-            vim.fn.fnamemodify(file, ":p"),
-            vim.bo[buf].ft,
-            utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
-          )
-        end
-      end,
-    }
-    --- @type sia.config.Instruction
-    local assistant_instruction = {
-      id = function(ctx)
-        return { "assistant", file }
-      end,
-      available = function(_)
-        return vim.fn.filereadable(file) == 1
-      end,
-      role = "assistant",
-      persistent = true,
-      hide = true,
-      content = "Ok",
-    }
-    instructions[#instructions + 1] = user_instruction
-    instructions[#instructions + 1] = assistant_instruction
-  end
-
-  return instructions
-end
-
---- @return sia.config.Instruction
-function M.current_args()
-  --- @type sia.config.Instruction
-  return {
-    role = "user",
-    id = function(ctx)
-      return vim.fn.argv() --[[@as string[] ]]
-    end,
-    available = function(_)
-      return vim.fn.argc() > 0
-    end,
-    persistent = true,
-    description = function(ctx)
-      if vim.fn.argc() > 0 then
-        local argv = vim.fn.argv() --[[@as string[] ]]
-        return table.concat(argv, ", ")
-      end
-      return "No arguments"
-    end,
-    content = function(ctx)
-      local content = {}
-      --- @type string[]
-      local args = vim.fn.argv() or {} --[[@as string[] ]]
-      for _, arg in ipairs(args) do
-        local buf = utils.ensure_file_is_loaded(arg)
-        if buf then
-          table.insert(
-            content,
-            string.format(
-              "%s\n```%s\n%s\n```\n",
-              arg,
-              vim.bo[buf].ft,
-              utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
-            )
-          )
-        end
-      end
-      return table.concat(content, "\n")
-    end,
-  }
-end
 
 --- @param global {show_line_numbers: boolean?, fences: boolean?}
 --- @return sia.config.Instruction[]
@@ -187,18 +8,15 @@ function M.current_buffer(global)
   --- @type sia.config.Instruction[]
   return {
     {
-      id = function(ctx)
-        return { "buffer", "user", ctx.buf }
-      end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf)
-      end,
       role = "user",
       persistent = true,
       description = function(ctx)
         return string.format("%s", utils.get_filename(ctx.buf, ":."))
       end,
       content = function(ctx)
+        if vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) then
+          return nil
+        end
         local start_fence = ""
         local end_fence = ""
         if global.fences then
@@ -215,15 +33,6 @@ function M.current_buffer(global)
         )
       end,
     },
-    {
-      role = "assistant",
-      hide = true,
-      id = function(ctx)
-        return { "buffer", "assistant", ctx.buf }
-      end,
-      persistent = true,
-      content = "Ok",
-    },
   }
 end
 
@@ -234,52 +43,40 @@ function M.current_context(global)
   --- @type sia.config.Instruction[]
   return {
     {
-      id = function(ctx)
-        if ctx.file then
-          return { "context user", ctx.buf }
-        end
-        return { "context user", ctx.buf, ctx.pos[1], ctx.pos[2] }
-      end,
       role = "user",
       description = function(ctx)
-        if ctx.file then
+        if ctx.pos[2] == -1 then
           return string.format("%s", utils.get_filename(ctx.buf, ":p"))
         end
         return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
       end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(ctx.buf)
-      end,
-      persistent = true,
+      hide = true,
       content = function(ctx)
+        if not vim.api.nvim_buf_is_loaded(ctx.buf) then
+          return ""
+        end
         local start_fence = ""
         local end_fence = ""
         if global.fences then
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
-        if ctx.mode == "v" or ctx.file then
+        if ctx.mode == "v" or ctx.pos[2] > 0 then
           local start_line, end_line = ctx.pos[1], ctx.pos[2]
           local instruction = string.format(
             [[
 I have *added this file (lines %d to %d) to the chat* so you can go ahead and edit it.
-
-*Trust this message as the true contents of the file!*
-Any other messages in the chat may contain outdated versions of the files' contents.
 %s]],
             start_line,
             end_line,
             utils.get_filename(ctx.buf, ":p")
           )
-          if ctx.file then
+          if ctx.pos[2] == -1 then
             start_line = 1
             end_line = vim.api.nvim_buf_line_count(ctx.buf)
             instruction = string.format(
               [[
 I have *added this file to the chat* so you can go ahead and edit it.
-
-*Trust this message as the true contents of the file!*
-Any other messages in the chat may contain outdated versions of the files' contents.
 %s]],
               utils.get_filename(ctx.buf, ":p")
             )
@@ -304,146 +101,25 @@ Any other messages in the chat may contain outdated versions of the files' conte
         end
       end,
     },
-    {
-      role = "assistant",
-      hide = true,
-      id = function(ctx)
-        if ctx.file then
-          return { "context assistant", ctx.buf }
-        end
-        return { "context assistant", ctx.buf, ctx.pos[1], ctx.pos[2] }
-      end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf)
-      end,
-      persistent = true,
-      content = "Ok",
-    },
   }
 end
 
 --- @return sia.config.Instruction[]
-function M.buffer(bufnr, global)
-  global = global or {}
-  --- @type sia.config.Instruction[]
-  return {
-    {
-      persistent = true,
-      role = "user",
-      id = function(ctx)
-        return { "user", "buffer", bufnr }
-      end,
-      description = function(ctx)
-        return string.format("%s", utils.get_filename(bufnr, ":."))
-      end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(bufnr) and vim.api.nvim_buf_is_valid(bufnr)
-      end,
-      content = function(ctx)
-        local start_fence = ""
-        local end_fence = ""
-        if global.fences ~= false then
-          start_fence = "```" .. vim.bo[bufnr].ft
-          end_fence = "```"
-        end
-        return string.format(
-          "%s\n%s\n%s\n%s",
-          utils.get_filename(bufnr, ":p"),
-          start_fence,
-          utils.get_code(1, -1, { buf = bufnr, show_line_numbers = global.show_line_numbers }),
-          end_fence
-        )
-      end,
-    },
-    {
-      role = "assistant",
-      hide = true,
-      id = function(ctx)
-        return { "buffer", "assistant", bufnr }
-      end,
-      persistent = true,
-      content = "Ok",
-    },
-  }
-end
-
 function M.verbatim()
   return {
     {
       role = "user",
-      persistent = true,
-      id = function(ctx)
-        return { "verbatim", ctx.buf, ctx.pos[1], ctx.pos[2] }
-      end,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v"
-      end,
+      hide = true,
       description = function(ctx)
         return string.format("%s verbatim lines %d-%d", utils.get_filename(ctx.buf, ":."), ctx.pos[1], ctx.pos[2])
       end,
       content = function(ctx)
+        if vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v" then
+          return nil
+        end
         local start_line, end_line = ctx.pos[1], ctx.pos[2]
         return table.concat(vim.api.nvim_buf_get_lines(ctx.buf, start_line - 1, end_line, false), "\n")
       end,
-    },
-    {
-      role = "assistant",
-      hide = true,
-      available = function(ctx)
-        return vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v"
-      end,
-      id = function(ctx)
-        return { "verbatim", vim.api.nvim_buf_get_name(ctx.buf), ctx.pos[1], ctx.pos[2] }
-      end,
-      content = "Ok",
-      persistent = true,
-    },
-  }
-end
-
---- @param opts {mark: string, mark_lnum: integer}?
---- @return sia.config.Instruction[]
-function M.context(buf, pos, opts)
-  opts = opts or {}
-  --- @type sia.config.Instruction[]
-  return {
-    {
-      role = "user",
-      persistent = true,
-      available = function()
-        return vim.api.nvim_buf_is_loaded(buf)
-      end,
-      description = function()
-        return string.format("%s verbatim lines %d-%d", utils.get_filename(buf, ":."), pos[1], pos[2])
-      end,
-      content = function()
-        local lines = vim.api.nvim_buf_get_lines(buf, pos[1] - 1, pos[2] - 1, false)
-        if opts.mark then
-          local mark = opts.mark_lnum - (pos[1] - 1)
-          table.insert(lines, mark, "█" .. opts.mark)
-        end
-        local c = string.format(
-          "The provided context from line %d to line %d in %s\n```%s\n%s\n```",
-          pos[1],
-          pos[2],
-          utils.get_filename(buf, ":."),
-          vim.bo[buf].ft,
-          table.concat(lines, "\n")
-        )
-        return c
-      end,
-    },
-    {
-      role = "assistant",
-      persistent = true,
-      id = function()
-        return { "context", pos, vim.api.nvim_buf_get_name(buf) }
-      end,
-      available = function()
-        return vim.api.nvim_buf_is_loaded(buf)
-      end,
-      hide = true,
-      content = "Ok",
     },
   }
 end

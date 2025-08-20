@@ -12,7 +12,6 @@ function M.create_context(args)
     end_line = args.line2,
     pos = { args.line1, args.line2 },
     bang = args.bang,
-    file = false,
   }
   if args.count == -1 then
     opts.mode = "n"
@@ -20,7 +19,7 @@ function M.create_context(args)
     opts.mode = "v"
   end
   if args.line1 == 1 and args.line2 == vim.api.nvim_buf_line_count(opts.buf) then
-    opts.file = true
+    opts.pos[2] = -1
   end
   return opts
 end
