@@ -45,7 +45,7 @@ local providers = require("sia.provider")
 --- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
---- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(content: string[]?, confirmation: {description: string[]}?)):nil
+--- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(result: sia.ToolResult)):nil
 
 --- @class sia.config.Action
 --- @field system (string|sia.config.Instruction)[]?

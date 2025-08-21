@@ -41,7 +41,7 @@ function M.highlight_diff_changes(buf, old_content, new_content)
   local baseline = edit_tool_old_contents[buf]
   vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
 
-  local diff_result = vim.text.diff(baseline, new_content, {
+  local diff_result = vim.diff(baseline, new_content, {
     result_type = "indices",
     algorithm = "myers",
   })

@@ -8,6 +8,11 @@ local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 
+--- @class sia.ToolResult
+--- @field content string[]
+--- @field context sia.Context?
+--- @field cancel boolean?
+
 --- Write text to a buffer via a canvas.
 --- @class sia.Writer
 --- @field canvas sia.Canvas?

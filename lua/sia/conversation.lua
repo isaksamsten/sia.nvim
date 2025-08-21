@@ -78,7 +78,7 @@ local function make_description(instruction, context)
   if type(instruction.description) == "function" then
     return instruction.description(context)
   end
-  return nil
+  return instruction.description
 end
 
 --- @param instruction sia.config.Instruction
@@ -87,7 +87,6 @@ end
 function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
   obj.role = instruction.role
-  obj.context = context
   obj.live_content = instruction.live_content
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
@@ -99,6 +98,9 @@ function Message:from_table(instruction, context)
   obj.hide = instruction.hide
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
+  if obj.live_content == nil or type(instruction.content) ~= "function" then
+    obj.context = context
+  end
   return obj
 end
 
@@ -253,7 +255,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
---- @field tool_fn table<string, {is_interactive:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(content: string[]?, confirmation: { description: string[]}?):nil)>}?
+--- @field tool_fn table<string, {is_interactive:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult):nil)}>}?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -507,11 +509,16 @@ end
 --- @param name string
 --- @param arguments table
 --- @param strategy sia.Strategy
---- @param callback  fun(opts: {content: string[]?, confirmation: string[]?, bufs: [integer]?}?):nil
+--- @param callback  fun(opts: sia.ToolResult?):nil
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
-    return self.tool_fn[name].action(arguments, strategy.conversation, callback)
+    local ok, err = pcall(self.tool_fn[name].action, arguments, strategy.conversation, callback)
+    if not ok then
+      print(vim.inspect(err))
+      callback({ content = { "Tool execution failed. " }, cancel = true })
+    end
+    return
   else
     callback(nil)
   end
@@ -558,17 +565,49 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
-  --- @type sia.Prompt[]
+  -- Gather all messages (system and user)
+  local all_messages = vim.iter({ self.system_messages, self.messages }):flatten():totable()
+
+  -- First pass: determine which messages would be filtered out due to stale buffers
+  local filtered = {}
+  for i, m in ipairs(all_messages) do
+    if m.context and not vim.api.nvim_buf_is_loaded(m.context.buf) then
+      filtered[i] = true
+    end
+  end
+
+  -- Second pass: if a message with tool_calls is immediately followed by a filtered _tool_call with matching id, filter both
+  local to_remove = {}
+  for i, m in ipairs(all_messages) do
+    if m.tool_calls and all_messages[i + 1] and all_messages[i + 1]._tool_call then
+      local next_msg = all_messages[i + 1]
+      if filtered[i + 1] then
+        -- Check if any tool_call id matches
+        local ids = {}
+        for _, tc in ipairs(m.tool_calls) do
+          ids[tc.id] = true
+        end
+        if ids[next_msg._tool_call.id] then
+          to_remove[i] = true
+        end
+      end
+    end
+  end
+
+  -- Build the filtered list
+  local retained = {}
+  for i, m in ipairs(all_messages) do
+    if not filtered[i] and not to_remove[i] then
+      table.insert(retained, m)
+    end
+  end
+
+  -- Map to prompts and filter as before
   local prompt = vim
-    .iter({ self.system_messages, self.messages })
-    :flatten()
-    --- @param m sia.Message
-    --- @return sia.Prompt
+    .iter(retained)
     :map(function(m)
       return m:to_prompt(self)
     end)
-    --- @param p sia.Prompt
-    --- @return boolean?
     :filter(function(p)
       return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
@@ -576,8 +615,6 @@ function Conversation:to_query(kind)
 
   --- @type sia.Tool[]?
   local tools = nil
-  -- We need to set tools to nil if there are no tools
-  -- so that unsupported models doesn't get confused.
   if self.tools and #self.tools > 0 then
     tools = {}
     for _, tool in ipairs(self.tools) do
@@ -597,7 +634,6 @@ function Conversation:to_query(kind)
     end
   end
 
-  --- @type sia.Query
   return {
     model = self.model,
     temperature = self.temperature,

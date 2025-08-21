@@ -40,17 +40,22 @@ local function show_diff_preview(buf, original_content, target_file)
 end
 
 ---@param opts SiaNewToolOpts
----@param execute any
+---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), choice: integer?):nil
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
-  local auto_apply = opts.auto_apply
-    or function(_)
-      if auto_confirm[opts.name] then
-        return 1
-      else
-        return nil
-      end
+  local auto_apply = function(args)
+    if vim.iter(opts.required):any(function(required)
+      return args[required] == nil
+    end) then
+      return 0
     end
+
+    if auto_confirm[opts.name] then
+      return 1
+    else
+      return (opts.auto_apply and opts.auto_apply(args)) or nil
+    end
+  end
 
   return {
     name = opts.name,
@@ -1128,12 +1133,14 @@ response]],
 local edit_auto_apply = nil
 M.edit_file = M.new_tool({
   name = "edit",
+  message = "Making code changes...",
   description = "Tool for editing files",
   system_prompt = [[This is a tool for editing files.
 
 Before using this tool:
 
-1. Use the read tool to understand the file's contents and context
+1. Unless the file content is available, use the read tool to understand the
+   file's contents and context
 
 To make a file edit, provide the following:
 1. file_path: The path to the file to modify
@@ -1218,6 +1225,16 @@ rather than multiple messages with a single call each.
     return
   end
 
+  if not args.old_string then
+    callback({ content = { "No old_string was provided" } })
+    return
+  end
+
+  if not args.new_string then
+    callback({ content = { "No new_string was provided" } })
+    return
+  end
+
   local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
   if not buf then
     callback({ content = { "Cannot load " .. args.target_file } })
@@ -1260,10 +1277,7 @@ rather than multiple messages with a single call each.
     local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
     local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
     table.insert(diff, 1, success_msg)
-    callback({
-      content = diff,
-      modified = { buf },
-    })
+    callback({ content = diff })
   else
     callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
   end

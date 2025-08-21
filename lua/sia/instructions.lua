@@ -45,6 +45,9 @@ function M.current_context(global)
     {
       role = "user",
       description = function(ctx)
+        if ctx.mode == "n" then
+          return string.format("Conversation initialized from %s", utils.get_filename(ctx.buf, ":p"))
+        end
         if ctx.pos[2] == -1 then
           return string.format("%s", utils.get_filename(ctx.buf, ":p"))
         end
@@ -61,7 +64,7 @@ function M.current_context(global)
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
-        if ctx.mode == "v" or ctx.pos[2] > 0 then
+        if ctx.mode == "v" and ctx.pos[2] > 0 then
           local start_line, end_line = ctx.pos[1], ctx.pos[2]
           local instruction = string.format(
             [[
