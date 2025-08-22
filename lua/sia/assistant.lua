@@ -79,12 +79,12 @@ local function call_provider(query, opts)
       string.format("editor-version: Neovim/%s.%s.%s", vim.version().major, vim.version().minor, vim.version().patch)
     )
     table.insert(args, "--header")
-    local intiator = "user"
+    local initiator = "user"
     local last = query.prompt[#query.prompt]
     if last and last.role == "tool" then
-      intiator = "agent"
+      initiator = "agent"
     end
-    table.insert(args, "X-Initiator: " .. intiator)
+    table.insert(args, "X-Initiator: " .. initiator)
   end
 
   table.insert(args, "--url")
