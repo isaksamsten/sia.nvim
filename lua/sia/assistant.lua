@@ -137,6 +137,8 @@ function M.execute_strategy(strategy)
         --- @diagnostic disable-next-line: undefined-field
         data = { buf = strategy.buf },
       })
+    else
+      strategy:on_continue()
     end
 
     local query = strategy:get_query()

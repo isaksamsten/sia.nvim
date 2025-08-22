@@ -134,6 +134,8 @@ end
 
 function Strategy:on_init() end
 
+function Strategy:on_continue() end
+
 --- Callback triggered when the strategy starts.
 --- @param job number
 function Strategy:on_start(job) end
@@ -433,10 +435,15 @@ function ChatStrategy:on_init()
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").options.defaults.model
     self.canvas:render_messages({ self.conversation:last_message() }, model)
+    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
     end
   end
+end
+
+function ChatStrategy:on_continue()
+  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
 end
 
 function ChatStrategy:on_error()
