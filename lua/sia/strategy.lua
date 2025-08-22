@@ -435,10 +435,10 @@ function ChatStrategy:on_init()
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").options.defaults.model
     self.canvas:render_messages({ self.conversation:last_message() }, model)
-    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
     end
+    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   end
 end
 
@@ -524,6 +524,8 @@ function ChatStrategy:on_complete(control)
       end,
       on_tools_complete = function(opts)
         self.hide_header = nil
+        -- Show completion message briefly before continuing
+        self.canvas:update_progress({ { "Tools completed", "DiagnosticOk" } })
         vim.defer_fn(function()
           self.canvas:clear_extmarks()
         end, 500)
