@@ -134,7 +134,7 @@ to add them again.
         elseif vim.fn.executable("fd") == 1 then
           return string.format(
             "Below is the current directory structure as reported by fd (it skips files in .gitignore):\n%s",
-            vim.fn.system("fd --type -f")
+            vim.fn.system("fd --type f")
           )
         else
           return string.format(
