@@ -123,7 +123,7 @@ M.new_tool = function(opts, execute)
             opts.select.choices,
             { prompt = string.format("%s\nChoose an action (Esc to cancel):", prompt) },
             function(_, idx)
-              if idx == nil then
+              if idx == nil or idx < 1 or idx > #opts.select.choices then
                 callback({ content = string.format("User cancelled %s operation.", opts.name) })
                 return
               end
