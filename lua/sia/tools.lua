@@ -17,7 +17,7 @@ local auto_confirm = {}
 ---@param buf integer
 ---@param original_content string[]
 ---@param target_file string
-local function show_diff_preview(buf, original_content, target_file)
+local function show_diff_preview(buf, original_content)
   local timestamp = os.date("%H:%M:%S")
   vim.cmd("tabnew")
   local left_buf = vim.api.nvim_get_current_buf()
@@ -44,6 +44,7 @@ end
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
   local auto_apply = function(args)
+    --- Ensure that we auto apply incorrect tool calls
     if vim.iter(opts.required):any(function(required)
       return args[required] == nil
     end) then
@@ -383,86 +384,6 @@ parameters. ]],
   })
 end)
 
---- @type sia.config.Tool
-M.add_files_glob = M.new_tool({
-  name = "add_files_glob",
-  system_prompt = [[Use the tool to add contents to the conversation.
-
-- If a the complete file has already been added to the conversation, do NOT
-  add file again. The files you add will always contain the current content.]],
-  message = "Loading multiple files...",
-  description = "Add files to the list of files to be included in the conversation",
-  parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be added." } },
-  required = { "glob_pattern" },
-  confirm = function(args)
-    return string.format("Add all files matching pattern '%s' to the conversation", args.glob_pattern)
-  end,
-}, function(args, conversation, callback)
-  if not args.glob_pattern then
-    callback({ content = { "Error: No glob pattern provided." } })
-    return
-  end
-
-  local files = require("sia.utils").glob_pattern_to_files(args.glob_pattern)
-  if #files > 3 then
-    callback({
-      content = { "Error: Glob pattern matches too many files (> 3). Please provide a more specific pattern." },
-    })
-    return
-  end
-
-  local missing_files = {}
-  local existing_files = {}
-  for _, file in ipairs(files) do
-    if vim.fn.filereadable(file) == 0 then
-      table.insert(missing_files, file)
-    else
-      table.insert(existing_files, file)
-      conversation:add_file(file)
-    end
-  end
-
-  local message = {}
-  if #existing_files > 0 then
-    table.insert(message, "Successfully added file" .. (#existing_files > 1 and "s" or "") .. ":")
-    for _, file in ipairs(existing_files) do
-      table.insert(message, "  - " .. file)
-    end
-  end
-
-  if #missing_files > 0 then
-    if #message > 0 then
-      table.insert(message, "")
-    end
-    table.insert(message, "Unable to locate file" .. (#missing_files > 1 and "s" or "") .. ":")
-    for _, file in ipairs(missing_files) do
-      table.insert(message, "  - " .. file)
-    end
-  end
-
-  if #message == 0 then
-    callback({ content = { "No matching files found for pattern: " .. args.glob_pattern } })
-  else
-    callback({ content = message })
-  end
-end)
-
---- @type sia.config.Tool
-M.remove_file = {
-  name = "remove_file",
-  description = "Remove files from the conversation",
-  parameters = { glob_pattern = { type = "string", description = "Glob pattern for one or more files to be deleted." } },
-  required = { "glob_pattern" },
-  execute = function(args, conversation, callback)
-    if args.glob_pattern then
-      conversation:remove_files({ args.glob_pattern })
-      callback({ content = { "I've removed the files matching " .. args.glob_pattern .. " from the conversation." } })
-    else
-      callback({ content = { "The glob pattern is missing" } })
-    end
-  end,
-}
-
 M.grep = M.new_tool({
   name = "grep",
   system_prompt = [[- Fast content search
@@ -684,15 +605,12 @@ example: // ... existing code ...  ]],
         end
       elseif choice == 3 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }), args.target_file)
+        show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
       end
       local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
       local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
       table.insert(diff, 1, success_msg)
-      callback({
-        content = diff,
-        modified = { buf },
-      })
+      callback({ content = diff })
     else
       callback({ content = { string.format("Failed to edit %s", args.target_file) } })
     end
@@ -728,7 +646,11 @@ M.get_diagnostics = M.new_tool({
 
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
-    callback({ content = { string.format("No diagnostics found for %s", args.file) } })
+    callback({
+      content = { string.format("No diagnostics found for %s", args.file) },
+      context = { buf = buf },
+      kind = "diagnostics",
+    })
     return
   end
 
@@ -750,7 +672,7 @@ M.get_diagnostics = M.new_tool({
     table.insert(content, string.format("  Line %d:%d %s%s: %s", line, col, severity, source, diagnostic.message))
   end
 
-  callback({ content = content })
+  callback({ content = content, context = { buf = buf }, kind = "diagnostics" })
 end)
 
 M.git_status = M.new_tool({
@@ -1270,7 +1192,7 @@ rather than multiple messages with a single call each.
       end
     elseif choice == 3 then
       vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-      show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }), args.target_file)
+      show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
     end
 
     local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
