@@ -184,10 +184,10 @@ function M.show_messages(opts)
           if buf == -1 then
             buf = vim.api.nvim_create_buf(false, true)
             vim.bo[buf].ft = "markdown"
-            vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
-            vim.bo[buf].modifiable = false
+            -- vim.bo[buf].modifiable = false
             vim.api.nvim_buf_set_name(buf, buf_name)
           end
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(content, "\n", { trimempty = true }))
           local win
           if opts.peek then
             win = vim.api.nvim_open_win(buf, true, {

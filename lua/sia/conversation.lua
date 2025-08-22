@@ -24,7 +24,8 @@
 --- @field role sia.config.Role
 --- @field context sia.Context?
 --- @field hide boolean?
---- @field content string[]?
+--- @field content string?
+--- @field content_gen fun(context: sia.Context?):string
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
@@ -33,25 +34,32 @@
 local Message = {}
 Message.__index = Message
 
+--- @param content_gen fun(context: sia.Context?):string
+--- @param context sia.Context?
+--- @return string? content
+local function generate_content(content_gen, context)
+  local tmp = content_gen(context)
+  if tmp then
+    if type(tmp) == "table" then
+      return table.concat(tmp, "\n")
+    else
+      return tmp
+    end
+  end
+  return nil
+end
+
 --- @param instruction sia.config.Instruction
 --- @param context sia.Context?
---- @return string[]? content
 local function make_content(instruction, context)
-  --- @type string[]?
+  --- @type string?
   local content
   if type(instruction.content) == "function" then
-    local tmp = instruction.content(context)
-    if tmp then
-      if type(tmp) == "string" then
-        content = vim.split(tmp, "\n", { trimempty = true })
-      else
-        content = tmp
-      end
-    end
+    content = generate_content(instruction.content, context)
   elseif type(instruction.content) == "table" then
     local tmp = instruction.content
     --- @cast tmp string[]
-    content = tmp
+    content = table.concat(tmp, "\n")
   elseif instruction.content ~= nil and type(instruction.content) == "string" then
     local tmp = instruction.content
     --- @cast tmp string
@@ -62,10 +70,10 @@ local function make_content(instruction, context)
       })
     end
 
-    content = vim.split(tmp, "\n", { trimempty = true })
+    content = tmp
   end
   if instruction.role == "tool" then
-    content = content or {}
+    content = content or nil
   end
 
   return content
@@ -88,6 +96,7 @@ function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
   obj.role = instruction.role
   obj.live_content = instruction.live_content
+
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
@@ -98,8 +107,11 @@ function Message:from_table(instruction, context)
   obj.hide = instruction.hide
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
-  if obj.live_content == nil or type(instruction.content) ~= "function" then
-    obj.context = context
+  if type(instruction.content) == "function" then
+    if context ~= nil then
+      obj.context = context
+    end
+    obj.content_gen = instruction.content
   end
   return obj
 end
@@ -145,15 +157,25 @@ function Message:new(instruction, context)
   end
 end
 
---- @return string[]?
+--- @return string?
 function Message:get_content()
   if self.content then
+    local has_changed = false
+    if self.context and self.content_gen then
+      local new_content = generate_content(self.content_gen, self.context)
+      if self.content ~= new_content then
+        self.has_changed = true
+      else
+        self.has_changed = false
+      end
+    end
+    if self.has_changed then
+      return "[OUTDATED CONTENT - IGNORE THIS MESSAGE]\n\nThe content below is stale. The file has been modified since this was captured.\nIMPORTANT: Use the 'read' tool to get the current content instead.\n\n"
+        .. (self.content or "")
+    end
     return self.content
   elseif self.live_content then
-    local content = self.live_content()
-    if content then
-      return vim.split(content, "\n")
-    end
+    return self.live_content()
   else
     return nil
   end
@@ -162,12 +184,7 @@ end
 --- @return sia.Prompt
 function Message:to_prompt(conversation)
   --- @type sia.Prompt
-  local prompt = { role = self.role }
-
-  local content = self:get_content()
-  if content then
-    prompt.content = table.concat(content, "\n")
-  end
+  local prompt = { role = self.role, content = self:get_content() }
 
   if self.tool_calls then
     prompt.tool_calls = {}
@@ -235,8 +252,8 @@ function Message:get_description()
   end
 
   local content = self:get_content()
-  if content and #content > 0 then
-    return self.role .. " " .. string.sub(content[1], 1, 40)
+  if content then
+    return self.role .. " " .. string.sub(content, 1, 40)
   elseif self.tool_calls then
     return self.role .. " calling tools..."
   end
@@ -393,20 +410,22 @@ function Conversation:_update_overlapping_messages(context)
         local buf_name = vim.api.nvim_buf_get_name(existing_interval.buf)
         local file_name = vim.fn.fnamemodify(buf_name, ":t")
 
+        -- This context is no longer relevant...
+        message.content_gen = nil
+        message.context = nil
         if existing_interval.pos then
           local start_line, end_line = existing_interval.pos[1], existing_interval.pos[2]
-          message.content = {
-            string.format(
-              "[SUPERSEDED] Content from %s lines %d-%d has been replaced by more comprehensive context below",
-              file_name,
-              start_line,
-              end_line
-            ),
-          }
+          message.content = string.format(
+            "[CONTENT_SUPERSEDED]\nFile: %s (lines %d-%d)\nStatus: This content has been replaced by updated context\nAction: Ignore this message and use the newer content provided later",
+            file_name,
+            start_line,
+            end_line
+          )
         else
-          message.content = {
-            string.format("[SUPERSEDED] Full content of %s has been replaced by updated context below", file_name),
-          }
+          message.content = string.format(
+            "[CONTENT_SUPERSEDED]\nFile: %s\nStatus: Full content has been replaced by updated context\nAction: Ignore this message and use the newer content provided later",
+            file_name
+          )
         end
       end
     end
@@ -565,49 +584,16 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
-  -- Gather all messages (system and user)
-  local all_messages = vim.iter({ self.system_messages, self.messages }):flatten():totable()
-
-  -- First pass: determine which messages would be filtered out due to stale buffers
-  local filtered = {}
-  for i, m in ipairs(all_messages) do
-    if m.context and not vim.api.nvim_buf_is_loaded(m.context.buf) then
-      filtered[i] = true
-    end
-  end
-
-  -- Second pass: if a message with tool_calls is immediately followed by a filtered _tool_call with matching id, filter both
-  local to_remove = {}
-  for i, m in ipairs(all_messages) do
-    if m.tool_calls and all_messages[i + 1] and all_messages[i + 1]._tool_call then
-      local next_msg = all_messages[i + 1]
-      if filtered[i + 1] then
-        -- Check if any tool_call id matches
-        local ids = {}
-        for _, tc in ipairs(m.tool_calls) do
-          ids[tc.id] = true
-        end
-        if ids[next_msg._tool_call.id] then
-          to_remove[i] = true
-        end
-      end
-    end
-  end
-
-  -- Build the filtered list
-  local retained = {}
-  for i, m in ipairs(all_messages) do
-    if not filtered[i] and not to_remove[i] then
-      table.insert(retained, m)
-    end
-  end
-
-  -- Map to prompts and filter as before
   local prompt = vim
-    .iter(retained)
+    .iter({ self.system_messages, self.messages })
+    :flatten()
+    --- @param m sia.Message
+    --- @return sia.Prompt
     :map(function(m)
       return m:to_prompt(self)
     end)
+    --- @param p sia.Prompt
+    --- @return boolean?
     :filter(function(p)
       return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
@@ -615,6 +601,8 @@ function Conversation:to_query(kind)
 
   --- @type sia.Tool[]?
   local tools = nil
+  -- We need to set tools to nil if there are no tools
+  -- so that unsupported models doesn't get confused.
   if self.tools and #self.tools > 0 then
     tools = {}
     for _, tool in ipairs(self.tools) do

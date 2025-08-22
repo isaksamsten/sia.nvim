@@ -122,7 +122,8 @@ end
 function ChatCanvas:render_messages(messages, model)
   for _, message in ipairs(messages) do
     if message:is_shown() then
-      if message.content then
+      local content = message:get_content()
+      if content then
         local line_count = vim.api.nvim_buf_line_count(self.buf)
         local heading = "/you"
         if message.role == "assistant" then
@@ -144,7 +145,7 @@ function ChatCanvas:render_messages(messages, model)
           end
         end
         line_count = vim.api.nvim_buf_line_count(self.buf)
-        vim.api.nvim_buf_set_lines(self.buf, line_count - 1, line_count, false, message.content)
+        vim.api.nvim_buf_set_lines(self.buf, line_count - 1, line_count, false, vim.split(content, "\n"))
       end
     end
   end

@@ -121,3 +121,34 @@ end, {
     return {}
   end,
 })
+
+vim.api.nvim_create_user_command("SiaDebug", function()
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+  local chat = ChatStrategy.by_buf()
+  if not chat or not chat.conversation or not chat.conversation.to_query then
+    vim.notify("SiaDebug: No active Sia chat in this buffer.", vim.log.levels.WARN)
+    return
+  end
+  local ok, result = pcall(chat.conversation.to_query, chat.conversation)
+  if not ok then
+    vim.notify("SiaDebug: Error generating conversation query: " .. tostring(result), vim.log.levels.ERROR)
+    return
+  end
+  local json_str = vim.json.encode(result)
+  local pretty = json_str
+  if vim.fn.executable("jq") == 1 then
+    local jq_out = vim.fn.system({ "jq", "." }, json_str)
+    if vim.v.shell_error == 0 then
+      pretty = jq_out
+    end
+  end
+  vim.cmd("tabnew")
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
+  vim.api.nvim_set_option_value("filetype", "json", { buf = buf })
+  local lines = vim.split(pretty, "\n", true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_name(buf, "*SiaDebug*")
+end, {})
