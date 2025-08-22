@@ -13,6 +13,7 @@ function M.create_context(args)
     pos = { args.line1, args.line2 },
     bang = args.bang,
   }
+  opts.changedtick = vim.b[opts.buf].changedtick
   if args.count == -1 then
     opts.mode = "n"
   else
@@ -47,7 +48,7 @@ function M.is_range_commend(cmd_line)
   return false
 end
 --- @class sia.utils.WithChatStrategy
---- @field on_select fun(strategy: sia.ChatStrategy):boolean
+--- @field on_select fun(strategy: sia.ChatStrategy):nil
 --- @field on_none (fun():boolean)?
 --- @field only_visible boolean?
 

@@ -10,6 +10,7 @@ function M.current_buffer(global)
     {
       role = "user",
       persistent = true,
+      kind = "buffer",
       description = function(ctx)
         return string.format("%s", utils.get_filename(ctx.buf, ":."))
       end,
@@ -44,6 +45,7 @@ function M.current_context(global)
   return {
     {
       role = "user",
+      kind = "context",
       description = function(ctx)
         if ctx.mode == "n" then
           return string.format("Conversation initialized from %s", utils.get_filename(ctx.buf, ":p"))
@@ -113,6 +115,7 @@ function M.verbatim()
     {
       role = "user",
       hide = true,
+      kind = "context",
       description = function(ctx)
         return string.format("%s verbatim lines %d-%d", utils.get_filename(ctx.buf, ":."), ctx.pos[1], ctx.pos[2])
       end,

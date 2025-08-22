@@ -378,7 +378,8 @@ parameters. ]],
 
   callback({
     content = content,
-    context = { buf = buf, pos = pos },
+    context = { buf = buf, pos = pos, changedtick = vim.b[buf].changedtick },
+    kind = "context",
   })
 end)
 

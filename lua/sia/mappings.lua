@@ -17,9 +17,9 @@ end
 function _G.__sia_add_buffer()
   require("sia.utils").with_chat_strategy({
     on_select = function(strategy)
-      return strategy.conversation:add_instruction("current_buffer", {
+      strategy.conversation:add_instruction("current_context", {
         buf = vim.api.nvim_get_current_buf(),
-        pos = vim.api.nvim_win_get_cursor(0),
+        pos = { 0, -1 },
         cursor = vim.api.nvim_win_get_cursor(0),
       })
     end,

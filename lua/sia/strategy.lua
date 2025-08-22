@@ -12,6 +12,7 @@ local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 --- @field content string[]
 --- @field context sia.Context?
 --- @field cancel boolean?
+--- @field kind string?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.Writer
@@ -185,7 +186,7 @@ end
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field on_tool_complete fun(tool: sia.ToolCall, output: string[], context: sia.Context?)
+--- @field on_tool_complete fun(tool: sia.ToolCall, tool_result: sia.ToolResult)
 --- @field on_tools_complete fun(args: {cancel: boolean})
 --- @field on_no_tools fun(args: {cancel: boolean})
 --- @field on_tool_status_update? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
@@ -280,10 +281,10 @@ function Strategy:execute_tools(opts)
               vim.schedule_wrap(function(tool_result)
                 local cancel
                 if tool_result then
-                  opts.on_tool_complete(tool.tool_call, tool_result.content, tool_result.context)
+                  opts.on_tool_complete(tool.tool_call, tool_result)
                   cancel = tool_result.cancel
                 else
-                  opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
+                  opts.on_tool_complete(tool.tool_call, { content = { "Could not find tool..." } })
                   cancel = true
                 end
                 on_tool_finished(tool.index, cancel)
@@ -291,11 +292,11 @@ function Strategy:execute_tools(opts)
             )
           else
             local error_message = { "Could not parse tool arguments" }
-            opts.on_tool_complete(tool.tool_call, error_message)
+            opts.on_tool_complete(tool.tool_call, { content = error_message })
             on_tool_finished(tool.index, true)
           end
         else
-          opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
+          opts.on_tool_complete(tool.tool_call, { content = { "Tool is not a function" } })
           on_tool_finished(tool.index, true)
         end
       end)
@@ -319,10 +320,10 @@ function Strategy:execute_tools(opts)
             vim.schedule_wrap(function(tool_result)
               local cancel
               if tool_result then
-                opts.on_tool_complete(tool.tool_call, tool_result.content, tool_result.context)
+                opts.on_tool_complete(tool.tool_call, tool_result)
                 cancel = tool_result.cancel
               else
-                opts.on_tool_complete(tool.tool_call, { "Could not find tool..." })
+                opts.on_tool_complete(tool.tool_call, { content = { "Could not find tool..." } })
                 cancel = true
               end
               on_tool_finished(tool.index, cancel)
@@ -331,12 +332,12 @@ function Strategy:execute_tools(opts)
           )
         else
           local error_message = { "Could not parse tool arguments" }
-          opts.on_tool_complete(tool.tool_call, error_message)
+          opts.on_tool_complete(tool.tool_call, { content = error_message })
           on_tool_finished(tool.index, true)
           process_next_tool()
         end
       else
-        opts.on_tool_complete(tool.tool_call, { "Tool is not a function" })
+        opts.on_tool_complete(tool.tool_call, { content = { "Tool is not a function" } })
         on_tool_finished(tool.index, true)
         process_next_tool()
       end
@@ -516,11 +517,11 @@ function ChatStrategy:on_complete(control)
         end
         self.canvas:update_tool_progress(lines)
       end,
-      on_tool_complete = function(tool, content, tool_context)
+      on_tool_complete = function(tool, result)
         self.conversation:add_instruction({
           { role = "assistant", tool_calls = { tool } },
-          { role = "tool", content = content, _tool_call = tool },
-        }, tool_context)
+          { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
+        }, result.context)
       end,
       on_tools_complete = function(opts)
         self.hide_header = nil
@@ -725,11 +726,11 @@ function DiffStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, content, tool_context)
+    on_tool_complete = function(tool, result)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = content, _tool_call = tool },
-      }, tool_context)
+        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
+      }, result.context)
     end,
     on_tools_complete = function()
       control.continue_execution()
@@ -851,11 +852,11 @@ function InsertStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, content, tool_context)
+    on_tool_complete = function(tool, result)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = content, _tool_call = tool },
-      }, tool_context)
+        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
+      }, result.context)
     end,
     on_tools_complete = function()
       control.continue_execution()
@@ -959,7 +960,11 @@ function HiddenStrategy:on_complete(control)
     del_abort_keymap(context.buf)
   end
   if #self._writer.cache > 0 then
-    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache, group = 1 })
+    self.conversation:add_instruction({
+      role = "assistant",
+      content = self._writer.cache,
+      kind = "<assistant-callback>",
+    })
   end
 
   self:execute_tools({
@@ -982,11 +987,11 @@ function HiddenStrategy:on_complete(control)
         end
       end
     end,
-    on_tool_complete = function(tool, content, tool_context)
+    on_tool_complete = function(tool, result)
       self.conversation:add_instruction({
         { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = content, _tool_call = tool },
-      }, tool_context)
+        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
+      }, result.context)
     end,
     on_tools_complete = function()
       control.continue_execution()
@@ -997,7 +1002,7 @@ function HiddenStrategy:on_complete(control)
       end
       local messages = self.conversation:get_messages({
         filter = function(message)
-          return message.role == "assistant" and message.group == 1
+          return message.role == "assistant" and message.kind == "<assistant-callback>"
         end,
       })
       local content = Message.merge_content(messages)

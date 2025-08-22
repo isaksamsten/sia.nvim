@@ -9,12 +9,13 @@
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
 --- @class sia.Context
---- @field buf integer
+--- @field buf integer?
 --- @field win integer?
---- @field pos [integer,integer]
+--- @field pos [integer,integer]?
 --- @field mode "n"|"v"?
 --- @field bang boolean?
 --- @field cursor integer[]?
+--- @field changedtick integer?
 
 --- @class sia.ActionContext : sia.Context
 --- @field start_line integer?
@@ -24,17 +25,17 @@
 --- @field role sia.config.Role
 --- @field context sia.Context?
 --- @field hide boolean?
+--- @field kind string?
 --- @field content string?
 --- @field content_gen fun(context: sia.Context?):string
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field description string?
---- @field group integer?
 local Message = {}
 Message.__index = Message
 
---- @param content_gen fun(context: sia.Context?):string
+--- @param content_gen fun(context: sia.Context?):string?
 --- @param context sia.Context?
 --- @return string? content
 local function generate_content(content_gen, context)
@@ -96,6 +97,7 @@ function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
   obj.role = instruction.role
   obj.live_content = instruction.live_content
+  obj.kind = instruction.kind
 
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
@@ -107,10 +109,8 @@ function Message:from_table(instruction, context)
   obj.hide = instruction.hide
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
+  obj.context = context
   if type(instruction.content) == "function" then
-    if context ~= nil then
-      obj.context = context
-    end
     obj.content_gen = instruction.content
   end
   return obj
@@ -161,15 +161,23 @@ end
 function Message:get_content()
   if self.content then
     local has_changed = false
-    if self.context and self.content_gen then
-      local new_content = generate_content(self.content_gen, self.context)
-      if self.content ~= new_content then
-        self.has_changed = true
-      else
-        self.has_changed = false
+    if self.context and self.kind ~= nil then
+      if
+        self.context.buf
+        and vim.api.nvim_buf_is_loaded(self.context.buf)
+        and self.context.changedtick ~= vim.b[self.context.buf].changedtick
+      then
+        has_changed = true
+      elseif self.content_gen then
+        local new_content = generate_content(self.content_gen, self.context)
+        if self.content ~= new_content then
+          has_changed = true
+        else
+          has_changed = false
+        end
       end
     end
-    if self.has_changed then
+    if has_changed then
       return "[OUTDATED CONTENT - IGNORE THIS MESSAGE]\n\nThe content below is stale. The file has been modified since this was captured.\nIMPORTANT: Use the 'read' tool to get the current content instead.\n\n"
         .. (self.content or "")
     end
@@ -223,20 +231,23 @@ function Message:is_shown()
   return not (self.hide == true or self.role == "system" or self.role == "tool")
 end
 
---- @return boolean
-function Message:is_available()
-  if self.available then
-    return self.available(self.context)
+--- @param messages sia.Message[]?
+--- @return string[]? content
+function Message.merge_content(messages)
+  if messages == nil then
+    return nil
   end
-  return true
-end
 
---- @return table?
-function Message:get_id()
-  if self.id then
-    return self.id(self.context)
-  end
-  return nil
+  return vim
+    .iter(messages)
+    :map(function(m)
+      return m:get_content()
+    end)
+    :filter(function(content)
+      return content ~= nil
+    end)
+    :flatten()
+    :totable()
 end
 
 --- @return string
@@ -390,31 +401,31 @@ end
 
 --- Update overlapping messages with replacement content
 --- @param context sia.Context?
-function Conversation:_update_overlapping_messages(context)
+--- @param kind string?
+function Conversation:_update_overlapping_messages(context, kind)
   if not context or not context.buf then
     return
   end
 
-  local new_interval = { buf = context.buf, pos = context.pos }
-
   for i, message in ipairs(self.messages) do
+    local old_context = message.context
     if
-      message.context
-      and message.context.buf
+      old_context
+      and message.kind ~= nil
+      and message.kind == kind
+      and old_context.buf
       and message.content
       and (message.role == "user" or message.role == "tool")
     then
-      local existing_interval = { buf = message.context.buf, pos = message.context.pos }
-
-      if should_mask_existing(new_interval, existing_interval) then
-        local buf_name = vim.api.nvim_buf_get_name(existing_interval.buf)
+      if should_mask_existing(context, old_context) then
+        local buf_name = vim.api.nvim_buf_get_name(old_context.buf)
         local file_name = vim.fn.fnamemodify(buf_name, ":t")
 
         -- This context is no longer relevant...
         message.content_gen = nil
         message.context = nil
-        if existing_interval.pos then
-          local start_line, end_line = existing_interval.pos[1], existing_interval.pos[2]
+        if old_context.pos then
+          local start_line, end_line = old_context.pos[1], old_context.pos[2]
           message.content = string.format(
             "[CONTENT_SUPERSEDED]\nFile: %s (lines %d-%d)\nStatus: This content has been replaced by updated context\nAction: Ignore this message and use the newer content provided later",
             file_name,
@@ -437,11 +448,12 @@ end
 --- @param opts { ignore_duplicates: boolean?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
-  if opts.ignore_duplicates ~= true then
-    self:_update_overlapping_messages(context)
-  end
-
+  local done = {}
   for _, message in ipairs(Message:new(instruction, context) or {}) do
+    if message.kind and opts.ignore_duplicates ~= true and not done[message.kind] then
+      self:_update_overlapping_messages(context, message.kind)
+      done[message.kind] = true
+    end
     table.insert(self.messages, message)
   end
 end
@@ -457,10 +469,6 @@ function Conversation:remove_instruction(index)
 
   if index.kind == "system" then
     removed = table.remove(self.system_messages, index.index)
-  elseif index.kind == "example" then
-    removed = table.remove(self.example_messages, index.index)
-  elseif index.kind == "files" then
-    removed = table.remove(self.files, index.index)
   elseif index.kind == "user" then
     removed = table.remove(self.messages, index.index)
   else
