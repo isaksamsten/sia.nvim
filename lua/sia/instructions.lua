@@ -66,7 +66,7 @@ function M.current_context(global)
           start_fence = "```" .. vim.bo[ctx.buf].ft
           end_fence = "```"
         end
-        if ctx.mode == "v" and ctx.pos[2] > 0 then
+        if ctx.mode == "v" then
           local start_line, end_line = ctx.pos[1], ctx.pos[2]
           local instruction = string.format(
             [[

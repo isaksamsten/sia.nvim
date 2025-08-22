@@ -161,13 +161,18 @@ end
 function Message:get_content()
   if self.content then
     local has_changed = false
+    -- If we have context, we track a specific buffer or part of
+    -- buffer. But only for messages of certain kind
     if self.context and self.kind ~= nil then
+      -- Most types of context track the buffer and
+      -- if the buffer changes we have an outdated context.
       if
         self.context.buf
         and vim.api.nvim_buf_is_loaded(self.context.buf)
         and self.context.changedtick ~= vim.b[self.context.buf].changedtick
       then
         has_changed = true
+      -- If not, we check if the generated content is the same
       elseif self.content_gen then
         local new_content = generate_content(self.content_gen, self.context)
         if self.content ~= new_content then
@@ -188,6 +193,7 @@ function Message:get_content()
     return nil
   end
 end
+
 --- @param conversation sia.Conversation?
 --- @return sia.Prompt
 function Message:to_prompt(conversation)
