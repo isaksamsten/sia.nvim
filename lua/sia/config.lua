@@ -205,6 +205,8 @@ local defaults = {
     tools = {
       enable = true,
       choices = {
+        show_locations = require("sia.tools").show_locations,
+        show_location = require("sia.tools").show_location,
         read = require("sia.tools").read,
         lsp_symbol = require("sia.tools").find_lsp_symbol,
         lsp_docs = require("sia.tools").documentation,
@@ -257,6 +259,8 @@ local defaults = {
         },
         tools = {
           "grep",
+          "show_location",
+          "show_locations",
           "edit",
           "read",
           "list_files",

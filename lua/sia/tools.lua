@@ -926,6 +926,209 @@ M.git_unstage = M.new_tool({
   end)
 end)
 
+M.show_location = M.new_tool({
+  name = "show_location",
+  message = "Navigating to location...",
+  description = "Navigate to a specific location in a file and show it to the user",
+  system_prompt = [[Navigate to a specific location in a file and show it to the user.
+
+This tool is ideal for:
+- Showing the user a specific line of code you're discussing
+- Navigating to error locations, function definitions, or problem areas
+- Directing attention to relevant code during explanations
+- Following up after using grep/search tools to show specific results
+
+The tool will:
+- Open the file in a split window if not already visible
+- Position the cursor at the exact location
+- Center the line in the window for visibility
+- Preserve the user's current window layout when possible
+
+Use this when you want to say "let me show you this specific location" or when referencing specific lines in your explanations.]],
+  parameters = {
+    file = { type = "string", description = "File path" },
+    line = { type = "integer", description = "Line number (1-based)" },
+    col = { type = "integer", description = "Column number (1-based, optional)" },
+  },
+  required = { "file", "line" },
+}, function(args, _, callback)
+  if not args.file then
+    callback({ content = { "Error: No file path provided" } })
+    return
+  end
+
+  if not args.line then
+    callback({ content = { "Error: No line number provided" } })
+    return
+  end
+
+  if vim.fn.filereadable(args.file) == 0 then
+    callback({ content = { "Error: File cannot be found or is not readable" } })
+    return
+  end
+
+  local buf = require("sia.utils").ensure_file_is_loaded(args.file)
+  if not buf then
+    callback({ content = { "Error: Cannot load file into buffer" } })
+    return
+  end
+
+  -- Get total lines in buffer to validate line number
+  local total_lines = vim.api.nvim_buf_line_count(buf)
+  if args.line < 1 or args.line > total_lines then
+    callback({
+      content = { string.format("Error: Line %d is out of range (file has %d lines)", args.line, total_lines) },
+    })
+    return
+  end
+
+  -- Find a window showing this buffer, or create one
+  local win = nil
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(w) == buf then
+      win = w
+      break
+    end
+  end
+
+  if not win then
+    -- Check if we're in a split layout
+    local current_win = vim.api.nvim_get_current_win()
+    local all_wins = vim.api.nvim_list_wins()
+
+    if #all_wins > 1 then
+      -- We have multiple windows, try to find a non-current window to use
+      for _, w in ipairs(all_wins) do
+        if w ~= current_win then
+          vim.api.nvim_set_current_win(w)
+          vim.api.nvim_set_current_buf(buf)
+          win = w
+          break
+        end
+      end
+    else
+      -- No splits, create a new vertical split
+      vim.cmd("vsplit")
+      vim.api.nvim_set_current_buf(buf)
+      win = vim.api.nvim_get_current_win()
+    end
+  else
+    -- Switch to the window showing this buffer
+    vim.api.nvim_set_current_win(win)
+  end
+
+  -- Set cursor position
+  local col = args.col or 1
+  -- Ensure column is within line bounds
+  local line_content = vim.api.nvim_buf_get_lines(buf, args.line - 1, args.line, false)[1] or ""
+  col = math.min(col, #line_content + 1)
+
+  vim.api.nvim_win_set_cursor(win, { args.line, col - 1 }) -- API uses 0-based columns
+
+  -- Center the line in the window
+  vim.cmd("normal! zz")
+
+  local location_str = args.col and string.format("%s:%d:%d", args.file, args.line, args.col)
+    or string.format("%s:%d", args.file, args.line)
+  callback({ content = { string.format("Navigated to %s", location_str) } })
+end)
+
+M.show_locations = M.new_tool({
+  name = "show_locations",
+  message = "Creating location list...",
+  description = "Show multiple locations in a navigable list for easy browsing",
+  system_prompt = [[Create and display a navigable list with multiple locations for easy browsing.
+
+This tool is perfect for:
+- Showing multiple search results, errors, or locations at once
+- Creating a navigable list of related code locations (e.g., all TODO comments, all function definitions)
+- Presenting diagnostic results, test failures, or lint issues
+- Organizing multiple findings from grep/search operations
+- Creating a "table of contents" for code exploration
+
+The location list allows users to:
+- Navigate between items using :cnext/:cprev or clicking
+- See all locations in one organized view
+- Jump directly to any location
+- Keep the list open while working on different items
+
+Use this instead of show_location when you have:
+- Multiple related locations to show (3+ items)
+- Search results that should be browsed together
+- A collection of errors, warnings, or findings
+- Any scenario where the user benefits from seeing all locations at once
+
+Each item should have a descriptive 'text' field explaining what's at that location.
+Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
+  parameters = {
+    items = {
+      type = "array",
+      items = {
+        type = "object",
+        properties = {
+          filename = { type = "string", description = "File path" },
+          lnum = { type = "integer", description = "Line number (1-based)" },
+          col = { type = "integer", description = "Column number (1-based, optional)" },
+          text = { type = "string", description = "Description text for the item" },
+          type = { type = "string", description = "Item type: E (error), W (warning), I (info), N (note)" },
+        },
+        required = { "filename", "lnum", "text" },
+      },
+      description = "List of quickfix items",
+    },
+    title = { type = "string", description = "Title for the quickfix list" },
+  },
+  required = { "items" },
+}, function(args, _, callback)
+  if not args.items or #args.items == 0 then
+    callback({ content = { "Error: No items provided for quickfix list" } })
+    return
+  end
+
+  local qf_items = {}
+  local valid_types = { E = true, W = true, I = true, N = true }
+
+  for i, item in ipairs(args.items) do
+    if not item.filename or not item.lnum or not item.text then
+      callback({ content = { string.format("Error: Item %d missing required fields (filename, lnum, text)", i) } })
+      return
+    end
+
+    local qf_item = {
+      filename = item.filename,
+      lnum = item.lnum,
+      col = item.col or 1,
+      text = item.text,
+    }
+
+    -- Validate and set type
+    if item.type and valid_types[item.type] then
+      qf_item.type = item.type
+    end
+
+    table.insert(qf_items, qf_item)
+  end
+
+  -- Set the quickfix list
+  vim.fn.setqflist(qf_items, "r")
+
+  -- Set title if provided
+  if args.title then
+    vim.fn.setqflist({}, "a", { title = args.title })
+  end
+
+  -- Open the quickfix window
+  vim.cmd("copen")
+
+  local title = args.title or "Quickfix List"
+  callback({
+    content = {
+      string.format("Created quickfix list '%s' with %d items", title, #qf_items),
+      "Use :cnext/:cprev to navigate, or click items in the quickfix window",
+    },
+  })
+end)
+
 M.compact_conversation = M.new_tool({
   name = "compact_conversation",
   message = "Compacting conversation...",
