@@ -122,6 +122,11 @@ function M.highlight_diff_changes(buf, old_content, new_content)
   })
 end
 
+--- Expose buffer diff state for tools
+function M.get_buffer_diff_state()
+  return buffer_diff_state
+end
+
 --- @param opts { buf: number? }?
 function M.accept_diff(opts)
   opts = opts or {}

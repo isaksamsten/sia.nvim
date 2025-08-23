@@ -207,6 +207,7 @@ local defaults = {
       choices = {
         show_locations = require("sia.tools").show_locations,
         show_location = require("sia.tools").show_location,
+        show_recent_changes = require("sia.tools").show_recent_changes,
         read = require("sia.tools").read,
         lsp_symbol = require("sia.tools").find_lsp_symbol,
         lsp_docs = require("sia.tools").documentation,
@@ -261,6 +262,7 @@ local defaults = {
           "grep",
           "show_location",
           "show_locations",
+          "show_recent_changes",
           "edit",
           "read",
           "list_files",
@@ -297,6 +299,7 @@ local defaults = {
         "compact",
         "git_commit",
         "git_diff",
+        "show_recent_changes",
       },
     },
     commit = require("sia.actions").commit(),

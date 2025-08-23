@@ -1129,6 +1129,122 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   })
 end)
 
+M.show_recent_changes = M.new_tool({
+  name = "show_recent_changes",
+  message = "Showing recent changes...",
+  description = "Show locations of recent changes made to files in the current session",
+  system_prompt = [[Show locations of recent changes made to files in the current session.
+
+This tool automatically tracks all modifications made through the edit tools during the current session and creates a navigable quickfix list showing exactly where changes occurred.
+
+WHAT IT TRACKS:
+- All edits made through the edit tool during this session
+- Precise line numbers where changes occurred
+- Type of change: additions, deletions, or modifications
+- Number of lines affected for each change
+
+WHEN TO USE:
+- User asks to see where you made changes ("show me what you edited")
+- User wants to navigate to recent modifications
+- After making multiple edits and user wants to review them
+- When user asks "where did you change that?" or similar location questions
+- To create a summary of modifications made during the conversation
+
+QUICKFIX LIST FEATURES:
+- Navigate between changes using :cnext/:cprev or clicking items
+- Jump directly to any change location
+- See all changes organized by file and line number
+- Each item shows the type and scope of change
+
+LIMITATIONS:
+- Only tracks changes made through edit tools in current session
+- Changes are cleared when user saves the buffer or accepts the changes
+- Does not track manual edits made by the user outside of the tool
+- Only shows changes that have diff highlighting active
+
+PARAMETERS:
+- file (optional): Filter results to show only changes in a specific file
+
+Use this tool whenever you need to show the user the locations of modifications you've made, especially after completing a series of edits.]],
+  parameters = {
+    file = { type = "string", description = "Specific file to show changes for (optional)" },
+  },
+  required = {},
+}, function(args, _, callback)
+  local sia = require("sia")
+  local buffer_diff_state = sia.get_buffer_diff_state()
+
+  local items = {}
+  local found_changes = false
+
+  for buf, diff_state in pairs(buffer_diff_state) do
+    if diff_state.hunks and #diff_state.hunks > 0 then
+      local buf_name = vim.api.nvim_buf_get_name(buf)
+      local rel_path = vim.fn.fnamemodify(buf_name, ":.")
+
+      if args.file and not vim.endswith(rel_path, args.file) and rel_path ~= args.file then
+        goto continue
+      end
+
+      found_changes = true
+
+      for _, hunk in ipairs(diff_state.hunks) do
+        local line = hunk.new_start
+        local description
+
+        if hunk.type == "add" then
+          description = string.format("Added %d line(s)", hunk.new_count)
+        elseif hunk.type == "delete" then
+          description = string.format("Deleted %d line(s)", hunk.old_count)
+        elseif hunk.type == "change" then
+          description = string.format("Modified %d line(s)", hunk.new_count)
+        end
+
+        table.insert(items, {
+          filename = rel_path,
+          lnum = line,
+          text = description,
+          type = hunk.type == "add" and "I" or (hunk.type == "delete" and "W" or "N"),
+        })
+      end
+
+      ::continue::
+    end
+  end
+
+  if not found_changes then
+    local msg = args.file and string.format("No recent changes found in %s", args.file)
+      or "No recent changes found in any files"
+    callback({ content = { msg } })
+    return
+  end
+
+  table.sort(items, function(a, b)
+    if a.filename == b.filename then
+      return a.lnum < b.lnum
+    end
+    return a.filename < b.filename
+  end)
+
+  vim.fn.setqflist(items, "r")
+  local title = args.file and string.format("Recent changes in %s", args.file) or "Recent changes in session"
+  vim.fn.setqflist({}, "a", { title = title })
+  vim.cmd("copen")
+
+  callback({
+    content = {
+      string.format(
+        "Found %d recent change(s) across %d file(s)",
+        #items,
+        vim.tbl_count(vim.tbl_map(function(item)
+          return item.filename
+        end, items))
+      ),
+      "Use :cnext/:cprev to navigate, or click items in the quickfix window",
+    },
+  })
+end)
+
 M.compact_conversation = M.new_tool({
   name = "compact_conversation",
   message = "Compacting conversation...",
