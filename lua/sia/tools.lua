@@ -167,157 +167,400 @@ local KINDS = {
   [26] = "TypeParameter",
 }
 
---- @type sia.config.Tool
-M.find_lsp_symbol = {
+M.find_lsp_symbol = M.new_tool({
   name = "find_lsp_symbol",
-  description = "Search for LSP symbols and add their file and location to the context",
+  message = function(args)
+    if #args.queries == 1 then
+      return string.format("Searching for LSP symbols matching '%s'...", args.queries[1])
+    else
+      return string.format("Searching for LSP symbols matching %d queries...", #args.queries)
+    end
+  end,
+  system_prompt = [[Search for LSP symbols in the workspace and make them available for further exploration.
+
+This tool is extremely useful for:
+- Finding functions, classes, methods, and variables by name across the entire project
+- Discovering code structure and understanding how components are organized
+- Locating specific symbols when you need to understand their implementation
+- Building context for code analysis tasks
+- Finding entry points and key components in unfamiliar codebases
+
+SEARCH STRATEGY:
+- Use partial names or patterns - LSP will find fuzzy matches
+- Search for multiple related terms in one call for efficiency
+- Combine with show_locations to create navigable lists of results
+- Follow up with read tool to examine specific symbol implementations
+
+SYMBOL TYPES FOUND:
+- Functions, methods, and constructors
+- Classes, interfaces, and types
+- Variables, constants, and properties
+- Modules, namespaces, and packages
+- Enums, structs, and other language-specific constructs
+
+INTEGRATION WITH OTHER TOOLS:
+- Results are stored for use with symbol_docs tool
+- Use show_locations to create quickfix lists from results
+- Follow up with read tool to examine symbol definitions
+- Combine with grep for broader context searches]],
+  description = "Search for LSP symbols across the workspace and prepare them for further exploration",
   parameters = {
-    queries = { type = "array", items = { type = "string" }, description = "The search queries" },
+    queries = {
+      type = "array",
+      items = { type = "string" },
+      description = "Search queries for symbol names (supports partial/fuzzy matching)",
+    },
+    kind_filter = {
+      type = "array",
+      items = { type = "string" },
+      description = "Optional filter by symbol types: Function, Class, Method, Variable, Constant, etc.",
+    },
+    project_only = {
+      type = "boolean",
+      description = "Only show symbols from the current project root (default: true)",
+    },
+    max_results = {
+      type = "integer",
+      description = "Maximum number of results to return per query (default: 50)",
+    },
   },
   required = { "queries" },
-  execute = function(args, conversation, callback)
-    if not args.queries or #args.queries == 0 then
-      callback({ content = { "Error: No queries were provided" } })
-      return
-    end
-
-    local clients = vim.lsp.get_clients({ method = "workspace/symbol" })
-    if vim.tbl_isempty(clients) then
-      callback({ content = { "Error: No LSP clients attached" } })
-      return
-    end
-    local found = {}
-    local done = {}
-    for i, client in ipairs(clients) do
-      local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
-
-      for _, query in ipairs(args.queries) do
-        --- @diagnostic disable-next-line undefined-field
-        params.query = query
-        done[i] = false
-
-        client:request("workspace/symbol", params, function(err, symbols)
-          if err or symbols == nil then
-            done[i] = true
-            return
-          end
-          for _, symbol in ipairs(symbols) do
-            local uri = vim.uri_to_fname(symbol.location.uri)
-            table.insert(found, { symbol = symbol, in_root = vim.startswith(uri, client.root_dir) })
-          end
-          done[i] = true
-        end)
-      end
-    end
-    vim.wait(1000, function()
-      return vim.iter(done):all(function(v)
-        return v
-      end)
-    end, 10)
-
-    local message = {}
-    --- @diagnostic disable-next-line undefined-field
-    conversation.lsp_symbols = conversation.lsp_symbols or {}
-
-    for _, f in ipairs(found) do
-      local symbol = f.symbol
-      conversation.lsp_symbols[symbol.name] = symbol
-      local rel_path = vim.fn.fnamemodify(vim.uri_to_fname(symbol.location.uri), ":.")
-      local kind = KINDS[symbol.kind] or "Unkown"
-      local item
-      if f.in_root then
-        item = string.format("  - %s: %s in %s", kind, symbol.name, rel_path)
-      else
-        item = string.format("  - %s: %s", kind, symbol.name)
-      end
-
-      table.insert(message, item)
-    end
-
-    if #message > 0 then
-      callback({ content = message })
+  confirm = function(args)
+    if #args.queries == 1 then
+      return string.format("Search workspace for symbols matching '%s'", args.queries[1])
     else
-      callback({ content = { "Error: Can't find any matching symbols" } })
+      return string.format("Search workspace for symbols matching %s", table.concat(args.queries, "', '"))
     end
   end,
-}
+}, function(args, conversation, callback)
+  if not args.queries or #args.queries == 0 then
+    callback({ content = { "Error: No search queries provided" } })
+    return
+  end
 
---- @type sia.config.Tool
-M.documentation = {
-  name = "symbol_docs",
-  description = "Get the documentation for a LSP symbol resolved through find_lsp_symbol",
-  parameters = { symbol = { type = "string", description = "The symbol to get documentation for" } },
-  required = { "symbol" },
-  execute = function(args, conversation, callback)
-    if not args.symbol then
-      callback({ content = { "Error: No symbol provided" } })
-      return
-    end
-
-    --- @diagnostic disable-next-line undefined-field
-    if conversation.lsp_symbols == nil then
-      callback({ content = { "Error: No symbols have been added to the conversation yet." } })
-      return
-    end
-
-    --- @diagnostic disable-next-line undefined-field
-    local symbol = conversation.lsp_symbols[args.symbol]
-
-    if symbol == nil then
-      callback({ content = { "Error: The symbol " .. args.symbol .. " has not been addded to the conversation" } })
-      return
-    end
-
-    local clients = vim.lsp.get_clients({ method = "textDocument/hover" })
-    if vim.tbl_isempty(clients) then
-      callback({ content = { "Error: No LSP clients attached" } })
-      return
-    end
-    local done = {}
-    local found = {}
-
-    local params = {
-      position = {
-        character = symbol.location.range.start.character,
-        line = symbol.location.range.start.line,
+  local clients = vim.lsp.get_clients({ method = "workspace/symbol" })
+  if vim.tbl_isempty(clients) then
+    callback({
+      content = {
+        "Error: No LSP clients with workspace symbol support found",
+        "Make sure an LSP server is running and supports workspace/symbol requests",
       },
-      textDocument = {
-        uri = symbol.location.uri,
-      },
-    }
+    })
+    return
+  end
 
-    for i, client in ipairs(clients) do
-      done[i] = false
+  -- Configuration
+  local project_only = args.project_only ~= false -- default to true
+  local max_results = args.max_results or 50
+  local kind_filter = args.kind_filter or {}
+  local kind_filter_set = {}
+  for _, kind in ipairs(kind_filter) do
+    kind_filter_set[kind:lower()] = true
+  end
 
-      client:request("textDocument/hover", params, function(err, resp)
-        if err or resp == nil then
-          done[i] = true
+  local all_found = {}
+  local done = {}
+  local total_requests = 0
+
+  -- Initialize conversation storage
+  conversation.lsp_symbols = conversation.lsp_symbols or {}
+
+  for i, client in ipairs(clients) do
+    for j, query in ipairs(args.queries) do
+      total_requests = total_requests + 1
+      local request_id = string.format("%d_%d", i, j)
+      done[request_id] = false
+
+      local params = { query = query }
+
+      client:request("workspace/symbol", params, function(err, symbols)
+        if err then
+          done[request_id] = true
           return
         end
-        table.insert(found, resp)
-        done[i] = true
+
+        if symbols then
+          for _, symbol in ipairs(symbols) do
+            local uri = vim.uri_to_fname(symbol.location.uri)
+            local in_root = vim.startswith(uri, client.root_dir or vim.fn.getcwd())
+
+            -- Apply filters
+            if project_only and not in_root then
+              goto continue
+            end
+
+            local kind_name = KINDS[symbol.kind] or "Unknown"
+            if #kind_filter > 0 and not kind_filter_set[kind_name:lower()] then
+              goto continue
+            end
+
+            -- Store symbol for later use
+            local symbol_key = string.format("%s_%s_%d", symbol.name, kind_name, symbol.location.range.start.line)
+            conversation.lsp_symbols[symbol_key] = symbol
+
+            table.insert(all_found, {
+              symbol = symbol,
+              in_root = in_root,
+              query = query,
+              client_name = client.name,
+              key = symbol_key,
+            })
+
+            ::continue::
+          end
+        end
+
+        done[request_id] = true
       end)
     end
+  end
 
-    vim.wait(1000, function()
-      return vim.iter(done):all(function(v)
-        return v
-      end)
-    end, 10)
+  -- Wait for all requests to complete
+  local success = vim.wait(3000, function()
+    return vim.iter(done):all(function(v)
+      return v
+    end)
+  end, 50)
 
-    if #found == 0 then
-      callback({ content = { "Error: No documentation found for " .. args.symbol } })
-      return
+  if not success then
+    callback({
+      content = {
+        "Warning: Some LSP requests timed out",
+        "Results may be incomplete",
+      },
+    })
+  end
+
+  if #all_found == 0 then
+    callback({
+      content = {
+        string.format("No symbols found matching: %s", table.concat(args.queries, ", ")),
+        "",
+        "Try:",
+        "- Using partial names or different search terms",
+        "- Removing kind_filter if specified",
+        "- Setting project_only to false to search external dependencies",
+      },
+    })
+    return
+  end
+
+  -- Sort and limit results
+  table.sort(all_found, function(a, b)
+    -- Prioritize project symbols over external
+    if a.in_root ~= b.in_root then
+      return a.in_root
     end
-
-    local content = {}
-    for _, doc in ipairs(found) do
-      vim.list_extend(content, vim.lsp.util.convert_input_to_markdown_lines(doc.contents))
+    -- Then by symbol kind (functions/classes first)
+    local a_kind, b_kind = a.symbol.kind, b.symbol.kind
+    if a_kind ~= b_kind then
+      local priority = { [12] = 1, [5] = 2, [6] = 3, [9] = 4 } -- Function, Class, Method, Constructor
+      return (priority[a_kind] or 99) < (priority[b_kind] or 99)
     end
+    -- Finally by name
+    return a.symbol.name < b.symbol.name
+  end)
 
-    callback({ content = content })
+  -- Limit results per query
+  local results_by_query = {}
+  for _, item in ipairs(all_found) do
+    results_by_query[item.query] = results_by_query[item.query] or {}
+    if #results_by_query[item.query] < max_results then
+      table.insert(results_by_query[item.query], item)
+    end
+  end
+
+  -- Build response
+  local content = {}
+  local total_symbols = 0
+
+  for _, query in ipairs(args.queries) do
+    local query_results = results_by_query[query] or {}
+    if #query_results > 0 then
+      table.insert(content, string.format("=== Symbols matching '%s' ===", query))
+
+      for _, item in ipairs(query_results) do
+        local symbol = item.symbol
+        local rel_path = vim.fn.fnamemodify(vim.uri_to_fname(symbol.location.uri), ":.")
+        local kind = KINDS[symbol.kind] or "Unknown"
+        local start_line = symbol.location.range.start.line + 1
+        local end_line = symbol.location.range["end"].line + 1
+
+        local location_info
+        if start_line == end_line then
+          location_info = item.in_root and string.format("%s:%d", rel_path, start_line)
+            or string.format("[external] %s:%d", rel_path, start_line)
+        else
+          location_info = item.in_root and string.format("%s:%d-%d", rel_path, start_line, end_line)
+            or string.format("[external] %s:%d-%d", rel_path, start_line, end_line)
+        end
+
+        local container = symbol.containerName and string.format(" (in %s)", symbol.containerName) or ""
+        table.insert(
+          content,
+          string.format("  %s: %s%s → %s [key: %s]", kind, symbol.name, container, location_info, item.key)
+        )
+        total_symbols = total_symbols + 1
+      end
+      table.insert(content, "")
+    else
+      table.insert(content, string.format("No symbols found for '%s'", query))
+      table.insert(content, "")
+    end
+  end
+
+  -- Add usage instructions
+  table.insert(content, string.format("Found %d total symbols across %d queries", total_symbols, #args.queries))
+  table.insert(content, "")
+  table.insert(content, "Next steps:")
+  table.insert(content, "- Use get_lsp_symbol_docs tool with the [key] to get documentation")
+  table.insert(content, "- Use read tool with file:line to examine implementations")
+  table.insert(content, "- Use show_locations to create a navigable quickfix list")
+
+  callback({ content = content })
+end)
+
+M.get_lsp_symbol_docs = M.new_tool({
+  name = "get_lsp_symbol_docs",
+  message = function(args)
+    return string.format("Getting documentation for symbol '%s'...", args.symbol)
   end,
-}
+  system_prompt = [[Get detailed documentation for LSP symbols that were previously found using find_lsp_symbol.
+
+This tool retrieves hover information and documentation for specific symbols in your codebase. It works by:
+
+1. Looking up the symbol from previously stored find_lsp_symbol results
+2. Making LSP hover requests to get documentation
+3. Converting the response to readable markdown format
+
+USAGE FLOW:
+1. First use find_lsp_symbol to search for symbols of interest
+2. Note the [key] values shown in the search results
+3. Use this tool with the key to get detailed documentation
+
+DOCUMENTATION INCLUDES:
+- Function/method signatures and parameter information
+- Type definitions and return types
+- Docstrings, comments, and inline documentation
+- Usage examples (when available from LSP)
+- Related type information
+
+The symbol parameter should be the exact key shown in find_lsp_symbol results
+(e.g., "MyClass_Class_42").
+
+This tool is essential for understanding code structure and API documentation
+without leaving the editor.]],
+  description = "Get detailed documentation and hover information for LSP symbols found via find_lsp_symbol",
+  parameters = {
+    symbol = {
+      type = "string",
+      description = "The symbol key from find_lsp_symbol results to get documentation for",
+    },
+  },
+  required = { "symbol" },
+}, function(args, conversation, callback)
+  if not args.symbol then
+    callback({ content = { "Error: No symbol provided" } })
+    return
+  end
+
+  --- @diagnostic disable-next-line undefined-field
+  if conversation.lsp_symbols == nil then
+    callback({ content = { "Error: No symbols have been added to the conversation yet. Use find_lsp_symbol first." } })
+    return
+  end
+
+  --- @diagnostic disable-next-line undefined-field
+  local symbol = conversation.lsp_symbols[args.symbol]
+
+  if symbol == nil then
+    callback({
+      content = {
+        string.format("Error: The symbol '%s' was not found in the conversation.", args.symbol),
+        "Available symbols:",
+        table.concat(vim.tbl_keys(conversation.lsp_symbols), ", "),
+      },
+    })
+    return
+  end
+
+  local clients = vim.lsp.get_clients({ method = "textDocument/hover" })
+  if vim.tbl_isempty(clients) then
+    callback({ content = { "Error: No LSP clients with hover support found" } })
+    return
+  end
+
+  local done = {}
+  local found = {}
+
+  local params = {
+    position = {
+      character = symbol.location.range.start.character,
+      line = symbol.location.range.start.line,
+    },
+    textDocument = {
+      uri = symbol.location.uri,
+    },
+  }
+
+  for i, client in ipairs(clients) do
+    done[i] = false
+
+    client:request("textDocument/hover", params, function(err, resp)
+      if err or resp == nil then
+        done[i] = true
+        return
+      end
+      table.insert(found, { client = client.name, response = resp })
+      done[i] = true
+    end)
+  end
+
+  local success = vim.wait(3000, function()
+    return vim.iter(done):all(function(v)
+      return v
+    end)
+  end, 50)
+
+  if not success then
+    callback({ content = { "Warning: LSP hover request timed out for symbol: " .. args.symbol } })
+    return
+  end
+
+  if #found == 0 then
+    callback({
+      content = {
+        string.format("No documentation found for symbol: %s", args.symbol),
+        "",
+        "This could mean:",
+        "- The symbol has no associated documentation",
+        "- The LSP server doesn't support hover for this symbol type",
+        "- The symbol location is no longer valid",
+      },
+    })
+    return
+  end
+
+  local content = { string.format("=== Documentation for '%s' ===", symbol.name), "" }
+
+  for _, result in ipairs(found) do
+    if result.response.contents then
+      local doc_lines = vim.lsp.util.convert_input_to_markdown_lines(result.response.contents)
+      if #doc_lines > 0 then
+        table.insert(content, string.format("From %s LSP:", result.client))
+        vim.list_extend(content, doc_lines)
+        table.insert(content, "")
+      end
+    end
+  end
+
+  -- Add symbol location info
+  local rel_path = vim.fn.fnamemodify(vim.uri_to_fname(symbol.location.uri), ":.")
+  local line = symbol.location.range.start.line + 1
+  table.insert(content, string.format("Symbol location: %s:%d", rel_path, line))
+
+  callback({ content = content })
+end)
 
 M.read = M.new_tool({
   name = "read",
@@ -409,7 +652,7 @@ globbing and grepping, use the dispatch_agent tool instead]],
     end
     return string.format("Search for '%s' in all files", args.pattern)
   end,
-}, function(args, _, callback)
+}, function(args, _, callback, choice)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
   if args.glob then
     table.insert(command, "--glob")
@@ -628,7 +871,7 @@ M.get_diagnostics = M.new_tool({
   confirm = function(args)
     return string.format("Get diagnostics for %s", args.file)
   end,
-}, function(args, _, callback)
+}, function(args, _, callback, choice)
   if not args.file then
     callback({ content = { "Error: No file path was provided" } })
     return
@@ -929,22 +1172,26 @@ end)
 M.show_location = M.new_tool({
   name = "show_location",
   message = "Navigating to location...",
-  description = "Navigate to a specific location in a file and show it to the user",
-  system_prompt = [[Navigate to a specific location in a file and show it to the user.
+  description = "Navigate the user's cursor to a specific location in a file for them to see",
+  system_prompt = [[Navigate the user's cursor to a specific location in a file for them to see.
+
+IMPORTANT: This tool is for directing the USER's attention to code, not for you to read code.
+If you need to read file contents, use the read tool instead.
 
 This tool is ideal for:
-- Showing the user a specific line of code you're discussing
-- Navigating to error locations, function definitions, or problem areas
-- Directing attention to relevant code during explanations
-- Following up after using grep/search tools to show specific results
+- Directing the user to look at a specific line of code you're discussing
+- Navigating the user to error locations, function definitions, or problem areas
+- Focusing the user's attention on relevant code during explanations
+- Following up after grep/search results to show the user specific matches
 
 The tool will:
-- Open the file in a split window if not already visible
-- Position the cursor at the exact location
+- Open the file in the user's editor if not already visible
+- Position the user's cursor at the exact location
 - Center the line in the window for visibility
 - Preserve the user's current window layout when possible
 
-Use this when you want to say "let me show you this specific location" or when referencing specific lines in your explanations.]],
+Use this when you want to say "let me show you this specific location" or "look at line X in file Y".
+Do NOT use this tool to read or examine code yourself - use the read tool for that purpose.]],
   parameters = {
     file = { type = "string", description = "File path" },
     line = { type = "integer", description = "Line number (1-based)" },
@@ -1371,6 +1618,101 @@ response]],
     require("sia.assistant").execute_strategy(strategy)
   end,
 }
+
+local write_auto_apply = nil
+M.write = M.new_tool({
+  name = "write",
+  message = "Writing file...",
+  description = "Write complete file contents to a buffer (creates new file or overwrites existing)",
+  system_prompt = [[Write complete file contents to a buffer.
+
+This tool is ideal for:
+- Creating new files from scratch
+- Making large changes where rewriting the entire file is simpler than search/replace
+- When the AI needs to restructure significant portions of a file
+- Generating configuration files, templates, or boilerplate code
+
+The tool will:
+- Create a new buffer for the file if it doesn't exist
+- Load and overwrite the buffer if the file already exists
+- Show diff highlighting for changes made to existing files
+
+Use this tool when:
+- Creating new files
+- Making extensive changes (>50% of file content)
+- The search/replace approach would be too complex or error-prone
+- You want to ensure the entire file structure is correct
+
+For small, targeted changes, prefer the edit tool instead.]],
+  parameters = {
+    path = { type = "string", description = "The file path to write to" },
+    content = { type = "string", description = "The complete file content to write" },
+  },
+  required = { "path", "content" },
+  auto_apply = function(args)
+    local file = vim.fs.basename(args.path)
+    if file == "AGENTS.md" then
+      return 1
+    end
+    return write_auto_apply
+  end,
+  confirm = function(args)
+    if vim.fn.filereadable(args.path) == 1 then
+      return string.format("Overwrite existing file %s with new content", args.path)
+    else
+      return string.format("Create new file %s", args.path)
+    end
+  end,
+}, function(args, _, callback)
+  if not args.path then
+    callback({ content = { "Error: No file path provided" } })
+    return
+  end
+
+  if not args.content then
+    callback({ content = { "Error: No content provided" } })
+    return
+  end
+
+  -- Load or create the buffer
+  local buf = require("sia.utils").ensure_file_is_loaded(args.path)
+  if not buf then
+    callback({ content = { "Error: Cannot create buffer for " .. args.path } })
+    return
+  end
+
+  local initial_code = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  local file_exists = initial_code ~= ""
+
+  local lines = vim.split(args.content, "\n", { plain = true })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+  if file_exists then
+    require("sia").highlight_diff_changes(buf, initial_code, args.content)
+  end
+
+  -- Auto-save AGENTS.md
+  local file = vim.fs.basename(args.path)
+  if file == "AGENTS.md" then
+    vim.api.nvim_buf_call(buf, function()
+      vim.cmd("write")
+    end)
+  end
+
+  local action = file_exists and "overwritten" or "created"
+  local result_content = { string.format("Successfully %s buffer for %s", action, args.path) }
+
+  if file_exists then
+    local diff = vim.split(vim.diff(initial_code, args.content), "\n", { plain = true, trimempty = true })
+    if #diff > 1 then
+      table.insert(result_content, "")
+      table.insert(result_content, "Changes made:")
+      vim.list_extend(result_content, diff)
+    end
+  end
+
+  callback({ content = result_content })
+end)
 
 local edit_auto_apply = nil
 M.edit_file = M.new_tool({
