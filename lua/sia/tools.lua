@@ -583,9 +583,14 @@ parameters. ]],
   confirm = function(args)
     if args.start_line then
       if args.end_line then
-        return string.format("Add lines %d-%d from %s to the conversation", args.start_line, args.end_line, args.path)
+        return string.format(
+          "Add lines %s-%s from %s to the conversation",
+          tostring(args.start_line),
+          tostring(args.end_line),
+          args.path
+        )
       else
-        return string.format("Add lines %d-until end from %s to the conversation", args.start_line, args.path)
+        return string.format("Add lines %s-until end from %s to the conversation", tostring(args.start_line), args.path)
       end
     end
     return string.format("Add %s to the conversation", args.path)
@@ -636,7 +641,7 @@ M.grep = M.new_tool({
 - Do not use search to get the content of a file, use tools or ask the user to
   add the information.
 - When you are doing an open ended search that may require multiple rounds of
-globbing and grepping, use the dispatch_agent tool instead]],
+  globbing and grepping, use the dispatch_agent tool instead]],
   message = function(args)
     return string.format("Searching through files for %s...", args.pattern)
   end,
@@ -659,6 +664,8 @@ globbing and grepping, use the dispatch_agent tool instead]],
     table.insert(command, args.glob)
   end
 
+  local max_count = 100
+
   if args.pattern == nil then
     callback({ content = { "No pattern was given" } })
     return
@@ -670,29 +677,136 @@ globbing and grepping, use the dispatch_agent tool instead]],
   vim.system(command, {
     text = true,
     stderr = false,
+    timeout = 5000,
   }, function(obj)
-    local lines = vim.split(obj.stdout, "\n")
-    table.insert(lines, 1, "The following search results were returned:")
-    callback({ content = lines })
+    local lines = vim.split(obj.stdout, "\n", { trimempty = true })
+    local matches = {}
+    local file_mtimes = {}
+
+    for _, line in ipairs(lines) do
+      local file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
+      if file and lnum and col then
+        table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = line })
+        if not file_mtimes[file] then
+          local stat = vim.loop.fs_stat(file)
+          file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
+        end
+      end
+    end
+    if #matches == 0 then
+      callback({ content = { "No matches found." } })
+      return
+    end
+
+    table.sort(matches, function(a, b)
+      return (file_mtimes[a.file] or 0) > (file_mtimes[b.file] or 0)
+    end)
+
+    local header = "The following search results were returned"
+    if #matches > max_count then
+      header = header
+        .. string.format(
+          "\n\nWARNING: Search returned %d matches (showing %d most recent by file mtime). Results may be incomplete.",
+          #matches,
+          max_count
+        )
+      header = header .. "\nConsider:"
+      header = header .. "\n- Using a more specific search pattern"
+      header = header .. "\n- Adding a glob parameter to limit file types"
+    else
+      header = header .. string.format(" (%d matches found)", #matches)
+    end
+
+    local output = {}
+    for _, line in ipairs(vim.split(header, "\n", { trimempty = false })) do
+      table.insert(output, line)
+    end
+
+    for i = 1, math.min(#matches, max_count) do
+      table.insert(output, matches[i].text)
+    end
+    callback({ content = output })
   end)
 end)
 
-M.list_files = M.new_tool({
-  name = "list_files",
-  description = "Recursivley list files in the current project",
-  message = "Exploring project structure...",
-  parameters = vim.empty_dict(),
+M.glob = M.new_tool({
+  name = "glob",
+  description = "Find files matching a glob pattern in the current project",
+  message = "Searching for files...",
+  parameters = {
+    pattern = {
+      type = "string",
+      description = "Glob pattern to match files (e.g., '*.lua', '**/*.py', 'src/**'). If not provided, lists all files.",
+    },
+  },
   required = {},
-  confirm = "List all files in the current directory",
-}, function(_, _, callback)
-  vim.system({ "fd", "--type", "f" }, { text = true }, function(obj)
-    local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
-    if #files == 0 or obj.code ~= 0 then
-      callback({ content = { "No files found (or fd is not installed)." } })
+  confirm = function(args)
+    if args.pattern then
+      return "Find files matching pattern: " .. args.pattern
+    else
+      return "List all files in the current directory"
+    end
+  end,
+}, function(args, _, callback)
+  local cmd = { "fd", "--type", "f", "--print0" }
+  local pattern = args.pattern
+
+  if pattern and pattern ~= "" then
+    table.insert(cmd, "--glob")
+    table.insert(cmd, pattern)
+  end
+
+  vim.system(cmd, { text = true }, function(obj)
+    if obj.code ~= 0 then
+      local msg = pattern and ("No files found matching pattern: " .. pattern)
+        or "No files found (or fd is not installed)."
+      callback({ content = { msg } })
       return
     end
-    table.insert(files, 1, "Files in the current project (fd):")
-    callback({ content = files })
+
+    local files = vim.split(obj.stdout or "", "\0", { trimempty = true })
+    if #files == 0 then
+      local msg = pattern and ("No files found matching pattern: " .. pattern) or "No files found."
+      callback({ content = { msg } })
+      return
+    end
+
+    -- Get file modification times and sort by mtime (newest first)
+    local file_info = {}
+    for _, file in ipairs(files) do
+      local stat = vim.loop.fs_stat(file)
+      if stat then
+        table.insert(file_info, {
+          path = file,
+          mtime = stat.mtime.sec,
+        })
+      end
+    end
+
+    table.sort(file_info, function(a, b)
+      return a.mtime > b.mtime
+    end)
+
+    -- Limit to 100 files
+    local max_files = 100
+    local limited_files = {}
+    for i = 1, math.min(max_files, #file_info) do
+      table.insert(limited_files, file_info[i].path)
+    end
+
+    local header = pattern and ("Files matching pattern '" .. pattern .. "' (max " .. max_files .. ", newest first):")
+      or ("Files in the current project (max " .. max_files .. ", newest first):")
+    table.insert(limited_files, 1, header)
+
+    if #file_info > max_files then
+      table.insert(
+        limited_files,
+        2,
+        string.format("Showing %d of %d files (limited to most recent %d)", max_files, #file_info, max_files)
+      )
+    end
+
+    callback({ content = limited_files })
   end)
 end)
 
@@ -1674,7 +1788,6 @@ For small, targeted changes, prefer the edit tool instead.]],
     return
   end
 
-  -- Load or create the buffer
   local buf = require("sia.utils").ensure_file_is_loaded(args.path)
   if not buf then
     callback({ content = { "Error: Cannot create buffer for " .. args.path } })
@@ -1691,7 +1804,6 @@ For small, targeted changes, prefer the edit tool instead.]],
     require("sia").highlight_diff_changes(buf, initial_code, args.content)
   end
 
-  -- Auto-save AGENTS.md
   local file = vim.fs.basename(args.path)
   if file == "AGENTS.md" then
     vim.api.nvim_buf_call(buf, function()
@@ -1700,18 +1812,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   end
 
   local action = file_exists and "overwritten" or "created"
-  local result_content = { string.format("Successfully %s buffer for %s", action, args.path) }
-
-  if file_exists then
-    local diff = vim.split(vim.diff(initial_code, args.content), "\n", { plain = true, trimempty = true })
-    if #diff > 1 then
-      table.insert(result_content, "")
-      table.insert(result_content, "Changes made:")
-      vim.list_extend(result_content, diff)
-    end
-  end
-
-  callback({ content = result_content })
+  callback({ content = { string.format("Successfully %s buffer for %s", action, args.path) } })
 end)
 
 local edit_auto_apply = nil
@@ -1830,7 +1931,20 @@ rather than multiple messages with a single call each.
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local initial_code = table.concat(old_content, "\n")
 
-  local matches = matching.find_best_subsequence_span(old_string, old_content)
+  local matches
+  -- Handle new file creation (empty old_string)
+  if args.old_string == "" then
+    -- For new files, only match if the buffer is actually empty
+    if #old_content == 0 or (#old_content == 1 and old_content[1] == "") then
+      -- Use 1-based indices like the matcher, will become 0, -1 in nvim_buf_set_lines
+      matches = { { span = { 1, -1 } } }
+    else
+      matches = {} -- No match if buffer has content but old_string is empty
+    end
+  else
+    matches = matching.find_best_subsequence_span(old_string, old_content)
+  end
+
   if #matches == 1 then
     local new_string = vim.split(args.new_string, "\n")
     local span = matches[1].span
@@ -1858,10 +1972,11 @@ rather than multiple messages with a single call each.
 
     local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local result = table.concat(new_content, "\n")
-    local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
-    local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
-    table.insert(diff, 1, success_msg)
-    callback({ content = diff })
+
+    local content_lines = vim.split(result, "\n", { plain = true })
+    local success_msg = string.format("Successfully edited %s. Here's the new content:", args.target_file)
+    table.insert(content_lines, 1, success_msg)
+    callback({ content = content_lines })
   else
     callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
   end

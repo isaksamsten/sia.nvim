@@ -211,7 +211,13 @@ function Strategy:execute_tools(opts)
       local fun = tool["function"]
       if fun then
         tool_name = fun.name
-        local status, args = pcall(vim.fn.json_decode, fun.arguments)
+        local status, args
+        if fun.arguments and fun.arguments:match("%S") then
+          status, args = pcall(vim.fn.json_decode, fun.arguments)
+        else
+          -- Handle empty or whitespace-only arguments
+          status, args = true, {}
+        end
         if status then
           tool_args = args
           local tool_fn = self.conversation.tool_fn[fun.name]
