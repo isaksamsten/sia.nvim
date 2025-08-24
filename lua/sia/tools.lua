@@ -1287,25 +1287,17 @@ M.show_location = M.new_tool({
   name = "show_location",
   message = "Navigating to location...",
   description = "Navigate the user's cursor to a specific location in a file for them to see",
-  system_prompt = [[Navigate the user's cursor to a specific location in a file for them to see.
+  system_prompt = [[SHOWS A LOCATION TO THE USER - navigates their cursor to a specific file and line.
 
-IMPORTANT: This tool is for directing the USER's attention to code, not for you to read code.
-If you need to read file contents, use the read tool instead.
+This tool is for directing the USER's attention to code, NOT for reading code yourself.
+Use the read tool if you need to examine file contents.
 
-This tool is ideal for:
-- Directing the user to look at a specific line of code you're discussing
-- Navigating the user to error locations, function definitions, or problem areas
-- Focusing the user's attention on relevant code during explanations
-- Following up after grep/search results to show the user specific matches
+Use this to:
+- Direct user to specific lines you're discussing
+- Show error locations or function definitions
+- Navigate to search results
 
-The tool will:
-- Open the file in the user's editor if not already visible
-- Position the user's cursor at the exact location
-- Center the line in the window for visibility
-- Preserve the user's current window layout when possible
-
-Use this when you want to say "let me show you this specific location" or "look at line X in file Y".
-Do NOT use this tool to read or examine code yourself - use the read tool for that purpose.]],
+Do NOT use this to read or examine code.]],
   parameters = {
     file = { type = "string", description = "File path" },
     line = { type = "integer", description = "Line number (1-based)" },
@@ -1398,28 +1390,17 @@ M.show_locations = M.new_tool({
   name = "show_locations",
   message = "Creating location list...",
   description = "Show multiple locations in a navigable list for easy browsing",
-  system_prompt = [[Create and display a navigable list with multiple locations for easy browsing.
+  system_prompt = [[SHOWS MULTIPLE LOCATIONS TO THE USER - creates a navigable quickfix list.
 
-This tool is perfect for:
-- Showing multiple search results, errors, or locations at once
-- Creating a navigable list of related code locations (e.g., all TODO comments, all function definitions)
-- Presenting diagnostic results, test failures, or lint issues
-- Organizing multiple findings from grep/search operations
-- Creating a "table of contents" for code exploration
+This tool is for presenting multiple locations to the USER, NOT for reading code yourself.
+Use the read tool if you need to examine file contents.
 
-The location list allows users to:
-- Navigate between items using :cnext/:cprev or clicking
-- See all locations in one organized view
-- Jump directly to any location
-- Keep the list open while working on different items
+Use this for:
+- Multiple search results or error locations
+- Collections of related code locations
+- Any scenario where user benefits from seeing all locations at once
 
-Use this instead of show_location when you have:
-- Multiple related locations to show (3+ items)
-- Search results that should be browsed together
-- A collection of errors, warnings, or findings
-- Any scenario where the user benefits from seeing all locations at once
-
-Each item should have a descriptive 'text' field explaining what's at that location.
+Creates a navigable list that users can browse with :cnext/:cprev or clicking.
 Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   parameters = {
     items = {
