@@ -127,6 +127,7 @@ function M.execute_strategy(strategy)
   end
 
   strategy.is_busy = true
+  strategy.cancelled = false -- Add cancellation flag
   local config = require("sia.config")
 
   local function execute_round(is_initial)
@@ -227,10 +228,6 @@ function M.execute_strategy(strategy)
           return
         end
 
-        local continue_execution = function()
-          execute_round(false)
-        end
-
         local finish = function()
           strategy.is_busy = false
           vim.api.nvim_exec_autocmds("User", {
@@ -240,7 +237,14 @@ function M.execute_strategy(strategy)
           })
         end
 
-        -- Pass control functions to strategy
+        local continue_execution = function()
+          if strategy.cancelled then
+            finish() -- Call finish instead of continuing if cancelled
+          else
+            execute_round(false)
+          end
+        end
+
         strategy:on_complete({
           continue_execution = continue_execution,
           finish = finish,

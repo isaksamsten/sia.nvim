@@ -118,6 +118,7 @@ end
 
 --- @class sia.Strategy
 --- @field is_busy boolean?
+--- @field cancelled boolean?
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
@@ -438,6 +439,7 @@ function ChatStrategy:redraw()
 end
 
 function ChatStrategy:on_init()
+  self.cancelled = false
   if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").options.defaults.model
@@ -462,6 +464,7 @@ function ChatStrategy:on_start(job)
     self.canvas:clear_reasoning()
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
+      self.cancelled = true
       vim.fn.jobstop(job)
     end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
