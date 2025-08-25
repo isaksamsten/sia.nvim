@@ -1,4 +1,6 @@
 local M = {}
+local utils = require("sia.utils")
+local diff = require("sia.diff")
 
 ---@class SiaNewToolOpts
 ---@field name string
@@ -13,31 +15,6 @@ local M = {}
 
 --- @type table<string, boolean?>
 local auto_confirm = {}
-
----@param buf integer
----@param original_content string[]
----@param target_file string
-local function show_diff_preview(buf, original_content)
-  local timestamp = os.date("%H:%M:%S")
-  vim.cmd("tabnew")
-  local left_buf = vim.api.nvim_get_current_buf()
-  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, original_content)
-  vim.api.nvim_buf_set_name(left_buf, string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp))
-  vim.bo[left_buf].buftype = "nofile"
-  vim.bo[left_buf].buflisted = false
-  vim.bo[left_buf].swapfile = false
-  vim.bo[left_buf].ft = vim.bo[buf].ft
-
-  vim.cmd("vsplit")
-  local right_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(right_win, buf)
-  vim.api.nvim_set_current_win(right_win)
-  vim.cmd("diffthis")
-  vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
-  vim.cmd("diffthis")
-  vim.bo[left_buf].modifiable = false
-  vim.api.nvim_set_current_win(right_win)
-end
 
 ---@param opts SiaNewToolOpts
 ---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), choice: integer?):nil
@@ -565,35 +542,25 @@ end)
 M.read = M.new_tool({
   name = "read",
   message = "Reading file contents...",
-  system_prompt = [[Reads a file from the local filesystem.
-
-You can optionally specify a start line and an end line (especially handy for long
-files), but it's recommended to read the whole file by not providing these
-parameters. ]],
+  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to 2000 lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters. Any lines longer than 2000 characters will be truncated.]],
   description = [[Reads a file from the local filesystem.]],
   parameters = {
     path = { type = "string", description = "The file path" },
-    start_line = { type = "integer", description = "The start line number. Ignore if reading the complete file." },
-    end_line = {
-      type = "integer",
-      description = "The end line number. Ignore if reading the complete file. If missing, read until end of file.",
-    },
+    offset = { type = "integer", description = "Line offset to start reading from (1-based, optional)" },
+    limit = { type = "integer", description = "Maximum number of lines to read (default: 2000)" },
   },
   required = { "path" },
   confirm = function(args)
-    if args.start_line then
-      if args.end_line then
-        return string.format(
-          "Add lines %s-%s from %s to the conversation",
-          tostring(args.start_line),
-          tostring(args.end_line),
-          args.path
-        )
-      else
-        return string.format("Add lines %s-until end from %s to the conversation", tostring(args.start_line), args.path)
-      end
+    local limit = args.limit or 2000
+    if args.offset then
+      return string.format(
+        "Add lines %d-%d from %s to the conversation",
+        args.offset,
+        args.offset + limit - 1,
+        args.path
+      )
     end
-    return string.format("Add %s to the conversation", args.path)
+    return string.format("Add %s to the conversation (up to %d lines)", args.path, limit)
   end,
   --- @param conversation sia.Conversation
 }, function(args, conversation, callback)
@@ -607,22 +574,37 @@ parameters. ]],
     return
   end
 
-  local pos = nil
-  if args.start_line then
-    if args.end_line then
-      pos = { args.start_line, args.end_line }
-    else
-      pos = { args.start_line, -1 }
-    end
-  end
+  local offset = args.offset or 1
+  local limit = args.limit or 2000
+  local max_line_length = 2000
 
   local buf = require("sia.utils").ensure_file_is_loaded(args.path)
-  local content
+  local total_lines = vim.api.nvim_buf_line_count(buf)
 
-  if pos then
-    content = vim.api.nvim_buf_get_lines(buf, pos[1], pos[2], false)
-  else
-    content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- Validate offset is within bounds
+  if offset > total_lines then
+    callback({
+      content = {
+        string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
+      },
+    })
+    return
+  end
+
+  -- Calculate actual range
+  local start_line = math.max(1, offset)
+  local end_line = math.min(total_lines, start_line + limit)
+
+  local content = utils.get_content(
+    buf,
+    start_line - 1,
+    end_line - 1,
+    { show_line_numbers = true, max_line_length = max_line_length }
+  )
+
+  local pos = nil
+  if args.offset or args.limit then
+    pos = { offset, offset + #content - 1 }
   end
 
   callback({
@@ -948,12 +930,12 @@ example: // ... existing code ...  ]],
       local split = vim.split(result, "\n", { plain = true, trimempty = true })
       if choice == 1 or choice == 2 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        require("sia").highlight_diff_changes(buf, initial_code, result)
+        diff.highlight_diff_changes(buf, initial_code)
 
         local file = vim.fs.basename(args.target_file)
         if file == "AGENTS.md" then
           vim.api.nvim_buf_call(buf, function()
-            vim.cmd("write")
+            vim.cmd("silent write")
           end)
         end
 
@@ -962,7 +944,7 @@ example: // ... existing code ...  ]],
         end
       elseif choice == 3 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
+        diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
       end
       local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
       local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
@@ -1471,122 +1453,6 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   })
 end)
 
-M.show_recent_changes = M.new_tool({
-  name = "show_recent_changes",
-  message = "Showing recent changes...",
-  description = "Show locations of recent changes made to files in the current session",
-  system_prompt = [[Show locations of recent changes made to files in the current session.
-
-This tool automatically tracks all modifications made through the edit tools during the current session and creates a navigable quickfix list showing exactly where changes occurred.
-
-WHAT IT TRACKS:
-- All edits made through the edit tool during this session
-- Precise line numbers where changes occurred
-- Type of change: additions, deletions, or modifications
-- Number of lines affected for each change
-
-WHEN TO USE:
-- User asks to see where you made changes ("show me what you edited")
-- User wants to navigate to recent modifications
-- After making multiple edits and user wants to review them
-- When user asks "where did you change that?" or similar location questions
-- To create a summary of modifications made during the conversation
-
-QUICKFIX LIST FEATURES:
-- Navigate between changes using :cnext/:cprev or clicking items
-- Jump directly to any change location
-- See all changes organized by file and line number
-- Each item shows the type and scope of change
-
-LIMITATIONS:
-- Only tracks changes made through edit tools in current session
-- Changes are cleared when user saves the buffer or accepts the changes
-- Does not track manual edits made by the user outside of the tool
-- Only shows changes that have diff highlighting active
-
-PARAMETERS:
-- file (optional): Filter results to show only changes in a specific file
-
-Use this tool whenever you need to show the user the locations of modifications you've made, especially after completing a series of edits.]],
-  parameters = {
-    file = { type = "string", description = "Specific file to show changes for (optional)" },
-  },
-  required = {},
-}, function(args, _, callback)
-  local sia = require("sia")
-  local buffer_diff_state = sia.get_buffer_diff_state()
-
-  local items = {}
-  local found_changes = false
-
-  for buf, diff_state in pairs(buffer_diff_state) do
-    if diff_state.hunks and #diff_state.hunks > 0 then
-      local buf_name = vim.api.nvim_buf_get_name(buf)
-      local rel_path = vim.fn.fnamemodify(buf_name, ":.")
-
-      if args.file and not vim.endswith(rel_path, args.file) and rel_path ~= args.file then
-        goto continue
-      end
-
-      found_changes = true
-
-      for _, hunk in ipairs(diff_state.hunks) do
-        local line = hunk.new_start
-        local description
-
-        if hunk.type == "add" then
-          description = string.format("Added %d line(s)", hunk.new_count)
-        elseif hunk.type == "delete" then
-          description = string.format("Deleted %d line(s)", hunk.old_count)
-        elseif hunk.type == "change" then
-          description = string.format("Modified %d line(s)", hunk.new_count)
-        end
-
-        table.insert(items, {
-          filename = rel_path,
-          lnum = line,
-          text = description,
-          type = hunk.type == "add" and "I" or (hunk.type == "delete" and "W" or "N"),
-        })
-      end
-
-      ::continue::
-    end
-  end
-
-  if not found_changes then
-    local msg = args.file and string.format("No recent changes found in %s", args.file)
-      or "No recent changes found in any files"
-    callback({ content = { msg } })
-    return
-  end
-
-  table.sort(items, function(a, b)
-    if a.filename == b.filename then
-      return a.lnum < b.lnum
-    end
-    return a.filename < b.filename
-  end)
-
-  vim.fn.setqflist(items, "r")
-  local title = args.file and string.format("Recent changes in %s", args.file) or "Recent changes in session"
-  vim.fn.setqflist({}, "a", { title = title })
-  vim.cmd("copen")
-
-  callback({
-    content = {
-      string.format(
-        "Found %d recent change(s) across %d file(s)",
-        #items,
-        vim.tbl_count(vim.tbl_map(function(item)
-          return item.filename
-        end, items))
-      ),
-      "Use :cnext/:cprev to navigate, or click items in the quickfix window",
-    },
-  })
-end)
-
 M.compact_conversation = M.new_tool({
   name = "compact_conversation",
   message = "Compacting conversation...",
@@ -1782,13 +1648,13 @@ For small, targeted changes, prefer the edit tool instead.]],
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
   if file_exists then
-    require("sia").highlight_diff_changes(buf, initial_code, args.content)
+    diff.highlight_diff_changes(buf, initial_code)
   end
 
   local file = vim.fs.basename(args.path)
   if file == "AGENTS.md" then
     vim.api.nvim_buf_call(buf, function()
-      vim.cmd("write")
+      vim.cmd("silent write")
     end)
   end
 
@@ -1797,6 +1663,8 @@ For small, targeted changes, prefer the edit tool instead.]],
 end)
 
 local edit_auto_apply = nil
+local failed_matches = {}
+local MAX_FAILED_MATCHES = 3
 M.edit_file = M.new_tool({
   name = "edit",
   message = "Making code changes...",
@@ -1910,56 +1778,61 @@ rather than multiple messages with a single call each.
 
   local old_string = vim.split(args.old_string, "\n", { trimempty = true })
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local initial_code = table.concat(old_content, "\n")
 
   local matches
-  -- Handle new file creation (empty old_string)
   if args.old_string == "" then
-    -- For new files, only match if the buffer is actually empty
     if #old_content == 0 or (#old_content == 1 and old_content[1] == "") then
-      -- Use 1-based indices like the matcher, will become 0, -1 in nvim_buf_set_lines
       matches = { { span = { 1, -1 } } }
     else
-      matches = {} -- No match if buffer has content but old_string is empty
+      matches = {}
     end
   else
     matches = matching.find_best_subsequence_span(old_string, old_content)
   end
 
   if #matches == 1 then
+    failed_matches[buf] = 0
     local new_string = vim.split(args.new_string, "\n")
     local span = matches[1].span
 
+    vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+    vim.api.nvim_buf_call(buf, function()
+      vim.cmd("silent write")
+    end)
     if choice == 1 or choice == 2 then
-      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-      local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-      local result = table.concat(new_content, "\n")
-      require("sia").highlight_diff_changes(buf, initial_code, result)
-
-      local file = vim.fs.basename(args.target_file)
-      if file == "AGENTS.md" then
-        vim.api.nvim_buf_call(buf, function()
-          vim.cmd("write")
-        end)
-      end
-
+      diff.highlight_diff_changes(buf, old_content)
       if choice == 2 then
         edit_auto_apply = 1
       end
     elseif choice == 3 then
-      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-      show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
+      diff.show_diff_preview(buf, old_content)
     end
 
-    local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local result = table.concat(new_content, "\n")
+    local new_content_lines = vim.api.nvim_buf_line_count(buf)
+    local context_lines = 4
+    local start_context = math.max(1, span[1] - context_lines)
+    local end_context = math.min(new_content_lines, span[1] + #new_string + context_lines)
 
-    local content_lines = vim.split(result, "\n", { plain = true })
-    local success_msg = string.format("Successfully edited %s. Here's the new content:", args.target_file)
-    table.insert(content_lines, 1, success_msg)
-    callback({ content = content_lines })
+    local snippet_lines = utils.get_content(buf, start_context - 1, end_context - 1)
+
+    local success_msg =
+      string.format("Successfully edited %s. Here's the edited snippet as returned by cat -n:", args.target_file)
+    table.insert(snippet_lines, 1, success_msg)
+    callback({ content = snippet_lines })
   else
-    callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
+    failed_matches[buf] = failed_matches[buf] + 1
+    if failed_matches[buf] >= MAX_FAILED_MATCHES then
+      callback({
+        content = {
+          string.format(
+            "Edit failed because %d matches was found. Please show the location(s) and the edit you want to make",
+            #matches
+          ),
+        },
+      })
+    else
+      callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
+    end
   end
 end)
 

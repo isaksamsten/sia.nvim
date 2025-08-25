@@ -170,8 +170,8 @@ You DO NOT have to add this file to the conversation to edit it.
       end,
     },
   },
-  current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = false }),
-  current_context = require("sia.instructions").current_context({ show_line_numbers = false, fences = true }),
+  current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = true }),
+  current_context = require("sia.instructions").current_context({ show_line_numbers = true }),
   insert_system = {
     role = "system",
     content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.

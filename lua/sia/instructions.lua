@@ -37,7 +37,7 @@ function M.current_buffer(global)
   }
 end
 
---- @param global {show_line_numbers: boolean?, fences: boolean?}
+--- @param global {show_line_numbers: boolean?}
 --- @return sia.config.Instruction[]
 function M.current_context(global)
   global = global or {}
@@ -60,43 +60,30 @@ function M.current_context(global)
         if not vim.api.nvim_buf_is_loaded(ctx.buf) then
           return ""
         end
-        local start_fence = ""
-        local end_fence = ""
-        if global.fences then
-          start_fence = "```" .. vim.bo[ctx.buf].ft
-          end_fence = "```"
-        end
+        local filename = utils.get_filename(ctx.buf, ":p")
         if ctx.mode == "v" then
           local start_line, end_line = ctx.pos[1], ctx.pos[2]
-          local instruction = string.format(
-            [[
-I have *added this file (lines %d to %d) to the chat* so you can go ahead and edit it.
-%s]],
-            start_line,
-            end_line,
-            utils.get_filename(ctx.buf, ":p")
-          )
+          local instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
           if ctx.pos[2] == -1 then
             start_line = 1
             end_line = vim.api.nvim_buf_line_count(ctx.buf)
-            instruction = string.format(
-              [[
-I have *added this file to the chat* so you can go ahead and edit it.
-%s]],
-              utils.get_filename(ctx.buf, ":p")
-            )
+            instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
           end
-          local code =
-            utils.get_code(start_line, end_line, { buf = ctx.buf, show_line_numbers = global.show_line_numbers })
+          local code = utils.get_content(
+            ctx.buf,
+            start_line - 1,
+            end_line - 1,
+            { show_line_numbers = global.show_line_numbers, max_line_length = 2000 }
+          )
+          if global.show_line_numbers then
+            instruction = instruction .. " as shown by cat -n"
+          end
+
           return string.format(
             [[%s
-%s
-%s
 %s]],
             instruction,
-            start_fence,
-            code,
-            end_fence
+            table.concat(code, "\n")
           )
         else
           return string.format(

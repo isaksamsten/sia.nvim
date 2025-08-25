@@ -1,5 +1,41 @@
 local M = {}
 
+---Get buffer content for a specific range with optional formatting
+---@param buf integer Buffer handle
+---@param start_line integer Starting line number (0-based)
+---@param end_line integer Ending line number (0-based, -1 for end of buffer)
+---@param opts { show_line_numbers: boolean?, max_line_length: integer? }?
+---@return string[] formatted_lines Array of lines, optionally with line numbers
+function M.get_content(buf, start_line, end_line, opts)
+  opts = opts or {}
+  local show_line_numbers = opts.show_line_numbers ~= false -- default to true
+  local max_line_length = opts.max_line_length
+
+  local content = vim.api.nvim_buf_get_lines(buf, start_line, end_line, false)
+
+  local result = {}
+  for i, line in ipairs(content) do
+    local processed_line = line
+    if max_line_length and #line > max_line_length then
+      processed_line = line:sub(1, max_line_length) .. "[TRUNCATED]"
+    end
+
+    if show_line_numbers then
+      local line_num = start_line + i
+      local num_str = tostring(line_num)
+      if #num_str >= 6 then
+        processed_line = string.format("%s\t%s", num_str, processed_line)
+      else
+        processed_line = string.format("%6d\t%s", line_num, processed_line)
+      end
+    end
+
+    table.insert(result, processed_line)
+  end
+
+  return result
+end
+
 --- @param args vim.api.keyset.create_user_command.command_args
 --- @return sia.ActionContext
 function M.create_context(args)

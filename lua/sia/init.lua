@@ -27,114 +27,11 @@ local function set_highlight_groups()
   end
 end
 
-local buffer_diff_state = {}
-
-local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
-
----@param buf number Buffer handle
----@param old_content string Original content
----@param new_content string New content after changes
-function M.highlight_diff_changes(buf, old_content, new_content)
-  if not buffer_diff_state[buf] then
-    buffer_diff_state[buf] = {
-      original_content = old_content,
-      hunks = {},
-    }
-  end
-
-  local baseline = buffer_diff_state[buf].original_content
-  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-
-  local diff_result = vim.diff(baseline, new_content, {
-    result_type = "indices",
-    algorithm = "histogram",
-  })
-
-  if not diff_result then
-    buffer_diff_state[buf].hunks = {}
-    return
-  end
-
-  local old_lines = vim.split(baseline, "\n", { plain = true })
-  local hunks = {}
-
-  for _, hunk in ipairs(diff_result) do
-    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
-
-    local hunk_info = {
-      old_start = old_start,
-      old_count = old_count,
-      new_start = new_start,
-      new_count = new_count,
-      type = old_count > 0 and new_count > 0 and "change" or (new_count > 0 and "add" or "delete"),
-    }
-    table.insert(hunks, hunk_info)
-
-    if old_count > 0 then
-      local old_text_lines = {}
-      for i = 0, old_count - 1 do
-        local old_line_idx = old_start + i
-        if old_line_idx <= #old_lines then
-          table.insert(old_text_lines, old_lines[old_line_idx])
-        end
-      end
-
-      local line_idx = math.max(0, new_start - 1)
-      if line_idx <= vim.api.nvim_buf_line_count(buf) then
-        local virt_lines = {}
-        for _, old_line in ipairs(old_text_lines) do
-          table.insert(virt_lines, { { old_line, "DiffDelete" } })
-        end
-
-        vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-          virt_lines = virt_lines,
-          virt_lines_above = true,
-          priority = 100,
-        })
-      end
-    end
-
-    if new_count > 0 then
-      for i = 0, new_count - 1 do
-        local line_idx = new_start - 1 + i
-        if line_idx < vim.api.nvim_buf_line_count(buf) then
-          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
-          vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-            end_col = 0,
-            hl_group = hl_group,
-            line_hl_group = hl_group,
-            priority = 100,
-          })
-        end
-      end
-    end
-  end
-
-  buffer_diff_state[buf].hunks = hunks
-
-  vim.api.nvim_create_autocmd("BufWritePost", {
-    buffer = buf,
-    once = true,
-    callback = function()
-      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-      buffer_diff_state[buf] = nil
-    end,
-  })
-end
-
---- Expose buffer diff state for tools
-function M.get_buffer_diff_state()
-  return buffer_diff_state
-end
-
 --- @param opts { buf: number? }?
 function M.accept_diff(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
-  if buffer_diff_state[buf] then
-    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-    buffer_diff_state[buf] = nil
-  else
+  if not require("sia.diff").accept_diff(buf) then
     vim.api.nvim_echo({ { "Sia: No diff changes to accept", "WarningMsg" } }, false, {})
   end
 end
@@ -143,11 +40,7 @@ end
 function M.reject_diff(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
-  if buffer_diff_state[buf] then
-    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(buffer_diff_state[buf].original_content, "\n"))
-    buffer_diff_state[buf] = nil
-  else
+  if not require("sia.diff").reject_diff(buf) then
     vim.api.nvim_echo({ { "Sia: No diff changes to reject", "WarningMsg" } }, false, {})
   end
 end
@@ -157,34 +50,16 @@ end
 function M.next_hunk(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local diff_state = buffer_diff_state[buf]
-
-  if not diff_state or #diff_state.hunks == 0 then
-    return
-  end
-
   local cursor = vim.api.nvim_win_get_cursor(0)
   local current_line = cursor[1]
-  local hunks = diff_state.hunks
-  local target_idx = nil
 
-  for i, hunk in ipairs(hunks) do
-    local hunk_line = hunk.new_start
-    if hunk_line > current_line then
-      vim.api.nvim_win_set_cursor(0, { hunk_line, 0 })
-      target_idx = i
-      break
-    end
-  end
+  local diff = require("sia.diff")
+  local hunk_info = diff.get_next_hunk(buf, current_line)
 
-  if not target_idx and #hunks > 0 then
-    local first_hunk = hunks[1]
-    vim.api.nvim_win_set_cursor(0, { first_hunk.new_start, 0 })
-    target_idx = 1
-  end
-
-  if target_idx then
-    vim.api.nvim_echo({ { string.format("Edit %d of %d", target_idx, #hunks), "Normal" } }, false, {})
+  if hunk_info then
+    vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+    local total_hunks = diff.get_hunk_count(buf)
+    vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
   end
 end
 
@@ -193,35 +68,16 @@ end
 function M.prev_hunk(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local diff_state = buffer_diff_state[buf]
-
-  if not diff_state or #diff_state.hunks == 0 then
-    return
-  end
-
   local cursor = vim.api.nvim_win_get_cursor(0)
   local current_line = cursor[1]
-  local hunks = diff_state.hunks
-  local target_idx = nil
 
-  for i = #hunks, 1, -1 do
-    local hunk = hunks[i]
-    local hunk_line = hunk.new_start
-    if hunk_line < current_line then
-      vim.api.nvim_win_set_cursor(0, { hunk_line, 0 })
-      target_idx = i
-      break
-    end
-  end
+  local diff = require("sia.diff")
+  local hunk_info = diff.get_prev_hunk(buf, current_line)
 
-  if not target_idx and #hunks > 0 then
-    local last_hunk = hunks[#hunks]
-    vim.api.nvim_win_set_cursor(0, { last_hunk.new_start, 0 })
-    target_idx = #hunks
-  end
-
-  if target_idx then
-    vim.api.nvim_echo({ { string.format("Edit %d of %d", target_idx, #hunks), "Normal" } }, false, {})
+  if hunk_info then
+    vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+    local total_hunks = diff.get_hunk_count(buf)
+    vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
   end
 end
 
