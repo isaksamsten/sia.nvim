@@ -122,23 +122,23 @@ to add them again.
   },
   directory_structure = {
     {
-      role = "user",
+      role = "system",
       hide = true,
       description = "List the files in the current git repository.",
-      live_content = function()
+      content = function()
         if require("sia.utils").is_git_repo() then
           return string.format(
-            "Below is the current directory structure as reported by Git (it skips files in .gitignore):\n:%s",
+            "Below is the current directory structure as reported by Git (it skips files in .gitignore).\nThis is only a snapshot\n%s",
             vim.fn.system("git ls-tree -r --name-only HEAD")
           )
         elseif vim.fn.executable("fd") == 1 then
           return string.format(
-            "Below is the current directory structure as reported by fd (it skips files in .gitignore):\n%s",
+            "Below is the current directory structure as reported by fd (it skips files in .gitignore).\nThis is only a snapshot\n%s",
             vim.fn.system("fd --type f")
           )
         else
           return string.format(
-            "Below is the current directory structure as reported by find:\n%s",
+            "Below is the current directory structure as reported by find.\nThis is only a snapshot\n%s",
             vim.fn.system("find . -type f -not -path './.git/*'")
           )
         end
@@ -147,10 +147,10 @@ to add them again.
   },
   agents_md = {
     {
-      role = "user",
+      role = "system",
       hide = true,
       description = "AGENTS.md",
-      live_content = function()
+      content = function()
         local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
         if vim.fn.filereadable(filename) ~= 1 then
           return nil
@@ -158,12 +158,12 @@ to add them again.
         local memories = vim.fn.readfile(filename)
         return string.format(
           [[Always follow the instructions stored in %s.
-Remember that you can edit this file and that the instructions below are the latest instructions in AGENTS.md.
-You DO NOT have to add this file to the conversation to edit it.
+Remember that you can edit this file and that the instructions below are the
+latest instructions in AGENTS.md. Before editing always read the latest
+version.
 ```markdown
 %s
-```
-]],
+```]],
           vim.fn.fnamemodify(filename, ":p"),
           table.concat(memories, "\n")
         )
