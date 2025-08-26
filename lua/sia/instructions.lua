@@ -34,7 +34,7 @@ function M.current_buffer(global)
         local code = utils.get_content(
           ctx.buf,
           0,
-          line_count - 1,
+          line_count,
           { show_line_numbers = global.show_line_numbers, max_line_length = 2000 }
         )
 
@@ -79,7 +79,7 @@ function M.current_context(global)
           local code = utils.get_content(
             ctx.buf,
             start_line - 1,
-            end_line - 1,
+            end_line,
             { show_line_numbers = global.show_line_numbers, max_line_length = 2000 }
           )
           if global.show_line_numbers then

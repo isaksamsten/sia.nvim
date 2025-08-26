@@ -608,12 +608,8 @@ M.read = M.new_tool({
   local start_line = math.max(1, offset)
   local end_line = math.min(total_lines, start_line + limit)
 
-  local content = utils.get_content(
-    buf,
-    start_line - 1,
-    end_line - 1,
-    { show_line_numbers = true, max_line_length = max_line_length }
-  )
+  local content =
+    utils.get_content(buf, start_line - 1, end_line, { show_line_numbers = true, max_line_length = max_line_length })
 
   local pos = nil
   if args.offset or args.limit then
@@ -1956,7 +1952,7 @@ rather than multiple messages with a single call each.
     local start_context = math.max(1, span[1] - context_lines)
     local end_context = math.min(new_content_lines, span[1] + #new_string + context_lines)
 
-    local snippet_lines = utils.get_content(buf, start_context - 1, end_context - 1)
+    local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
 
     local success_msg =
       string.format("Successfully edited %s. Here's the edited snippet as returned by cat -n:", args.target_file)
