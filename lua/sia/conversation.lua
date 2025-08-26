@@ -225,9 +225,11 @@ function Message:to_prompt(conversation)
 
     if #tool_instructions > 0 then
       local tool_prompt = table.concat(tool_instructions, "\n")
-      prompt.content = string.gsub(prompt.content, "%{%{([%w_]+)%}%}", {
-        tool_instructions = tool_prompt,
-      })
+      if prompt.content ~= nil then
+        prompt.content = string.gsub(prompt.content, "%{%{([%w_]+)%}%}", {
+          tool_instructions = tool_prompt,
+        })
+      end
     end
   end
   return prompt
@@ -289,7 +291,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
---- @field tool_fn table<string, {is_interactive:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult):nil)}>}?
+--- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult):nil)}>}?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -359,7 +361,7 @@ function Conversation:add_tool(tool)
     tool = require("sia.config").options.defaults.tools.choices[tool]
   end
   if tool ~= nil and self.tool_fn[tool.name] == nil then
-    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute, is_interactive = tool.is_interactive }
+    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute, allow_parallel = tool.allow_parallel }
     table.insert(self.tools, tool)
   end
 end
@@ -548,7 +550,6 @@ function Conversation:execute_tool(name, arguments, strategy, callback)
   if self.tool_fn[name] then
     local ok, err = pcall(self.tool_fn[name].action, arguments, strategy.conversation, callback)
     if not ok then
-      print(vim.inspect(err))
       callback({ content = { "Tool execution failed. " }, cancel = true })
     end
     return
