@@ -5,6 +5,7 @@ local diff = require("sia.diff")
 ---@class SiaNewToolOpts
 ---@field name string
 ---@field description string
+---@field read_only boolean?
 ---@field auto_apply (fun(args: table):integer?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
@@ -40,14 +41,21 @@ M.new_tool = function(opts, execute)
     message = opts.message,
     parameters = opts.parameters,
     system_prompt = opts.system_prompt,
-    is_interactive = function(conversation, args)
-      if conversation.ignore_tool_confirm then
+    allow_parallel = function(conversation, args)
+      if conversation.ignore_tool_confirm and opts.read_only then
+        return true
+      end
+
+      if not opts.read_only then
         return false
       end
+
+      -- Read-only tools are only parallel if they are auto applied
+      -- or without confirmation
       if opts.confirm ~= nil or opts.select ~= nil then
-        return auto_apply(args) == nil
+        return auto_apply(args) ~= nil
       end
-      return false
+      return true
     end,
     description = opts.description,
     required = opts.required,
@@ -67,25 +75,27 @@ M.new_tool = function(opts, execute)
         else
           text = opts.confirm
         end
-        vim.ui.input(
-          { prompt = string.format("%s\nProceed and send to AI? [Y/n/a] ([Y]es, [n]o or Esc, [a]lways): ", text) },
-          function(resp)
-            if resp == nil then
-              callback({ content = string.format("User cancelled %s operation.", opts.name), cancel = true })
-              return
-            end
-
-            local response = resp:lower()
-            if response == "a" or response == "always" then
-              auto_confirm[opts.name] = true
-              execute(args, conversation, callback)
-            elseif response == "n" or response == "no" then
-              callback({ content = string.format("User declined to execute %s.", opts.name) })
-            else
-              execute(args, conversation, callback)
-            end
+        vim.ui.input({
+          prompt = string.format("%s\nProceed and send to AI? [Y/n/a] ([Y]es, [n]o or Esc, [a]lways): ", text),
+        }, function(resp)
+          if resp == nil then
+            callback({
+              content = string.format("User cancelled %s operation.", opts.name),
+              cancel = true,
+            })
+            return
           end
-        )
+
+          local response = resp:lower()
+          if response == "a" or response == "always" then
+            auto_confirm[opts.name] = true
+            execute(args, conversation, callback)
+          elseif response == "n" or response == "no" then
+            callback({ content = string.format("User declined to execute %s.", opts.name) })
+          else
+            execute(args, conversation, callback)
+          end
+        end)
       elseif opts.select then
         local auto_applied_choice = auto_apply(args)
         if auto_applied_choice then
@@ -443,7 +453,9 @@ without leaving the editor.]],
 
   --- @diagnostic disable-next-line undefined-field
   if conversation.lsp_symbols == nil then
-    callback({ content = { "Error: No symbols have been added to the conversation yet. Use find_lsp_symbol first." } })
+    callback({
+      content = { "Error: No symbols have been added to the conversation yet. Use find_lsp_symbol first." },
+    })
     return
   end
 
@@ -541,6 +553,7 @@ end)
 
 M.read = M.new_tool({
   name = "read",
+  read_only = true,
   message = "Reading file contents...",
   system_prompt = [[Reads a file from the local filesystem. By default, it reads up to 2000 lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters. Any lines longer than 2000 characters will be truncated.]],
   description = [[Reads a file from the local filesystem.]],
@@ -616,6 +629,7 @@ end)
 
 M.grep = M.new_tool({
   name = "grep",
+  read_only = true,
   system_prompt = [[- Fast content search
 - Searches files using regluar expressions as supported by rg
 - Supports glob patterns to specify files
@@ -935,7 +949,7 @@ example: // ... existing code ...  ]],
         local file = vim.fs.basename(args.target_file)
         if file == "AGENTS.md" then
           vim.api.nvim_buf_call(buf, function()
-            vim.cmd("silent write")
+            vim.cmd("noa silent write")
           end)
         end
 
@@ -958,6 +972,7 @@ end)
 
 M.get_diagnostics = M.new_tool({
   name = "get_diagnostics",
+  read_only = true,
   message = "Retrieving diagnostics...",
   description = "Get LSP diagnostics for a specific file",
   parameters = {
@@ -1453,6 +1468,132 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   })
 end)
 
+M.workspace = M.new_tool({
+  name = "workspace",
+  message = "Getting workspace information...",
+  description = "Show visible files with line ranges and background files",
+  system_prompt = [[ALWAYS call this tool first for contextual questions about code the user is looking at.
+
+Shows your current workspace - what files are visible and what you're looking at.
+
+MANDATORY USAGE - Call this tool when the user asks:
+- "What does this [file/function/code] do?" (without specifying which file)
+- "Change this [function/variable/code]" (without specifying location)
+- "Fix this bug" or "explain this code" (referring to visible code)
+- "How does this work?" (about code they're viewing)
+- Any question using "this", "here", "current" referring to code
+- Questions about code without specifying a file path
+
+PROVIDES:
+- Visible files with exact line ranges (e.g., "lines 25-55 of 200")
+- Background files that are loaded but not visible
+
+WORKFLOW: Call workspace → read the relevant file → answer the question
+
+Do NOT guess which file the user means. Always check workspace first for contextual questions.]],
+  parameters = vim.empty_dict(),
+  required = {},
+}, function(args, _, callback)
+  local content = {}
+  local current_win = vim.api.nvim_get_current_win()
+  local visible_windows = {}
+  local visible_bufs = {}
+  local background_buffers = {}
+
+  -- Get information about visible windows
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local name = vim.api.nvim_buf_get_name(buf)
+
+    -- Only show buffers backed by actual files
+    if name == "" or vim.fn.filereadable(name) == 0 then
+      goto continue
+    end
+
+    local relative_path = vim.fn.fnamemodify(name, ":.")
+
+    -- Get visible line range in this window
+    local topline = vim.fn.line("w0", win)
+    local botline = vim.fn.line("w$", win)
+    local total_lines = vim.api.nvim_buf_line_count(buf)
+
+    table.insert(visible_windows, {
+      win = win,
+      buf = buf,
+      relative_path = relative_path,
+      topline = topline,
+      botline = botline,
+      total_lines = total_lines,
+      is_current = win == current_win,
+    })
+
+    visible_bufs[buf] = true
+
+    ::continue::
+  end
+
+  -- Sort windows: current first, then by buffer name
+  table.sort(visible_windows, function(a, b)
+    if a.is_current ~= b.is_current then
+      return a.is_current
+    end
+    return a.relative_path < b.relative_path
+  end)
+
+  -- Get background buffers (loaded but not visible)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and not visible_bufs[buf] then
+      local name = vim.api.nvim_buf_get_name(buf)
+
+      -- Only show buffers backed by actual files
+      if name == "" or vim.fn.filereadable(name) == 0 then
+        goto continue
+      end
+
+      local relative_path = vim.fn.fnamemodify(name, ":.")
+
+      table.insert(background_buffers, {
+        buf = buf,
+        relative_path = relative_path,
+      })
+
+      ::continue::
+    end
+  end
+
+  -- Sort background buffers by name
+  table.sort(background_buffers, function(a, b)
+    return a.relative_path < b.relative_path
+  end)
+
+  -- Build output
+  if #visible_windows == 0 then
+    table.insert(content, "No file windows are currently visible")
+  else
+    table.insert(
+      content,
+      string.format("Visible files (%d window%s):", #visible_windows, #visible_windows == 1 and "" or "s")
+    )
+    table.insert(content, "")
+
+    for _, win_info in ipairs(visible_windows) do
+      local line_range = string.format("lines %d-%d of %d", win_info.topline, win_info.botline, win_info.total_lines)
+      local line = string.format("  %s (%s)", win_info.relative_path, line_range)
+      table.insert(content, line)
+    end
+  end
+
+  if #background_buffers > 0 then
+    table.insert(content, "")
+    table.insert(content, string.format("Background files (%d):", #background_buffers))
+    for _, buf_info in ipairs(background_buffers) do
+      table.insert(content, string.format("  %s", buf_info.relative_path))
+    end
+  end
+
+  callback({ content = content })
+end)
+
 M.compact_conversation = M.new_tool({
   name = "compact_conversation",
   message = "Compacting conversation...",
@@ -1506,6 +1647,7 @@ end)
 M.dispatch_agent = {
   name = "dispatch_agent",
   message = "Launching autonomous agent...",
+  read_only = true,
   description = [[Launch a new agent that has access to the following tools: list_files, grep, read tools.
   system_prompt = [[When you are searching for a keyword or file and are not confident that you
 will find the right match on the first try, use the dispatch_agent tool to perform the
@@ -1654,7 +1796,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   local file = vim.fs.basename(args.path)
   if file == "AGENTS.md" then
     vim.api.nvim_buf_call(buf, function()
-      vim.cmd("silent write")
+      vim.cmd("noa silent write")
     end)
   end
 
@@ -1797,7 +1939,7 @@ rather than multiple messages with a single call each.
 
     vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
     vim.api.nvim_buf_call(buf, function()
-      vim.cmd("silent write")
+      vim.cmd("noa silent write")
     end)
     if choice == 1 or choice == 2 then
       diff.highlight_diff_changes(buf, old_content)

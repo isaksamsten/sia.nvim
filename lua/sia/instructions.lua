@@ -1,7 +1,7 @@
 local utils = require("sia.utils")
 local M = {}
 
---- @param global {show_line_numbers: boolean?, fences: boolean?}
+--- @param global {show_line_numbers: boolean?, include_cursor: boolean?}
 --- @return sia.config.Instruction[]
 function M.current_buffer(global)
   global = global or {}
@@ -18,20 +18,27 @@ function M.current_buffer(global)
         if vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) then
           return nil
         end
-        local start_fence = ""
-        local end_fence = ""
-        if global.fences then
-          start_fence = "```" .. vim.bo[ctx.buf].ft
-          end_fence = "```"
+        local filename = utils.get_filename(ctx.buf, ":p")
+        local line_count = vim.api.nvim_buf_line_count(ctx.buf)
+        local instruction = string.format("Here is %s (lines 1 to %d)", filename, line_count)
+
+        if global.show_line_numbers then
+          instruction = instruction .. " as shown by cat -n"
         end
-        return string.format(
-          "%s (%s)\n%s\n%s\n%s",
-          utils.get_filename(ctx.buf, ":p"),
-          vim.bo[ctx.buf].ft,
-          start_fence,
-          utils.get_code(1, -1, { buf = ctx.buf, show_line_numbers = global.show_line_numbers }),
-          end_fence
+
+        if global.include_cursor and ctx.cursor then
+          local cursor_line, cursor_col = ctx.cursor[1], ctx.cursor[2]
+          instruction = instruction .. string.format(" - cursor is at line %d, column %d", cursor_line, cursor_col + 1)
+        end
+
+        local code = utils.get_content(
+          ctx.buf,
+          0,
+          line_count - 1,
+          { show_line_numbers = global.show_line_numbers, max_line_length = 2000 }
         )
+
+        return string.format("%s\n%s", instruction, table.concat(code, "\n"))
       end,
     },
   }
@@ -58,7 +65,7 @@ function M.current_context(global)
       hide = true,
       content = function(ctx)
         if not vim.api.nvim_buf_is_loaded(ctx.buf) then
-          return ""
+          return nil
         end
         local filename = utils.get_filename(ctx.buf, ":p")
         if ctx.mode == "v" then
@@ -79,17 +86,15 @@ function M.current_context(global)
             instruction = instruction .. " as shown by cat -n"
           end
 
-          return string.format(
-            [[%s
-%s]],
-            instruction,
-            table.concat(code, "\n")
-          )
+          return string.format("%s\n%s", instruction, table.concat(code, "\n"))
         else
-          return string.format(
-            "The conversation was initiated from the file: %s. This is only a snapshot and I might discuss other files later",
-            utils.get_filename(ctx.buf, ":p")
-          )
+          local content =
+            string.format("The conversation was initiated from the file: %s", utils.get_filename(ctx.buf, ":p"))
+
+          if ctx.cursor then
+            content = string.format("%s with the cursor at %d", content, ctx.cursor[1])
+          end
+          return content
         end
       end,
     },

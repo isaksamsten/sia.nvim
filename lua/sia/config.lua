@@ -42,7 +42,7 @@ local providers = require("sia.provider")
 --- @field name string
 --- @field description string
 --- @field system_prompt string?
---- @field is_interactive (fun(args: table):boolean)?
+--- @field allow_parallel (fun(args: table):boolean)?
 --- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
@@ -206,7 +206,6 @@ local defaults = {
       enable = true,
       choices = {
         show_locations = require("sia.tools").show_locations,
-        show_location = require("sia.tools").show_location,
         read = require("sia.tools").read,
         -- find_symbols = require("sia.tools").find_lsp_symbol,
         -- get_symbols_docs = require("sia.tools").get_lsp_symbol_docs,
@@ -221,6 +220,7 @@ local defaults = {
         git_status = require("sia.tools").git_status,
         dispatch_agent = require("sia.tools").dispatch_agent,
         compact = require("sia.tools").compact_conversation,
+        workspace = require("sia.tools").workspace,
       },
     },
     actions = {
@@ -230,7 +230,7 @@ local defaults = {
         temperature = 0.2,
         system = { "insert_system" },
         instructions = {
-          "current_buffer",
+          require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true }),
         },
       },
       diff = {
@@ -240,7 +240,7 @@ local defaults = {
         system = { "diff_system" },
         instructions = {
           require("sia.instructions").current_buffer({ fences = false }),
-          require("sia.instructions").current_context({ fences = false }),
+          require("sia.instructions").current_context({ show_line_numbers = false, fences = false }),
         },
       },
       --- @type sia.config.Action
@@ -260,7 +260,7 @@ local defaults = {
         },
         tools = {
           "grep",
-          "show_location",
+          "workspace",
           "show_locations",
           "edit",
           "write",
@@ -299,7 +299,6 @@ local defaults = {
         "compact",
         "git_commit",
         "git_diff",
-        "show_recent_changes",
       },
     },
     commit = require("sia.actions").commit(),

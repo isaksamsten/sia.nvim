@@ -1,12 +1,10 @@
 local M = {}
-local utils = require("sia.utils")
 local ChatCanvas = require("sia.canvas").ChatCanvas
 local assistant = require("sia.assistant")
 local Message = require("sia.conversation").Message
 
 local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
-local SPLIT_NS = vim.api.nvim_create_namespace("SiaChatStrategy")
 
 --- @class sia.ToolResult
 --- @field content string[]
@@ -187,20 +185,24 @@ end
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field on_tool_complete fun(tool: sia.ToolCall, tool_result: sia.ToolResult)
---- @field on_tools_complete fun(args: {cancel: boolean})
---- @field on_no_tools fun(args: {cancel: boolean})
---- @field on_tool_status_update? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
+--- @field handle_tools_completion fun(args: {cancel: boolean, results?: {tool: sia.ToolCall, result: sia.ToolResult}[]})
+--- @field handle_empty_toolset fun(args: {cancel: boolean})
+--- @field handle_status_updates? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
 
 --- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
   local tool_cancel = false
   if not vim.tbl_isempty(self.tools) then
     --- @type sia.ParsedTool
-    local non_interactive_tools = {}
+    local parallel_tools = {}
     --- @type sia.ParsedTool
-    local interactive_tools = {}
+    local sequential_tools = {}
+
+    --- @type { tool: sia.ParsedTool, status: string}[]
     local all_tools = {}
+
+    --- @type {tool: sia.ToolCall, result: sia.ToolResult}[]
+    local tool_results = {}
 
     local index = 1
     for _, tool in pairs(self.tools) do
@@ -208,7 +210,7 @@ function Strategy:execute_tools(opts)
       local tool_args = nil
       --- @type string?
       local tool_message = nil
-      local is_interactive = false
+      local is_parallel = false
       local fun = tool["function"]
       if fun then
         tool_name = fun.name
@@ -225,58 +227,69 @@ function Strategy:execute_tools(opts)
           if tool_fn then
             if tool_fn.message ~= nil then
               if type(tool_fn.message) == "string" then
-                tool_message = tool_fn.message --- @as string
+                tool_message = tool_fn.message
               else
                 tool_message = tool_fn.message(args)
               end
             end
-            is_interactive = tool_fn.is_interactive ~= nil and tool_fn.is_interactive(self.conversation, tool_args)
+            is_parallel = tool_fn.allow_parallel ~= nil and tool_fn.allow_parallel(self.conversation, tool_args)
           end
         end
       end
       local parsed_tool =
         { index = index, message = tool_message, name = tool_name, arguments = tool_args, tool_call = tool }
       all_tools[index] = { tool = parsed_tool, status = "pending" }
+      tool_results[index] = nil
       index = index + 1
-      if is_interactive then
-        table.insert(interactive_tools, parsed_tool)
+      if is_parallel then
+        table.insert(parallel_tools, parsed_tool)
       else
-        table.insert(non_interactive_tools, parsed_tool)
+        table.insert(sequential_tools, parsed_tool)
       end
     end
 
     self.tools = {}
 
-    if opts.on_tool_status_update then
-      opts.on_tool_status_update(all_tools)
+    if opts.handle_status_updates then
+      opts.handle_status_updates(all_tools)
     end
 
-    local total_tools = #interactive_tools + #non_interactive_tools
+    local total_tools = #sequential_tools + #parallel_tools
     local completed_count = 0
 
     --- @param index integer
     local function update_status(index, status)
       all_tools[index].status = status
-      if opts.on_tool_status_update then
-        opts.on_tool_status_update(all_tools)
+      if opts.handle_status_updates then
+        opts.handle_status_updates(all_tools)
       end
     end
 
     --- @param index integer
+    --- @param tool_call sia.ToolCall
+    --- @param tool_result sia.ToolResult
     --- @param cancel boolean?
-    local function on_tool_finished(index, cancel)
+    local function on_tool_finished(index, tool_call, tool_result, cancel)
       completed_count = completed_count + 1
       tool_cancel = cancel or false
       update_status(index, "done")
+      tool_results[index] = { tool = tool_call, result = tool_result }
+
       if completed_count == total_tools then
-        if opts.on_tools_complete then
-          opts.on_tools_complete({ cancel = tool_cancel })
+        local ordered_results = {}
+        for i = 1, total_tools do
+          if tool_results[i] then
+            table.insert(ordered_results, tool_results[i])
+          end
+        end
+
+        if opts.handle_tools_completion then
+          opts.handle_tools_completion({ cancel = tool_cancel, results = ordered_results })
         end
       end
     end
 
-    -- Non-interactive tools
-    for i, tool in ipairs(non_interactive_tools) do
+    for i, tool in ipairs(parallel_tools) do
       vim.schedule(function()
         update_status(tool.index, "running")
         if tool.name then
@@ -288,23 +301,20 @@ function Strategy:execute_tools(opts)
               vim.schedule_wrap(function(tool_result)
                 local cancel
                 if tool_result then
-                  opts.on_tool_complete(tool.tool_call, tool_result)
                   cancel = tool_result.cancel
                 else
-                  opts.on_tool_complete(tool.tool_call, { content = { "Could not find tool..." } })
+                  tool_result = { content = { "Could not find tool..." } }
                   cancel = true
                 end
-                on_tool_finished(tool.index, cancel)
+                on_tool_finished(tool.index, tool.tool_call, tool_result, cancel)
               end)
             )
           else
             local error_message = { "Could not parse tool arguments" }
-            opts.on_tool_complete(tool.tool_call, { content = error_message })
-            on_tool_finished(tool.index, true)
+            on_tool_finished(tool.index, tool.tool_call, { content = error_message }, true)
           end
         else
-          opts.on_tool_complete(tool.tool_call, { content = { "Tool is not a function" } })
-          on_tool_finished(tool.index, true)
+          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } }, true)
         end
       end)
     end
@@ -312,10 +322,10 @@ function Strategy:execute_tools(opts)
     -- Interactive tools
     local current_tool_index = 1
     local function process_next_tool()
-      if current_tool_index > #interactive_tools then
+      if current_tool_index > #sequential_tools then
         return
       end
-      local tool = interactive_tools[current_tool_index]
+      local tool = sequential_tools[current_tool_index]
       update_status(tool.index, "running")
       current_tool_index = current_tool_index + 1
       if tool.name then
@@ -327,34 +337,31 @@ function Strategy:execute_tools(opts)
             vim.schedule_wrap(function(tool_result)
               local cancel
               if tool_result then
-                opts.on_tool_complete(tool.tool_call, tool_result)
                 cancel = tool_result.cancel
               else
-                opts.on_tool_complete(tool.tool_call, { content = { "Could not find tool..." } })
+                tool_result = { content = { "Could not find tool..." } }
                 cancel = true
               end
-              on_tool_finished(tool.index, cancel)
+              on_tool_finished(tool.index, tool.tool_call, tool_result, cancel)
               process_next_tool()
             end)
           )
         else
           local error_message = { "Could not parse tool arguments" }
-          opts.on_tool_complete(tool.tool_call, { content = error_message })
-          on_tool_finished(tool.index, true)
+          on_tool_finished(tool.index, tool.tool_call, { content = error_message }, true)
           process_next_tool()
         end
       else
-        opts.on_tool_complete(tool.tool_call, { content = { "Tool is not a function" } })
-        on_tool_finished(tool.index, true)
+        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } }, true)
         process_next_tool()
       end
     end
 
-    if #interactive_tools > 0 then
+    if #sequential_tools > 0 then
       process_next_tool()
     end
   else
-    opts.on_no_tools({ cancel = tool_cancel })
+    opts.handle_empty_toolset({ cancel = tool_cancel })
   end
 end
 
@@ -513,7 +520,7 @@ function ChatStrategy:on_complete(control)
     end
 
     self:execute_tools({
-      on_tool_status_update = function(statuses)
+      handle_status_updates = function(statuses)
         local status_icons = { pending = " ", running = " ", done = " " }
         local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
         local lines = {}
@@ -526,13 +533,22 @@ function ChatStrategy:on_complete(control)
         end
         self.canvas:update_tool_progress(lines)
       end,
-      on_tool_complete = function(tool, result)
-        self.conversation:add_instruction({
-          { role = "assistant", tool_calls = { tool } },
-          { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
-        }, result.context)
-      end,
-      on_tools_complete = function(opts)
+      handle_tools_completion = function(opts)
+        -- Add all tool instructions in order
+        if opts.results then
+          for _, tool_result in ipairs(opts.results) do
+            self.conversation:add_instruction({
+              { role = "assistant", tool_calls = { tool_result.tool } },
+              {
+                role = "tool",
+                content = tool_result.result.content,
+                _tool_call = tool_result.tool,
+                kind = tool_result.result.kind,
+              },
+            }, tool_result.result.context)
+          end
+        end
+
         self.hide_header = nil
         -- Show completion message briefly before continuing
         self.canvas:update_progress({ { "Tools completed", "DiagnosticOk" } })
@@ -545,7 +561,7 @@ function ChatStrategy:on_complete(control)
           control.continue_execution()
         end
       end,
-      on_no_tools = function(opts)
+      handle_empty_toolset = function(opts)
         self.canvas:clear_extmarks()
         if opts.cancel then
           self.canvas:update_progress({ { "The tool call was cancelled. Manually resume conversation" } })
@@ -561,7 +577,10 @@ function ChatStrategy:on_complete(control)
 buffer name in neovim using three to five words separated by
 spaces. Only output the name, nothing else.]],
               },
-              { role = "user", content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n") },
+              {
+                role = "user",
+                content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
+              },
             },
           }, function(resp)
             if resp then
@@ -715,7 +734,7 @@ end
 function DiffStrategy:on_complete(control)
   del_abort_keymap(self.buf)
   self:execute_tools({
-    -- on_tool_status_update = function(statuses)
+    -- handle_status_updates = function(statuses)
     --   local status_icons = { pending = " ", running = " ", done = " " }
     --   local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
     --   local lines = {}
@@ -736,16 +755,23 @@ function DiffStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, result)
-      self.conversation:add_instruction({
-        { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
-      }, result.context)
-    end,
-    on_tools_complete = function()
+    handle_tools_completion = function(opts)
+      if opts.results then
+        for _, tool_result in ipairs(opts.results) do
+          self.conversation:add_instruction({
+            { role = "assistant", tool_calls = { tool_result.tool } },
+            {
+              role = "tool",
+              content = tool_result.result.content,
+              _tool_call = tool_result.tool,
+              kind = tool_result.result.kind,
+            },
+          }, tool_result.result.context)
+        end
+      end
       control.continue_execution()
     end,
-    on_no_tools = function()
+    handle_empty_toolset = function()
       if vim.api.nvim_buf_is_loaded(self.buf) then
         local context = self.conversation.context
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
@@ -843,7 +869,7 @@ function InsertStrategy:on_complete(control)
   local context = self.conversation.context
   del_abort_keymap(context.buf)
   self:execute_tools({
-    -- on_tool_status_update = function(statuses)
+    -- handle_status_updates = function(statuses)
     --   local status_icons = { pending = " ", running = " ", done = " " }
     --   local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
     --   local lines = {}
@@ -862,16 +888,23 @@ function InsertStrategy:on_complete(control)
     --     })
     --   end
     -- end,
-    on_tool_complete = function(tool, result)
-      self.conversation:add_instruction({
-        { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
-      }, result.context)
-    end,
-    on_tools_complete = function()
+    handle_tools_completion = function(opts)
+      if opts.results then
+        for _, tool_result in ipairs(opts.results) do
+          self.conversation:add_instruction({
+            { role = "assistant", tool_calls = { tool_result.tool } },
+            {
+              role = "tool",
+              content = tool_result.result.content,
+              _tool_call = tool_result.tool,
+              kind = tool_result.result.kind,
+            },
+          }, tool_result.result.context)
+        end
+      end
       control.continue_execution()
     end,
-    on_no_tools = function()
+    handle_empty_toolset = function()
       if self._writer then
         self._writer = nil
       end
@@ -978,7 +1011,7 @@ function HiddenStrategy:on_complete(control)
   end
 
   self:execute_tools({
-    on_tool_status_update = function(statuses)
+    handle_status_updates = function(statuses)
       local running_tools = vim.tbl_filter(function(s)
         return s.status == "running"
       end, statuses)
@@ -997,16 +1030,23 @@ function HiddenStrategy:on_complete(control)
         end
       end
     end,
-    on_tool_complete = function(tool, result)
-      self.conversation:add_instruction({
-        { role = "assistant", tool_calls = { tool } },
-        { role = "tool", content = result.content, _tool_call = tool, kind = result.kind },
-      }, result.context)
-    end,
-    on_tools_complete = function()
+    handle_tools_completion = function(opts)
+      if opts.results then
+        for _, tool_result in ipairs(opts.results) do
+          self.conversation:add_instruction({
+            { role = "assistant", tool_calls = { tool_result.tool } },
+            {
+              role = "tool",
+              content = tool_result.result.content,
+              _tool_call = tool_result.tool,
+              kind = tool_result.result.kind,
+            },
+          }, tool_result.result.context)
+        end
+      end
       control.continue_execution()
     end,
-    on_no_tools = function()
+    handle_empty_toolset = function()
       if context then
         vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
       end
@@ -1030,4 +1070,5 @@ M.HiddenStrategy = HiddenStrategy
 M.ChatStrategy = ChatStrategy
 M.DiffStrategy = DiffStrategy
 M.InsertStrategy = InsertStrategy
+
 return M
