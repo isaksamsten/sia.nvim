@@ -669,6 +669,7 @@ end
 
 function DiffStrategy:on_init()
   vim.bo[self.buf].modifiable = true
+  vim.bo[self.buf].buftype = "nofile"
   vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
   for _, wo in ipairs(self.options.wo) do
     vim.wo[self.win][wo] = vim.wo[self.conversation.context.win][wo]
