@@ -619,7 +619,7 @@ function M.main(action, opts, model)
         strategy = ChatStrategy.by_buf(opts.buf)
       end
 
-      if strategy then
+      if strategy and not strategy.is_busy then
         for _, tool in ipairs(action.tools or {}) do
           strategy.conversation:add_tool(tool)
         end

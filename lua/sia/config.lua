@@ -38,15 +38,16 @@ local providers = require("sia.provider")
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 
+--- @alias sia.config.ToolExecute fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult?), cancellable: sia.Cancellable?)
 --- @class sia.config.Tool
 --- @field name string
 --- @field description string
 --- @field system_prompt string?
---- @field allow_parallel (fun(args: table):boolean)?
+--- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
 --- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>
 --- @field required string[]?
---- @field execute fun(args:table, strategy: sia.Conversation, callback: fun(result: sia.ToolResult)):nil
+--- @field execute sia.config.ToolExecute
 
 --- @class sia.config.Action
 --- @field system (string|sia.config.Instruction)[]?

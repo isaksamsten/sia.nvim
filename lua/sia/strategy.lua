@@ -9,7 +9,6 @@ local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 --- @class sia.ToolResult
 --- @field content string[]
 --- @field context sia.Context?
---- @field cancel boolean?
 --- @field kind string?
 
 --- Write text to a buffer via a canvas.
@@ -116,7 +115,7 @@ end
 
 --- @class sia.Strategy
 --- @field is_busy boolean?
---- @field cancelled boolean?
+--- @field cancellable sia.Cancellable?
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
@@ -154,6 +153,8 @@ function Strategy:on_complete(control) end
 
 function Strategy:on_error() end
 
+function Strategy:on_cancelled() end
+
 --- Callback triggered when LLM wants to call a function
 ---
 --- Collects a streaming function call response
@@ -180,22 +181,23 @@ function Strategy:on_tool_call(t)
 end
 
 --- @class sia.ParsedTool
+--- @field index integer
 --- @field name string?
 --- @field arguments table?
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field handle_tools_completion fun(args: {cancel: boolean, results?: {tool: sia.ToolCall, result: sia.ToolResult}[]})
---- @field handle_empty_toolset fun(args: {cancel: boolean})
+--- @field handle_tools_completion fun(args: { results?: {tool: sia.ToolCall, result: sia.ToolResult}[]})
+--- @field handle_empty_toolset fun(args: table?)
 --- @field handle_status_updates? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
+--- @field cancellable sia.Cancellable?
 
 --- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
-  local tool_cancel = false
   if not vim.tbl_isempty(self.tools) then
-    --- @type sia.ParsedTool
+    --- @type sia.ParsedTool[]
     local parallel_tools = {}
-    --- @type sia.ParsedTool
+    --- @type sia.ParsedTool[]
     local sequential_tools = {}
 
     --- @type { tool: sia.ParsedTool, status: string}[]
@@ -257,9 +259,9 @@ function Strategy:execute_tools(opts)
     local total_tools = #sequential_tools + #parallel_tools
     local completed_count = 0
 
-    --- @param index integer
-    local function update_status(index, status)
-      all_tools[index].status = status
+    --- @param idx integer
+    local function update_status(idx, status)
+      all_tools[idx].status = status
       if opts.handle_status_updates then
         opts.handle_status_updates(all_tools)
       end
@@ -268,10 +270,8 @@ function Strategy:execute_tools(opts)
     --- @param index integer
     --- @param tool_call sia.ToolCall
     --- @param tool_result sia.ToolResult
-    --- @param cancel boolean?
-    local function on_tool_finished(index, tool_call, tool_result, cancel)
+    local function on_tool_finished(index, tool_call, tool_result)
       completed_count = completed_count + 1
-      tool_cancel = cancel or false
       update_status(index, "done")
       tool_results[index] = { tool = tool_call, result = tool_result }
 
@@ -284,7 +284,7 @@ function Strategy:execute_tools(opts)
         end
 
         if opts.handle_tools_completion then
-          opts.handle_tools_completion({ cancel = tool_cancel, results = ordered_results })
+          opts.handle_tools_completion({ results = ordered_results })
         end
       end
     end
@@ -294,27 +294,21 @@ function Strategy:execute_tools(opts)
         update_status(tool.index, "running")
         if tool.name then
           if tool.arguments then
-            self.conversation:execute_tool(
-              tool.name,
-              tool.arguments,
-              self,
-              vim.schedule_wrap(function(tool_result)
-                local cancel
-                if tool_result then
-                  cancel = tool_result.cancel
-                else
+            self.conversation:execute_tool(tool.name, tool.arguments, {
+              cancellable = opts.cancellable,
+              callback = vim.schedule_wrap(function(tool_result)
+                if not tool_result then
                   tool_result = { content = { "Could not find tool..." } }
-                  cancel = true
                 end
-                on_tool_finished(tool.index, tool.tool_call, tool_result, cancel)
-              end)
-            )
+                on_tool_finished(tool.index, tool.tool_call, tool_result)
+              end),
+            })
           else
             local error_message = { "Could not parse tool arguments" }
-            on_tool_finished(tool.index, tool.tool_call, { content = error_message }, true)
+            on_tool_finished(tool.index, tool.tool_call, { content = error_message })
           end
         else
-          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } }, true)
+          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } })
         end
       end)
     end
@@ -330,29 +324,23 @@ function Strategy:execute_tools(opts)
       current_tool_index = current_tool_index + 1
       if tool.name then
         if tool.arguments then
-          self.conversation:execute_tool(
-            tool.name,
-            tool.arguments,
-            self,
-            vim.schedule_wrap(function(tool_result)
-              local cancel
-              if tool_result then
-                cancel = tool_result.cancel
-              else
+          self.conversation:execute_tool(tool.name, tool.arguments, {
+            cancellable = opts.cancellable,
+            callback = vim.schedule_wrap(function(tool_result)
+              if not tool_result then
                 tool_result = { content = { "Could not find tool..." } }
-                cancel = true
               end
-              on_tool_finished(tool.index, tool.tool_call, tool_result, cancel)
+              on_tool_finished(tool.index, tool.tool_call, tool_result)
               process_next_tool()
-            end)
-          )
+            end),
+          })
         else
           local error_message = { "Could not parse tool arguments" }
-          on_tool_finished(tool.index, tool.tool_call, { content = error_message }, true)
+          on_tool_finished(tool.index, tool.tool_call, { content = error_message })
           process_next_tool()
         end
       else
-        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } }, true)
+        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } })
         process_next_tool()
       end
     end
@@ -361,7 +349,7 @@ function Strategy:execute_tools(opts)
       process_next_tool()
     end
   else
-    opts.handle_empty_toolset({ cancel = tool_cancel })
+    opts.handle_empty_toolset({})
   end
 end
 
@@ -376,6 +364,9 @@ end
 --- @field id string
 --- @field type string
 --- @field function { arguments: string, name: string }
+
+--- @class sia.Cancellable
+--- @field is_cancelled boolean
 
 --- Create a new chat window.
 --- @class sia.ChatStrategy : sia.Strategy
@@ -434,6 +425,7 @@ function ChatStrategy:new(conversation, options)
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
   obj._is_named = false
+  obj.cancellable = { is_cancelled = false }
   return obj
 end
 
@@ -446,7 +438,7 @@ function ChatStrategy:redraw()
 end
 
 function ChatStrategy:on_init()
-  self.cancelled = false
+  self.cancellable.is_cancelled = false
   if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").options.defaults.model
@@ -471,7 +463,7 @@ function ChatStrategy:on_start(job)
     self.canvas:clear_reasoning()
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
-      self.cancelled = true
+      self.cancellable.is_cancelled = true
       vim.fn.jobstop(job)
     end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
@@ -507,19 +499,25 @@ function ChatStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
+function ChatStrategy:on_cancelled()
+  self.canvas:update_progress({
+    { "Operation cancelled. Continue the conversation or start a new request", "DiagnosticWarn" },
+  })
+end
+
 function ChatStrategy:on_complete(control)
   if not self._writer then
     return
   end
 
   if vim.api.nvim_buf_is_loaded(self.buf) then
-    del_abort_keymap(self.buf)
     self.canvas:scroll_to_bottom()
     if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
       self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
     end
 
     self:execute_tools({
+      cancellable = self.cancellable,
       handle_status_updates = function(statuses)
         local status_icons = { pending = " ", running = " ", done = " " }
         local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
@@ -550,22 +548,16 @@ function ChatStrategy:on_complete(control)
         end
 
         self.hide_header = nil
-        -- Show completion message briefly before continuing
-        self.canvas:update_progress({ { "Tools completed", "DiagnosticOk" } })
-        vim.defer_fn(function()
-          self.canvas:clear_extmarks()
-        end, 500)
-        if opts.cancel then
-          control.finish()
-        else
-          control.continue_execution()
-        end
+        -- -- Show completion message briefly before continuing
+        -- self.canvas:update_progress({ { "Tools completed", "DiagnosticOk" } })
+        -- vim.defer_fn(function()
+        --   self.canvas:clear_extmarks()
+        -- end, 500)
+        control.continue_execution()
       end,
       handle_empty_toolset = function(opts)
+        del_abort_keymap(self.buf)
         self.canvas:clear_extmarks()
-        if opts.cancel then
-          self.canvas:update_progress({ { "The tool call was cancelled. Manually resume conversation" } })
-        end
         vim.bo[self.buf].modifiable = false
         if not self._is_named then
           assistant.execute_query({
@@ -952,10 +944,12 @@ HiddenStrategy.__index = HiddenStrategy
 
 --- @param conversation sia.Conversation
 --- @param options sia.config.Hidden
-function HiddenStrategy:new(conversation, options)
+--- @param cancellable sia.Cancellable?
+function HiddenStrategy:new(conversation, options, cancellable)
   local obj = setmetatable(Strategy:new(conversation), self)
   obj._options = options
   obj._writer = nil
+  obj.cancellable = cancellable
   return obj
 end
 
@@ -999,9 +993,6 @@ end
 
 function HiddenStrategy:on_complete(control)
   local context = self.conversation.context
-  if context then
-    del_abort_keymap(context.buf)
-  end
   if #self._writer.cache > 0 then
     self.conversation:add_instruction({
       role = "assistant",
@@ -1011,6 +1002,7 @@ function HiddenStrategy:on_complete(control)
   end
 
   self:execute_tools({
+    cancellable = self.cancellable,
     handle_status_updates = function(statuses)
       local running_tools = vim.tbl_filter(function(s)
         return s.status == "running"
@@ -1048,6 +1040,7 @@ function HiddenStrategy:on_complete(control)
     end,
     handle_empty_toolset = function()
       if context then
+        del_abort_keymap(context.buf)
         vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
       end
       local messages = self.conversation:get_messages({
@@ -1064,6 +1057,16 @@ function HiddenStrategy:on_complete(control)
       control.finish()
     end,
   })
+end
+
+function HiddenStrategy:on_cancelled()
+  local context = self.conversation.context
+  if context then
+    vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+    del_abort_keymap(context.buf)
+  end
+  self._options.callback(self.conversation.context, { "Operation was cancelled by user" })
+  vim.api.nvim_echo({ { "Sia: Operation cancelled", "DiagnosticWarn" } }, false, {})
 end
 
 M.HiddenStrategy = HiddenStrategy

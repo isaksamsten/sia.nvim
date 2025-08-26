@@ -127,7 +127,6 @@ function M.execute_strategy(strategy)
   end
 
   strategy.is_busy = true
-  strategy.cancelled = false -- Add cancellation flag
   local config = require("sia.config")
 
   local function execute_round(is_initial)
@@ -223,7 +222,11 @@ function M.execute_strategy(strategy)
         end
 
         if code == ERROR_API_KEY_MISSING or code == 143 or code == 137 then
-          strategy:on_error()
+          if code == 143 or code == 137 then
+            strategy:on_cancelled()
+          else
+            strategy:on_error()
+          end
           strategy.is_busy = false
           return
         end
@@ -238,8 +241,9 @@ function M.execute_strategy(strategy)
         end
 
         local continue_execution = function()
-          if strategy.cancelled then
-            finish() -- Call finish instead of continuing if cancelled
+          if strategy.cancellable and strategy.cancellable.is_cancelled then
+            strategy:on_cancelled()
+            finish()
           else
             execute_round(false)
           end

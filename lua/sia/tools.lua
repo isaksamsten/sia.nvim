@@ -18,7 +18,7 @@ local diff = require("sia.diff")
 local auto_confirm = {}
 
 ---@param opts SiaNewToolOpts
----@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), choice: integer?):nil
+---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: {choice: integer?, cancellable: sia.Cancellable?}?)
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
   local auto_apply = function(args)
@@ -36,6 +36,7 @@ M.new_tool = function(opts, execute)
     end
   end
 
+  --- @type sia.config.Tool
   return {
     name = opts.name,
     message = opts.message,
@@ -59,13 +60,13 @@ M.new_tool = function(opts, execute)
     end,
     description = opts.description,
     required = opts.required,
-    execute = function(args, conversation, callback)
+    execute = function(args, conversation, callback, cancellable)
       if conversation.ignore_tool_confirm then
         opts.confirm = nil
       end
       if opts.confirm ~= nil then
         if auto_apply(args) then
-          execute(args, conversation, callback)
+          execute(args, conversation, callback, { cancellable = cancellable })
           return
         end
 
@@ -80,8 +81,7 @@ M.new_tool = function(opts, execute)
         }, function(resp)
           if resp == nil then
             callback({
-              content = string.format("User cancelled %s operation.", opts.name),
-              cancel = true,
+              content = { string.format("User cancelled %s operation.", opts.name) },
             })
             return
           end
@@ -89,17 +89,17 @@ M.new_tool = function(opts, execute)
           local response = resp:lower()
           if response == "a" or response == "always" then
             auto_confirm[opts.name] = true
-            execute(args, conversation, callback)
+            execute(args, conversation, callback, { cancellable = cancellable })
           elseif response == "n" or response == "no" then
-            callback({ content = string.format("User declined to execute %s.", opts.name) })
+            callback({ content = { string.format("User declined to execute %s.", opts.name) } })
           else
-            execute(args, conversation, callback)
+            execute(args, conversation, callback, { cancellable = cancellable })
           end
         end)
       elseif opts.select then
         local auto_applied_choice = auto_apply(args)
         if auto_applied_choice then
-          execute(args, conversation, callback, auto_applied_choice)
+          execute(args, conversation, callback, { choice = auto_applied_choice, cancellable = cancellable })
         else
           local prompt
           if type(opts.select.prompt) == "function" then
@@ -112,10 +112,10 @@ M.new_tool = function(opts, execute)
             { prompt = string.format("%s\nChoose an action (Esc to cancel):", prompt) },
             function(_, idx)
               if idx == nil or idx < 1 or idx > #opts.select.choices then
-                callback({ content = string.format("User cancelled %s operation.", opts.name) })
+                callback({ content = { string.format("User cancelled %s operation.", opts.name) } })
                 return
               end
-              execute(args, conversation, callback, idx)
+              execute(args, conversation, callback, { choice = idx, cancellable = cancellable })
             end
           )
         end
@@ -653,7 +653,7 @@ M.grep = M.new_tool({
     end
     return string.format("Search for '%s' in all files", args.pattern)
   end,
-}, function(args, _, callback, choice)
+}, function(args, _, callback)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
   if args.glob then
     table.insert(command, "--glob")
@@ -908,7 +908,7 @@ example: // ... existing code ...  ]],
       "Apply changes and preview them in diff view",
     },
   },
-}, function(args, _, callback, choice)
+}, function(args, _, callback, opts)
   if not args.target_file then
     callback({ content = { "No target_file was provided" } })
     return
@@ -942,7 +942,7 @@ example: // ... existing code ...  ]],
   }, function(result)
     if result then
       local split = vim.split(result, "\n", { plain = true, trimempty = true })
-      if choice == 1 or choice == 2 then
+      if opts.choice == 1 or opts.choice == 2 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
         diff.highlight_diff_changes(buf, initial_code)
 
@@ -953,10 +953,10 @@ example: // ... existing code ...  ]],
           end)
         end
 
-        if choice == 2 then
+        if opts.choice == 2 then
           edit_file_auto_apply = 1
         end
-      elseif choice == 3 then
+      elseif opts.choice == 3 then
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
         diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
       end
@@ -982,7 +982,7 @@ M.get_diagnostics = M.new_tool({
   confirm = function(args)
     return string.format("Get diagnostics for %s", args.file)
   end,
-}, function(args, _, callback, choice)
+}, function(args, _, callback)
   if not args.file then
     callback({ content = { "Error: No file path was provided" } })
     return
@@ -1644,6 +1644,7 @@ The tool will preserve important context while removing outdated information.]],
   end)
 end)
 
+--- @type sia.config.Tool
 M.dispatch_agent = {
   name = "dispatch_agent",
   message = "Launching autonomous agent...",
@@ -1689,7 +1690,7 @@ Usage notes:
     },
   },
   required = { "prompt" },
-  execute = function(args, _, callback)
+  execute = function(args, _, callback, cancellable)
     local HiddenStrategy = require("sia.strategy").HiddenStrategy
     local Conversation = require("sia.conversation").Conversation
     local conversation = Conversation:new({
@@ -1717,7 +1718,7 @@ response]],
       callback = function(_, reply)
         callback({ content = reply })
       end,
-    })
+    }, cancellable)
     require("sia.assistant").execute_strategy(strategy)
   end,
 }
@@ -1895,7 +1896,7 @@ rather than multiple messages with a single call each.
       "Apply changes and preview them in diff view",
     },
   },
-}, function(args, _, callback, choice)
+}, function(args, _, callback, opts)
   if not args.target_file then
     callback({ content = { "No target_file was provided" } })
     return
@@ -1941,12 +1942,12 @@ rather than multiple messages with a single call each.
     vim.api.nvim_buf_call(buf, function()
       vim.cmd("noa silent write")
     end)
-    if choice == 1 or choice == 2 then
+    if opts.choice == 1 or opts.choice == 2 then
       diff.highlight_diff_changes(buf, old_content)
-      if choice == 2 then
+      if opts.choice == 2 then
         edit_auto_apply = 1
       end
-    elseif choice == 3 then
+    elseif opts.choice == 3 then
       diff.show_diff_preview(buf, old_content)
     end
 

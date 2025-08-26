@@ -291,7 +291,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
---- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult):nil)}>}?
+--- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -543,18 +543,17 @@ end
 
 --- @param name string
 --- @param arguments table
---- @param strategy sia.Strategy
---- @param callback  fun(opts: sia.ToolResult?):nil
+--- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?) }
 --- @return string[]?
-function Conversation:execute_tool(name, arguments, strategy, callback)
+function Conversation:execute_tool(name, arguments, opts)
   if self.tool_fn[name] then
-    local ok, err = pcall(self.tool_fn[name].action, arguments, strategy.conversation, callback)
+    local ok, err = pcall(self.tool_fn[name].action, arguments, self, opts.callback, opts.cancellable)
     if not ok then
-      callback({ content = { "Tool execution failed. " }, cancel = true })
+      opts.callback({ content = { "Tool execution failed. " }, cancel = true })
     end
     return
   else
-    callback(nil)
+    opts.callback(nil)
   end
 end
 
