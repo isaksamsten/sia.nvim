@@ -563,6 +563,13 @@ M.read = M.new_tool({
     limit = { type = "integer", description = "Maximum number of lines to read (default: 2000)" },
   },
   required = { "path" },
+  auto_apply = function(args)
+    local file = vim.fs.basename(args.path)
+    if file == "AGENTS.md" then
+      return 1
+    end
+    return nil
+  end,
   confirm = function(args)
     local limit = args.limit or 2000
     if args.offset then
@@ -1468,25 +1475,14 @@ M.workspace = M.new_tool({
   name = "workspace",
   message = "Getting workspace information...",
   description = "Show visible files with line ranges and background files",
-  system_prompt = [[ALWAYS call this tool first for contextual questions about code the user is looking at.
+  system_prompt = [[Use this tool to get information about which files and line
+ranges are currently visible in the user's workspace.
 
-Shows your current workspace - what files are visible and what you're looking at.
+Always call this tool first when the user asks contextual questions about code
+they are viewing, especially if they refer to "this", "here", or do not specify
+a file.
 
-MANDATORY USAGE - Call this tool when the user asks:
-- "What does this [file/function/code] do?" (without specifying which file)
-- "Change this [function/variable/code]" (without specifying location)
-- "Fix this bug" or "explain this code" (referring to visible code)
-- "How does this work?" (about code they're viewing)
-- Any question using "this", "here", "current" referring to code
-- Questions about code without specifying a file path
-
-PROVIDES:
-- Visible files with exact line ranges (e.g., "lines 25-55 of 200")
-- Background files that are loaded but not visible
-
-WORKFLOW: Call workspace → read the relevant file → answer the question
-
-Do NOT guess which file the user means. Always check workspace first for contextual questions.]],
+Do not guess which file the user means—always check the workspace first.]],
   parameters = vim.empty_dict(),
   required = {},
 }, function(args, _, callback)
@@ -1927,6 +1923,10 @@ rather than multiple messages with a single call each.
     end
   else
     matches = matching.find_best_subsequence_span(old_string, old_content)
+  end
+
+  if failed_matches[buf] == nil then
+    failed_matches[buf] = 0
   end
 
   if #matches == 1 then
