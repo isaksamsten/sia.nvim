@@ -57,9 +57,12 @@ function M.next_hunk(opts)
   local hunk_info = diff.get_next_hunk(buf, current_line)
 
   if hunk_info then
-    vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
-    local total_hunks = diff.get_hunk_count(buf)
-    vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    if hunk_info.line > 0 and hunk_info.line <= line_count then
+      vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+      local total_hunks = diff.get_hunk_count(buf)
+      vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+    end
   end
 end
 
@@ -75,9 +78,12 @@ function M.prev_hunk(opts)
   local hunk_info = diff.get_prev_hunk(buf, current_line)
 
   if hunk_info then
-    vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
-    local total_hunks = diff.get_hunk_count(buf)
-    vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+    local line_count = vim.api.nvim_buf_line_count(buf)
+    if hunk_info.line > 0 and hunk_info.line <= line_count then
+      vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+      local total_hunks = diff.get_hunk_count(buf)
+      vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+    end
   end
 end
 

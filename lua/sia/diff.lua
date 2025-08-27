@@ -223,39 +223,16 @@ function M.get_all_hunks_for_quickfix(buf)
   local quickfix_items = {}
 
   if buf then
-    -- Get hunks for specific buffer
     local diff_state = buffer_diff_state[buf]
     if diff_state and diff_state.hunks then
       local bufname = vim.api.nvim_buf_get_name(buf)
-      for i, hunk in ipairs(diff_state.hunks) do
-        local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
-        local text = string.format(
-          "Hunk %d/%d: %s lines %d-%d",
-          i,
-          #diff_state.hunks,
-          hunk_type,
-          hunk.new_start,
-          hunk.new_start + hunk.new_count - 1
-        )
+      local line_count = vim.api.nvim_buf_line_count(buf)
 
-        table.insert(quickfix_items, {
-          filename = bufname,
-          lnum = hunk.new_start,
-          col = 1,
-          text = text,
-          type = "I",
-        })
-      end
-    end
-  else
-    -- Get hunks from all buffers with diff state
-    for buffer_id, diff_state in pairs(buffer_diff_state) do
-      if diff_state.hunks and vim.api.nvim_buf_is_valid(buffer_id) then
-        local bufname = vim.api.nvim_buf_get_name(buffer_id)
-        for i, hunk in ipairs(diff_state.hunks) do
+      for i, hunk in ipairs(diff_state.hunks) do
+        if hunk.new_start > 0 and hunk.new_start <= line_count then
           local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
           local text = string.format(
-            "Hunk %d/%d: %s lines %d-%d",
+            "Edit %d/%d: %s lines %d-%d",
             i,
             #diff_state.hunks,
             hunk_type,
@@ -270,6 +247,35 @@ function M.get_all_hunks_for_quickfix(buf)
             text = text,
             type = "I",
           })
+        end
+      end
+    end
+  else
+    for buffer_id, diff_state in pairs(buffer_diff_state) do
+      if diff_state.hunks and vim.api.nvim_buf_is_valid(buffer_id) then
+        local bufname = vim.api.nvim_buf_get_name(buffer_id)
+        local line_count = vim.api.nvim_buf_line_count(buffer_id)
+
+        for i, hunk in ipairs(diff_state.hunks) do
+          if hunk.new_start > 0 and hunk.new_start <= line_count then
+            local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
+            local text = string.format(
+              "Edit %d/%d: %s lines %d-%d",
+              i,
+              #diff_state.hunks,
+              hunk_type,
+              hunk.new_start,
+              hunk.new_start + hunk.new_count - 1
+            )
+
+            table.insert(quickfix_items, {
+              filename = bufname,
+              lnum = hunk.new_start,
+              col = 1,
+              text = text,
+              type = "I",
+            })
+          end
         end
       end
     end
