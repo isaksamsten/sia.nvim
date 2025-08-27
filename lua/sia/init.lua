@@ -81,6 +81,28 @@ function M.prev_hunk(opts)
   end
 end
 
+--- Populate quickfix list with all diff hunks
+--- @param opts { buf: number? }? Options table with optional buffer number
+function M.show_hunks(opts)
+  opts = opts or {}
+  local buf = opts.buf
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  local diff = require("sia.diff")
+  local quickfix_items = diff.get_all_hunks_for_quickfix(buf)
+
+  if #quickfix_items == 0 then
+    local message = buf and "No diff hunks in current buffer" or "No diff hunks found"
+    vim.api.nvim_echo({ { "Sia: " .. message, "WarningMsg" } }, false, {})
+    return
+  end
+
+  vim.fn.setqflist(quickfix_items, "r")
+  vim.cmd("copen")
+end
+
 function M.remove_message()
   local chat = ChatStrategy.by_buf()
   if chat then

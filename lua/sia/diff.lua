@@ -216,4 +216,66 @@ function M.get_hunk_count(buf)
   return #diff_state.hunks
 end
 
+--- Get all diff hunks for quickfix list
+--- @param buf number? Buffer handle (if nil, gets hunks from all buffers)
+--- @return table[] quickfix_items List of quickfix items for all hunks
+function M.get_all_hunks_for_quickfix(buf)
+  local quickfix_items = {}
+
+  if buf then
+    -- Get hunks for specific buffer
+    local diff_state = buffer_diff_state[buf]
+    if diff_state and diff_state.hunks then
+      local bufname = vim.api.nvim_buf_get_name(buf)
+      for i, hunk in ipairs(diff_state.hunks) do
+        local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
+        local text = string.format(
+          "Hunk %d/%d: %s lines %d-%d",
+          i,
+          #diff_state.hunks,
+          hunk_type,
+          hunk.new_start,
+          hunk.new_start + hunk.new_count - 1
+        )
+
+        table.insert(quickfix_items, {
+          filename = bufname,
+          lnum = hunk.new_start,
+          col = 1,
+          text = text,
+          type = "I",
+        })
+      end
+    end
+  else
+    -- Get hunks from all buffers with diff state
+    for buffer_id, diff_state in pairs(buffer_diff_state) do
+      if diff_state.hunks and vim.api.nvim_buf_is_valid(buffer_id) then
+        local bufname = vim.api.nvim_buf_get_name(buffer_id)
+        for i, hunk in ipairs(diff_state.hunks) do
+          local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
+          local text = string.format(
+            "Hunk %d/%d: %s lines %d-%d",
+            i,
+            #diff_state.hunks,
+            hunk_type,
+            hunk.new_start,
+            hunk.new_start + hunk.new_count - 1
+          )
+
+          table.insert(quickfix_items, {
+            filename = bufname,
+            lnum = hunk.new_start,
+            col = 1,
+            text = text,
+            type = "I",
+          })
+        end
+      end
+    end
+  end
+
+  return quickfix_items
+end
+
 return M
