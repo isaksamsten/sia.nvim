@@ -549,6 +549,7 @@ function Conversation:execute_tool(name, arguments, opts)
   if self.tool_fn[name] then
     local ok, err = pcall(self.tool_fn[name].action, arguments, self, opts.callback, opts.cancellable)
     if not ok then
+      print(vim.inspect(err))
       opts.callback({ content = { "Tool execution failed. " }, cancel = true })
     end
     return
