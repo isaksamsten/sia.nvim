@@ -464,7 +464,7 @@ function ChatStrategy:on_start(job)
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
       self.cancellable.is_cancelled = true
-      vim.fn.jobstop(job)
+      -- vim.fn.jobstop(job)
     end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
