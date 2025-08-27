@@ -175,7 +175,7 @@ Requirements:
           return { "above", "start" }
         end
       end,
-      message = { "Generating documentation...", "SiaProgress" },
+      message = { "Generating documentation...", "Comment" },
     },
     cursor = "end", -- start or end
   }
