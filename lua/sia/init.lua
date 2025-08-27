@@ -146,7 +146,13 @@ function M.show_messages(opts)
       --- @param idx integer
     }, function(item, idx)
       if item and mappings then
-        local content = item:get_content()
+        local content
+        if item.tool_calls then
+          content = vim.inspect(item.tool_calls)
+        else
+          content = item:get_content()
+        end
+
         if content then
           local buf_name = chat.name .. " " .. item:get_description()
           local buf = vim.fn.bufnr(buf_name)
@@ -180,21 +186,21 @@ function M.show_messages(opts)
             vim.bo[buf].buftype = "acwrite"
             vim.bo[buf].modified = false
             vim.api.nvim_win_set_buf(0, buf)
-            if opts.edit then
-              vim.bo[buf].modifiable = chat.conversation:is_instruction_editable(mappings[idx])
-              vim.api.nvim_create_autocmd("BufWriteCmd", {
-                buffer = buf,
-                callback = function()
-                  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                  local updated = chat.conversation:update_instruction(mappings[idx], lines)
-                  if updated then
-                    vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
-                  end
-                  vim.bo[buf].modified = false
-                  chat:redraw()
-                end,
-              })
-            end
+            -- if opts.edit then
+            --   vim.bo[buf].modifiable = chat.conversation:is_instruction_editable(mappings[idx])
+            --   vim.api.nvim_create_autocmd("BufWriteCmd", {
+            --     buffer = buf,
+            --     callback = function()
+            --       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            --       local updated = chat.conversation:update_instruction(mappings[idx], lines)
+            --       if updated then
+            --         vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
+            --       end
+            --       vim.bo[buf].modified = false
+            --       chat:redraw()
+            --     end,
+            --   })
+            -- end
           end
         end
       end

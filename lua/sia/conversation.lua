@@ -262,7 +262,7 @@ end
 function Message:get_description()
   if self.role == "tool" then
     local f = self._tool_call["function"]
-    return "Calling the tool " .. f.name
+    return self.role .. ": result from " .. f.name
   end
   local description = self.description
   --- @cast description string?
@@ -272,9 +272,13 @@ function Message:get_description()
 
   local content = self:get_content()
   if content then
-    return self.role .. " " .. string.sub(content, 1, 40)
+    return self.role .. ": " .. string.sub(content, 1, 40)
   elseif self.tool_calls then
-    return self.role .. " calling tools..."
+    local name = "unknown"
+    if self.tool_calls[1] and self.tool_calls[1]["function"] then
+      name = self.tool_calls[1]["function"].name
+    end
+    return self.role .. ": calling " .. name
   end
   return self.role
 end
