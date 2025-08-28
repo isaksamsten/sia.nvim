@@ -126,12 +126,7 @@ to add them again.
       hide = true,
       description = "List the files in the current git repository.",
       content = function()
-        if require("sia.utils").is_git_repo() then
-          return string.format(
-            "Below is the current directory structure as reported by Git (it skips files in .gitignore).\nThis is only a snapshot\n%s",
-            vim.fn.system("git ls-tree -r --name-only HEAD")
-          )
-        elseif vim.fn.executable("fd") == 1 then
+        if vim.fn.executable("fd") == 1 then
           return string.format(
             "Below is the current directory structure as reported by fd (it skips files in .gitignore).\nThis is only a snapshot\n%s",
             vim.fn.system("fd --type f")

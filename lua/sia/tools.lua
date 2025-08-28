@@ -2,6 +2,16 @@ local M = {}
 local utils = require("sia.utils")
 local diff = require("sia.diff")
 
+local function in_root(path, root)
+  local abs = vim.fn.fnamemodify(path, ":p")
+  root = vim.fn.fnamemodify(root, ":p")
+  return vim.startswith(abs, root)
+end
+
+local function rel(path)
+  return vim.fn.fnamemodify(path, ":.")
+end
+
 ---@class SiaNewToolOpts
 ---@field name string
 ---@field description string
@@ -269,10 +279,10 @@ INTEGRATION WITH OTHER TOOLS:
         if symbols then
           for _, symbol in ipairs(symbols) do
             local uri = vim.uri_to_fname(symbol.location.uri)
-            local in_root = vim.startswith(uri, client.root_dir or vim.fn.getcwd())
+            local is_in_root = vim.startswith(uri, client.root_dir or vim.fn.getcwd())
 
             -- Apply filters
-            if project_only and not in_root then
+            if project_only and not is_in_root then
               goto continue
             end
 
@@ -287,7 +297,7 @@ INTEGRATION WITH OTHER TOOLS:
 
             table.insert(all_found, {
               symbol = symbol,
-              in_root = in_root,
+              in_root = is_in_root,
               query = query,
               client_name = client.name,
               key = symbol_key,
@@ -1776,8 +1786,8 @@ For small, targeted changes, prefer the edit tool instead.]],
     return
   end
 
-  local initial_code = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  local file_exists = initial_code ~= ""
+  local initial_code = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local file_exists = #initial_code > 0 and initial_code[1] ~= ""
 
   local lines = vim.split(args.content, "\n", { plain = true })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -1972,6 +1982,191 @@ rather than multiple messages with a single call each.
     else
       callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
     end
+  end
+end)
+
+-- File operations: rename_file and remove_file
+M.rename_file = M.new_tool({
+  name = "rename_file",
+  message = function(args)
+    return string.format("Renaming %s → %s...", args.src or "", args.dest or "")
+  end,
+  description = "Rename/move a file.",
+  system_prompt = [[Rename or move a file within the project.
+
+Notes:
+- Currently supports files. Renaming directories is not supported.
+- Updates any loaded buffer pointing at src to the new destination.]],
+  parameters = {
+    src = { type = "string", description = "Source file path" },
+    dest = { type = "string", description = "Destination file path" },
+  },
+  required = { "src", "dest" },
+  confirm = function(args)
+    local cfg = require("sia.config").options.defaults.file_ops or {}
+    local overwrite = cfg.overwrite_on_rename and "on" or "off"
+    return string.format("Rename %s → %s (overwrite: %s)", args.src, args.dest, overwrite)
+  end,
+}, function(args, _, callback)
+  local config = require("sia.config").options.defaults.file_ops or {}
+  local create_dirs = config.create_dirs_on_rename ~= false
+  local restrict_root = config.restrict_to_project_root ~= false
+  local overwrite = config.overwrite_on_rename == true
+
+  if not args.src or not args.dest then
+    callback({ content = { "Error: src and dest are required" } })
+    return
+  end
+
+  local src_abs = vim.fn.fnamemodify(args.src, ":p")
+  local dest_abs = vim.fn.fnamemodify(args.dest, ":p")
+  local root = vim.fs.root(src_abs, { ".git" })
+
+  if restrict_root then
+    if not in_root(src_abs, root) or not in_root(dest_abs, root) then
+      callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
+      return
+    end
+  end
+
+  local stat = vim.loop.fs_stat(src_abs)
+  if not stat then
+    callback({ content = { string.format("Error: Source not found: %s", args.src) } })
+    return
+  end
+  if stat.type ~= "file" then
+    callback({ content = { "Error: Only file renames are supported" } })
+    return
+  end
+
+  local dest_stat = vim.loop.fs_stat(dest_abs)
+  if dest_stat and not overwrite then
+    callback({ content = { string.format("Error: Destination exists and overwriting is disabled: %s", args.dest) } })
+    return
+  end
+
+  if create_dirs then
+    local parent = vim.fn.fnamemodify(dest_abs, ":h")
+    if parent ~= "" then
+      vim.fn.mkdir(parent, "p")
+    end
+  end
+
+  -- If destination exists and overwrite requested, try removing it (file only)
+  if dest_stat and overwrite then
+    pcall(vim.fn.delete, dest_abs)
+  end
+  local ok, err = pcall(vim.loop.fs_rename, src_abs, dest_abs)
+  if not ok then
+    callback({ content = { string.format("Error: Failed to rename: %s", err or "unknown error") } })
+    return
+  end
+
+  -- Update buffer name if loaded
+  local buf = vim.fn.bufnr(src_abs)
+  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
+    -- Write any pending changes before rename (best effort)
+    vim.api.nvim_buf_call(buf, function()
+      pcall(vim.cmd, "noa silent write")
+    end)
+    vim.api.nvim_buf_set_name(buf, dest_abs)
+    vim.api.nvim_buf_call(buf, function()
+      -- Reload to ensure no stale state
+      pcall(vim.cmd, "noa e!")
+    end)
+  end
+
+  callback({ content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) } })
+end)
+
+M.remove_file = M.new_tool({
+  name = "remove_file",
+  message = function(args)
+    return string.format("Removing %s...", args.path or "")
+  end,
+  description = "Remove a file. By default moves to trash; can be permanent based on user config.",
+  system_prompt = [[Remove a file from the project.]],
+  parameters = {
+    path = { type = "string", description = "Path to remove" },
+  },
+  required = { "path" },
+  confirm = function(args)
+    local cfg = require("sia.config").options.defaults.file_ops or {}
+    if cfg.trash_by_default ~= false then
+      return string.format("Move to trash: %s", args.path)
+    else
+      return string.format("Permanently delete: %s", args.path)
+    end
+  end,
+}, function(args, _, callback)
+  local cfg = require("sia.config").options.defaults.file_ops or {}
+  local trash = cfg.trash ~= false
+  local restrict_root = cfg.restrict_to_project_root ~= false
+  local allow_recursive = cfg.allow_recursive_remove == true
+  local trash_dir_name = cfg.trash_dir or ".sia_trash"
+
+  if not args.path then
+    callback({ content = { "Error: path is required" } })
+    return
+  end
+
+  local target_abs = vim.fn.fnamemodify(args.path, ":p")
+  local root = vim.fs.root(target_abs, { ".git" })
+  if restrict_root and not in_root(target_abs, root) then
+    callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
+    return
+  end
+
+  local st = vim.loop.fs_stat(target_abs)
+  if not st then
+    callback({ content = { string.format("Error: Path not found: %s", args.path) } })
+    return
+  end
+  if st.type == "directory" and not allow_recursive then
+    callback({ content = { "Error: Directory removal is disabled by config" } })
+    return
+  end
+
+  local function delete_buffers_under(path_abs)
+    local abs = vim.fn.fnamemodify(path_abs, ":p")
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(b) then
+        local name = vim.api.nvim_buf_get_name(b)
+        if name ~= "" then
+          local nabs = vim.fn.fnamemodify(name, ":p")
+          if nabs == abs or vim.startswith(nabs, abs .. "/") then
+            pcall(vim.api.nvim_buf_delete, b, { force = true })
+          end
+        end
+      end
+    end
+  end
+
+  if trash then
+    local timestamp = os.date("%Y%m%d-%H%M%S")
+    local trash_base = vim.fs.joinpath(root, trash_dir_name, timestamp)
+    local relative_from_root = vim.fn.fnamemodify(target_abs, ":p"):gsub("^" .. vim.pesc(root) .. "/?", "")
+    local trash_dest = vim.fs.joinpath(trash_base, relative_from_root)
+    vim.fn.mkdir(vim.fn.fnamemodify(trash_dest, ":h"), "p")
+    local ok, err = pcall(vim.loop.fs_rename, target_abs, trash_dest)
+    if not ok then
+      callback({ content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") } })
+      return
+    end
+
+    delete_buffers_under(target_abs)
+    callback({ content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) } })
+    return
+  else
+    local flags = st.type == "directory" and "rf" or "f"
+    local ok = vim.fn.delete(target_abs, flags)
+    if ok ~= 0 then
+      callback({ content = { string.format("Error: Failed to delete %s", args.path) } })
+      return
+    end
+    delete_buffers_under(target_abs)
+    callback({ content = { string.format("Permanently deleted %s", rel(target_abs)) } })
+    return
   end
 end)
 

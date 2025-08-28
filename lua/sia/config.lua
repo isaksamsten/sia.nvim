@@ -82,6 +82,7 @@ local providers = require("sia.provider")
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
+--- @field file_ops table
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -172,6 +173,7 @@ local defaults = {
     ["openrouter/glm-4.5"] = { "openrouter", "z-ai/glm-4.5" },
     ["openrouter/quen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
     ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
+    ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
   },
   instructions = {},
   --- @type sia.config.Defaults
@@ -203,6 +205,14 @@ local defaults = {
     replace = {
       timeout = 300,
     },
+    file_ops = {
+      trash = true,
+      create_dirs_on_rename = true,
+      overwrite_on_rename = false,
+      trash_dir = ".sia_trash",
+      restrict_to_project_root = true,
+      allow_recursive_remove = false,
+    },
     tools = {
       enable = true,
       choices = {
@@ -222,6 +232,8 @@ local defaults = {
         dispatch_agent = require("sia.tools").dispatch_agent,
         compact = require("sia.tools").compact_conversation,
         workspace = require("sia.tools").workspace,
+        rename_file = require("sia.tools").rename_file,
+        remove_file = require("sia.tools").remove_file,
       },
     },
     actions = {
@@ -270,6 +282,8 @@ local defaults = {
           "get_diagnostics",
           "dispatch_agent",
           "compact",
+          "rename_file",
+          "remove_file",
         },
       },
     },
@@ -300,6 +314,8 @@ local defaults = {
         "compact",
         "git_commit",
         "git_diff",
+        "rename_file",
+        "remove_file",
       },
     },
     commit = require("sia.actions").commit(),
