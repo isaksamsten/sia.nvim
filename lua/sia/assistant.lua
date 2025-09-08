@@ -17,7 +17,8 @@ local function call_provider(query, opts)
     model = config.options.models[query.model or config.options.defaults.model]
     provider = config.options.providers[model[1]]
   else
-    model = { nil, query.model.name, function_calling = query.model.function_calling }
+    model =
+      { nil, query.model.name, temperature = query.model.temperature, function_calling = query.model.function_calling }
     provider = query.model.provider
   end
 
@@ -39,6 +40,10 @@ local function call_provider(query, opts)
 
   if not model.reasoning_effort then
     data.temperature = query.temperature or config.options.defaults.temperature
+  end
+
+  if model.temperature then
+    data.temperature = model.temperature
   end
 
   if model.max_tokens then

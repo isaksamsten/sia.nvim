@@ -109,6 +109,12 @@ local defaults = {
     openrouter = providers.openrouter,
   },
   models = {
+    ["openai/gpt-5"] = {
+      "openai",
+      "gpt-5",
+      temperature = 1,
+      cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 },
+    },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
     ["openai/gpt-4.1-mini"] = {
       "openai",
