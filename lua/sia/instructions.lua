@@ -57,7 +57,7 @@ function M.current_context(global)
         if ctx.mode == "n" then
           return string.format("Conversation initialized from %s", utils.get_filename(ctx.buf, ":p"))
         end
-        if ctx.pos[2] == -1 then
+        if ctx.pos == nil or ctx.pos[2] == -1 then
           return string.format("%s", utils.get_filename(ctx.buf, ":p"))
         end
         return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
@@ -69,9 +69,12 @@ function M.current_context(global)
         end
         local filename = utils.get_filename(ctx.buf, ":p")
         if ctx.mode == "v" then
-          local start_line, end_line = ctx.pos[1], ctx.pos[2]
+          local start_line, end_line = 0, -1
+          if ctx.pos then
+            start_line, end_line = ctx.pos[1], ctx.pos[2]
+          end
           local instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
-          if ctx.pos[2] == -1 then
+          if end_line == -1 then
             start_line = 1
             end_line = vim.api.nvim_buf_line_count(ctx.buf)
             instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
