@@ -305,6 +305,7 @@ function Strategy:execute_tools(opts)
             })
           else
             local error_message = { "Could not parse tool arguments" }
+            tool.tool_call["function"].arguments = "{}"
             on_tool_finished(tool.index, tool.tool_call, { content = error_message })
           end
         else
