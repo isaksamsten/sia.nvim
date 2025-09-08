@@ -80,8 +80,15 @@ M.new_tool = function(opts, execute)
         else
           text = opts.confirm
         end
+
+        if text == nil then
+          text = "Execute " .. (opts.name or "tool")
+        end
+
+        text = text:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
+
         vim.ui.input({
-          prompt = string.format("%s\nProceed and send to AI? [Y/n/a] ([Y]es, [n]o or Esc, [a]lways): ", text),
+          prompt = text .. " - Proceed? (Y/n/[a]lways): ",
         }, function(resp)
           if resp == nil then
             callback({
