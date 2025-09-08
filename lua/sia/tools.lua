@@ -2038,25 +2038,45 @@ Notes:
     end
   end
 
-  local buf = vim.fn.bufnr(src_abs)
-  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write!")
-    end)
+  -- Rename the file
+  local success, _, err_code = vim.loop.fs_rename(src_abs, dest_abs)
+
+  if err_code == "EXDEV" then
+    success = vim.loop.fs_copyfile(src_abs, dest_abs)
+    if success then
+      success = pcall(vim.fn.delete, src_abs)
+    end
+    if not success then
+      pcall(vim.fn.delete, dest_abs)
+    end
   end
 
-  local ok, err = pcall(vim.loop.fs_rename, src_abs, dest_abs)
-  if not ok then
-    callback({ content = { string.format("Error: Failed to rename: %s", err or "unknown error") } })
+  if not success then
+    callback({ content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") } })
     return
   end
 
-  -- Update buffer name if loaded
-  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
-    vim.api.nvim_buf_set_name(buf, dest_abs)
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "silent doautocmd filetypedetect BufRead")
+  -- Rename in all loaded buffers (simplified for single file renames)
+  for _, buf_id in ipairs(vim.api.nvim_list_bufs()) do
+    if not (vim.api.nvim_buf_is_loaded(buf_id) and vim.bo[buf_id].buftype == "") then
+      goto continue
+    end
+
+    -- Check if this buffer matches the renamed file
+    local cur_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf_id), ":p")
+    if cur_name ~= src_abs then
+      goto continue
+    end
+
+    -- Rename buffer using relative form (for nicer :buffers output)
+    vim.api.nvim_buf_set_name(buf_id, vim.fn.fnamemodify(dest_abs, ":."))
+
+    -- Force write to avoid the 'overwrite existing file' error message
+    vim.api.nvim_buf_call(buf_id, function()
+      pcall(vim.cmd, "silent! write! | edit")
     end)
+
+    ::continue::
   end
 
   callback({ content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) } })
