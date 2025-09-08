@@ -172,6 +172,7 @@ local defaults = {
     ["openrouter/quen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
     ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
     ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
+    ["openrouter/grok-code-fast-1"] = { "openrouter", "x-ai/grok-code-fast-1" },
   },
   instructions = {},
   --- @type sia.config.Defaults
