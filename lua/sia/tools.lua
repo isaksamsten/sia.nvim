@@ -948,7 +948,7 @@ example: // ... existing code ...  ]],
         local file = vim.fs.basename(args.target_file)
         if file == "AGENTS.md" then
           vim.api.nvim_buf_call(buf, function()
-            vim.cmd("noa silent write")
+            pcall(vim.cmd, "noa silent write!")
           end)
         end
 
@@ -1785,7 +1785,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   local file = vim.fs.basename(args.path)
   if file == "AGENTS.md" then
     vim.api.nvim_buf_call(buf, function()
-      vim.cmd("noa silent write")
+      pcall(vim.cmd, "noa silent write!")
     end)
   end
 
@@ -1932,7 +1932,7 @@ rather than multiple messages with a single call each.
 
     vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
     vim.api.nvim_buf_call(buf, function()
-      vim.cmd("noa silent write")
+      pcall(vim.cmd, "noa silent write!")
     end)
     if opts.choice == 1 or opts.choice == 2 then
       diff.highlight_diff_changes(buf, old_content)
@@ -2049,7 +2049,6 @@ Notes:
   -- Update buffer name if loaded
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
     vim.api.nvim_buf_set_name(buf, dest_abs)
-    vim.bo[buf].modified = false
     vim.api.nvim_buf_call(buf, function()
       pcall(vim.cmd, "silent doautocmd filetypedetect BufRead")
     end)
