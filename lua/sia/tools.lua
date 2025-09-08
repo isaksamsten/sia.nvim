@@ -319,15 +319,6 @@ INTEGRATION WITH OTHER TOOLS:
     end)
   end, 50)
 
-  if not success then
-    callback({
-      content = {
-        "Warning: Some LSP requests timed out",
-        "Results may be incomplete",
-      },
-    })
-  end
-
   if #all_found == 0 then
     callback({
       content = {
@@ -1985,7 +1976,6 @@ rather than multiple messages with a single call each.
   end
 end)
 
--- File operations: rename_file and remove_file
 M.rename_file = M.new_tool({
   name = "rename_file",
   message = function(args)
@@ -1995,23 +1985,19 @@ M.rename_file = M.new_tool({
   system_prompt = [[Rename or move a file within the project.
 
 Notes:
-- Currently supports files. Renaming directories is not supported.
-- Updates any loaded buffer pointing at src to the new destination.]],
+- Only supports renaming files.]],
   parameters = {
     src = { type = "string", description = "Source file path" },
     dest = { type = "string", description = "Destination file path" },
   },
   required = { "src", "dest" },
   confirm = function(args)
-    local cfg = require("sia.config").options.defaults.file_ops or {}
-    local overwrite = cfg.overwrite_on_rename and "on" or "off"
-    return string.format("Rename %s → %s (overwrite: %s)", args.src, args.dest, overwrite)
+    return string.format("Rename %s → %s", args.src, args.dest)
   end,
 }, function(args, _, callback)
   local config = require("sia.config").options.defaults.file_ops or {}
   local create_dirs = config.create_dirs_on_rename ~= false
   local restrict_root = config.restrict_to_project_root ~= false
-  local overwrite = config.overwrite_on_rename == true
 
   if not args.src or not args.dest then
     callback({ content = { "Error: src and dest are required" } })
@@ -2040,8 +2026,8 @@ Notes:
   end
 
   local dest_stat = vim.loop.fs_stat(dest_abs)
-  if dest_stat and not overwrite then
-    callback({ content = { string.format("Error: Destination exists and overwriting is disabled: %s", args.dest) } })
+  if dest_stat then
+    callback({ content = { string.format("Error: Destination exists and overwriting is not allowed: %s", args.dest) } })
     return
   end
 
@@ -2052,10 +2038,13 @@ Notes:
     end
   end
 
-  -- If destination exists and overwrite requested, try removing it (file only)
-  if dest_stat and overwrite then
-    pcall(vim.fn.delete, dest_abs)
+  local buf = vim.fn.bufnr(src_abs)
+  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
+    vim.api.nvim_buf_call(buf, function()
+      pcall(vim.cmd, "noa silent write!")
+    end)
   end
+
   local ok, err = pcall(vim.loop.fs_rename, src_abs, dest_abs)
   if not ok then
     callback({ content = { string.format("Error: Failed to rename: %s", err or "unknown error") } })
@@ -2063,16 +2052,11 @@ Notes:
   end
 
   -- Update buffer name if loaded
-  local buf = vim.fn.bufnr(src_abs)
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
-    -- Write any pending changes before rename (best effort)
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write")
-    end)
     vim.api.nvim_buf_set_name(buf, dest_abs)
+    vim.bo[buf].modified = false
     vim.api.nvim_buf_call(buf, function()
-      -- Reload to ensure no stale state
-      pcall(vim.cmd, "noa e!")
+      pcall(vim.cmd, "silent doautocmd filetypedetect BufRead")
     end)
   end
 
@@ -2084,7 +2068,7 @@ M.remove_file = M.new_tool({
   message = function(args)
     return string.format("Removing %s...", args.path or "")
   end,
-  description = "Remove a file. By default moves to trash; can be permanent based on user config.",
+  description = "Remove a file.",
   system_prompt = [[Remove a file from the project.]],
   parameters = {
     path = { type = "string", description = "Path to remove" },
@@ -2092,7 +2076,7 @@ M.remove_file = M.new_tool({
   required = { "path" },
   confirm = function(args)
     local cfg = require("sia.config").options.defaults.file_ops or {}
-    if cfg.trash_by_default ~= false then
+    if cfg.trash ~= false then
       return string.format("Move to trash: %s", args.path)
     else
       return string.format("Permanently delete: %s", args.path)
@@ -2102,8 +2086,7 @@ M.remove_file = M.new_tool({
   local cfg = require("sia.config").options.defaults.file_ops or {}
   local trash = cfg.trash ~= false
   local restrict_root = cfg.restrict_to_project_root ~= false
-  local allow_recursive = cfg.allow_recursive_remove == true
-  local trash_dir_name = cfg.trash_dir or ".sia_trash"
+  local trash_dir_name = ".sia_trash"
 
   if not args.path then
     callback({ content = { "Error: path is required" } })
@@ -2122,7 +2105,7 @@ M.remove_file = M.new_tool({
     callback({ content = { string.format("Error: Path not found: %s", args.path) } })
     return
   end
-  if st.type == "directory" and not allow_recursive then
+  if st.type == "directory" then
     callback({ content = { "Error: Directory removal is disabled by config" } })
     return
   end
@@ -2158,8 +2141,7 @@ M.remove_file = M.new_tool({
     callback({ content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) } })
     return
   else
-    local flags = st.type == "directory" and "rf" or "f"
-    local ok = vim.fn.delete(target_abs, flags)
+    local ok = vim.fn.delete(target_abs, "f")
     if ok ~= 0 then
       callback({ content = { string.format("Error: Failed to delete %s", args.path) } })
       return

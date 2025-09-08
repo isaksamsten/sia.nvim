@@ -80,7 +80,7 @@ local providers = require("sia.provider")
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
---- @field file_ops table
+--- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -204,10 +204,7 @@ local defaults = {
     file_ops = {
       trash = true,
       create_dirs_on_rename = true,
-      overwrite_on_rename = false,
-      trash_dir = ".sia_trash",
       restrict_to_project_root = true,
-      allow_recursive_remove = false,
     },
     tools = {
       enable = true,
