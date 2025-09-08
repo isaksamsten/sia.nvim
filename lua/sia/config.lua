@@ -17,8 +17,6 @@ local providers = require("sia.provider")
 
 --- @class sia.config.Chat
 --- @field cmd string?
---- @field block_action (string|sia.BlockAction)?
---- @field automatic_block_action boolean?
 --- @field wo table<string, any>?
 
 --- @class sia.config.Hidden
@@ -189,8 +187,6 @@ local defaults = {
     chat = {
       cmd = "vnew",
       wo = { wrap = true },
-      block_action = "search_replace",
-      automatic_block_action = false,
     },
     hidden = {
       messages = {},
@@ -260,9 +256,6 @@ local defaults = {
       chat = {
         mode = "chat",
         temperature = 0.1,
-        chat = {
-          block_action = "verbatim",
-        },
         system = {
           "default_system",
           "directory_structure",
@@ -292,9 +285,6 @@ local defaults = {
     agent = {
       mode = "chat",
       temperature = 0.1,
-      chat = {
-        block_action = "verbatim",
-      },
       system = {
         "default_system",
         "directory_structure",
