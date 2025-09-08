@@ -287,6 +287,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
+--- @field auto_confirm_tools table<string, boolean>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 local Conversation = {}
 
@@ -322,6 +323,7 @@ function Conversation:new(action, context)
   obj.system_messages = {}
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
+  obj.auto_confirm_tools = {}
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
@@ -549,7 +551,7 @@ function Conversation:execute_tool(name, arguments, opts)
     local ok, err = pcall(self.tool_fn[name].action, arguments, self, opts.callback, opts.cancellable)
     if not ok then
       print(vim.inspect(err))
-      opts.callback({ content = { "Tool execution failed. " }, cancel = true })
+      opts.callback({ content = { "Tool execution failed. " } })
     end
     return
   else

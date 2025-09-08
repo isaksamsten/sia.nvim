@@ -18,14 +18,11 @@ end
 ---@field confirm (string|fun(args:table):string)?
 ---@field select { prompt: (string|fun(args:table):string)?, choices: string[]}?
 
---- @type table<string, boolean?>
-local auto_confirm = {}
-
 ---@param opts SiaNewToolOpts
 ---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: {choice: integer?, cancellable: sia.Cancellable?}?)
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
-  local auto_apply = function(args)
+  local auto_apply = function(args, conversation)
     --- Ensure that we auto apply incorrect tool calls
     if vim.iter(opts.required):any(function(required)
       return args[required] == nil
@@ -33,7 +30,7 @@ M.new_tool = function(opts, execute)
       return 0
     end
 
-    if auto_confirm[opts.name] then
+    if conversation.auto_confirm_tools[opts.name] then
       return 1
     else
       return (opts.auto_apply and opts.auto_apply(args)) or nil
@@ -58,18 +55,19 @@ M.new_tool = function(opts, execute)
       -- Read-only tools are only parallel if they are auto applied
       -- or without confirmation
       if opts.confirm ~= nil or opts.select ~= nil then
-        return auto_apply(args) ~= nil
+        return auto_apply(args, conversation) ~= nil
       end
       return true
     end,
     description = opts.description,
     required = opts.required,
     execute = function(args, conversation, callback, cancellable)
+      local should_confirm = opts.confirm ~= nil
       if conversation.ignore_tool_confirm then
-        opts.confirm = nil
+        should_confirm = false
       end
-      if opts.confirm ~= nil then
-        if auto_apply(args) then
+      if should_confirm then
+        if auto_apply(args, conversation) then
           execute(args, conversation, callback, { cancellable = cancellable })
           return
         end
@@ -99,7 +97,7 @@ M.new_tool = function(opts, execute)
 
           local response = resp:lower()
           if response == "a" or response == "always" then
-            auto_confirm[opts.name] = true
+            conversation.auto_confirm_tools[opts.name] = true
             execute(args, conversation, callback, { cancellable = cancellable })
           elseif response == "n" or response == "no" then
             callback({ content = { string.format("User declined to execute %s.", opts.name) } })
@@ -108,7 +106,7 @@ M.new_tool = function(opts, execute)
           end
         end)
       elseif opts.select then
-        local auto_applied_choice = auto_apply(args)
+        local auto_applied_choice = auto_apply(args, conversation)
         if auto_applied_choice then
           execute(args, conversation, callback, { choice = auto_applied_choice, cancellable = cancellable })
         else
