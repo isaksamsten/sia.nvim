@@ -2,12 +2,6 @@ local M = {}
 local utils = require("sia.utils")
 local diff = require("sia.diff")
 
-local function in_root(path, root)
-  local abs = vim.fn.fnamemodify(path, ":p")
-  root = vim.fn.fnamemodify(root, ":p")
-  return vim.startswith(abs, root)
-end
-
 local function rel(path)
   return vim.fn.fnamemodify(path, ":.")
 end
@@ -279,7 +273,8 @@ INTEGRATION WITH OTHER TOOLS:
         if symbols then
           for _, symbol in ipairs(symbols) do
             local uri = vim.uri_to_fname(symbol.location.uri)
-            local is_in_root = vim.startswith(uri, client.root_dir or vim.fn.getcwd())
+            local project_root = utils.detect_project_root(uri)
+            local is_in_root = utils.path_in_root(uri, project_root)
 
             -- Apply filters
             if project_only and not is_in_root then
@@ -599,7 +594,7 @@ M.read = M.new_tool({
   local limit = args.limit or 2000
   local max_line_length = 2000
 
-  local buf = require("sia.utils").ensure_file_is_loaded(args.path)
+  local buf = utils.ensure_file_is_loaded(args.path)
   local total_lines = vim.api.nvim_buf_line_count(buf)
 
   -- Validate offset is within bounds
@@ -918,12 +913,12 @@ example: // ... existing code ...  ]],
     return
   end
 
-  local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file)
   if not buf then
     callback({ content = { "Cannot load " .. args.target_file } })
     return
   end
-  local initial_code = require("sia.utils").get_code(1, -1, { buf = buf, show_line_numbers = false })
+  local initial_code = utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
 
   local assistant = require("sia.assistant")
   assistant.execute_query({
@@ -996,7 +991,7 @@ M.get_diagnostics = M.new_tool({
     callback({ content = { "Error: File cannot be found or is not readable" } })
     return
   end
-  local buf = require("sia.utils").ensure_file_is_loaded(args.file)
+  local buf = utils.ensure_file_is_loaded(args.file)
   if not buf then
     callback({ content = { "Error: Cannot load file into buffer" } })
     return
@@ -1321,7 +1316,7 @@ Do NOT use this to read or examine code.]],
     return
   end
 
-  local buf = require("sia.utils").ensure_file_is_loaded(args.file)
+  local buf = utils.ensure_file_is_loaded(args.file)
   if not buf then
     callback({ content = { "Error: Cannot load file into buffer" } })
     return
@@ -1771,7 +1766,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     return
   end
 
-  local buf = require("sia.utils").ensure_file_is_loaded(args.path)
+  local buf = utils.ensure_file_is_loaded(args.path)
   if not buf then
     callback({ content = { "Error: Cannot create buffer for " .. args.path } })
     return
@@ -1905,7 +1900,7 @@ rather than multiple messages with a single call each.
     return
   end
 
-  local buf = require("sia.utils").ensure_file_is_loaded(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file)
   if not buf then
     callback({ content = { "Cannot load " .. args.target_file } })
     return
@@ -2006,10 +2001,10 @@ Notes:
 
   local src_abs = vim.fn.fnamemodify(args.src, ":p")
   local dest_abs = vim.fn.fnamemodify(args.dest, ":p")
-  local root = vim.fs.root(src_abs, { ".git" })
+  local root = utils.detect_project_root(src_abs)
 
   if restrict_root then
-    if not in_root(src_abs, root) or not in_root(dest_abs, root) then
+    if not utils.path_in_root(src_abs, root) or not utils.path_in_root(dest_abs, root) then
       callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
       return
     end
@@ -2094,8 +2089,8 @@ M.remove_file = M.new_tool({
   end
 
   local target_abs = vim.fn.fnamemodify(args.path, ":p")
-  local root = vim.fs.root(target_abs, { ".git" })
-  if restrict_root and not in_root(target_abs, root) then
+  local root = utils.detect_project_root(target_abs)
+  if restrict_root and not utils.path_in_root(target_abs, root) then
     callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
     return
   end

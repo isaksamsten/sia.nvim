@@ -604,4 +604,64 @@ function M.urlencode(str)
   end
   return str
 end
+
+-- Root detection helpers
+local default_markers = {
+  ".git",
+  ".hg",
+  ".svn",
+  "go.mod",
+  "Cargo.toml",
+  "package.json",
+  "pyproject.toml",
+  "Pipfile",
+  "poetry.lock",
+  "requirements.txt",
+  "setup.py",
+  "Makefile",
+  "pom.xml",
+  "build.gradle",
+  "mix.exs",
+}
+
+local function normalize(p)
+  return vim.fn.fnamemodify(p, ":p")
+end
+
+--- Detect a project root given a path or buffer
+--- @param path_or_buf string|integer
+--- @param opts { markers: string[]? }?
+--- @return string root_abs
+function M.detect_project_root(path_or_buf, opts)
+  opts = opts or {}
+  local markers = opts.markers or default_markers
+
+  local path_abs
+  if type(path_or_buf) == "number" then
+    local name = vim.api.nvim_buf_get_name(path_or_buf)
+    path_abs = normalize(name ~= "" and name or vim.fn.getcwd())
+  else
+    path_abs = normalize(path_or_buf or vim.fn.getcwd())
+  end
+
+  local marker_root = vim.fs.root(path_abs, markers)
+  if marker_root then
+    return normalize(marker_root)
+  end
+
+  return normalize(vim.fn.getcwd(0, 0))
+end
+
+--- Check if path is inside root
+--- @param path string
+--- @param root string
+function M.path_in_root(path, root)
+  if not path or not root then
+    return false
+  end
+  path = normalize(path)
+  root = normalize(root)
+  return vim.startswith(path, root)
+end
+
 return M
