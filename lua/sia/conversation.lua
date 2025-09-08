@@ -32,6 +32,7 @@
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field description string?
+--- @field superseded boolean? -- Mark message as superseded by a newer overlapping message
 local Message = {}
 Message.__index = Message
 
@@ -160,38 +161,29 @@ end
 --- @return string?
 function Message:get_content()
   if self.content then
-    local has_changed = false
-    -- If we have context, we track a specific buffer or part of
-    -- buffer. But only for messages of certain kind
-    if self.context and self.kind ~= nil then
-      -- Most types of context track the buffer and
-      -- if the buffer changes we have an outdated context.
-      if
-        self.context.buf
-        and vim.api.nvim_buf_is_loaded(self.context.buf)
-        and self.context.changedtick ~= vim.b[self.context.buf].changedtick
-      then
-        has_changed = true
-      -- If not, we check if the generated content is the same
-      elseif self.content_gen then
-        local new_content = generate_content(self.content_gen, self.context)
-        if self.content ~= new_content then
-          has_changed = true
-        else
-          has_changed = false
-        end
-      end
-    end
-    if has_changed then
-      return "[OUTDATED CONTENT - IGNORE THIS MESSAGE]\n\nThe content below is stale. The file has been modified since this was captured.\nIMPORTANT: Use the 'read' tool to get the current content instead.\n\n"
-        .. (self.content or "")
-    end
     return self.content
   elseif self.live_content then
     return self.live_content()
   else
     return nil
   end
+end
+
+--- Check if this message is outdated (has nil content when it should have content)
+--- @return boolean
+function Message:is_outdated()
+  if self.live_content then
+    return false
+  end
+
+  if self.context and self.kind ~= nil and (self.role == "tool" or (self.content and self.role ~= "assistant")) then
+    if vim.api.nvim_buf_is_loaded(self.context.buf) then
+      return self.context.changedtick ~= vim.b[self.context.buf].changedtick
+    else
+      return true
+    end
+  end
+  return false
 end
 
 --- @param conversation sia.Conversation?
@@ -411,7 +403,8 @@ local function should_mask_existing(new_interval, existing_interval)
   return new_start <= existing_start and existing_end <= new_end
 end
 
---- Update overlapping messages with replacement content
+--- Mark overlapping messages as superseded instead of removing them
+--- Handle tool call sequences as atomic units to maintain conversation integrity
 --- @param context sia.Context?
 --- @param kind string?
 function Conversation:_update_overlapping_messages(context, kind)
@@ -419,8 +412,12 @@ function Conversation:_update_overlapping_messages(context, kind)
     return
   end
 
-  for i, message in ipairs(self.messages) do
+  local tool_call_ids_to_supersede = {}
+
+  -- First pass: identify messages that should be marked as superseded due to overlap
+  for _, message in ipairs(self.messages) do
     local old_context = message.context
+
     if
       old_context
       and message.kind ~= nil
@@ -430,25 +427,23 @@ function Conversation:_update_overlapping_messages(context, kind)
       and (message.role == "user" or message.role == "tool")
     then
       if should_mask_existing(context, old_context) then
-        local buf_name = vim.api.nvim_buf_get_name(old_context.buf)
-        local file_name = vim.fn.fnamemodify(buf_name, ":t")
+        message.superseded = true
 
-        -- This context is no longer relevant...
-        message.content_gen = nil
-        message.context = nil
-        if old_context.pos then
-          local start_line, end_line = old_context.pos[1], old_context.pos[2]
-          message.content = string.format(
-            "[CONTENT_SUPERSEDED]\nFile: %s (lines %d-%d)\nStatus: This content has been replaced by updated context\nAction: Ignore this message and use the newer content provided later",
-            file_name,
-            start_line,
-            end_line
-          )
-        else
-          message.content = string.format(
-            "[CONTENT_SUPERSEDED]\nFile: %s\nStatus: Full content has been replaced by updated context\nAction: Ignore this message and use the newer content provided later",
-            file_name
-          )
+        -- If this is a tool result being superseded, mark its tool call ID for superseding
+        if message.role == "tool" and message._tool_call then
+          tool_call_ids_to_supersede[message._tool_call.id] = true
+        end
+      end
+    end
+  end
+
+  -- Second pass: also mark assistant messages whose tool calls are being superseded
+  for _, message in ipairs(self.messages) do
+    if message.role == "assistant" and message.tool_calls then
+      for _, tool_call in ipairs(message.tool_calls) do
+        if tool_call_ids_to_supersede[tool_call.id] then
+          message.superseded = true
+          break
         end
       end
     end
@@ -603,9 +598,38 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
+  -- Build a table of tool calls that have been marked as outdated or superseded
+  local outdated_tool_call_ids = {}
+  for _, message in ipairs(self.messages) do
+    if message.role == "tool" and message._tool_call and (message:is_outdated() or message.superseded) then
+      outdated_tool_call_ids[message._tool_call.id] = true
+    end
+  end
+
   local prompt = vim
     .iter({ self.system_messages, self.messages })
     :flatten()
+    --- @param m sia.Message
+    --- @return boolean
+    :filter(function(m)
+      if m.superseded then
+        return false
+      end
+
+      if m:is_outdated() then
+        return false
+      end
+
+      if m.role == "assistant" and m.tool_calls then
+        for _, tool_call in ipairs(m.tool_calls) do
+          if outdated_tool_call_ids[tool_call.id] then
+            return false
+          end
+        end
+      end
+
+      return true
+    end)
     --- @param m sia.Message
     --- @return sia.Prompt
     :map(function(m)

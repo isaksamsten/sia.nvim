@@ -146,7 +146,13 @@ function M.show_messages(opts)
       prompt = "Show message",
       --- @param message sia.Message
       format_item = function(message)
-        return message:get_description()
+        local outdated = message:is_outdated()
+        local description = message:get_description()
+        if outdated then
+          return "[outdated] " .. description
+        else
+          return description
+        end
       end,
       --- @param item sia.Message?
       --- @param idx integer
