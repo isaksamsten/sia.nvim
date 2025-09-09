@@ -374,7 +374,12 @@ function Conversation:_find_file(needle)
 end
 
 function Conversation:clear_user_instructions()
-  self.messages = {}
+  self.messages = vim
+    .iter(self.messages)
+    :filter(function(m)
+      return m.role == "system"
+    end)
+    :totable()
 end
 
 --- Check if the new interval completely encompasses an existing interval

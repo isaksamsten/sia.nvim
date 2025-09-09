@@ -541,8 +541,10 @@ The summary will replace the conversation history, so ensure no critical informa
 
     if chat then
       chat.is_busy = true
+      chat.canvas:update_progress({ { "Compacting conversation...", "WarningMsg" } })
       M.compact_conversation(chat.conversation, "Requested by user", function(_)
         chat.is_busy = false
+        chat:redraw()
       end)
     else
       -- echo that not called from a chat
