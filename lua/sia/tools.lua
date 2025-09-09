@@ -624,10 +624,18 @@ M.read = M.new_tool({
     pos = { offset, offset + #content - 1 }
   end
 
+  local display_lines = {}
+  if args.offset or args.limit then
+    table.insert(display_lines, string.format("📖 Read lines %d-%d from %s", start_line, end_line, rel(args.path)))
+  else
+    table.insert(display_lines, string.format("📖 Read %s (%d lines)", rel(args.path), #content))
+  end
+
   callback({
     content = content,
-    context = { buf = buf, pos = pos, changedtick = vim.b[buf].changedtick },
+    context = { buf = buf, pos = pos, tick = tracker.track(buf) },
     kind = "context",
+    display_content = display_lines,
   })
 end)
 

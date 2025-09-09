@@ -49,7 +49,7 @@ function M.create_context(args)
     pos = { args.line1, args.line2 },
     bang = args.bang,
   }
-  opts.changedtick = vim.b[opts.buf].changedtick
+  opts.tick = require("sia.tracker").track(opts.buf)
   if args.count == -1 then
     opts.mode = "n"
   else

@@ -1,3 +1,5 @@
+local tracker = require("sia.tracker")
+
 --- @class sia.Prompt
 --- @field role sia.config.Role
 --- @field content (string|{type:string, text: string, cache_control: {type: "ephemeral"}?})?
@@ -15,7 +17,7 @@
 --- @field mode "n"|"v"?
 --- @field bang boolean?
 --- @field cursor integer[]?
---- @field changedtick integer?
+--- @field tick integer?
 
 --- @class sia.ActionContext : sia.Context
 --- @field start_line integer?
@@ -178,7 +180,7 @@ function Message:is_outdated()
 
   if self.context and self.kind ~= nil and (self.role == "tool" or (self.content and self.role ~= "assistant")) then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
-      return self.context.changedtick ~= vim.b[self.context.buf].changedtick
+      return self.context.tick ~= tracker.user_tick(self.context.buf)
     else
       return true
     end
