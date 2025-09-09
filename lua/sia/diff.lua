@@ -1,11 +1,11 @@
 local M = {}
 
+--- @type table<integer, {original_content: string[], hunks: table}>
 local buffer_diff_state = {}
 local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
 
 ---@param buf integer
 ---@param original_content string[]
----@param target_file string
 function M.show_diff_preview(buf, original_content)
   local timestamp = os.date("%H:%M:%S")
   vim.cmd("tabnew")
@@ -32,16 +32,15 @@ end
 ---@param original_content string[] Original content
 function M.highlight_diff_changes(buf, original_content)
   local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-  local old_content = table.concat(original_content, "\n")
 
   if not buffer_diff_state[buf] then
     buffer_diff_state[buf] = {
-      original_content = old_content,
+      original_content = original_content,
       hunks = {},
     }
   end
 
-  local baseline = buffer_diff_state[buf].original_content
+  local baseline = table.concat(buffer_diff_state[buf].original_content, "\n")
   vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
 
   local diff_result = vim.diff(baseline, new_content, {
@@ -56,7 +55,7 @@ function M.highlight_diff_changes(buf, original_content)
     return
   end
 
-  local old_lines = vim.split(baseline, "\n", { plain = true })
+  local old_lines = buffer_diff_state[buf].original_content
   local hunks = {}
 
   for _, hunk in ipairs(diff_result) do
@@ -136,7 +135,19 @@ end
 function M.reject_diff(buf)
   if buffer_diff_state[buf] then
     vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(buffer_diff_state[buf].original_content, "\n"))
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, buffer_diff_state[buf].original_content)
+    buffer_diff_state[buf] = nil
+    return true
+  else
+    return false
+  end
+end
+
+function M.show_diff_for_buffer(buf)
+  if buffer_diff_state[buf] then
+    local original_lines = buffer_diff_state[buf].original_content
+    M.show_diff_preview(buf, original_lines)
+    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
     buffer_diff_state[buf] = nil
     return true
   else

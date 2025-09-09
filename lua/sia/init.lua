@@ -28,26 +28,37 @@ local function set_highlight_groups()
 end
 
 --- @param opts { buf: number? }?
-function M.accept_diff(opts)
+function M.accept_edits(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
   if not require("sia.diff").accept_diff(buf) then
-    vim.api.nvim_echo({ { "Sia: No diff changes to accept", "WarningMsg" } }, false, {})
+    vim.api.nvim_echo({ { "Sia: No changes to accept", "WarningMsg" } }, false, {})
   end
 end
 
 --- @param opts { buf: number? }?
-function M.reject_diff(opts)
+function M.reject_edits(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
   if not require("sia.diff").reject_diff(buf) then
-    vim.api.nvim_echo({ { "Sia: No diff changes to reject", "WarningMsg" } }, false, {})
+    vim.api.nvim_echo({ { "Sia: No changes to reject", "WarningMsg" } }, false, {})
+  end
+end
+
+--- @param opts { buf: number? }?
+function M.show_edits_diff(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  local diff = require("sia.diff")
+
+  if not diff.show_diff_for_buffer(buf) then
+    vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
   end
 end
 
 --- Navigate to the next diff hunk
 --- @param opts { buf: number? }?
-function M.next_hunk(opts)
+function M.next_edit(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
@@ -68,7 +79,7 @@ end
 
 --- Navigate to the previous diff hunk
 --- @param opts { buf: number? }?
-function M.prev_hunk(opts)
+function M.prev_edit(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
@@ -89,7 +100,7 @@ end
 
 --- Populate quickfix list with all diff hunks
 --- @param opts { buf: number? }? Options table with optional buffer number
-function M.show_hunks(opts)
+function M.show_edits_qf(opts)
   opts = opts or {}
   local buf = opts.buf
   if buf == 0 then
@@ -373,11 +384,15 @@ function M.setup(options)
   require("sia.mappings").setup()
 
   vim.api.nvim_create_user_command("SiaAccept", function()
-    M.accept_diff()
+    M.accept_edits()
   end, {})
 
   vim.api.nvim_create_user_command("SiaReject", function()
-    M.reject_diff()
+    M.reject_edits()
+  end, {})
+
+  vim.api.nvim_create_user_command("SiaDiff", function()
+    M.show_edits_diff()
   end, {})
 
   vim.api.nvim_create_user_command("SiaAdd", function(args)
