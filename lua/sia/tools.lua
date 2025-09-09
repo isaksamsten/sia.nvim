@@ -760,9 +760,9 @@ M.grep = M.new_tool({
     for i = 1, math.min(#matches, max_count) do
       table.insert(output, matches[i].text)
     end
-    local display_msg = string.format("🔍 Found %d matches for `%s`", math.min(#matches, max_count), args.pattern)
+    local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
     if args.glob then
-      display_msg = display_msg .. string.format(" in files matching `%s`", args.glob)
+      display_msg = display_msg .. string.format(" in `%s`", args.glob)
     end
 
     callback({
@@ -1019,7 +1019,7 @@ example: // ... existing code ...  ]],
       table.insert(diff, 1, success_msg)
       callback({
         content = diff,
-        display_content = { string.format("📄 Diff for %s (%d lines)", args.target_file, #diff - 1) },
+        display_content = { string.format("📄 Diff for %s", rel(args.target_file)) },
       })
     else
       callback({ content = { string.format("Failed to edit %s", args.target_file) } })
@@ -1681,7 +1681,7 @@ response]],
       },
       ignore_tool_confirm = true,
       tools = {
-        "list_files",
+        "glob",
         "grep",
         "read",
       },
@@ -1964,7 +1964,9 @@ rather than multiple messages with a single call each.
     table.insert(snippet_lines, 1, success_msg)
     callback({
       content = snippet_lines,
-      display_content = { string.format("✏️ Edited %s (lines %d-%d)", rel(args.target_file), edit_start, edit_end) },
+      display_content = {
+        string.format("✏️ Edited lines %d-%d in %s", edit_start, edit_end, rel(args.target_file)),
+      },
     })
   else
     failed_matches[buf] = failed_matches[buf] + 1
