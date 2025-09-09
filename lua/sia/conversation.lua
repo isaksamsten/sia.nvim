@@ -465,6 +465,13 @@ end
 --- @param opts { ignore_duplicates: boolean?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
+  -- We track per-kind updates to avoid two problems:
+  -- 1) Self-supersession: a single instruction can expand into multiple messages of the same `kind`.
+  --    If we ran `_update_overlapping_messages` for each message, the first inserted message could
+  --    be considered "existing" when processing the second, causing the second to supersede the first.
+  -- 2) Redundant scans: calling the overlap logic once per kind avoids repeated O(n) passes when
+  --    an instruction yields many messages.
+  -- In short: run overlap updates at most once per message.kind for the current instruction batch.
   local done = {}
   for _, message in ipairs(Message:new(instruction, context) or {}) do
     if message.kind and opts.ignore_duplicates ~= true and not done[message.kind] then
