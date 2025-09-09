@@ -266,7 +266,7 @@ function Message:get_description()
 
   local content = self:get_content()
   if content then
-    return self.role .. ": " .. string.sub(content, 1, 40)
+    return self.role .. ": " .. string.sub(content:gsub("\n", " "), 1, 40)
   elseif self.tool_calls then
     local name = "unknown"
     if self.tool_calls[1] and self.tool_calls[1]["function"] then
@@ -289,7 +289,7 @@ end
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
---- @field auto_confirm_tools table<string, boolean>
+--- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 local Conversation = {}
 

@@ -3,6 +3,7 @@ local M = {}
 local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
 local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
 local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
+local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 
 --- @class sia.Canvas
 local Canvas = {}
@@ -20,6 +21,9 @@ function Canvas:update_progress(content) end
 
 --- @param content string[][][]
 function Canvas:update_tool_progress(content) end
+
+--- @param content string[][]
+function Canvas:append_tool_result(content) end
 
 --- @param content string[]
 function Canvas:append(content) end
@@ -72,7 +76,21 @@ function ChatCanvas:update_progress(content)
   })
 end
 
-function ChatCanvas:clear_reasoning(content, linenr)
+function ChatCanvas:append_tool_result(content)
+  local line = self:line_count()
+
+  self:append(content)
+  local end_line = self:line_count()
+
+  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
+    end_line = end_line,
+    hl_mode = "combine",
+    hl_eol = true,
+    hl_group = "DiffChange",
+  })
+end
+
+function ChatCanvas:clear_reasoning()
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   self.reasoning_extmark = nil
   self.reasoning_content = {}
@@ -167,6 +185,10 @@ end
 
 function ChatCanvas:clear()
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
+  vim.api.nvim_buf_clear_namespace(self.buf, TOOL_RESULT_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)
 end
 
 function ChatCanvas:line_count()

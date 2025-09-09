@@ -10,6 +10,7 @@ local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 --- @field content string[]
 --- @field context sia.Context?
 --- @field kind string?
+--- @field display_content string[]?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.Writer
@@ -471,7 +472,7 @@ function ChatStrategy:on_start(job)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
       local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
-      if #last_line[1] > 0 then
+      if last_line[1]:match("%S") then -- Contains non-whitespace characters
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
         line_count = line_count + 1
       end
@@ -537,6 +538,9 @@ function ChatStrategy:on_complete(control)
         -- Add all tool instructions in order
         if opts.results then
           for _, tool_result in ipairs(opts.results) do
+            if tool_result.result.display_content then
+              self.canvas:append_tool_result(tool_result.result.display_content)
+            end
             self.conversation:add_instruction({
               { role = "assistant", tool_calls = { tool_result.tool } },
               {

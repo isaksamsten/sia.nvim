@@ -1,6 +1,16 @@
 local M = {}
 local utils = require("sia.utils")
 local diff = require("sia.diff")
+local tracker = require("sia.tracker")
+
+local FAILED_TO_RENAME = "❌ Failed to rename/move file"
+local FAILED_TO_REMOVE = "❌ Failed to remove file"
+local FAILED_TO_EDIT = "❌ Failed to edit"
+local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
+local FAILED_TO_READ = "❌ Failed to read"
+local FAILED_TO_GET_DIAGNOSTICS = "❌ Failed to read diagnostics"
+local FAILED_TO_CREATE_QF = "❌ Failed to create quickfix list"
+local FAILED_TO_WRITE = "❌ Failed to write file"
 
 local function rel(path)
   return vim.fn.fnamemodify(path, ":.")
@@ -10,7 +20,7 @@ end
 ---@field name string
 ---@field description string
 ---@field read_only boolean?
----@field auto_apply (fun(args: table):integer?)?
+---@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
 ---@field required string[]
@@ -33,7 +43,7 @@ M.new_tool = function(opts, execute)
     if conversation.auto_confirm_tools[opts.name] then
       return 1
     else
-      return (opts.auto_apply and opts.auto_apply(args)) or nil
+      return (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
     end
   end
 
@@ -97,7 +107,7 @@ M.new_tool = function(opts, execute)
 
           local response = resp:lower()
           if response == "a" or response == "always" then
-            conversation.auto_confirm_tools[opts.name] = true
+            conversation.auto_confirm_tools[opts.name] = 1
             execute(args, conversation, callback, { cancellable = cancellable })
           elseif response == "n" or response == "no" then
             callback({ content = { string.format("User declined to execute %s.", opts.name) } })
@@ -167,7 +177,7 @@ M.find_lsp_symbol = M.new_tool({
   name = "find_lsp_symbol",
   message = function(args)
     if #args.queries == 1 then
-      return string.format("Searching for LSP symbols matching '%s'...", args.queries[1])
+      return string.format("Searching for LSP symbols matching `%s`...", args.queries[1])
     else
       return string.format("Searching for LSP symbols matching %d queries...", #args.queries)
     end
@@ -223,14 +233,14 @@ INTEGRATION WITH OTHER TOOLS:
   required = { "queries" },
   confirm = function(args)
     if #args.queries == 1 then
-      return string.format("Search workspace for symbols matching '%s'", args.queries[1])
+      return string.format("Search workspace for symbols matching `%s`", args.queries[1])
     else
-      return string.format("Search workspace for symbols matching %s", table.concat(args.queries, "', '"))
+      return string.format("Search workspace for symbols matching %s", table.concat(args.queries, "`, `"))
     end
   end,
 }, function(args, conversation, callback)
   if not args.queries or #args.queries == 0 then
-    callback({ content = { "Error: No search queries provided" } })
+    callback({ content = { "No search queries provided" } })
     return
   end
 
@@ -238,7 +248,7 @@ INTEGRATION WITH OTHER TOOLS:
   if vim.tbl_isempty(clients) then
     callback({
       content = {
-        "Error: No LSP clients with workspace symbol support found",
+        "No LSP clients with workspace symbol support found",
         "Make sure an LSP server is running and supports workspace/symbol requests",
       },
     })
@@ -365,7 +375,7 @@ INTEGRATION WITH OTHER TOOLS:
   for _, query in ipairs(args.queries) do
     local query_results = results_by_query[query] or {}
     if #query_results > 0 then
-      table.insert(content, string.format("=== Symbols matching '%s' ===", query))
+      table.insert(content, string.format("=== Symbols matching `%s` ===", query))
 
       for _, item in ipairs(query_results) do
         local symbol = item.symbol
@@ -392,7 +402,7 @@ INTEGRATION WITH OTHER TOOLS:
       end
       table.insert(content, "")
     else
-      table.insert(content, string.format("No symbols found for '%s'", query))
+      table.insert(content, string.format("No symbols found for `%s`", query))
       table.insert(content, "")
     end
   end
@@ -405,13 +415,16 @@ INTEGRATION WITH OTHER TOOLS:
   table.insert(content, "- Use read tool with file:line to examine implementations")
   table.insert(content, "- Use show_locations to create a navigable quickfix list")
 
-  callback({ content = content })
+  callback({
+    content = content,
+    display_content = { string.format("🔍 Found %d symbols across %d queries", total_symbols, #args.queries) },
+  })
 end)
 
 M.get_lsp_symbol_docs = M.new_tool({
   name = "get_lsp_symbol_docs",
   message = function(args)
-    return string.format("Getting documentation for symbol '%s'...", args.symbol)
+    return string.format("Getting documentation for symbol `%s`...", args.symbol)
   end,
   system_prompt = [[Get detailed documentation for LSP symbols that were previously found using find_lsp_symbol.
 
@@ -448,14 +461,14 @@ without leaving the editor.]],
   required = { "symbol" },
 }, function(args, conversation, callback)
   if not args.symbol then
-    callback({ content = { "Error: No symbol provided" } })
+    callback({ content = { "No symbol provided" } })
     return
   end
 
   --- @diagnostic disable-next-line undefined-field
   if conversation.lsp_symbols == nil then
     callback({
-      content = { "Error: No symbols have been added to the conversation yet. Use find_lsp_symbol first." },
+      content = { "No symbols have been added to the conversation yet. Use find_lsp_symbol first." },
     })
     return
   end
@@ -466,7 +479,7 @@ without leaving the editor.]],
   if symbol == nil then
     callback({
       content = {
-        string.format("Error: The symbol '%s' was not found in the conversation.", args.symbol),
+        string.format("The symbol `%s` was not found in the conversation.", args.symbol),
         "Available symbols:",
         table.concat(vim.tbl_keys(conversation.lsp_symbols), ", "),
       },
@@ -476,7 +489,7 @@ without leaving the editor.]],
 
   local clients = vim.lsp.get_clients({ method = "textDocument/hover" })
   if vim.tbl_isempty(clients) then
-    callback({ content = { "Error: No LSP clients with hover support found" } })
+    callback({ content = { "No LSP clients with hover support found" } })
     return
   end
 
@@ -524,14 +537,14 @@ without leaving the editor.]],
         "",
         "This could mean:",
         "- The symbol has no associated documentation",
-        "- The LSP server doesn't support hover for this symbol type",
+        "- The LSP server doesn`t support hover for this symbol type",
         "- The symbol location is no longer valid",
       },
     })
     return
   end
 
-  local content = { string.format("=== Documentation for '%s' ===", symbol.name), "" }
+  local content = { string.format("=== Documentation for `%s` ===", symbol.name), "" }
 
   for _, result in ipairs(found) do
     if result.response.contents then
@@ -549,14 +562,14 @@ without leaving the editor.]],
   local line = symbol.location.range.start.line + 1
   table.insert(content, string.format("Symbol location: %s:%d", rel_path, line))
 
-  callback({ content = content })
+  callback({ content = content, display_content = { string.format("📚 Got documentation for `%s`", symbol.name) } })
 end)
 
 M.read = M.new_tool({
   name = "read",
   read_only = true,
   message = "Reading file contents...",
-  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to 2000 lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters. Any lines longer than 2000 characters will be truncated.]],
+  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to 2000 lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it`s recommended to read the whole file by not providing these parameters. Any lines longer than 2000 characters will be truncated.]],
   description = [[Reads a file from the local filesystem.]],
   parameters = {
     path = { type = "string", description = "The file path" },
@@ -564,7 +577,7 @@ M.read = M.new_tool({
     limit = { type = "integer", description = "Maximum number of lines to read (default: 2000)" },
   },
   required = { "path" },
-  auto_apply = function(args)
+  auto_apply = function(args, _)
     local file = vim.fs.basename(args.path)
     if file == "AGENTS.md" then
       return 1
@@ -586,12 +599,18 @@ M.read = M.new_tool({
   --- @param conversation sia.Conversation
 }, function(args, conversation, callback)
   if not args.path then
-    callback({ content = { "Error: No file path was provided" } })
+    callback({
+      content = { "Error: No file path was provided" },
+      display_content = { FAILED_TO_READ },
+    })
     return
   end
 
   if vim.fn.filereadable(args.path) == 0 then
-    callback({ content = { "Error: File cannot be found" } })
+    callback({
+      content = { "Error: File cannot be found" },
+      display_content = { FAILED_TO_READ },
+    })
     return
   end
 
@@ -602,12 +621,12 @@ M.read = M.new_tool({
   local buf = utils.ensure_file_is_loaded(args.path)
   local total_lines = vim.api.nvim_buf_line_count(buf)
 
-  -- Validate offset is within bounds
   if offset > total_lines then
     callback({
       content = {
         string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
       },
+      display_content = { FAILED_TO_READ },
     })
     return
   end
@@ -661,9 +680,9 @@ M.grep = M.new_tool({
   required = { "pattern" },
   confirm = function(args)
     if args.glob then
-      return string.format("Search for '%s' in files matching '%s'", args.pattern, args.glob)
+      return string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
     end
-    return string.format("Search for '%s' in all files", args.pattern)
+    return string.format("Search for `%s` in all files", args.pattern)
   end,
 }, function(args, _, callback)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
@@ -702,7 +721,15 @@ M.grep = M.new_tool({
       end
     end
     if #matches == 0 then
-      callback({ content = { "No matches found." } })
+      local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
+      if args.glob then
+        no_match_msg = no_match_msg .. string.format(" in files matching `%s`", args.glob)
+      end
+
+      callback({
+        content = { "No matches found." },
+        display_content = { no_match_msg },
+      })
       return
     end
 
@@ -733,7 +760,15 @@ M.grep = M.new_tool({
     for i = 1, math.min(#matches, max_count) do
       table.insert(output, matches[i].text)
     end
-    callback({ content = output })
+    local display_msg = string.format("🔍 Found %d matches for `%s`", math.min(#matches, max_count), args.pattern)
+    if args.glob then
+      display_msg = display_msg .. string.format(" in files matching `%s`", args.glob)
+    end
+
+    callback({
+      content = output,
+      display_content = { display_msg },
+    })
   end)
 end)
 
@@ -744,7 +779,7 @@ M.glob = M.new_tool({
   parameters = {
     pattern = {
       type = "string",
-      description = "Glob pattern to match files (e.g., '*.lua', '**/*.py', 'src/**'). If not provided, lists all files.",
+      description = "Glob pattern to match files (e.g., `*.lua`, `**/*.py`, `src/**`). If not provided, lists all files.",
     },
   },
   required = {},
@@ -802,7 +837,7 @@ M.glob = M.new_tool({
       table.insert(limited_files, file_info[i].path)
     end
 
-    local header = pattern and ("Files matching pattern '" .. pattern .. "' (max " .. max_files .. ", newest first):")
+    local header = pattern and ("Files matching pattern `" .. pattern .. "` (max " .. max_files .. ", newest first):")
       or ("Files in the current project (max " .. max_files .. ", newest first):")
     table.insert(limited_files, 1, header)
 
@@ -814,12 +849,15 @@ M.glob = M.new_tool({
       )
     end
 
-    callback({ content = limited_files })
+    callback({
+      content = limited_files,
+      display_content = {
+        pattern and string.format("📂 Found %d files matching `%s`", #file_info, pattern)
+          or string.format("📂 Found %d files", #file_info),
+      },
+    })
   end)
 end)
-
---- @type integer?
-local edit_file_auto_apply = nil
 
 M.edit_file_agent = M.new_tool({
   name = "edit",
@@ -828,7 +866,7 @@ M.edit_file_agent = M.new_tool({
 
 KEY PRINCIPLES:
 - Make ALL edits to a file in a single tool call (use multiple edit blocks if needed)
-- Only specify lines you're changing - represent unchanged code with comments
+- Only specify lines you`re changing - represent unchanged code with comments
 
 EDIT SYNTAX:
 Use "// ... existing code ..." comments to represent unchanged sections:
@@ -894,17 +932,17 @@ what you are going to do. Use it to disambiguate uncertainty in the edit.
       type = "string",
       description = [[Specify ONLY the precise lines of code that you wish to
 edit. NEVER specify or write out unchanged code. Instead, represent all
-unchanged code using the comment of the language you're editing in -
+unchanged code using the comment of the language you`re editing in -
 example: // ... existing code ...  ]],
     },
   },
   required = { "target_file", "instructions", "code_edit" },
-  auto_apply = function(args)
+  auto_apply = function(args, conversation)
     local file = vim.fs.basename(args.target_file)
     if file == "AGENTS.md" then
       return 1
     end
-    return edit_file_auto_apply
+    return conversation.auto_confirm_tools["edit"]
   end,
   select = {
     prompt = function(args)
@@ -920,7 +958,7 @@ example: // ... existing code ...  ]],
       "Apply changes and preview them in diff view",
     },
   },
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   if not args.target_file then
     callback({ content = { "No target_file was provided" } })
     return
@@ -955,7 +993,9 @@ example: // ... existing code ...  ]],
     if result then
       local split = vim.split(result, "\n", { plain = true, trimempty = true })
       if opts.choice == 1 or opts.choice == 2 then
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        tracker.non_tracked_edit(buf, function()
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        end)
         diff.highlight_diff_changes(buf, initial_code)
 
         local file = vim.fs.basename(args.target_file)
@@ -966,16 +1006,21 @@ example: // ... existing code ...  ]],
         end
 
         if opts.choice == 2 then
-          edit_file_auto_apply = 1
+          conversation.auto_confirm_tools["edit"] = 1
         end
       elseif opts.choice == 3 then
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        tracker.non_tracked_edit(buf, function()
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+        end)
         diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
       end
       local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
-      local success_msg = string.format("Successfully edited %s. Here's the resulting diff:", args.target_file)
+      local success_msg = string.format("Successfully edited %s. Here`s the resulting diff:", args.target_file)
       table.insert(diff, 1, success_msg)
-      callback({ content = diff })
+      callback({
+        content = diff,
+        display_content = { string.format("📄 Diff for %s (%d lines)", args.target_file, #diff - 1) },
+      })
     else
       callback({ content = { string.format("Failed to edit %s", args.target_file) } })
     end
@@ -996,23 +1041,33 @@ M.get_diagnostics = M.new_tool({
   end,
 }, function(args, _, callback)
   if not args.file then
-    callback({ content = { "Error: No file path was provided" } })
+    callback({
+      content = { "Error: No file path was provided" },
+      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+    })
     return
   end
 
   if vim.fn.filereadable(args.file) == 0 then
-    callback({ content = { "Error: File cannot be found or is not readable" } })
+    callback({
+      content = { "Error: File cannot be found or is not readable" },
+      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+    })
     return
   end
   local buf = utils.ensure_file_is_loaded(args.file)
   if not buf then
-    callback({ content = { "Error: Cannot load file into buffer" } })
+    callback({
+      content = { "Error: Cannot load file into buffer" },
+      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+    })
     return
   end
 
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
+      display_content = { string.format("🩺 No diagnostics found for %s", args.file) },
       content = { string.format("No diagnostics found for %s", args.file) },
       context = { buf = buf },
       kind = "diagnostics",
@@ -1038,7 +1093,12 @@ M.get_diagnostics = M.new_tool({
     table.insert(content, string.format("  Line %d:%d %s%s: %s", line, col, severity, source, diagnostic.message))
   end
 
-  callback({ content = content, context = { buf = buf }, kind = "diagnostics" })
+  callback({
+    content = content,
+    context = { buf = buf },
+    kind = "diagnostics",
+    display_content = { string.format("🩺 Found %d diagnostics", #diagnostics) },
+  })
 end)
 
 M.git_status = M.new_tool({
@@ -1057,7 +1117,10 @@ M.git_status = M.new_tool({
 
     local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
     if #lines == 0 then
-      callback({ content = { "Working tree clean - no changes detected" } })
+      callback({
+        content = { "Working tree clean - no changes detected" },
+        display_content = { "🌿 Working tree clean - no changes detected" },
+      })
       return
     end
 
@@ -1086,7 +1149,10 @@ M.git_status = M.new_tool({
       table.insert(content, string.format("  %s: %s", desc, file))
     end
 
-    callback({ content = content })
+    callback({
+      content = content,
+      display_content = { string.format("📋 Fetched git status (%d files changed)", #lines) },
+    })
   end)
 end)
 
@@ -1127,18 +1193,21 @@ M.git_diff = M.new_tool({
 
   vim.system(cmd, { text = true }, function(obj)
     if obj.code ~= 0 then
-      callback({ content = { "Error running git diff" } })
+      callback({ content = { "Failed to run git diff" } })
       return
     end
 
     local lines = vim.split(obj.stdout or "", "\n")
     if #lines <= 1 then
-      callback({ content = { "No changes to show" } })
+      callback({
+        content = { "No changes to show" },
+        display_content = { "🌿 No changes to show" },
+      })
       return
     end
 
     table.insert(lines, 1, "Git diff:")
-    callback({ content = lines })
+    callback({ content = lines, display_content = { string.format("📄 Git diff (%d lines)", #lines - 1) } })
   end)
 end)
 
@@ -1155,7 +1224,7 @@ M.git_commit = M.new_tool({
     },
   },
   confirm = function(args)
-    return string.format("Commit changes with message: '%s'", args.message)
+    return string.format("Commit changes with message: `%s`", args.message)
   end,
   required = { "message" },
 }, function(args, _, callback)
@@ -1169,7 +1238,7 @@ M.git_commit = M.new_tool({
       local message_split = vim.split(message, "\n")
       table.insert(message_split, 1, "Successfully committed changes:")
 
-      cb({ content = message_split })
+      cb({ content = message_split, display_content = { "✅ Committed changes" } })
     end)
   end
 
@@ -1199,7 +1268,7 @@ M.git_commit = M.new_tool({
       vim.system({ "git", "add", file }, { text = true }, function(obj)
         staged_count = staged_count + 1
         if obj.code ~= 0 then
-          callback({ content = { string.format("Error staging file: %s", file) } })
+          callback({ content = { string.format("Failed to stage file: %s", file) } })
           return
         end
 
@@ -1278,7 +1347,7 @@ M.git_unstage = M.new_tool({
 
     vim.system(cmd, { text = true }, function(reset_obj)
       if reset_obj.code ~= 0 then
-        callback({ content = { "Error unstaging files:", reset_obj.stderr or "Unknown error" } })
+        callback({ content = { "Failed to unstage files:", reset_obj.stderr or "Unknown error" } })
         return
       end
 
@@ -1287,112 +1356,9 @@ M.git_unstage = M.new_tool({
         table.insert(content, "  " .. file)
       end
 
-      callback({ content = content })
+      callback({ content = content, display_content = { string.format("↩️ Unstaged %d files", #files_to_unstage) } })
     end)
   end)
-end)
-
-M.show_location = M.new_tool({
-  name = "show_location",
-  message = "Navigating to location...",
-  description = "Navigate the user's cursor to a specific location in a file for them to see",
-  system_prompt = [[SHOWS A LOCATION TO THE USER - navigates their cursor to a specific file and line.
-
-This tool is for directing the USER's attention to code, NOT for reading code yourself.
-Use the read tool if you need to examine file contents.
-
-Use this to:
-- Direct user to specific lines you're discussing
-- Show error locations or function definitions
-- Navigate to search results
-
-Do NOT use this to read or examine code.]],
-  parameters = {
-    file = { type = "string", description = "File path" },
-    line = { type = "integer", description = "Line number (1-based)" },
-    col = { type = "integer", description = "Column number (1-based, optional)" },
-  },
-  required = { "file", "line" },
-}, function(args, _, callback)
-  if not args.file then
-    callback({ content = { "Error: No file path provided" } })
-    return
-  end
-
-  if not args.line then
-    callback({ content = { "Error: No line number provided" } })
-    return
-  end
-
-  if vim.fn.filereadable(args.file) == 0 then
-    callback({ content = { "Error: File cannot be found or is not readable" } })
-    return
-  end
-
-  local buf = utils.ensure_file_is_loaded(args.file)
-  if not buf then
-    callback({ content = { "Error: Cannot load file into buffer" } })
-    return
-  end
-
-  -- Get total lines in buffer to validate line number
-  local total_lines = vim.api.nvim_buf_line_count(buf)
-  if args.line < 1 or args.line > total_lines then
-    callback({
-      content = { string.format("Error: Line %d is out of range (file has %d lines)", args.line, total_lines) },
-    })
-    return
-  end
-
-  -- Find a window showing this buffer, or create one
-  local win = nil
-  for _, w in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_get_buf(w) == buf then
-      win = w
-      break
-    end
-  end
-
-  if not win then
-    -- Check if we're in a split layout
-    local current_win = vim.api.nvim_get_current_win()
-    local all_wins = vim.api.nvim_list_wins()
-
-    if #all_wins > 1 then
-      -- We have multiple windows, try to find a non-current window to use
-      for _, w in ipairs(all_wins) do
-        if w ~= current_win then
-          vim.api.nvim_set_current_win(w)
-          vim.api.nvim_set_current_buf(buf)
-          win = w
-          break
-        end
-      end
-    else
-      -- No splits, create a new vertical split
-      vim.cmd("vsplit")
-      vim.api.nvim_set_current_buf(buf)
-      win = vim.api.nvim_get_current_win()
-    end
-  else
-    -- Switch to the window showing this buffer
-    vim.api.nvim_set_current_win(win)
-  end
-
-  -- Set cursor position
-  local col = args.col or 1
-  -- Ensure column is within line bounds
-  local line_content = vim.api.nvim_buf_get_lines(buf, args.line - 1, args.line, false)[1] or ""
-  col = math.min(col, #line_content + 1)
-
-  vim.api.nvim_win_set_cursor(win, { args.line, col - 1 }) -- API uses 0-based columns
-
-  -- Center the line in the window
-  vim.cmd("normal! zz")
-
-  local location_str = args.col and string.format("%s:%d:%d", args.file, args.line, args.col)
-    or string.format("%s:%d", args.file, args.line)
-  callback({ content = { string.format("Navigated to %s", location_str) } })
 end)
 
 M.show_locations = M.new_tool({
@@ -1432,7 +1398,10 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   required = { "items" },
 }, function(args, _, callback)
   if not args.items or #args.items == 0 then
-    callback({ content = { "Error: No items provided for quickfix list" } })
+    callback({
+      content = { "Error: No items provided for quickfix list" },
+      display_content = { FAILED_TO_CREATE_QF },
+    })
     return
   end
 
@@ -1441,7 +1410,10 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
 
   for i, item in ipairs(args.items) do
     if not item.filename or not item.lnum or not item.text then
-      callback({ content = { string.format("Error: Item %d missing required fields (filename, lnum, text)", i) } })
+      callback({
+        content = { string.format("Error: Item %d missing required fields (filename, lnum, text)", i) },
+        display_content = { FAILED_TO_CREATE_QF },
+      })
       return
     end
 
@@ -1452,7 +1424,6 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
       text = item.text,
     }
 
-    -- Validate and set type
     if item.type and valid_types[item.type] then
       qf_item.type = item.type
     end
@@ -1460,23 +1431,21 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
     table.insert(qf_items, qf_item)
   end
 
-  -- Set the quickfix list
   vim.fn.setqflist(qf_items, "r")
 
-  -- Set title if provided
   if args.title then
     vim.fn.setqflist({}, "a", { title = args.title })
   end
 
-  -- Open the quickfix window
   vim.cmd("copen")
 
   local title = args.title or "Quickfix List"
   callback({
     content = {
-      string.format("Created quickfix list '%s' with %d items", title, #qf_items),
+      string.format("Created quickfix list `%s` with %d items", title, #qf_items),
       "Use :cnext/:cprev to navigate, or click items in the quickfix window",
     },
+    display_content = { string.format("📝 Created quickfix list with %d items", #qf_items) },
   })
 end)
 
@@ -1579,7 +1548,8 @@ Do not guess which file the user means—always check the workspace first.]],
 
     for _, win_info in ipairs(visible_windows) do
       local line_range = string.format("lines %d-%d of %d", win_info.topline, win_info.botline, win_info.total_lines)
-      local line = string.format("  %s (%s)", win_info.relative_path, line_range)
+      local current_indicator = win_info.is_current and " [current]" or ""
+      local line = string.format("  %s (%s)%s", win_info.relative_path, line_range, current_indicator)
       table.insert(content, line)
     end
   end
@@ -1592,7 +1562,7 @@ Do not guess which file the user means—always check the workspace first.]],
     end
   end
 
-  callback({ content = content })
+  callback({ content = content, display_content = { "👁️ Read current workspace" } })
 end)
 
 M.compact_conversation = M.new_tool({
@@ -1638,9 +1608,10 @@ The tool will preserve important context while removing outdated information.]],
           string.format("Successfully compacted conversation. Reason: %s", args.reason),
           "Previous context has been summarized and the conversation is now ready for the new topic.",
         },
+        display_content = { "🗂️ Compacted conversation" },
       })
     else
-      callback({ content = { "Error: Failed to compact conversation" } })
+      callback({ content = { "Failed to compact conversation" } })
     end
   end)
 end)
@@ -1717,14 +1688,13 @@ response]],
     }, nil)
     local strategy = HiddenStrategy:new(conversation, {
       callback = function(_, reply)
-        callback({ content = reply })
+        callback({ content = reply, display_content = { "🤖 Agent completed task" } })
       end,
     }, cancellable)
     require("sia.assistant").execute_strategy(strategy)
   end,
 }
 
-local write_auto_apply = nil
 M.write = M.new_tool({
   name = "write",
   message = "Writing file...",
@@ -1754,12 +1724,12 @@ For small, targeted changes, prefer the edit tool instead.]],
     content = { type = "string", description = "The complete file content to write" },
   },
   required = { "path", "content" },
-  auto_apply = function(args)
+  auto_apply = function(args, conversation)
     local file = vim.fs.basename(args.path)
     if file == "AGENTS.md" then
       return 1
     end
-    return write_auto_apply
+    return conversation.auto_confirm_tools["write"]
   end,
   confirm = function(args)
     if vim.fn.filereadable(args.path) == 1 then
@@ -1770,18 +1740,27 @@ For small, targeted changes, prefer the edit tool instead.]],
   end,
 }, function(args, _, callback)
   if not args.path then
-    callback({ content = { "Error: No file path provided" } })
+    callback({
+      content = { "Error: No file path provided" },
+      display_content = { FAILED_TO_WRITE },
+    })
     return
   end
 
   if not args.content then
-    callback({ content = { "Error: No content provided" } })
+    callback({
+      content = { "Error: No content provided" },
+      display_content = { FAILED_TO_WRITE },
+    })
     return
   end
 
   local buf = utils.ensure_file_is_loaded(args.path)
   if not buf then
-    callback({ content = { "Error: Cannot create buffer for " .. args.path } })
+    callback({
+      content = { "Error: Cannot create buffer for " .. args.path },
+      display_content = { FAILED_TO_WRITE },
+    })
     return
   end
 
@@ -1789,24 +1768,27 @@ For small, targeted changes, prefer the edit tool instead.]],
   local file_exists = #initial_code > 0 and initial_code[1] ~= ""
 
   local lines = vim.split(args.content, "\n", { plain = true })
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  tracker.non_tracked_edit(buf, function()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  end)
 
   if file_exists then
     diff.highlight_diff_changes(buf, initial_code)
   end
 
-  local file = vim.fs.basename(args.path)
-  if file == "AGENTS.md" then
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write!")
-    end)
-  end
+  vim.api.nvim_buf_call(buf, function()
+    pcall(vim.cmd, "noa silent write!")
+  end)
 
   local action = file_exists and "overwritten" or "created"
-  callback({ content = { string.format("Successfully %s buffer for %s", action, args.path) } })
+  local display_text =
+    string.format("%s %s (%d lines)", file_exists and "Overwrote" or "Created", rel(args.path), #lines)
+  callback({
+    content = { string.format("Successfully %s buffer for %s", action, args.path) },
+    display_content = { "💾 " .. display_text },
+  })
 end)
 
-local edit_auto_apply = nil
 local failed_matches = {}
 local MAX_FAILED_MATCHES = 3
 M.edit_file = M.new_tool({
@@ -1880,12 +1862,12 @@ rather than multiple messages with a single call each.
     },
   },
   required = { "target_file", "old_string", "new_string" },
-  auto_apply = function(args)
+  auto_apply = function(args, conversation)
     local file = vim.fs.basename(args.target_file)
     if file == "AGENTS.md" then
       return 1
     end
-    return edit_auto_apply
+    return conversation.auto_confirm_tools["edit"]
   end,
   select = {
     prompt = function(args)
@@ -1897,25 +1879,34 @@ rather than multiple messages with a single call each.
       "Apply changes and preview them in diff view",
     },
   },
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   if not args.target_file then
-    callback({ content = { "No target_file was provided" } })
+    callback({
+      content = { "Error: No target_file was provided" },
+      display_content = { FAILED_TO_EDIT },
+    })
     return
   end
 
   if not args.old_string then
-    callback({ content = { "No old_string was provided" } })
+    callback({ content = { "Error: No old_string was provided" }, display_content = { FAILED_TO_EDIT } })
     return
   end
 
   if not args.new_string then
-    callback({ content = { "No new_string was provided" } })
+    callback({
+      content = { "Error: No new_string was provided" },
+      display_content = { FAILED_TO_EDIT },
+    })
     return
   end
 
   local buf = utils.ensure_file_is_loaded(args.target_file)
   if not buf then
-    callback({ content = { "Cannot load " .. args.target_file } })
+    callback({
+      content = { "Error: Cannot load " .. args.target_file },
+      display_content = { FAILED_TO_EDIT },
+    })
     return
   end
   local matching = require("sia.matcher")
@@ -1943,14 +1934,16 @@ rather than multiple messages with a single call each.
     local new_string = vim.split(args.new_string, "\n")
     local span = matches[1].span
 
-    vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+    tracker.non_tracked_edit(buf, function()
+      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+    end)
     vim.api.nvim_buf_call(buf, function()
       pcall(vim.cmd, "noa silent write!")
     end)
     if opts.choice == 1 or opts.choice == 2 then
       diff.highlight_diff_changes(buf, old_content)
       if opts.choice == 2 then
-        edit_auto_apply = 1
+        conversation.auto_confirm_tools["edit"] = 1
       end
     elseif opts.choice == 3 then
       diff.show_diff_preview(buf, old_content)
@@ -1963,10 +1956,16 @@ rather than multiple messages with a single call each.
 
     local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
 
+    local edit_start = span[1]
+    local edit_end = span[1] + #new_string
+
     local success_msg =
-      string.format("Successfully edited %s. Here's the edited snippet as returned by cat -n:", args.target_file)
+      string.format("Successfully edited %s. Here`s the edited snippet as returned by cat -n:", args.target_file)
     table.insert(snippet_lines, 1, success_msg)
-    callback({ content = snippet_lines })
+    callback({
+      content = snippet_lines,
+      display_content = { string.format("✏️ Edited %s (lines %d-%d)", rel(args.target_file), edit_start, edit_end) },
+    })
   else
     failed_matches[buf] = failed_matches[buf] + 1
     if failed_matches[buf] >= MAX_FAILED_MATCHES then
@@ -1977,9 +1976,23 @@ rather than multiple messages with a single call each.
             #matches
           ),
         },
+        display_content = {
+          string.format(FAILED_TO_EDIT_FILE, rel(args.target_file)),
+        },
       })
     else
-      callback({ content = { string.format("Edit failed because %d matches was found", #matches) } })
+      callback({
+        content = {
+          string.format(
+            "I tried to edit %s but couldn't find the exact text to replace (found %d matches instead of 1). Let me try again with more specific context.",
+            args.target_file,
+            #matches
+          ),
+        },
+        display_content = {
+          string.format(FAILED_TO_EDIT_FILE, rel(args.target_file)),
+        },
+      })
     end
   end
 end)
@@ -2008,7 +2021,7 @@ Notes:
   local restrict_root = config.restrict_to_project_root ~= false
 
   if not args.src or not args.dest then
-    callback({ content = { "Error: src and dest are required" } })
+    callback({ content = { "Error: src and dest are required" }, display_content = { FAILED_TO_RENAME } })
     return
   end
 
@@ -2018,24 +2031,36 @@ Notes:
 
   if restrict_root then
     if not utils.path_in_root(src_abs, root) or not utils.path_in_root(dest_abs, root) then
-      callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
+      callback({
+        content = { string.format("Error: Operation must stay within project root: %s", root) },
+        display_content = { FAILED_TO_RENAME },
+      })
       return
     end
   end
 
   local stat = vim.loop.fs_stat(src_abs)
   if not stat then
-    callback({ content = { string.format("Error: Source not found: %s", args.src) } })
+    callback({
+      content = { string.format("Error: Source not found: %s", args.src) },
+      display_content = { FAILED_TO_RENAME },
+    })
     return
   end
   if stat.type ~= "file" then
-    callback({ content = { "Error: Only file renames are supported" } })
+    callback({
+      content = { "Error: Only file renames are supported" },
+      display_content = { FAILED_TO_RENAME },
+    })
     return
   end
 
   local dest_stat = vim.loop.fs_stat(dest_abs)
   if dest_stat then
-    callback({ content = { string.format("Error: Destination exists and overwriting is not allowed: %s", args.dest) } })
+    callback({
+      content = { string.format("Error: Destination exists and overwriting is not allowed: %s", args.dest) },
+      display_content = { FAILED_TO_RENAME },
+    })
     return
   end
 
@@ -2060,7 +2085,10 @@ Notes:
   end
 
   if not success then
-    callback({ content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") } })
+    callback({
+      content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") },
+      display_content = { FAILED_TO_RENAME },
+    })
     return
   end
 
@@ -2087,7 +2115,10 @@ Notes:
     ::continue::
   end
 
-  callback({ content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) } })
+  callback({
+    content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+    display_content = { string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+  })
 end)
 
 M.remove_file = M.new_tool({
@@ -2116,24 +2147,33 @@ M.remove_file = M.new_tool({
   local trash_dir_name = ".sia_trash"
 
   if not args.path then
-    callback({ content = { "Error: path is required" } })
+    callback({ content = { "Error: path is required" }, display_content = { FAILED_TO_REMOVE } })
     return
   end
 
   local target_abs = vim.fn.fnamemodify(args.path, ":p")
   local root = utils.detect_project_root(target_abs)
   if restrict_root and not utils.path_in_root(target_abs, root) then
-    callback({ content = { string.format("Error: Operation must stay within project root: %s", root) } })
+    callback({
+      content = { string.format("Error: Operation must stay within project root: %s", root) },
+      display_content = { FAILED_TO_REMOVE },
+    })
     return
   end
 
   local st = vim.loop.fs_stat(target_abs)
   if not st then
-    callback({ content = { string.format("Error: Path not found: %s", args.path) } })
+    callback({
+      content = { string.format("Error: Path not found: %s", args.path) },
+      display_content = { FAILED_TO_REMOVE },
+    })
     return
   end
   if st.type == "directory" then
-    callback({ content = { "Error: Directory removal is disabled by config" } })
+    callback({
+      content = { "Error: Directory removal is disabled by config" },
+      display_content = { FAILED_TO_REMOVE },
+    })
     return
   end
 
@@ -2160,21 +2200,33 @@ M.remove_file = M.new_tool({
     vim.fn.mkdir(vim.fn.fnamemodify(trash_dest, ":h"), "p")
     local ok, err = pcall(vim.loop.fs_rename, target_abs, trash_dest)
     if not ok then
-      callback({ content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") } })
+      callback({
+        content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") },
+        display_content = { FAILED_TO_REMOVE },
+      })
       return
     end
 
     delete_buffers_under(target_abs)
-    callback({ content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) } })
+    callback({
+      content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) },
+      display_content = { string.format("🗑️ Moved %s to trash", rel(target_abs)) },
+    })
     return
   else
     local ok = vim.fn.delete(target_abs, "f")
     if ok ~= 0 then
-      callback({ content = { string.format("Error: Failed to delete %s", args.path) } })
+      callback({
+        content = { string.format("Error: Failed to delete %s", args.path) },
+        display_content = { FAILED_TO_REMOVE },
+      })
       return
     end
     delete_buffers_under(target_abs)
-    callback({ content = { string.format("Permanently deleted %s", rel(target_abs)) } })
+    callback({
+      content = { string.format("Deleted %s", rel(target_abs)) },
+      display_content = { string.format("🗑️ Deleted %s", rel(target_abs)) },
+    })
     return
   end
 end)
