@@ -13,14 +13,13 @@ local function get_position(type)
   return start_pos, end_pos
 end
 
---- TODO: should this add it as a file instead?
 function _G.__sia_add_buffer()
   require("sia.utils").with_chat_strategy({
     on_select = function(strategy)
       strategy.conversation:add_instruction("current_context", {
         buf = vim.api.nvim_get_current_buf(),
-        pos = { 0, -1 },
         cursor = vim.api.nvim_win_get_cursor(0),
+        tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
       })
     end,
     only_visible = true,
@@ -39,6 +38,7 @@ function _G.__sia_add_context(type)
           cursor = vim.api.nvim_win_get_cursor(0),
           pos = { start_line, end_line },
           mode = "v",
+          tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
         })
       end,
       only_visible = true,
@@ -64,6 +64,7 @@ function _G.__sia_execute(type)
     buf = vim.api.nvim_get_current_buf(),
     win = vim.api.nvim_get_current_win(),
     cursor = vim.api.nvim_win_get_cursor(0),
+    tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
   }
   local action
   if _G.__sia_execute_action == nil and vim.b.sia then
