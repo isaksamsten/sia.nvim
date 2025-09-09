@@ -652,7 +652,7 @@ M.read = M.new_tool({
 
   callback({
     content = content,
-    context = { buf = buf, pos = pos, tick = tracker.track(buf) },
+    context = { buf = buf, pos = pos, tick = tracker.ensure_tracked(buf) },
     kind = "context",
     display_content = display_lines,
   })
@@ -1964,6 +1964,8 @@ rather than multiple messages with a single call each.
     table.insert(snippet_lines, 1, success_msg)
     callback({
       content = snippet_lines,
+      context = { buf = buf, tick = tracker.ensure_tracked(buf) },
+      kind = "IGNORE_SUPERSEDED",
       display_content = {
         string.format("✏️ Edited lines %d-%d in %s", edit_start, edit_end, rel(args.target_file)),
       },
@@ -1974,7 +1976,7 @@ rather than multiple messages with a single call each.
       callback({
         content = {
           string.format(
-            "Edit failed because %d matches was found. Please show the location(s) and the edit you want to make",
+            "Edit failed because %d matches was found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
             #matches
           ),
         },

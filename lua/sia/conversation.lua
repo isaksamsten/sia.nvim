@@ -430,6 +430,7 @@ function Conversation:_update_overlapping_messages(context, kind)
     if
       old_context
       and message.kind ~= nil
+      and message.kind ~= "IGNORE_SUPERSEDED"
       and message.kind == kind
       and old_context.buf
       and message.content

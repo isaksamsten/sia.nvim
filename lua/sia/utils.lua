@@ -49,7 +49,7 @@ function M.create_context(args)
     pos = { args.line1, args.line2 },
     bang = args.bang,
   }
-  opts.tick = require("sia.tracker").track(opts.buf)
+  opts.tick = require("sia.tracker").ensure_tracked(opts.buf)
   if args.count == -1 then
     opts.mode = "n"
   else

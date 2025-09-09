@@ -5,7 +5,7 @@ M.tracked_buffers = {}
 
 --- @param buf integer
 --- @return integer
-function M.track(buf)
+function M.ensure_tracked(buf)
   if not M.tracked_buffers[buf] then
     M.tracked_buffers[buf] = { tick = 0, editing = false }
 
