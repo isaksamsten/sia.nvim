@@ -429,6 +429,15 @@ function ChatStrategy:new(conversation, options)
 
   obj._is_named = false
   obj.cancellable = { is_cancelled = false }
+  local augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = true })
+  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+    group = augroup,
+    buffer = buf,
+    once = true,
+    callback = function(args)
+      ChatStrategy.remove(args.buf)
+    end,
+  })
   return obj
 end
 

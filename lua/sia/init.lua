@@ -27,7 +27,7 @@ local function set_highlight_groups()
   end
 end
 
---- @param opts { buf: number? }?
+--- @param opts { buf: integer? }?
 function M.accept_edits(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
@@ -36,7 +36,7 @@ function M.accept_edits(opts)
   end
 end
 
---- @param opts { buf: number? }?
+--- @param opts { buf: integer? }?
 function M.reject_edits(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
@@ -45,7 +45,7 @@ function M.reject_edits(opts)
   end
 end
 
---- @param opts { buf: number? }?
+--- @param opts { buf: integer? }?
 function M.show_edits_diff(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
@@ -57,7 +57,7 @@ function M.show_edits_diff(opts)
 end
 
 --- Navigate to the next diff hunk
---- @param opts { buf: number? }?
+--- @param opts { buf: integer? }?
 function M.next_edit(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
@@ -78,7 +78,7 @@ function M.next_edit(opts)
 end
 
 --- Navigate to the previous diff hunk
---- @param opts { buf: number? }?
+--- @param opts { buf: integer? }?
 function M.prev_edit(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
@@ -99,7 +99,7 @@ function M.prev_edit(opts)
 end
 
 --- Populate quickfix list with all diff hunks
---- @param opts { buf: number? }? Options table with optional buffer number
+--- @param opts { buf: integer? }?
 function M.show_edits_qf(opts)
   opts = opts or {}
   local buf = opts.buf
@@ -111,8 +111,7 @@ function M.show_edits_qf(opts)
   local quickfix_items = diff.get_all_hunks_for_quickfix(buf)
 
   if #quickfix_items == 0 then
-    local message = buf and "No diff hunks in current buffer" or "No diff hunks found"
-    vim.api.nvim_echo({ { "Sia: " .. message, "WarningMsg" } }, false, {})
+    vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
     return
   end
 
