@@ -1583,21 +1583,25 @@ For small, targeted changes, prefer the edit tool instead.]],
   local lines = vim.split(args.content, "\n", { plain = true })
   tracker.non_tracked_edit(buf, function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_buf_call(buf, function()
+      pcall(vim.cmd, "noa silent write!")
+    end)
   end)
 
   if file_exists then
     diff.highlight_diff_changes(buf, initial_code)
   end
 
-  vim.api.nvim_buf_call(buf, function()
-    pcall(vim.cmd, "noa silent write!")
-  end)
-
   local action = file_exists and "overwritten" or "created"
   local display_text =
     string.format("%s %s (%d lines)", file_exists and "Overwrote" or "Created", rel(args.path), #lines)
   callback({
     content = { string.format("Successfully %s buffer for %s", action, args.path) },
+    context = {
+      buf = buf,
+      kind = "IGNORE_SUPERSEDED",
+      tick = tracker.ensure_tracked(buf),
+    },
     display_content = { "💾 " .. display_text },
   })
 end)
@@ -1749,9 +1753,9 @@ rather than multiple messages with a single call each.
 
     tracker.non_tracked_edit(buf, function()
       vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-    end)
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write!")
+      vim.api.nvim_buf_call(buf, function()
+        pcall(vim.cmd, "noa silent write!")
+      end)
     end)
     if opts.choice == 1 or opts.choice == 2 then
       diff.highlight_diff_changes(buf, old_content)
