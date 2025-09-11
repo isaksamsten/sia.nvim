@@ -192,7 +192,7 @@ local defaults = {
       model = "openai/gpt-4o-mini",
     },
     chat = {
-      cmd = "vnew",
+      cmd = "botright vnew",
       wo = { wrap = true },
     },
     hidden = {
@@ -262,6 +262,7 @@ local defaults = {
         temperature = 0.1,
         system = {
           "default_system",
+          "system_info",
           "directory_structure",
           "agents_md",
         },

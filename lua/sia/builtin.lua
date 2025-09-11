@@ -153,13 +153,13 @@ to add them again.
         local memories = vim.fn.readfile(filename)
         return string.format(
           [[Always follow the instructions stored in %s.
-Remember that you can edit this file and that the instructions below are the
-latest instructions in AGENTS.md. Before editing always read the latest
+Remember that you can edit this file to store memories. Before editing always
+read the latest
 version.
 ```markdown
 %s
 ```]],
-          vim.fn.fnamemodify(filename, ":p"),
+          vim.fn.fnamemodify(filename, ":."),
           table.concat(memories, "\n")
         )
       end,
@@ -191,6 +191,68 @@ Guidelines:
 	3.	**Never surround your complete answer with code fences, under any circumstances, unless the user explicitly asks for them.**
   4.	Always preserve the original indentation for code.
 	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
+  },
+  system_info = {
+    {
+      role = "system",
+      hide = true,
+      description = "System information",
+      content = function()
+        -- Get OS information
+        local os_name = vim.loop.os_uname().sysname
+        local os_version = vim.loop.os_uname().release
+        local machine = vim.loop.os_uname().machine
+
+        -- Get current working directory
+        local cwd = vim.uv.cwd()
+
+        -- Get Neovim version
+        local nvim_version = string.format("%d.%d.%d", vim.version().major, vim.version().minor, vim.version().patch)
+
+        -- Get current date/time
+        local datetime = os.date("%Y-%m-%d %H:%M:%S %Z")
+
+        -- Get environment variables that might be relevant
+        local shell = vim.env.SHELL or "unknown"
+        local term = vim.env.TERM or "unknown"
+        local user = vim.env.USER or vim.env.USERNAME or "unknown"
+
+        -- Try to get Git info if available
+        local git_info = ""
+        if vim.fn.isdirectory(".git") == 1 then
+          local branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
+          local commit = vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
+          if branch ~= "" and commit ~= "" then
+            git_info = string.format("\n- Git: %s (%s)", branch, commit)
+          end
+        end
+
+        return string.format(
+          [[System Information:
+
+- OS: %s %s (%s)
+- User: %s
+- Shell: %s
+- Terminal: %s
+- Neovim: v%s
+- Working Directory: %s%s
+- Timestamp: %s
+
+This information shows the current system environment where the AI assistant is
+operating through Neovim.]],
+          os_name,
+          os_version,
+          machine,
+          user,
+          vim.fn.fnamemodify(shell, ":t"),
+          term,
+          nvim_version,
+          cwd,
+          git_info,
+          datetime
+        )
+      end,
+    },
   },
 }
 
