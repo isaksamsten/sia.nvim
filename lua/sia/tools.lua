@@ -133,7 +133,9 @@ M.new_tool = function(opts, execute)
           end
           if resp == nil then
             callback({
-              content = { string.format("User cancelled %s operation.", opts.name) },
+              content = {
+                string.format("User cancelled %s operation. Ask the user what they want you to do!", opts.name),
+              },
             })
             return
           end
