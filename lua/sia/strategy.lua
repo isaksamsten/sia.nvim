@@ -142,11 +142,13 @@ function Strategy:on_start(job) end
 
 --- Callback triggered on each streaming content.
 --- @param content string
-function Strategy:on_progress(content) end
+--- @param job integer
+function Strategy:on_progress(content, job) end
 
 --- Callback triggered when the model is reasoning
 --- @param content string
-function Strategy:on_reasoning(content) end
+--- @param job integer
+function Strategy:on_reasoning(content, job) end
 
 --- Callback triggered when the strategy is completed.
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil), job: number? }
@@ -476,7 +478,7 @@ function ChatStrategy:on_start(job)
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
       self.cancellable.is_cancelled = true
-      -- vim.fn.jobstop(job)
+      vim.fn.jobstop(job)
     end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
@@ -492,19 +494,28 @@ function ChatStrategy:on_start(job)
   end
 end
 
-function ChatStrategy:on_reasoning(content)
-  -- self._reasoning_writer:append(content)
-end
-
-function ChatStrategy:on_progress(content)
+function ChatStrategy:on_reasoning(content, job)
   if vim.api.nvim_buf_is_loaded(self.buf) then
-    self._writer:append(content)
+  else
+    vim.fn.jobstop(job)
   end
 end
 
-function ChatStrategy:on_tool_call(tool)
-  self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
-  Strategy.on_tool_call(self, tool)
+function ChatStrategy:on_progress(content, job)
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    self._writer:append(content)
+  else
+    vim.fn.jobstop(job)
+  end
+end
+
+function ChatStrategy:on_tool_call(tool, job)
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
+    Strategy.on_tool_call(self, tool)
+  else
+    vim.fn.jobstop(job)
+  end
 end
 
 function ChatStrategy:get_win()
@@ -512,9 +523,11 @@ function ChatStrategy:get_win()
 end
 
 function ChatStrategy:on_cancelled()
-  self.canvas:update_progress({
-    { "Operation cancelled. Continue the conversation or start a new request", "DiagnosticWarn" },
-  })
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    self.canvas:update_progress({
+      { "Operation cancelled. Continue the conversation or start a new request", "DiagnosticWarn" },
+    })
+  end
 end
 
 function ChatStrategy:on_complete(control)

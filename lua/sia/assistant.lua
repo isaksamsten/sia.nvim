@@ -9,6 +9,7 @@ local ERROR_API_KEY_MISSING = -100
 --- Call the provider defined in the query.
 --- @param query sia.Query
 --- @param opts sia.ProviderOpts
+--- @return integer jobid
 local function call_provider(query, opts)
   local config = require("sia.config")
   local model
@@ -102,7 +103,7 @@ local function call_provider(query, opts)
     error("Failed to write request to temp file")
   end
   table.insert(args, "@" .. tmpfile)
-  vim.fn.jobstart(args, {
+  return vim.fn.jobstart(args, {
     clear_env = true,
     on_stderr = function(_, a, _) end,
     on_stdout = opts.on_stdout,
@@ -203,16 +204,16 @@ function M.execute_strategy(strategy)
                   local delta = obj.choices[1].delta
                   if delta then
                     if delta.reasoning then
-                      strategy:on_reasoning(delta.reasoning)
+                      strategy:on_reasoning(delta.reasoning, job_id)
                     elseif delta.content then
-                      strategy:on_progress(delta.content)
+                      strategy:on_progress(delta.content, job_id)
                       vim.api.nvim_exec_autocmds("User", {
                         pattern = "SiaProgress",
                         --- @diagnostic disable-next-line: undefined-field
                         data = { buf = strategy.buf, content = delta.content },
                       })
                     elseif delta.tool_calls then
-                      strategy:on_tool_call(delta.tool_calls)
+                      strategy:on_tool_call(delta.tool_calls, job_id)
                     end
                   end
                 end
