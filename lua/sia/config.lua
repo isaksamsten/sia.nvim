@@ -234,6 +234,7 @@ local defaults = {
         workspace = require("sia.tools").workspace,
         rename_file = require("sia.tools").rename_file,
         remove_file = require("sia.tools").remove_file,
+        bash = require("sia.tools").bash,
       },
     },
     actions = {
@@ -282,6 +283,7 @@ local defaults = {
           "compact",
           "rename_file",
           "remove_file",
+          "bash",
         },
       },
     },
