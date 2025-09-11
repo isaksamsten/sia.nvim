@@ -1266,12 +1266,10 @@ Do not guess which file the user means—always check the workspace first.]],
   local visible_bufs = {}
   local background_buffers = {}
 
-  -- Get information about visible windows
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local buf = vim.api.nvim_win_get_buf(win)
     local name = vim.api.nvim_buf_get_name(buf)
 
-    -- Only show buffers backed by actual files
     if name == "" or vim.fn.filereadable(name) == 0 then
       goto continue
     end
@@ -1291,6 +1289,7 @@ Do not guess which file the user means—always check the workspace first.]],
       botline = botline,
       total_lines = total_lines,
       is_current = win == current_win,
+      cursor_line = vim.api.nvim_win_get_cursor(win)[1],
     })
 
     visible_bufs[buf] = true
@@ -1298,7 +1297,6 @@ Do not guess which file the user means—always check the workspace first.]],
     ::continue::
   end
 
-  -- Sort windows: current first, then by buffer name
   table.sort(visible_windows, function(a, b)
     if a.is_current ~= b.is_current then
       return a.is_current
@@ -1306,7 +1304,6 @@ Do not guess which file the user means—always check the workspace first.]],
     return a.relative_path < b.relative_path
   end)
 
-  -- Get background buffers (loaded but not visible)
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) and not visible_bufs[buf] then
       local name = vim.api.nvim_buf_get_name(buf)
@@ -1327,12 +1324,10 @@ Do not guess which file the user means—always check the workspace first.]],
     end
   end
 
-  -- Sort background buffers by name
   table.sort(background_buffers, function(a, b)
     return a.relative_path < b.relative_path
   end)
 
-  -- Build output
   if #visible_windows == 0 then
     table.insert(content, "No file windows are currently visible")
   else
@@ -1342,11 +1337,30 @@ Do not guess which file the user means—always check the workspace first.]],
     )
     table.insert(content, "")
 
-    for _, win_info in ipairs(visible_windows) do
+    for i, win_info in ipairs(visible_windows) do
       local line_range = string.format("lines %d-%d of %d", win_info.topline, win_info.botline, win_info.total_lines)
-      local current_indicator = win_info.is_current and " [current]" or ""
-      local line = string.format("  %s (%s)%s", win_info.relative_path, line_range, current_indicator)
-      table.insert(content, line)
+      local header = string.format(
+        "%s (%s, cursor at line %d) with content as shown by cat -n",
+        win_info.relative_path,
+        line_range,
+        win_info.cursor_line
+      )
+      table.insert(content, header)
+
+      local visible_content = utils.get_content(
+        win_info.buf,
+        win_info.topline - 1,
+        win_info.botline,
+        { show_line_numbers = true, max_line_length = 2000 }
+      )
+
+      for _, line in ipairs(visible_content) do
+        table.insert(content, line)
+      end
+
+      if i < #visible_windows then
+        table.insert(content, "")
+      end
     end
   end
 
@@ -1358,7 +1372,10 @@ Do not guess which file the user means—always check the workspace first.]],
     end
   end
 
-  callback({ content = content, display_content = { "👁️ Read current workspace" } })
+  callback({
+    content = content,
+    display_content = { "👁️ Read current workspace" },
+  })
 end)
 
 M.compact_conversation = M.new_tool({
