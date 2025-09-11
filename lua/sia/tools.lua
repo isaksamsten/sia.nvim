@@ -2105,11 +2105,13 @@ Usage notes:
     workspace to read files.
   - When issuing multiple commands, use the ';' or '&&' operator to separate
     them. DO NOT use newlines (newlines are ok in quoted strings).
-  - IMPORTANT: All commands share the same shell session. Shell state
-    (environment variables, virtual environments, current directory, etc.)
-    persist between commands. For example, if you set an environment variable as
-    part of a command, the environment variable will persist for subsequent
-    commands.
+  - VERY IMPORTANT: You should use separate tool calls rather than chaining
+    with `&&` when one of the commands changes the environment. The changes are
+    persisted between calls!
+  - VERY IMPORTANT: All commands share the same persistent shell session. This means:
+    * Environment variables remain set between commands
+    * Directory changes with `cd` persist
+    * Shell settings like `ulimit` persist
   - Try to maintain your current working directory throughout the session by
     using absolute paths and avoiding usage of `cd`. You may use `cd` if the
     User explicitly requests it.
