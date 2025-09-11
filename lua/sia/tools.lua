@@ -1805,7 +1805,7 @@ rather than multiple messages with a single call each.
       callback({
         content = {
           string.format(
-            "I tried to edit %s but couldn't find the exact text to replace (found %d matches instead of 1). Let me try again with more specific context.",
+            "Failed to edit %s since I couldn't find the exact text to replace (found %d matches instead of 1).",
             args.target_file,
             #matches
           ),
