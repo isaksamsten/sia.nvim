@@ -261,7 +261,7 @@ function Message:get_description()
   local description = self.description
   --- @cast description string?
   if description then
-    return description
+    return self.role .. ": " .. description
   end
 
   local content = self:get_content()
