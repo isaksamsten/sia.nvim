@@ -686,7 +686,7 @@ function M.main(action, opts, model)
           end
         else
           local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-          strategy.conversation:add_instruction(last_instruction, opts)
+          strategy.conversation:add_instruction(last_instruction, nil)
         end
 
         -- The user might have explicitly changed the model with -m
