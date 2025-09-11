@@ -1,6 +1,7 @@
 local M = {}
 
---- @type table<integer, {original_content: string[], hunks: table}>
+--- @alias sia.diff.Hunk {old_start: integer, old_count: integer, new_start: integer, new_count: integer, type: "change"|"add"|"delete"}
+--- @type table<integer, {original_content: string[], hunks: sia.diff.Hunk[]}>
 local buffer_diff_state = {}
 local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
 
@@ -39,6 +40,7 @@ function M.highlight_diff_changes(buf, original_content)
       hunks = {},
     }
   end
+  local diff_state = buffer_diff_state[buf]
 
   local baseline = table.concat(buffer_diff_state[buf].original_content, "\n")
   vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
@@ -56,7 +58,6 @@ function M.highlight_diff_changes(buf, original_content)
   end
 
   local old_lines = buffer_diff_state[buf].original_content
-  local hunks = {}
 
   for _, hunk in ipairs(diff_result) do
     local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
@@ -68,7 +69,7 @@ function M.highlight_diff_changes(buf, original_content)
       new_count = new_count,
       type = old_count > 0 and new_count > 0 and "change" or (new_count > 0 and "add" or "delete"),
     }
-    table.insert(hunks, hunk_info)
+    table.insert(diff_state.hunks, hunk_info)
 
     if old_count > 0 then
       local old_text_lines = {}
@@ -110,14 +111,15 @@ function M.highlight_diff_changes(buf, original_content)
     end
   end
 
-  buffer_diff_state[buf].hunks = hunks
-
-  vim.api.nvim_create_autocmd("BufWritePost", {
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = buf,
     once = true,
     callback = function()
       vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
       buffer_diff_state[buf] = nil
+      require("sia.tracker").non_tracked_edit(buf, function()
+        vim.cmd("noa write")
+      end)
     end,
   })
 end
@@ -176,7 +178,6 @@ function M.get_next_hunk(buf, current_line)
     end
   end
 
-  -- If no hunk found after current line, wrap to first hunk
   if #hunks > 0 then
     local first_hunk = hunks[1]
     return { line = first_hunk.new_start, index = 1 }
@@ -188,7 +189,7 @@ end
 --- Get the previous diff hunk position relative to current line
 --- @param buf number Buffer handle
 --- @param current_line number Current cursor line (1-based)
---- @return { line: number, index: number }? hunk_info Position and index of previous hunk, or nil if none
+--- @return { line: number, index: number }? hunk_info
 function M.get_prev_hunk(buf, current_line)
   local diff_state = buffer_diff_state[buf]
 
