@@ -664,4 +664,124 @@ function M.path_in_root(path, root)
   return vim.startswith(path, root)
 end
 
+-- Banned commands for security
+M.BANNED_COMMANDS = {
+  "open",
+  "xdg-open",
+  "alias",
+  "sudo",
+  "su",
+  "passwd",
+  "ssh",
+  "scp",
+  "rsync",
+  "curl",
+  "curlie",
+  "wget",
+  "nc",
+  "netcat",
+  "dd",
+  "mkfs",
+  "fdisk",
+  "mount",
+  "umount",
+  "chmod",
+  "chown",
+  "chgrp",
+  "systemctl",
+  "service",
+  "reboot",
+  "shutdown",
+  "halt",
+  "poweroff",
+  "kill",
+  "killall",
+  "crontab",
+  "at",
+  "nohup",
+  "screen",
+  "tmux",
+  "bg",
+  "fg",
+  "jobs",
+}
+
+function M.is_command_banned(command)
+  local cmd_parts = vim.split(command:gsub("^%s+", ""), "%s+")
+  local base_cmd = cmd_parts[1]:lower()
+
+  for _, banned in ipairs(M.BANNED_COMMANDS) do
+    if base_cmd == banned then
+      return true, string.format("Command '%s' is not allowed for security reasons", base_cmd)
+    end
+  end
+
+  -- if command:match("%.%.") or command:match("~/") or command:match("^/") then
+  --   return true, "Path traversal or absolute paths outside project are not allowed"
+  -- end
+
+  return false, "command requires confirmation"
+end
+
+--- Command security functions for bash tool
+--- @param command string
+--- @return boolean is_dangerous
+function M.detect_dangerous_command_patterns(command)
+  local dangerous_patterns = {
+    -- Command chaining/compound commands
+    "rm",
+    "rmdir",
+    "&&",
+    "||",
+    ";",
+    "|",
+    -- Command substitution
+    "%$%(",
+    "`",
+    "%$%{",
+    -- Indirect execution
+    "bash %-c",
+    "sh %-c",
+    "zsh %-c",
+    "python %-c",
+    "node %-e",
+    "perl %-e",
+    -- Built-in bypasses
+    "eval",
+    "exec",
+    "source",
+    -- Process substitution
+    "%<%(",
+    -- Here documents
+    "<<",
+    -- Variable assignment with execution
+    "%$[A-Za-z_]",
+    -- Alias/function definition
+    "alias ",
+    "function ",
+    -- Network commands
+    "curl",
+    "wget",
+    "nc",
+    "netcat",
+    -- Common escape patterns
+    "\\r",
+    "\\m",
+    "\\s",
+    -- Quoted command bypasses
+    "\"r\"",
+    "'s'",
+    "\"s\"",
+    "'r'",
+  }
+
+  for _, pattern in ipairs(dangerous_patterns) do
+    if command:find(pattern) then
+      return true
+    end
+  end
+
+  return false
+end
+
 return M

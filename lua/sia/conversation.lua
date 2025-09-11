@@ -382,6 +382,11 @@ function Conversation:clear_user_instructions()
       return m.role == "system"
     end)
     :totable()
+
+  if self.shell then
+    self.shell:close()
+    self.shell = nil
+  end
 end
 
 --- Check if the new interval completely encompasses an existing interval

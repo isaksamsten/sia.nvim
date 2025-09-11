@@ -11,6 +11,7 @@ local FAILED_TO_READ = "❌ Failed to read"
 local FAILED_TO_GET_DIAGNOSTICS = "❌ Failed to read diagnostics"
 local FAILED_TO_CREATE_QF = "❌ Failed to create quickfix list"
 local FAILED_TO_WRITE = "❌ Failed to write file"
+local FAILED_TO_EXECUTE = "❌ Failed to execute command"
 
 local function rel(path)
   return vim.fn.fnamemodify(path, ":.")
@@ -27,6 +28,7 @@ end
 ---@field parameters table
 ---@field confirm (string|fun(args:table):string)?
 ---@field select { prompt: (string|fun(args:table):string)?, choices: string[]}?
+---@field require_confirmation (boolean|fun(args:table):boolean)?
 
 ---@param opts SiaNewToolOpts
 ---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: {choice: integer?, cancellable: sia.Cancellable?}?)
@@ -45,6 +47,17 @@ M.new_tool = function(opts, execute)
     else
       return (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
     end
+  end
+
+  --- @return boolean
+  local require_confirmation = function(args)
+    if not opts.require_confirmation then
+      return false
+    end
+    if type(opts.require_confirmation) == "function" then
+      return opts.require_confirmation(args)
+    end
+    return opts.require_confirmation
   end
 
   --- @type sia.config.Tool
@@ -93,11 +106,31 @@ M.new_tool = function(opts, execute)
           text = "Execute " .. (opts.name or "tool")
         end
 
-        text = text:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
+        --- @cast text string
+        local text_no_whitespace = text:gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1")
+        local text_sub = text_no_whitespace:sub(1, 80)
+
+        local must_confirm = require_confirmation(args)
+
+        local clear_confirmation = nil
+        local prompt_text
+        if #text_no_whitespace ~= #text_sub and must_confirm then
+          clear_confirmation =
+            require("sia.confirmation").show(vim.split(text, "\n", { trimempty = true, plain = true }))
+          vim.cmd.redraw()
+          prompt_text = "Proceed? (y/N): "
+        elseif must_confirm then
+          prompt_text = text_sub .. " - Proceed? (y/N): "
+        else
+          prompt_text = text_sub .. " - Proceed? (Y/n/[a]lways): "
+        end
 
         vim.ui.input({
-          prompt = text .. " - Proceed? (Y/n/[a]lways): ",
+          prompt = prompt_text,
         }, function(resp)
+          if clear_confirmation then
+            clear_confirmation()
+          end
           if resp == nil then
             callback({
               content = { string.format("User cancelled %s operation.", opts.name) },
@@ -105,14 +138,37 @@ M.new_tool = function(opts, execute)
             return
           end
 
-          local response = resp:lower()
-          if response == "a" or response == "always" then
+          local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
+          if response == "n" or response == "no" then
+            callback({
+              content = {
+                string.format("User declined to execute %s. Ask the user what they want you to do!", opts.name),
+              },
+            })
+            return
+          end
+
+          if not must_confirm and (response == "a" or response == "always") then
             conversation.auto_confirm_tools[opts.name] = 1
             execute(args, conversation, callback, { cancellable = cancellable })
-          elseif response == "n" or response == "no" then
-            callback({ content = { string.format("User declined to execute %s.", opts.name) } })
+            return
+          end
+
+          local should_proceed = false
+          if must_confirm then
+            should_proceed = response == "y" or response == "yes"
           else
+            should_proceed = response == "" or response == "y" or response == "yes"
+          end
+
+          if should_proceed then
             execute(args, conversation, callback, { cancellable = cancellable })
+          else
+            callback({
+              content = {
+                string.format("User declined to execute %s. Ask the user what they want you to do!", opts.name),
+              },
+            })
           end
         end)
       elseif opts.select then
@@ -1101,266 +1157,6 @@ M.get_diagnostics = M.new_tool({
   })
 end)
 
-M.git_status = M.new_tool({
-  name = "git_status",
-  message = "Checking git status...",
-  description = "Get current git status showing staged, unstaged, and untracked files",
-  parameters = vim.empty_dict(),
-  required = {},
-  confirm = "Check git status",
-}, function(args, _, callback)
-  vim.system({ "git", "status", "--porcelain" }, { text = true }, function(obj)
-    if obj.code ~= 0 then
-      callback({ content = { "Error: Not a git repository or git not available" } })
-      return
-    end
-
-    local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
-    if #lines == 0 then
-      callback({
-        content = { "Working tree clean - no changes detected" },
-        display_content = { "🌿 Working tree clean - no changes detected" },
-      })
-      return
-    end
-
-    local content = { "Git status:", "" }
-    for _, line in ipairs(lines) do
-      local status = line:sub(1, 2)
-      local file = line:sub(4)
-      local desc = ""
-
-      if status == "??" then
-        desc = "untracked"
-      elseif status == "A " then
-        desc = "added"
-      elseif status == "M " then
-        desc = "modified"
-      elseif status == " M" then
-        desc = "modified (unstaged)"
-      elseif status == "MM" then
-        desc = "modified (staged and unstaged)"
-      elseif status == "D " then
-        desc = "deleted"
-      else
-        desc = "other"
-      end
-
-      table.insert(content, string.format("  %s: %s", desc, file))
-    end
-
-    callback({
-      content = content,
-      display_content = { string.format("📋 Fetched git status (%d files changed)", #lines) },
-    })
-  end)
-end)
-
-M.git_diff = M.new_tool({
-  name = "git_diff",
-  message = "Getting git diff...",
-  description = "Show git diff for specific files or all changes",
-  parameters = {
-    file = { type = "string", description = "Specific file to diff (optional)" },
-    staged = { type = "boolean", description = "Show staged changes instead of unstaged" },
-  },
-  required = { "staged" },
-  confirm = function(args)
-    if args.file then
-      if args.staged then
-        return string.format("Show staged changes for %s", args.file)
-      else
-        return string.format("Show unstaged changes for %s", args.file)
-      end
-    else
-      if args.staged then
-        return "Show all staged changes"
-      else
-        return "Show all unstaged changes"
-      end
-    end
-  end,
-}, function(args, _, callback)
-  local cmd = { "git", "diff" }
-
-  if args.staged then
-    table.insert(cmd, "--staged")
-  end
-
-  if args.file then
-    table.insert(cmd, args.file)
-  end
-
-  vim.system(cmd, { text = true }, function(obj)
-    if obj.code ~= 0 then
-      callback({ content = { "Failed to run git diff" } })
-      return
-    end
-
-    local lines = vim.split(obj.stdout or "", "\n")
-    if #lines <= 1 then
-      callback({
-        content = { "No changes to show" },
-        display_content = { "🌿 No changes to show" },
-      })
-      return
-    end
-
-    table.insert(lines, 1, "Git diff:")
-    callback({ content = lines, display_content = { string.format("📄 Git diff (%d lines)", #lines - 1) } })
-  end)
-end)
-
-M.git_commit = M.new_tool({
-  name = "git_commit",
-  message = "Preparing commit...",
-  description = "Commit staged changes with a generated or custom commit message",
-  parameters = {
-    message = { type = "string", description = "Commit message" },
-    files = {
-      type = "array",
-      items = { type = "string" },
-      description = "Specific files to stage and commit (optional)",
-    },
-  },
-  confirm = function(args)
-    return string.format("Commit changes with message: `%s`", args.message)
-  end,
-  required = { "message" },
-}, function(args, _, callback)
-  local function execute_commit(message, cb)
-    vim.system({ "git", "commit", "-m", message }, { text = true }, function(commit_obj)
-      if commit_obj.code ~= 0 then
-        cb({ content = { "Error: Commit failed", commit_obj.stderr or "Unknown error" } })
-        return
-      end
-
-      local message_split = vim.split(message, "\n")
-      table.insert(message_split, 1, "Successfully committed changes:")
-
-      cb({ content = message_split, display_content = { "✅ Committed changes" } })
-    end)
-  end
-
-  local function proceed_with_commit()
-    vim.system({ "git", "diff", "--staged", "--name-only" }, { text = true }, function(obj)
-      if obj.code ~= 0 then
-        callback({ content = { "Error: Not a git repository" } })
-        return
-      end
-
-      local staged_files = vim.split(obj.stdout or "", "\n", { trimempty = true })
-      if #staged_files == 0 then
-        callback({ content = { "Error: No staged changes to commit" } })
-        return
-      end
-
-      local commit_message = args.message
-      execute_commit(commit_message, callback)
-    end)
-  end
-
-  if args.files then
-    local staged_count = 0
-    local total_files = #args.files
-
-    for _, file in ipairs(args.files) do
-      vim.system({ "git", "add", file }, { text = true }, function(obj)
-        staged_count = staged_count + 1
-        if obj.code ~= 0 then
-          callback({ content = { string.format("Failed to stage file: %s", file) } })
-          return
-        end
-
-        if staged_count == total_files then
-          proceed_with_commit()
-        end
-      end)
-    end
-  else
-    proceed_with_commit()
-  end
-end)
-
-M.git_unstage = M.new_tool({
-  name = "git_unstage",
-  message = "Unstaging files...",
-  description = "Unstage files from the staging area (does not delete changes, just moves them back to unstaged)",
-  parameters = {
-    files = {
-      type = "array",
-      items = { type = "string" },
-      description = "Specific files to unstage (optional - unstages all if not provided)",
-    },
-  },
-  required = {},
-  confirm = function(args)
-    if args.files and #args.files > 0 then
-      return string.format("Unstage files: %s", table.concat(args.files, ", "))
-    else
-      return "Unstage all staged files"
-    end
-  end,
-}, function(args, _, callback)
-  vim.system({ "git", "diff", "--staged", "--name-only" }, { text = true }, function(obj)
-    if obj.code ~= 0 then
-      callback({ content = { "Error: Not a git repository" } })
-      return
-    end
-
-    local staged_files = vim.split(obj.stdout or "", "\n", { trimempty = true })
-    if #staged_files == 0 then
-      callback({ content = { "No staged files to unstage" } })
-      return
-    end
-
-    local files_to_unstage = {}
-    if args.files and #args.files > 0 then
-      for _, file in ipairs(args.files) do
-        local found = false
-        for _, staged_file in ipairs(staged_files) do
-          if file == staged_file then
-            found = true
-            break
-          end
-        end
-        if found then
-          table.insert(files_to_unstage, file)
-        else
-          callback({ content = { string.format("Warning: %s is not currently staged", file) } })
-          return
-        end
-      end
-    else
-      files_to_unstage = staged_files
-    end
-
-    if #files_to_unstage == 0 then
-      callback({ content = { "No valid files to unstage" } })
-      return
-    end
-
-    local cmd = { "git", "reset", "HEAD" }
-    for _, file in ipairs(files_to_unstage) do
-      table.insert(cmd, file)
-    end
-
-    vim.system(cmd, { text = true }, function(reset_obj)
-      if reset_obj.code ~= 0 then
-        callback({ content = { "Failed to unstage files:", reset_obj.stderr or "Unknown error" } })
-        return
-      end
-
-      local content = { "Successfully unstaged files:" }
-      for _, file in ipairs(files_to_unstage) do
-        table.insert(content, "  " .. file)
-      end
-
-      callback({ content = content, display_content = { string.format("↩️ Unstaged %d files", #files_to_unstage) } })
-    end)
-  end)
-end)
-
 M.show_locations = M.new_tool({
   name = "show_locations",
   message = "Creating location list...",
@@ -2233,6 +2029,214 @@ M.remove_file = M.new_tool({
     })
     return
   end
+end)
+
+M.bash = M.new_tool({
+  name = "bash",
+  require_confirmation = function(args)
+    return utils.detect_dangerous_command_patterns(args.command) or #args.command > 100
+  end,
+  message = function(args)
+    return string.format("Running command`...")
+  end,
+  description = "Execute bash commands safely within the project directory",
+  system_prompt = string.format(
+    [[Executes a given bash command in a persistent shell session
+with optional timeout, ensuring proper handling and security measures.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use the
+     glob tool to verify the parent directory exists and is the correct
+     location
+   - For example, before running "mkdir foo/bar", first use glob to check
+     that "foo" exists and is the intended parent directory
+
+2. Security Check:
+   - For security and to limit the threat of a prompt injection attack, some
+     commands are limited or banned. If you use a disallowed command, you will
+     receive an error message explaining the restriction. Explain the error to
+     the User.
+   - Verify that the command is not one of the banned commands: %s.
+
+3. Command Execution:
+   - After ensuring proper quoting, execute the command.
+   - Capture the output of the command.
+
+4. Output Processing:
+   - If the output exceeds 8000 characters, output will be truncated before
+     being returned to you.
+   - Prepare the output for display to the user.
+
+5. Return Result:
+   - Provide the processed output of the command.
+   - If any errors occurred during execution, include those in the output.
+
+Usage notes:
+  - The command argument is required.
+  - You can specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). If not specified, commands will timeout after 30 seconds.
+  - VERY IMPORTANT: You MUST avoid using search commands like `find` and
+    `grep`. Instead use grep, glob, or dispatch_agent to search. You MUST avoid
+    read tools like `cat`, `head`, `tail`, and `ls`, and use read and
+    workspace to read files.
+  - When issuing multiple commands, use the ';' or '&&' operator to separate
+    them. DO NOT use newlines (newlines are ok in quoted strings).
+  - IMPORTANT: All commands share the same shell session. Shell state
+    (environment variables, virtual environments, current directory, etc.)
+    persist between commands. For example, if you set an environment variable as
+    part of a command, the environment variable will persist for subsequent
+    commands.
+  - Try to maintain your current working directory throughout the session by
+    using absolute paths and avoiding usage of `cd`. You may use `cd` if the
+    User explicitly requests it.
+
+  <good-example>
+  pytest /foo/bar/tests
+  </good-example>
+  <bad-example>
+  cd /foo/bar && pytest tests
+  </bad-example>
+
+# Committing changes with git
+
+When the user asks you to create a new git commit, follow these steps carefully:
+
+1. Start with a single message that contains exactly three tool_use blocks that
+   do the following (it is VERY IMPORTANT that you send these tool_use blocks
+   in a single message, otherwise it will feel slow to the user!):
+   - Run a git status command to see all untracked files.
+   - Run a git diff command to see both staged and unstaged changes that will be committed.
+   - Run a git log command to see recent commit messages, so that you can follow this repository's commit message style.
+
+2. Analyze all the changes; if there are multiple unrelated changes ask the
+   user what changes to commit and add.
+3. Analyze all staged changes (both previously staged and newly added) and draft a commit message.
+
+4. Create the commit and in order to ensure good formatting, ALWAYS pass the
+   commit message via a HEREDOC, a la this example:
+<example>
+git commit -m "$(cat <<'EOF'
+   Commit message here.
+
+   )"
+</example>
+
+5. If the commit fails due to pre-commit hook changes, retry the commit ONCE to include these automated changes. If it fails again, it usually means a pre-commit hook is preventing the commit. If the commit succeeds but you notice that files were modified by the pre-commit hook, you MUST amend your commit to include them.
+
+6. Finally, run git status to make sure the commit succeeded.]],
+    table.concat(utils.BANNED_COMMANDS, ", ")
+  ),
+
+  parameters = {
+    command = {
+      type = "string",
+      description = "The bash command to execute",
+    },
+    timeout = {
+      type = "number",
+      description = "Optional timeout in milliseconds (default 30000, max 300000)",
+    },
+  },
+  required = { "command" },
+  auto_apply = function(args, _)
+    local banned, _ = utils.is_command_banned(args.command)
+    if banned then
+      return 1
+    end
+    return nil
+  end,
+  confirm = function(args)
+    local is_dangerous = utils.detect_dangerous_command_patterns(args.command)
+    if is_dangerous then
+      return string.format("🚨 Execute: `%s`", args.command)
+    else
+      return string.format("Execute: `%s`", args.command)
+    end
+  end,
+}, function(args, conversation, callback, opts)
+  if not args.command or args.command:match("^%s*$") then
+    callback({
+      content = { "Error: No command specified" },
+      display_content = { FAILED_TO_EXECUTE },
+    })
+    return
+  end
+
+  local timeout = args.timeout or 30000
+  if timeout > 300000 then
+    timeout = 300000
+  end
+
+  local project_root = vim.fn.getcwd()
+
+  local banned, reason = utils.is_command_banned(args.command)
+  if banned then
+    callback({
+      content = { string.format("Error: %s", reason) },
+      display_content = { FAILED_TO_EXECUTE },
+    })
+    return
+  end
+
+  if not conversation.shell then
+    local Shell = require("sia.shell")
+    conversation.shell = Shell.new(project_root)
+  end
+
+  conversation.shell:exec(args.command, timeout, opts and opts.cancellable, function(result)
+    local stdout = result.stdout or ""
+    local stderr = result.stderr or ""
+    local code = result.code or 0
+
+    local content = {}
+
+    local cwd = conversation.shell:pwd()
+    local relative_cwd = vim.fn.fnamemodify(cwd, ":~:.")
+    if relative_cwd == "" or relative_cwd == "." then
+      relative_cwd = "."
+    end
+    table.insert(content, string.format("Working directory: %s", relative_cwd))
+
+    if stdout and stdout ~= "" then
+      table.insert(content, "")
+      table.insert(content, stdout)
+    end
+    if stderr and stderr ~= "" then
+      if stdout and stdout ~= "" then
+        table.insert(content, "")
+      elseif #content > 1 then
+        table.insert(content, "")
+      end
+      table.insert(content, "stderr:")
+      table.insert(content, stderr)
+    end
+    if code ~= 0 then
+      table.insert(content, string.format("Exit code: %d", code))
+    end
+    if result.interrupted then
+      table.insert(content, "Command was interrupted")
+    end
+
+    if #content == 1 then
+      table.insert(content, "")
+      table.insert(content, "Command completed successfully (no output)")
+    end
+
+    local display_msg
+    if code == 0 then
+      display_msg = string.format("⚡ Executed `%s`", args.command)
+    elseif result.interrupted then
+      display_msg = string.format("⚡ Stopped `%s`", args.command)
+    else
+      display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
+    end
+
+    callback({
+      content = content,
+      display_content = vim.split(display_msg, "\n", { trimempty = true, plain = true }),
+    })
+  end)
 end)
 
 return M
