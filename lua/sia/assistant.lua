@@ -9,7 +9,7 @@ local ERROR_API_KEY_MISSING = -100
 --- Call the provider defined in the query.
 --- @param query sia.Query
 --- @param opts sia.ProviderOpts
---- @return integer jobid
+--- @return integer? jobid
 local function call_provider(query, opts)
   local config = require("sia.config")
   local model
@@ -64,7 +64,7 @@ local function call_provider(query, opts)
   if api_key == nil then
     vim.notify("Sia: API key is not set for " .. model[1])
     opts.on_exit(nil, ERROR_API_KEY_MISSING, nil)
-    return
+    return nil
   end
 
   local args = {

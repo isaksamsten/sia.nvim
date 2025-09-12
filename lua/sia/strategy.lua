@@ -162,7 +162,8 @@ function Strategy:on_cancelled() end
 ---
 --- Collects a streaming function call response
 --- @param t table
-function Strategy:on_tool_call(t)
+--- @param job integer
+function Strategy:on_tool_call(t, _)
   for i, v in ipairs(t) do
     local func = v["function"]
     --- Patch for gemini models
