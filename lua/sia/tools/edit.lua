@@ -197,10 +197,11 @@ rather than multiple messages with a single call each.
       kind = "IGNORE_SUPERSEDED",
       display_content = {
         string.format(
-          "✏️ Edited lines %d-%d in %s",
+          "✏️ Edited lines %d-%d in %s%s",
           edit_start,
           edit_end,
-          vim.fn.fnamemodify(args.target_file, ":.")
+          vim.fn.fnamemodify(args.target_file, ":."),
+          fuzzy and " - please double-check the changes" or ""
         ),
       },
     })
