@@ -64,9 +64,9 @@ local function copilot_api_key()
     local cmd = table.concat({
       "curl",
       "--silent",
-      '--header "Authorization: Bearer ' .. oauth .. '"',
-      '--header "Content-Type: application/json"',
-      '--header "Accept: application/json"',
+      "--header \"Authorization: Bearer " .. oauth .. "\"",
+      "--header \"Content-Type: application/json\"",
+      "--header \"Accept: application/json\"",
       "https://api.github.com/copilot_internal/v2/token",
     }, " ")
     local response = vim.fn.system(cmd)
@@ -117,7 +117,7 @@ M.morph = {
   end,
 }
 
-local OR_CACHING = { "anthropic/claude-sonnet-4" }
+local OR_CACHING_PREFIXES = { "anthropic/", "google/" }
 M.openrouter = {
   base_url = "https://openrouter.ai/api/v1/chat/completions",
   api_key = function()
@@ -126,8 +126,15 @@ M.openrouter = {
   --- @param model string
   --- @param prompt sia.Prompt[]
   format_messages = function(model, prompts)
-    local new_prompts = {}
-    if vim.list_contains(OR_CACHING, model) then
+    local should_cache = false
+    for _, prefix in ipairs(OR_CACHING_PREFIXES) do
+      if model:find(prefix, 1, true) == 1 then
+        should_cache = true
+        break
+      end
+    end
+
+    if should_cache then
       local last_system_idx = nil
       local last_user_idx = nil
       for i = #prompts, 1, -1 do
@@ -148,8 +155,6 @@ M.openrouter = {
         elseif i == last_user_idx then
           prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
         end
-
-        table.insert(new_prompts, prompt)
       end
     end
   end,
