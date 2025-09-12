@@ -1,5 +1,43 @@
 local M = {}
 
+--- @param files string[]
+--- @param opts {max_count: integer?, max_sort: integer?}?
+function M.limit_files(files, opts)
+  opts = opts or {}
+  local max_count = opts.max_count or 100
+  local max_sort = opts.max_sort or 1000
+  if #files > max_sort then
+    local limited_files = {}
+    for i = 1, max_count do
+      table.insert(limited_files, files[i])
+    end
+    return limited_files, #files
+  end
+
+  local file_info = {}
+
+  for _, file in ipairs(files) do
+    local stat = vim.loop.fs_stat(file)
+    if stat then
+      table.insert(file_info, {
+        path = file,
+        mtime = stat.mtime.sec,
+      })
+    end
+  end
+
+  table.sort(file_info, function(a, b)
+    return a.mtime > b.mtime
+  end)
+
+  local limited_files = {}
+  for i = 1, math.min(max_count, #file_info) do
+    table.insert(limited_files, file_info[i].path)
+  end
+
+  return limited_files, #file_info
+end
+
 ---Get buffer content for a specific range with optional formatting
 ---@param buf integer Buffer handle
 ---@param start_line integer Starting line number (0-based)

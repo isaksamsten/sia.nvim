@@ -1,0 +1,14 @@
+return {
+  read = require("sia.tools.read"),
+  grep = require("sia.tools.grep"),
+  glob = require("sia.tools.glob"),
+  edit = require("sia.tools.edit"),
+  write = require("sia.tools.write"),
+  rename = require("sia.tools.rename"),
+  remove = require("sia.tools.remove"),
+  bash = require("sia.tools.bash"),
+  locations = require("sia.tools.locations"),
+  workspace = require("sia.tools.workspace"),
+  agent = require("sia.tools.agent"),
+  diagnostics = require("sia.tools.diagnostics"),
+}

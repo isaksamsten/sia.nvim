@@ -126,17 +126,28 @@ to add them again.
       hide = true,
       description = "List the files in the current git repository.",
       content = function()
+        local command
         if vim.fn.executable("fd") == 1 then
-          return string.format(
-            "Below is the current directory structure as reported by fd (it skips files in .gitignore).\nThis is only a snapshot\n%s",
-            vim.fn.system("fd --type f")
-          )
+          command = { "fd", "--type", "f" }
         else
-          return string.format(
-            "Below is the current directory structure as reported by find.\nThis is only a snapshot\n%s",
-            vim.fn.system("find . -type f -not -path './.git/*'")
-          )
+          command = { "find", ".", "-type", "f", "-not", "-path", "'./.git/*'" }
         end
+        local obj = vim.system(command, { timeout = 1000 }):wait()
+        if obj.code ~= 0 then
+          return nil
+        end
+        local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
+        if #files == 0 then
+          return nil
+        end
+        print(vim.inspect(files))
+        return string.format(
+          [[Below is the current directory structure. It does not include
+hidden files or directories. The listing is immutable and represents the start
+of the conversation. Use the glob tool to refresh your understanding.
+%s]],
+          table.concat(require("sia.utils").limit_files(files), "\n")
+        )
       end,
     },
   },
