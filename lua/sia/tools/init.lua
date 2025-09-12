@@ -11,4 +11,5 @@ return {
   workspace = require("sia.tools.workspace"),
   agent = require("sia.tools.agent"),
   diagnostics = require("sia.tools.diagnostics"),
+  compact = require("sia.tools.compact"),
 }
