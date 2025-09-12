@@ -178,6 +178,7 @@ local defaults = {
     ["openrouter/qwen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
     ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
     ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
+    ["openrouter/gpt-5-mini"] = { "openrouter", "openai/gpt-5-mini" },
     ["openrouter/grok-code-fast-1"] = { "openrouter", "x-ai/grok-code-fast-1" },
   },
   instructions = {},
