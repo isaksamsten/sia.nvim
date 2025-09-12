@@ -14,13 +14,12 @@ return tool_utils.new_tool({
 This tool is ideal for:
 - Creating new files from scratch
 - Making large changes where rewriting the entire file is simpler than search/replace
-- When the AI needs to restructure significant portions of a file
+- When you needs to restructure significant portions of a file
 - Generating configuration files, templates, or boilerplate code
 
 The tool will:
 - Create a new buffer for the file if it doesn't exist
 - Load and overwrite the buffer if the file already exists
-- Show diff highlighting for changes made to existing files
 
 Use this tool when:
 - Creating new files
@@ -41,14 +40,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     end
     return conversation.auto_confirm_tools["write"]
   end,
-  confirm = function(args)
-    if vim.fn.filereadable(args.path) == 1 then
-      return string.format("Overwrite existing file %s with new content", args.path)
-    else
-      return string.format("Create new file %s", args.path)
-    end
-  end,
-}, function(args, _, callback)
+}, function(args, _, callback, opts)
   if not args.path then
     callback({
       content = { "Error: No file path provided" },
@@ -64,50 +56,59 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-
-  local buf = utils.ensure_file_is_loaded(args.path)
-  if not buf then
-    callback({
-      content = { "Error: Cannot create buffer for " .. args.path },
-      display_content = { FAILED_TO_WRITE },
-    })
-    return
+  local prompt
+  if vim.fn.filereadable(args.path) == 1 then
+    prompt = string.format("Overwrite existing file %s with new content", args.path)
+  else
+    prompt = string.format("Create new file %s", args.path)
   end
+  opts.user_input(prompt, {
+    on_accept = function()
+      local buf = utils.ensure_file_is_loaded(args.path)
+      if not buf then
+        callback({
+          content = { "Error: Cannot create buffer for " .. args.path },
+          display_content = { FAILED_TO_WRITE },
+        })
+        return
+      end
 
-  local initial_code = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local file_exists = #initial_code > 0 and initial_code[1] ~= ""
+      local initial_code = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local file_exists = #initial_code > 0 and initial_code[1] ~= ""
 
-  local lines = vim.split(args.content, "\n", { plain = true })
-  tracker.non_tracked_edit(buf, function()
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write!")
-    end)
-  end)
+      local lines = vim.split(args.content, "\n", { plain = true })
+      tracker.non_tracked_edit(buf, function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        vim.api.nvim_buf_call(buf, function()
+          pcall(vim.cmd, "noa silent write!")
+        end)
+      end)
 
-  if file_exists then
-    diff.highlight_diff_changes(buf, initial_code)
-  end
+      if file_exists then
+        diff.highlight_diff_changes(buf, initial_code)
+      end
 
-  local action = file_exists and "overwritten" or "created"
-  local display_text = string.format(
-    "%s %s (%d lines)",
-    file_exists and "Overwrote" or "Created",
-    vim.fn.fnamemodify(args.path, ":."),
-    #lines
-  )
-  callback({
-    content = { string.format("Successfully %s buffer for %s", action, args.path) },
-    context = {
-      buf = buf,
-      kind = "edit",
-      tick = tracker.ensure_tracked(buf),
-      outdated_message = string.format(
-        "%s %s",
+      local action = file_exists and "overwritten" or "created"
+      local display_text = string.format(
+        "%s %s (%d lines)",
         file_exists and "Overwrote" or "Created",
-        vim.fn.fnamemodify(args.target_file, ":.")
-      ),
-    },
-    display_content = { "💾 " .. display_text },
+        vim.fn.fnamemodify(args.path, ":."),
+        #lines
+      )
+      callback({
+        content = { string.format("Successfully %s buffer for %s", action, args.path) },
+        context = {
+          buf = buf,
+          kind = "edit",
+          tick = tracker.ensure_tracked(buf),
+          outdated_message = string.format(
+            "%s %s",
+            file_exists and "Overwrote" or "Created",
+            vim.fn.fnamemodify(args.target_file, ":.")
+          ),
+        },
+        display_content = { "💾 " .. display_text },
+      })
+    end,
   })
 end)

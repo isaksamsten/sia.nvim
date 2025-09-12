@@ -1,172 +1,173 @@
-local diff = require("sia.diff")
-local utils = require("sia.utils")
-local tracker = require("sia.tracker")
-local tool_utils = require("sia.tools.utils")
-
-return tool_utils.new_tool({
-  name = "edit",
-  message = "Making code changes...",
-  description = [[Edit an existing file by specifying precise changes.
-
-KEY PRINCIPLES:
-- Make ALL edits to a file in a single tool call (use multiple edit blocks if needed)
-- Only specify lines you`re changing - represent unchanged code with comments
-
-EDIT SYNTAX:
-Use "// ... existing code ..." comments to represent unchanged sections:
-
-// ... existing code ...
-NEW_OR_MODIFIED_CODE_HERE
-// ... existing code ...
-ANOTHER_EDIT_HERE
-// ... existing code ...
-
-EXAMPLES:
-
-Adding a new function:
-```
-// ... existing code ...
-function newFunction() {
-  return "hello";
-}
-// ... existing code ...
-```
-
-Modifying existing code:
-```
-// ... existing code ...
-const updated = "new value";
-// ... existing code ...
-```
-
-Deleting code (provide context before and after):
-```
-// ... existing code ...
-function keepThis() {}
-function alsoKeepThis() {}
-// ... existing code ...
-```
-
-Multiple changes in one call:
-```
-// ... existing code ...
-FIRST_EDIT
-// ... existing code ...
-SECOND_EDIT
-// ... existing code ...
-THIRD_EDIT
-// ... existing code ...
-```
-
-The apply model will handle multiple distinct edits efficiently in a single operation.]],
-  parameters = {
-    target_file = {
-      type = "string",
-      description = "The target file to modify.",
-    },
-    instructions = {
-      type = "string",
-      description = [[A single sentence instruction describing what you are
-going to do for the sketched edit. This is used to assist the less
-intelligent model in applying the edit. Use the first person to describe
-what you are going to do. Use it to disambiguate uncertainty in the edit.
-      ]],
-    },
-    code_edit = {
-      type = "string",
-      description = [[Specify ONLY the precise lines of code that you wish to
-edit. NEVER specify or write out unchanged code. Instead, represent all
-unchanged code using the comment of the language you`re editing in -
-example: // ... existing code ...  ]],
-    },
-  },
-  required = { "target_file", "instructions", "code_edit" },
-  auto_apply = function(args, conversation)
-    local file = vim.fs.basename(args.target_file)
-    if file == "AGENTS.md" then
-      return 1
-    end
-    return conversation.auto_confirm_tools["edit"]
-  end,
-  select = {
-    prompt = function(args)
-      if args.instructions then
-        return string.format("%s\nEdit %s", args.instructions, args.target_file)
-      else
-        return string.format("Edit %s", args.target_file)
-      end
-    end,
-    choices = {
-      "Apply changes immediately",
-      "Apply changes immediately and remember this choice",
-      "Apply changes and preview them in diff view",
-    },
-  },
-}, function(args, conversation, callback, opts)
-  if not args.target_file then
-    callback({ content = { "No target_file was provided" } })
-    return
-  end
-
-  local buf = utils.ensure_file_is_loaded(args.target_file)
-  if not buf then
-    callback({ content = { "Cannot load " .. args.target_file } })
-    return
-  end
-  local initial_code = utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
-
-  local assistant = require("sia.assistant")
-  assistant.execute_query({
-    model = {
-      name = "morph/morph-v3-fast",
-      function_calling = false,
-      provider = require("sia.provider").openrouter,
-    },
-    prompt = {
-      {
-        role = "user",
-        content = string.format(
-          "<instruction>%s</instruction>\n<code>%s</code>\n<update>%s</update>",
-          args.instructions,
-          initial_code,
-          args.code_edit
-        ),
-      },
-    },
-  }, function(result)
-    if result then
-      local split = vim.split(result, "\n", { plain = true, trimempty = true })
-      if opts.choice == 1 or opts.choice == 2 then
-        tracker.non_tracked_edit(buf, function()
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        end)
-        diff.highlight_diff_changes(buf, initial_code)
-
-        local file = vim.fs.basename(args.target_file)
-        if file == "AGENTS.md" then
-          vim.api.nvim_buf_call(buf, function()
-            pcall(vim.cmd, "noa silent write!")
-          end)
-        end
-
-        if opts.choice == 2 then
-          conversation.auto_confirm_tools["edit"] = 1
-        end
-      elseif opts.choice == 3 then
-        tracker.non_tracked_edit(buf, function()
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
-        end)
-        diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
-      end
-      local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
-      local success_msg = string.format("Successfully edited %s. Here`s the resulting diff:", args.target_file)
-      table.insert(diff, 1, success_msg)
-      callback({
-        content = diff,
-        display_content = { string.format("📄 Diff for %s", vim.fn.fnamemodify(args.target_file, ":.")) },
-      })
-    else
-      callback({ content = { string.format("Failed to edit %s", args.target_file) } })
-    end
-  end)
-end)
+-- local diff = require("sia.diff")
+-- local utils = require("sia.utils")
+-- local tracker = require("sia.tracker")
+-- local tool_utils = require("sia.tools.utils")
+--
+-- return tool_utils.new_tool({
+--   name = "edit",
+--   message = "Making code changes...",
+--   description = [[Edit an existing file by specifying precise changes.
+--
+-- KEY PRINCIPLES:
+-- - Make ALL edits to a file in a single tool call (use multiple edit blocks if needed)
+-- - Only specify lines you`re changing - represent unchanged code with comments
+--
+-- EDIT SYNTAX:
+-- Use "// ... existing code ..." comments to represent unchanged sections:
+--
+-- // ... existing code ...
+-- NEW_OR_MODIFIED_CODE_HERE
+-- // ... existing code ...
+-- ANOTHER_EDIT_HERE
+-- // ... existing code ...
+--
+-- EXAMPLES:
+--
+-- Adding a new function:
+-- ```
+-- // ... existing code ...
+-- function newFunction() {
+--   return "hello";
+-- }
+-- // ... existing code ...
+-- ```
+--
+-- Modifying existing code:
+-- ```
+-- // ... existing code ...
+-- const updated = "new value";
+-- // ... existing code ...
+-- ```
+--
+-- Deleting code (provide context before and after):
+-- ```
+-- // ... existing code ...
+-- function keepThis() {}
+-- function alsoKeepThis() {}
+-- // ... existing code ...
+-- ```
+--
+-- Multiple changes in one call:
+-- ```
+-- // ... existing code ...
+-- FIRST_EDIT
+-- // ... existing code ...
+-- SECOND_EDIT
+-- // ... existing code ...
+-- THIRD_EDIT
+-- // ... existing code ...
+-- ```
+--
+-- The apply model will handle multiple distinct edits efficiently in a single operation.]],
+--   parameters = {
+--     target_file = {
+--       type = "string",
+--       description = "The target file to modify.",
+--     },
+--     instructions = {
+--       type = "string",
+--       description = [[A single sentence instruction describing what you are
+-- going to do for the sketched edit. This is used to assist the less
+-- intelligent model in applying the edit. Use the first person to describe
+-- what you are going to do. Use it to disambiguate uncertainty in the edit.
+--       ]],
+--     },
+--     code_edit = {
+--       type = "string",
+--       description = [[Specify ONLY the precise lines of code that you wish to
+-- edit. NEVER specify or write out unchanged code. Instead, represent all
+-- unchanged code using the comment of the language you`re editing in -
+-- example: // ... existing code ...  ]],
+--     },
+--   },
+--   required = { "target_file", "instructions", "code_edit" },
+--   auto_apply = function(args, conversation)
+--     local file = vim.fs.basename(args.target_file)
+--     if file == "AGENTS.md" then
+--       return 1
+--     end
+--     return conversation.auto_confirm_tools["edit"]
+--   end,
+--   select = {
+--     prompt = function(args)
+--       if args.instructions then
+--         return string.format("%s\nEdit %s", args.instructions, args.target_file)
+--       else
+--         return string.format("Edit %s", args.target_file)
+--       end
+--     end,
+--     choices = {
+--       "Apply changes immediately",
+--       "Apply changes immediately and remember this choice",
+--       "Apply changes and preview them in diff view",
+--     },
+--   },
+-- }, function(args, conversation, callback, opts)
+--   if not args.target_file then
+--     callback({ content = { "No target_file was provided" } })
+--     return
+--   end
+--
+--   local buf = utils.ensure_file_is_loaded(args.target_file)
+--   if not buf then
+--     callback({ content = { "Cannot load " .. args.target_file } })
+--     return
+--   end
+--   local initial_code = utils.get_code(1, -1, { buf = buf, show_line_numbers = false })
+--
+--     opts.user_choice(
+--   local assistant = require("sia.assistant")
+--   assistant.execute_query({
+--     model = {
+--       name = "morph/morph-v3-fast",
+--       function_calling = false,
+--       provider = require("sia.provider").openrouter,
+--     },
+--     prompt = {
+--       {
+--         role = "user",
+--         content = string.format(
+--           "<instruction>%s</instruction>\n<code>%s</code>\n<update>%s</update>",
+--           args.instructions,
+--           initial_code,
+--           args.code_edit
+--         ),
+--       },
+--     },
+--   }, function(result)
+--     if result then
+--       local split = vim.split(result, "\n", { plain = true, trimempty = true })
+--       if opts.choice == 1 or opts.choice == 2 then
+--         tracker.non_tracked_edit(buf, function()
+--           vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+--         end)
+--         diff.highlight_diff_changes(buf, initial_code)
+--
+--         local file = vim.fs.basename(args.target_file)
+--         if file == "AGENTS.md" then
+--           vim.api.nvim_buf_call(buf, function()
+--             pcall(vim.cmd, "noa silent write!")
+--           end)
+--         end
+--
+--         if opts.choice == 2 then
+--           conversation.auto_confirm_tools["edit"] = 1
+--         end
+--       elseif opts.choice == 3 then
+--         tracker.non_tracked_edit(buf, function()
+--           vim.api.nvim_buf_set_lines(buf, 0, -1, false, split)
+--         end)
+--         diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
+--       end
+--       local diff = vim.split(vim.diff(initial_code, result), "\n", { plain = true, trimempty = true })
+--       local success_msg = string.format("Successfully edited %s. Here`s the resulting diff:", args.target_file)
+--       table.insert(diff, 1, success_msg)
+--       callback({
+--         content = diff,
+--         display_content = { string.format("📄 Diff for %s", vim.fn.fnamemodify(args.target_file, ":.")) },
+--       })
+--     else
+--       callback({ content = { string.format("Failed to edit %s", args.target_file) } })
+--     end
+--   end)
+-- end)

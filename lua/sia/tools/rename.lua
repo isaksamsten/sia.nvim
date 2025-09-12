@@ -21,7 +21,7 @@ Notes:
   confirm = function(args)
     return string.format("Rename %s → %s", args.src, args.dest)
   end,
-}, function(args, _, callback)
+}, function(args, _, callback, opts)
   local config = require("sia.config").options.defaults.file_ops or {}
   local create_dirs = config.create_dirs_on_rename ~= false
   local restrict_root = config.restrict_to_project_root ~= false
@@ -70,62 +70,62 @@ Notes:
     return
   end
 
-  if create_dirs then
-    local parent = vim.fn.fnamemodify(dest_abs, ":h")
-    if parent ~= "" then
-      vim.fn.mkdir(parent, "p")
-    end
-  end
+  opts.user_input(string.format("Rename %s → %s", args.src, args.dest), {
+    on_accept = function()
+      if create_dirs then
+        local parent = vim.fn.fnamemodify(dest_abs, ":h")
+        if parent ~= "" then
+          vim.fn.mkdir(parent, "p")
+        end
+      end
 
-  -- Rename the file
-  local success, _, err_code = vim.uv.fs_rename(src_abs, dest_abs)
+      local success, _, err_code = vim.uv.fs_rename(src_abs, dest_abs)
 
-  if err_code == "EXDEV" then
-    success = vim.uv.fs_copyfile(src_abs, dest_abs)
-    if success then
-      success = pcall(vim.fn.delete, src_abs)
-    end
-    if not success then
-      pcall(vim.fn.delete, dest_abs)
-    end
-  end
+      if err_code == "EXDEV" then
+        success = vim.uv.fs_copyfile(src_abs, dest_abs)
+        if success then
+          success = pcall(vim.fn.delete, src_abs)
+        end
+        if not success then
+          pcall(vim.fn.delete, dest_abs)
+        end
+      end
 
-  if not success then
-    callback({
-      content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") },
-      display_content = { FAILED_TO_RENAME },
-    })
-    return
-  end
+      if not success then
+        callback({
+          content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") },
+          display_content = { FAILED_TO_RENAME },
+        })
+        return
+      end
 
-  -- Rename in all loaded buffers (simplified for single file renames)
-  for _, buf_id in ipairs(vim.api.nvim_list_bufs()) do
-    if not (vim.api.nvim_buf_is_loaded(buf_id) and vim.bo[buf_id].buftype == "") then
-      goto continue
-    end
+      for _, buf_id in ipairs(vim.api.nvim_list_bufs()) do
+        if not (vim.api.nvim_buf_is_loaded(buf_id) and vim.bo[buf_id].buftype == "") then
+          goto continue
+        end
 
-    -- Check if this buffer matches the renamed file
-    local cur_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf_id), ":p")
-    if cur_name ~= src_abs then
-      goto continue
-    end
+        local cur_name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf_id), ":p")
+        if cur_name ~= src_abs then
+          goto continue
+        end
 
-    -- Rename buffer using relative form (for nicer :buffers output)
-    vim.api.nvim_buf_set_name(buf_id, vim.fn.fnamemodify(dest_abs, ":."))
+        vim.api.nvim_buf_set_name(buf_id, vim.fn.fnamemodify(dest_abs, ":."))
 
-    -- Force write to avoid the 'overwrite existing file' error message
-    vim.api.nvim_buf_call(buf_id, function()
-      pcall(vim.cmd, "silent! write! | edit")
-    end)
+        -- Force write to avoid the 'overwrite existing file' error message
+        vim.api.nvim_buf_call(buf_id, function()
+          pcall(vim.cmd, "silent! write! | edit")
+        end)
 
-    ::continue::
-  end
+        ::continue::
+      end
 
-  local function rel(path)
-    return vim.fn.fnamemodify(path, ":.")
-  end
-  callback({
-    content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) },
-    display_content = { string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+      local function rel(path)
+        return vim.fn.fnamemodify(path, ":.")
+      end
+      callback({
+        content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+        display_content = { string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+      })
+    end,
   })
 end)

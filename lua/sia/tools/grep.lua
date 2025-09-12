@@ -20,13 +20,7 @@ return tool_utils.new_tool({
     pattern = { type = "string", description = "Search pattern" },
   },
   required = { "pattern" },
-  confirm = function(args)
-    if args.glob then
-      return string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
-    end
-    return string.format("Search for `%s` in all files", args.pattern)
-  end,
-}, function(args, _, callback)
+}, function(args, _, callback, opts)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
   if args.glob then
     table.insert(command, "--glob")
@@ -40,76 +34,85 @@ return tool_utils.new_tool({
     return
   end
 
-  table.insert(command, "--")
-  table.insert(command, args.pattern)
+  local prompt = string.format("Search for `%s` in all files", args.pattern)
+  if args.glob then
+    prompt = string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
+  end
 
-  vim.system(command, {
-    text = true,
-    stderr = false,
-    timeout = 5000,
-  }, function(obj)
-    local lines = vim.split(obj.stdout, "\n", { trimempty = true })
-    local matches = {}
-    local file_mtimes = {}
+  opts.user_input(prompt, {
+    on_accept = function()
+      table.insert(command, "--")
+      table.insert(command, args.pattern)
 
-    for _, line in ipairs(lines) do
-      local file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
-      if file and lnum and col then
-        table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = line })
-        if not file_mtimes[file] then
-          local stat = vim.loop.fs_stat(file)
-          file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
+      vim.system(command, {
+        text = true,
+        stderr = false,
+        timeout = 5000,
+      }, function(obj)
+        local lines = vim.split(obj.stdout, "\n", { trimempty = true })
+        local matches = {}
+        local file_mtimes = {}
+
+        for _, line in ipairs(lines) do
+          local file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
+          if file and lnum and col then
+            table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = line })
+            if not file_mtimes[file] then
+              local stat = vim.loop.fs_stat(file)
+              file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
+            end
+          end
         end
-      end
-    end
-    if #matches == 0 then
-      local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
-      if args.glob then
-        no_match_msg = no_match_msg .. string.format(" in files matching `%s`", args.glob)
-      end
+        if #matches == 0 then
+          local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
+          if args.glob then
+            no_match_msg = no_match_msg .. string.format(" in files matching `%s`", args.glob)
+          end
 
-      callback({
-        content = { "No matches found." },
-        display_content = { no_match_msg },
-      })
-      return
-    end
+          callback({
+            content = { "No matches found." },
+            display_content = { no_match_msg },
+          })
+          return
+        end
 
-    table.sort(matches, function(a, b)
-      return (file_mtimes[a.file] or 0) > (file_mtimes[b.file] or 0)
-    end)
+        table.sort(matches, function(a, b)
+          return (file_mtimes[a.file] or 0) > (file_mtimes[b.file] or 0)
+        end)
 
-    local header = "The following search results were returned"
-    if #matches > max_count then
-      header = header
-        .. string.format(
-          "\n\nWARNING: Search returned %d matches (showing %d most recent by file mtime). Results may be incomplete.",
-          #matches,
-          max_count
-        )
-      header = header .. "\nConsider:"
-      header = header .. "\n- Using a more specific search pattern"
-      header = header .. "\n- Adding a glob parameter to limit file types"
-    else
-      header = header .. string.format(" (%d matches found)", #matches)
-    end
+        local header = "The following search results were returned"
+        if #matches > max_count then
+          header = header
+            .. string.format(
+              "\n\nWARNING: Search returned %d matches (showing %d most recent by file mtime). Results may be incomplete.",
+              #matches,
+              max_count
+            )
+          header = header .. "\nConsider:"
+          header = header .. "\n- Using a more specific search pattern"
+          header = header .. "\n- Adding a glob parameter to limit file types"
+        else
+          header = header .. string.format(" (%d matches found)", #matches)
+        end
 
-    local output = {}
-    for _, line in ipairs(vim.split(header, "\n", { trimempty = false })) do
-      table.insert(output, line)
-    end
+        local output = {}
+        for _, line in ipairs(vim.split(header, "\n", { trimempty = false })) do
+          table.insert(output, line)
+        end
 
-    for i = 1, math.min(#matches, max_count) do
-      table.insert(output, matches[i].text)
-    end
-    local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
-    if args.glob then
-      display_msg = display_msg .. string.format(" in `%s`", args.glob)
-    end
+        for i = 1, math.min(#matches, max_count) do
+          table.insert(output, matches[i].text)
+        end
+        local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
+        if args.glob then
+          display_msg = display_msg .. string.format(" in `%s`", args.glob)
+        end
 
-    callback({
-      content = output,
-      display_content = { display_msg },
-    })
-  end)
+        callback({
+          content = output,
+          display_content = { display_msg },
+        })
+      end)
+    end,
+  })
 end)

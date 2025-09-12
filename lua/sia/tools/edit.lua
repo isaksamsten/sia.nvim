@@ -4,6 +4,11 @@ local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 
 local failed_matches = {}
+local CHOICES = {
+  "Apply changes immediately",
+  "Apply changes immediately and remember this choice",
+  "Apply changes and preview them in diff view",
+}
 local MAX_FAILED_MATCHES = 3
 local FAILED_TO_EDIT = "❌ Failed to edit"
 local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
@@ -86,16 +91,6 @@ rather than multiple messages with a single call each.
     end
     return conversation.auto_confirm_tools["edit"]
   end,
-  select = {
-    prompt = function(args)
-      return string.format("Edit %s", args.target_file)
-    end,
-    choices = {
-      "Apply changes immediately",
-      "Apply changes immediately and remember this choice",
-      "Apply changes and preview them in diff view",
-    },
-  },
 }, function(args, conversation, callback, opts)
   if not args.target_file then
     callback({
@@ -166,54 +161,59 @@ rather than multiple messages with a single call each.
         pcall(vim.cmd, "noa silent write!")
       end)
     end)
-    if opts.choice == 1 or opts.choice == 2 then
-      diff.highlight_diff_changes(buf, old_content)
-      if opts.choice == 2 then
-        conversation.auto_confirm_tools["edit"] = 1
-      end
-    elseif opts.choice == 3 then
-      diff.show_diff_preview(buf, old_content)
-    end
+    opts.user_choice(string.format("Edit %s", args.target_file), {
+      choices = CHOICES,
+      on_accept = function(choice)
+        if choice == 1 or choice == 2 then
+          diff.highlight_diff_changes(buf, old_content)
+          if choice == 2 then
+            conversation.auto_confirm_tools["edit"] = 1
+          end
+        elseif choice == 3 then
+          diff.show_diff_preview(buf, old_content)
+        end
 
-    local new_content_lines = vim.api.nvim_buf_line_count(buf)
-    local context_lines = 4
-    local start_context = math.max(1, span[1] - context_lines)
-    local end_context = math.min(new_content_lines, span[1] + #new_string + context_lines)
+        local new_content_lines = vim.api.nvim_buf_line_count(buf)
+        local context_lines = 4
+        local start_context = math.max(1, span[1] - context_lines)
+        local end_context = math.min(new_content_lines, span[1] + #new_string + context_lines)
 
-    local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
+        local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
 
-    local edit_start = span[1]
-    local edit_end = span[1] + #new_string
+        local edit_start = span[1]
+        local edit_end = span[1] + #new_string
 
-    local success_msg = string.format(
-      "Successfully edited %s%s. Here`s the edited snippet as returned by cat -n:",
-      args.target_file,
-      fuzzy and " (the match was not perfect)" or ""
-    )
-    table.insert(snippet_lines, 1, success_msg)
-    callback({
-      content = snippet_lines,
-      context = {
-        buf = buf,
-        pos = { edit_start, edit_end },
-        tick = tracker.ensure_tracked(buf),
-        outdated_message = string.format(
-          "Edited %s on lines %d-%d",
-          vim.fn.fnamemodify(args.target_file, ":."),
-          edit_start,
-          edit_end
-        ),
-      },
-      kind = "edit",
-      display_content = {
-        string.format(
-          "✏️ Edited lines %d-%d in %s%s",
-          edit_start,
-          edit_end,
-          vim.fn.fnamemodify(args.target_file, ":."),
-          fuzzy and " - please double-check the changes" or ""
-        ),
-      },
+        local success_msg = string.format(
+          "Successfully edited %s%s. Here`s the edited snippet as returned by cat -n:",
+          args.target_file,
+          fuzzy and " (the match was not perfect)" or ""
+        )
+        table.insert(snippet_lines, 1, success_msg)
+        callback({
+          content = snippet_lines,
+          context = {
+            buf = buf,
+            pos = { edit_start, edit_end },
+            tick = tracker.ensure_tracked(buf),
+            outdated_message = string.format(
+              "Edited %s on lines %d-%d",
+              vim.fn.fnamemodify(args.target_file, ":."),
+              edit_start,
+              edit_end
+            ),
+          },
+          kind = "edit",
+          display_content = {
+            string.format(
+              "✏️ Edited lines %d-%d in %s%s",
+              edit_start,
+              edit_end,
+              vim.fn.fnamemodify(args.target_file, ":."),
+              fuzzy and " - please double-check the changes" or ""
+            ),
+          },
+        })
+      end,
     })
   else
     failed_matches[buf] = failed_matches[buf] + 1

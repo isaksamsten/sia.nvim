@@ -27,9 +27,6 @@ The tool will preserve important context while removing outdated information.]],
     },
   },
   required = { "reason" },
-  confirm = function(args)
-    return string.format("Compact conversation due to: %s", args.reason)
-  end,
 }, function(args, conversation, callback)
   if not args.reason then
     callback({ content = { "Error: No reason provided for compacting conversation" } })

@@ -33,15 +33,7 @@ return tool_utils.new_tool({
     path = { type = "string", description = "Path to remove" },
   },
   required = { "path" },
-  confirm = function(args)
-    local cfg = require("sia.config").options.defaults.file_ops or {}
-    if cfg.trash ~= false then
-      return string.format("Move to trash: %s", args.path)
-    else
-      return string.format("Permanently delete: %s", args.path)
-    end
-  end,
-}, function(args, _, callback)
+}, function(args, _, callback, opts)
   local cfg = require("sia.config").options.defaults.file_ops or {}
   local trash = cfg.trash ~= false
   local restrict_root = cfg.restrict_to_project_root ~= false
@@ -78,41 +70,51 @@ return tool_utils.new_tool({
     return
   end
 
-  if trash then
-    local timestamp = os.date("%Y%m%d-%H%M%S")
-    local trash_base = vim.fs.joinpath(root, trash_dir_name, timestamp)
-    local relative_from_root = vim.fn.fnamemodify(target_abs, ":p"):gsub("^" .. vim.pesc(root) .. "/?", "")
-    local trash_dest = vim.fs.joinpath(trash_base, relative_from_root)
-    vim.fn.mkdir(vim.fn.fnamemodify(trash_dest, ":h"), "p")
-    local ok, err = pcall(vim.uv.fs_rename, target_abs, trash_dest)
-    if not ok then
-      callback({
-        content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") },
-        display_content = { FAILED_TO_REMOVE },
-      })
-      return
-    end
-
-    delete_buffers_under(target_abs)
-    callback({
-      content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) },
-      display_content = { string.format("🗑️ Moved %s to trash", rel(target_abs)) },
-    })
-    return
+  local prompt
+  if trash ~= false then
+    prompt = string.format("Move to trash: %s", args.path)
   else
-    local ok = vim.fn.delete(target_abs, "f")
-    if ok ~= 0 then
-      callback({
-        content = { string.format("Error: Failed to delete %s", args.path) },
-        display_content = { FAILED_TO_REMOVE },
-      })
-      return
-    end
-    delete_buffers_under(target_abs)
-    callback({
-      content = { string.format("Deleted %s", rel(target_abs)) },
-      display_content = { string.format("🗑️ Deleted %s", rel(target_abs)) },
-    })
-    return
+    prompt = string.format("Permanently delete: %s", args.path)
   end
+  opts.user_input(prompt, {
+    on_accept = function()
+      if trash then
+        local timestamp = os.date("%Y%m%d-%H%M%S")
+        local trash_base = vim.fs.joinpath(root, trash_dir_name, timestamp)
+        local relative_from_root = vim.fn.fnamemodify(target_abs, ":p"):gsub("^" .. vim.pesc(root) .. "/?", "")
+        local trash_dest = vim.fs.joinpath(trash_base, relative_from_root)
+        vim.fn.mkdir(vim.fn.fnamemodify(trash_dest, ":h"), "p")
+        local ok, err = pcall(vim.uv.fs_rename, target_abs, trash_dest)
+        if not ok then
+          callback({
+            content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") },
+            display_content = { FAILED_TO_REMOVE },
+          })
+          return
+        end
+
+        delete_buffers_under(target_abs)
+        callback({
+          content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) },
+          display_content = { string.format("🗑️ Moved %s to trash", rel(target_abs)) },
+        })
+        return
+      else
+        local ok = vim.fn.delete(target_abs, "f")
+        if ok ~= 0 then
+          callback({
+            content = { string.format("Error: Failed to delete %s", args.path) },
+            display_content = { FAILED_TO_REMOVE },
+          })
+          return
+        end
+        delete_buffers_under(target_abs)
+        callback({
+          content = { string.format("Deleted %s", rel(target_abs)) },
+          display_content = { string.format("🗑️ Deleted %s", rel(target_abs)) },
+        })
+        return
+      end
+    end,
+  })
 end)

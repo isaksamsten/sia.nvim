@@ -23,19 +23,7 @@ return tool_utils.new_tool({
     end
     return nil
   end,
-  confirm = function(args)
-    local limit = args.limit or 2000
-    if args.offset then
-      return string.format(
-        "Add lines %d-%d from %s to the conversation",
-        args.offset,
-        args.offset + limit - 1,
-        args.path
-      )
-    end
-    return string.format("Add %s to the conversation (up to %d lines)", args.path, limit)
-  end,
-}, function(args, _, callback)
+}, function(args, _, callback, opts)
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
@@ -55,51 +43,68 @@ return tool_utils.new_tool({
   local offset = args.offset or 1
   local limit = args.limit or 2000
   local max_line_length = 2000
-
-  local buf = utils.ensure_file_is_loaded(args.path)
-  local total_lines = vim.api.nvim_buf_line_count(buf)
-
-  if offset > total_lines then
-    callback({
-      content = {
-        string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
-      },
-      display_content = { FAILED_TO_READ },
-    })
-    return
-  end
-
-  -- Calculate actual range
-  local start_line = math.max(1, offset)
-  local end_line = math.min(total_lines, start_line + limit)
-
-  local content =
-    utils.get_content(buf, start_line - 1, end_line, { show_line_numbers = true, max_line_length = max_line_length })
-
-  local pos = nil
-  if args.offset or args.limit then
-    pos = { offset, offset + #content - 1 }
-  end
-
-  local display_lines = {}
-  if args.offset or args.limit then
-    table.insert(
-      display_lines,
-      string.format("📖 Read lines %d-%d from %s", start_line, end_line, vim.fn.fnamemodify(args.path, ":."))
-    )
+  local confirm_message
+  if args.offset then
+    confirm_message = string.format("Read lines %d-%d from %s", args.offset, args.offset + limit - 1, args.path)
   else
-    table.insert(display_lines, string.format("📖 Read %s (%d lines)", vim.fn.fnamemodify(args.path, ":."), #content))
+    confirm_message = string.format("Read %s (up to %d lines)", args.path, limit)
   end
 
-  callback({
-    content = content,
-    context = {
-      buf = buf,
-      pos = pos,
-      tick = tracker.ensure_tracked(buf),
-      outdated_message = string.format("%s was modified externally", vim.fn.fnamemodify(args.path, ":.")),
-    },
-    kind = "context",
-    display_content = display_lines,
+  opts.user_input(confirm_message, {
+    on_accept = function()
+      local buf = utils.ensure_file_is_loaded(args.path)
+      local total_lines = vim.api.nvim_buf_line_count(buf)
+
+      if offset > total_lines then
+        callback({
+          content = {
+            string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
+          },
+          display_content = { FAILED_TO_READ },
+        })
+        return
+      end
+
+      -- Calculate actual range
+      local start_line = math.max(1, offset)
+      local end_line = math.min(total_lines, start_line + limit)
+
+      local content = utils.get_content(
+        buf,
+        start_line - 1,
+        end_line,
+        { show_line_numbers = true, max_line_length = max_line_length }
+      )
+
+      local pos = nil
+      if args.offset or args.limit then
+        pos = { offset, offset + #content - 1 }
+      end
+
+      local display_lines = {}
+      if args.offset or args.limit then
+        table.insert(
+          display_lines,
+          string.format("📖 Read lines %d-%d from %s", start_line, end_line, vim.fn.fnamemodify(args.path, ":."))
+        )
+      else
+        table.insert(
+          display_lines,
+          string.format("📖 Read %s (%d lines)", vim.fn.fnamemodify(args.path, ":."), #content)
+        )
+      end
+
+      callback({
+        content = content,
+        context = {
+          buf = buf,
+          pos = pos,
+          tick = tracker.ensure_tracked(buf),
+          outdated_message = string.format("%s was modified externally", vim.fn.fnamemodify(args.path, ":.")),
+        },
+        kind = "context",
+        display_content = display_lines,
+      })
+    end,
   })
 end)

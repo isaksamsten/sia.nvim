@@ -4,9 +4,6 @@ local FAILED_TO_EXECUTE = "❌ Failed to execute command"
 
 return tool_utils.new_tool({
   name = "bash",
-  require_confirmation = function(args)
-    return utils.detect_dangerous_command_patterns(args.command) or #args.command > 100
-  end,
   message = function(_)
     return string.format("Running command`...")
   end,
@@ -112,21 +109,6 @@ git commit -m "$(cat <<'EOF'
     },
   },
   required = { "command" },
-  auto_apply = function(args, _)
-    local banned, _ = utils.is_command_banned(args.command)
-    if banned then
-      return 1
-    end
-    return nil
-  end,
-  confirm = function(args)
-    local is_dangerous = utils.detect_dangerous_command_patterns(args.command)
-    if is_dangerous then
-      return string.format("🚨 Execute: `%s`", args.command)
-    else
-      return string.format("Execute: `%s`", args.command)
-    end
-  end,
 }, function(args, conversation, callback, opts)
   if not args.command or args.command:match("^%s*$") then
     callback({
@@ -151,63 +133,75 @@ git commit -m "$(cat <<'EOF'
     })
     return
   end
-
-  if not conversation.shell then
-    local Shell = require("sia.shell")
-    conversation.shell = Shell.new(project_root)
+  local is_dangerous = utils.detect_dangerous_command_patterns(args.command)
+  local prompt
+  if is_dangerous then
+    prompt = string.format("🚨 Execute: `%s`", args.command)
+  else
+    prompt = string.format("Execute: `%s`", args.command)
   end
 
-  conversation.shell:exec(args.command, timeout, opts and opts.cancellable, function(result)
-    local stdout = result.stdout or ""
-    local stderr = result.stderr or ""
-    local code = result.code or 0
-
-    local content = {}
-
-    local cwd = conversation.shell:pwd()
-    local relative_cwd = vim.fn.fnamemodify(cwd, ":~:.")
-    if relative_cwd == "" or relative_cwd == "." then
-      relative_cwd = "."
-    end
-    table.insert(content, string.format("Working directory: %s", relative_cwd))
-
-    if stdout and stdout ~= "" then
-      table.insert(content, "")
-      table.insert(content, stdout)
-    end
-    if stderr and stderr ~= "" then
-      if stdout and stdout ~= "" then
-        table.insert(content, "")
-      elseif #content > 1 then
-        table.insert(content, "")
+  opts.user_input(prompt, {
+    must_confirm = is_dangerous,
+    on_accept = function()
+      if not conversation.shell then
+        local Shell = require("sia.shell")
+        conversation.shell = Shell.new(project_root)
       end
-      table.insert(content, "stderr:")
-      table.insert(content, stderr)
-    end
-    if code ~= 0 then
-      table.insert(content, string.format("Exit code: %d", code))
-    end
-    if result.interrupted then
-      table.insert(content, "Command was interrupted")
-    end
 
-    if #content == 1 then
-      table.insert(content, "")
-      table.insert(content, "Command completed successfully (no output)")
-    end
+      conversation.shell:exec(args.command, timeout, opts and opts.cancellable, function(result)
+        local stdout = result.stdout or ""
+        local stderr = result.stderr or ""
+        local code = result.code or 0
 
-    local display_msg
-    if code == 0 then
-      display_msg = string.format("⚡ Executed `%s`", args.command)
-    elseif result.interrupted then
-      display_msg = string.format("⚡ Stopped `%s`", args.command)
-    else
-      display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
-    end
+        local content = {}
 
-    callback({
-      content = content,
-      display_content = vim.split(display_msg, "\n", { trimempty = true, plain = true }),
-    })
-  end)
+        local cwd = conversation.shell:pwd()
+        local relative_cwd = vim.fn.fnamemodify(cwd, ":~:.")
+        if relative_cwd == "" or relative_cwd == "." then
+          relative_cwd = "."
+        end
+        table.insert(content, string.format("Working directory: %s", relative_cwd))
+
+        if stdout and stdout ~= "" then
+          table.insert(content, "")
+          table.insert(content, stdout)
+        end
+        if stderr and stderr ~= "" then
+          if stdout and stdout ~= "" then
+            table.insert(content, "")
+          elseif #content > 1 then
+            table.insert(content, "")
+          end
+          table.insert(content, "stderr:")
+          table.insert(content, stderr)
+        end
+        if code ~= 0 then
+          table.insert(content, string.format("Exit code: %d", code))
+        end
+        if result.interrupted then
+          table.insert(content, "Command was interrupted")
+        end
+
+        if #content == 1 then
+          table.insert(content, "")
+          table.insert(content, "Command completed successfully (no output)")
+        end
+
+        local display_msg
+        if code == 0 then
+          display_msg = string.format("⚡ Executed `%s`", args.command)
+        elseif result.interrupted then
+          display_msg = string.format("⚡ Stopped `%s`", args.command)
+        else
+          display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
+        end
+
+        callback({
+          content = content,
+          display_content = vim.split(display_msg, "\n", { trimempty = true, plain = true }),
+        })
+      end)
+    end,
+  })
 end)

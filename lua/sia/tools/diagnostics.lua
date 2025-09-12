@@ -11,9 +11,6 @@ return tool_utils.new_tool({
     file = { type = "string", description = "The file path to get diagnostics for" },
   },
   required = { "file" },
-  confirm = function(args)
-    return string.format("Get diagnostics for %s", args.file)
-  end,
 }, function(args, _, callback)
   if not args.file then
     callback({
@@ -61,8 +58,8 @@ return tool_utils.new_tool({
 
   for _, diagnostic in ipairs(diagnostics) do
     local severity = severity_names[diagnostic.severity] or "UNKNOWN"
-    local line = diagnostic.lnum + 1 -- Convert to 1-based line numbers
-    local col = diagnostic.col + 1 -- Convert to 1-based column numbers
+    local line = diagnostic.lnum + 1
+    local col = diagnostic.col + 1
     local source = diagnostic.source and string.format(" [%s]", diagnostic.source) or ""
 
     table.insert(content, string.format("  Line %d:%d %s%s: %s", line, col, severity, source, diagnostic.message))
