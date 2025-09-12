@@ -132,6 +132,7 @@ rather than multiple messages with a single call each.
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
   local matches
+  local fuzzy = false
   if args.old_string == "" then
     if #old_content == 0 or (#old_content == 1 and old_content[1] == "") then
       matches = { { span = { 1, -1 } } }
@@ -140,6 +141,14 @@ rather than multiple messages with a single call each.
     end
   else
     matches = matching.find_best_subsequence_span(old_string, old_content)
+    if #matches == 0 then
+      fuzzy = true
+      matches = matching.find_best_subsequence_span(old_string, old_content, { ignore_indent = true })
+      if #matches == 0 then
+        matches =
+          matching.find_best_subsequence_span(old_string, old_content, { ignore_indent = true, threshold = 0.9 })
+      end
+    end
   end
 
   if failed_matches[buf] == nil then
@@ -176,8 +185,11 @@ rather than multiple messages with a single call each.
     local edit_start = span[1]
     local edit_end = span[1] + #new_string
 
-    local success_msg =
-      string.format("Successfully edited %s. Here`s the edited snippet as returned by cat -n:", args.target_file)
+    local success_msg = string.format(
+      "Successfully edited %s%s. Here`s the edited snippet as returned by cat -n:",
+      args.target_file,
+      fuzzy and " (the match was not perfect)" or ""
+    )
     table.insert(snippet_lines, 1, success_msg)
     callback({
       content = snippet_lines,
@@ -210,9 +222,10 @@ rather than multiple messages with a single call each.
       callback({
         content = {
           string.format(
-            "Failed to edit %s since I couldn't find the exact text to replace (found %d matches instead of 1).",
+            "Failed to edit %s since I couldn't find the exact text to replace (found %d%s matches instead of 1).",
             args.target_file,
-            #matches
+            #matches,
+            fuzzy and " fuzzy" or ""
           ),
         },
         display_content = {
