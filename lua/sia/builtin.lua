@@ -140,7 +140,6 @@ to add them again.
         if #files == 0 then
           return nil
         end
-        print(vim.inspect(files))
         return string.format(
           [[Below is the current directory structure. It does not include
 hidden files or directories. The listing is immutable and represents the start
@@ -268,3 +267,4 @@ operating through Neovim.]],
 }
 
 return M
+
