@@ -88,6 +88,9 @@ function M.create_context(args)
     bang = args.bang,
   }
   opts.tick = require("sia.tracker").ensure_tracked(opts.buf)
+  local name = vim.api.nvim_buf_get_name(opts.buf)
+  opts.outdated_message = string.format("%s was modified externally", name)
+
   if args.count == -1 then
     opts.mode = "n"
   else

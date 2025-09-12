@@ -18,6 +18,7 @@ local tracker = require("sia.tracker")
 --- @field bang boolean?
 --- @field cursor integer[]?
 --- @field tick integer?
+--- @field outdated_message string?
 
 --- @class sia.ActionContext : sia.Context
 --- @field start_line integer?
@@ -163,6 +164,9 @@ end
 --- @return string?
 function Message:get_content()
   if self.content then
+    if self:is_outdated() then
+      return string.format("System Note: History pruned. %s", self.context.outdated_message)
+    end
     return self.content
   elseif self.live_content then
     return self.live_content()
@@ -435,7 +439,7 @@ function Conversation:_update_overlapping_messages(context, kind)
     if
       old_context
       and message.kind ~= nil
-      and message.kind ~= "IGNORE_SUPERSEDED"
+      and message.kind ~= "edit"
       and message.kind == kind
       and old_context.buf
       and message.content
@@ -620,14 +624,6 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
-  -- Build a table of tool calls that have been marked as outdated or superseded
-  local outdated_tool_call_ids = {}
-  for _, message in ipairs(self.messages) do
-    if message.role == "tool" and message._tool_call and (message:is_outdated() or message.superseded) then
-      outdated_tool_call_ids[message._tool_call.id] = true
-    end
-  end
-
   local prompt = vim
     .iter({ self.system_messages, self.messages })
     :flatten()
@@ -636,18 +632,6 @@ function Conversation:to_query(kind)
     :filter(function(m)
       if m.superseded then
         return false
-      end
-
-      if m:is_outdated() then
-        return false
-      end
-
-      if m.role == "assistant" and m.tool_calls then
-        for _, tool_call in ipairs(m.tool_calls) do
-          if outdated_tool_call_ids[tool_call.id] then
-            return false
-          end
-        end
       end
 
       return true

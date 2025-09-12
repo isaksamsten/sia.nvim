@@ -193,8 +193,18 @@ rather than multiple messages with a single call each.
     table.insert(snippet_lines, 1, success_msg)
     callback({
       content = snippet_lines,
-      context = { buf = buf, tick = tracker.ensure_tracked(buf) },
-      kind = "IGNORE_SUPERSEDED",
+      context = {
+        buf = buf,
+        pos = { edit_start, edit_end },
+        tick = tracker.ensure_tracked(buf),
+        outdated_message = string.format(
+          "Edited %s on lines %d-%d",
+          vim.fn.fnamemodify(args.target_file, ":."),
+          edit_start,
+          edit_end
+        ),
+      },
+      kind = "edit",
       display_content = {
         string.format(
           "✏️ Edited lines %d-%d in %s%s",

@@ -16,10 +16,13 @@ end
 function _G.__sia_add_buffer()
   require("sia.utils").with_chat_strategy({
     on_select = function(strategy)
+      local buf = vim.api.nvim_get_current_buf()
+      local name = vim.api.nvim_buf_get_name(buf)
       strategy.conversation:add_instruction("current_context", {
         buf = vim.api.nvim_get_current_buf(),
         cursor = vim.api.nvim_win_get_cursor(0),
-        tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
+        tick = require("sia.tracker").ensure_tracked(buf),
+        outdated_message = string.format("the content of %s has been externally modified", name),
       })
     end,
     only_visible = true,
@@ -31,6 +34,8 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line > 0 then
+    local buf = vim.api.nvim_get_current_buf()
+    local name = vim.api.nvim_buf_get_name(buf)
     require("sia.utils").with_chat_strategy({
       on_select = function(strategy)
         return strategy.conversation:add_instruction("current_context", {
@@ -38,7 +43,8 @@ function _G.__sia_add_context(type)
           cursor = vim.api.nvim_win_get_cursor(0),
           pos = { start_line, end_line },
           mode = "v",
-          tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
+          tick = require("sia.tracker").ensure_tracked(buf),
+          outdated_message = string.format("the content of %s has been externally modified", name),
         })
       end,
       only_visible = true,
@@ -128,7 +134,7 @@ function M.setup()
     vim.api.nvim_set_keymap(
       "n",
       "<Plug>(sia-execute-" .. action .. ")",
-      'v:lua.require("sia.mappings").execute_op_with_action("/' .. action .. '")',
+      "v:lua.require(\"sia.mappings\").execute_op_with_action(\"/" .. action .. "\")",
       { noremap = true, silent = true, expr = true }
     )
     vim.api.nvim_set_keymap(

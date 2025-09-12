@@ -93,7 +93,12 @@ return tool_utils.new_tool({
 
   callback({
     content = content,
-    context = { buf = buf, pos = pos, tick = tracker.ensure_tracked(buf) },
+    context = {
+      buf = buf,
+      pos = pos,
+      tick = tracker.ensure_tracked(buf),
+      outdated_message = string.format("%s was modified externally", vim.fn.fnamemodify(args.path, ":.")),
+    },
     kind = "context",
     display_content = display_lines,
   })

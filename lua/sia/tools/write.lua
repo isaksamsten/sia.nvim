@@ -100,8 +100,13 @@ For small, targeted changes, prefer the edit tool instead.]],
     content = { string.format("Successfully %s buffer for %s", action, args.path) },
     context = {
       buf = buf,
-      kind = "IGNORE_SUPERSEDED",
+      kind = "edit",
       tick = tracker.ensure_tracked(buf),
+      outdated_message = string.format(
+        "%s %s",
+        file_exists and "Overwrote" or "Created",
+        vim.fn.fnamemodify(args.target_file, ":.")
+      ),
     },
     display_content = { "💾 " .. display_text },
   })
