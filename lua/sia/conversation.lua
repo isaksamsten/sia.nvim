@@ -165,7 +165,7 @@ end
 function Message:get_content()
   if self.content then
     if self:is_outdated() then
-      return string.format("System Note: History pruned. %s", self.context.outdated_message)
+      return string.format("System Note: History pruned. %s", self.context.outdated_message or "")
     end
     return self.content
   elseif self.live_content then
@@ -182,7 +182,12 @@ function Message:is_outdated()
     return false
   end
 
-  if self.context and self.kind ~= nil and (self.role == "tool" or (self.content and self.role ~= "assistant")) then
+  if
+    self.context
+    and self.context.tick
+    and self.kind ~= nil
+    and (self.role == "tool" or (self.content and self.role ~= "assistant"))
+  then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
       return self.context.tick ~= tracker.user_tick(self.context.buf)
     else
@@ -420,7 +425,7 @@ function Conversation:_update_overlapping_messages(context, kind)
     if
       old_context
       and message.kind ~= nil
-      and message.kind ~= "edit"
+      and message.kind == "context"
       and message.kind == kind
       and old_context.buf
       and message.content
