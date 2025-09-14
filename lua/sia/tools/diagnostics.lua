@@ -1,3 +1,4 @@
+local tracker = require("sia.tracker")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local FAILED_TO_GET_DIAGNOSTICS = "❌ Failed to read diagnostics"
@@ -41,7 +42,7 @@ return tool_utils.new_tool({
     callback({
       display_content = { string.format("🩺 No diagnostics found for %s", args.file) },
       content = { string.format("No diagnostics found for %s", args.file) },
-      context = { buf = buf },
+      context = { buf = buf, tick = tracker.ensure_tracked(buf) },
       kind = "diagnostics",
     })
     return
@@ -67,7 +68,7 @@ return tool_utils.new_tool({
 
   callback({
     content = content,
-    context = { buf = buf },
+    context = { buf = buf, tick = tracker.ensure_tracked(buf) },
     kind = "diagnostics",
     display_content = { string.format("🩺 Found %d diagnostics", #diagnostics) },
   })
