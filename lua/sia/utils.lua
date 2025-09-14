@@ -273,14 +273,16 @@ end
 --- @param argument string[]
 --- @param opts sia.ActionContext
 --- @return sia.config.Action?
+--- @return boolean named prompt
 function M.resolve_action(argument, opts)
   local config = require("sia.config")
   local action
+  local named
   if vim.startswith(argument[1], "/") and vim.bo.ft ~= "sia" then
     action = vim.deepcopy(config.options.actions[argument[1]:sub(2)])
     if action == nil then
       vim.api.nvim_echo({ { "Sia: The action '" .. argument[1] .. "' does not exist.", "ErrorMsg" } }, false, {})
-      return nil
+      return nil, true
     end
 
     if action.input and action.input == "require" and #argument < 2 then
@@ -289,15 +291,17 @@ function M.resolve_action(argument, opts)
         false,
         {}
       )
-      return nil
+      return nil, true
     end
 
+    named = true
     if #argument > 1 and not (action.input and action.input == "ignore") then
       local tools, prompt = split_tools_and_prompt(argument)
       action.tools = tools
       table.insert(action.instructions, { role = "user", content = table.concat(prompt, " ", 2) })
     end
   else
+    named = false
     local action_mode = M.get_action_mode(opts)
     action = vim.deepcopy(config.options.defaults.actions[action_mode])
     local tools, prompt = split_tools_and_prompt(argument)
@@ -309,7 +313,7 @@ function M.resolve_action(argument, opts)
     action.modify_instructions(action.instructions, opts)
   end
 
-  return action
+  return action, named
 end
 
 --- @param action sia.config.Action

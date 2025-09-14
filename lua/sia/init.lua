@@ -620,43 +620,34 @@ The summary will replace the conversation history, so ensure no critical informa
 end
 
 --- @param action sia.config.Action
---- @param opts sia.ActionContext
---- @param model string?
-function M.main(action, opts, model)
-  if vim.api.nvim_buf_is_loaded(opts.buf) then
+--- @param opts {context: sia.ActionContext, model: string?, named_prompt: boolean?}
+function M.main(action, opts)
+  local context = opts.context
+  if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
-    local visible = ChatStrategy.visible()
-    if action.mode == "chat" and (vim.bo[opts.buf].filetype == "sia" or #visible == 1) then
-      if #visible == 1 then
-        strategy = ChatStrategy.by_buf(visible[1].buf)
-      else
-        strategy = ChatStrategy.by_buf(opts.buf)
-      end
+    if not opts.named_prompt and (vim.bo[context.buf].filetype == "sia") then
+      strategy = ChatStrategy.by_buf(context.buf)
 
       if strategy and not strategy.is_busy then
         for _, tool in ipairs(action.tools or {}) do
           strategy.conversation:add_tool(tool)
         end
 
-        if vim.bo[opts.buf].filetype ~= "sia" then
-          for _, instruction in ipairs(action.instructions or {}) do
-            strategy.conversation:add_instruction(instruction, opts)
-          end
-        else
-          local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-          strategy.conversation:add_instruction(last_instruction, nil)
-        end
+        local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
+        strategy.conversation:add_instruction(last_instruction, nil)
 
         -- The user might have explicitly changed the model with -m
-        if model then
-          strategy.conversation.model = model
+        if opts.model then
+          strategy.conversation.model = opts.model
         end
+      else
+        vim.notify("Sia: conversation is busy")
       end
     else
-      if model then
-        action.model = model
+      if opts.model then
+        action.model = opts.model
       end
-      local conversation = Conversation:new(action, opts)
+      local conversation = Conversation:new(action, context)
       if conversation.mode == "diff" then
         local options = vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
         strategy = DiffStrategy:new(conversation, options)

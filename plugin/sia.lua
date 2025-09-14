@@ -27,30 +27,29 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   --- @type sia.ActionContext
-  local opts = utils.create_context(args)
-  local action
+  local context = utils.create_context(args)
   if vim.b.sia and #args.fargs == 0 then
     args.fargs = { vim.b.sia }
   end
 
-  action = utils.resolve_action(args.fargs, opts)
+  local action, named = utils.resolve_action(args.fargs, context)
 
   if not action then
     return
   end
 
-  if action.capture and opts.mode ~= "v" then
-    local capture = action.capture(opts)
+  if action.capture and context.mode ~= "v" then
+    local capture = action.capture(context)
     if not capture then
       vim.api.nvim_echo({ { "Sia: Unable to capture current context.", "ErrorMsg" } }, false, {})
       return
     end
-    opts.start_line, opts.end_line = capture[1], capture[2]
-    opts.pos = { capture[1], capture[2] }
-    opts.mode = "v"
+    context.start_line, context.end_line = capture[1], capture[2]
+    context.pos = { capture[1], capture[2] }
+    context.mode = "v"
   end
 
-  if action.range == true and opts.mode ~= "v" then
+  if action.range == true and context.mode ~= "v" then
     vim.api.nvim_echo(
       { { "Sia: The action " .. args.fargs[1] .. " must be used with a range", "ErrorMsg" } },
       false,
@@ -59,7 +58,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     return
   end
 
-  local is_range = opts.mode == "v"
+  local is_range = context.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
     vim.api.nvim_echo(
@@ -70,7 +69,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     return
   end
 
-  require("sia").main(action, opts, model)
+  require("sia").main(action, { context = context, model = model, named_prompt = named })
 end, {
   range = true,
   bang = true,
@@ -111,9 +110,6 @@ end, {
             end
           end
         end
-        return complete
-      elseif vim.startswith(ArgLead, "#") then
-        local complete = { "#files", "#lsp" }
         return complete
       end
     end

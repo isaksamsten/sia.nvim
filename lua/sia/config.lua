@@ -180,6 +180,7 @@ local defaults = {
     ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
     ["openrouter/gpt-5-mini"] = { "openrouter", "openai/gpt-5-mini" },
     ["openrouter/grok-code-fast-1"] = { "openrouter", "x-ai/grok-code-fast-1" },
+    ["openrouter/qwen3-next"] = { "openrouter", "qwen/qwen3-next-80b-a3b-instruct" },
   },
   instructions = {},
   --- @type sia.config.Defaults

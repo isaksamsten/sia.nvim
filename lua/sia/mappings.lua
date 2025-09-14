@@ -62,7 +62,7 @@ function _G.__sia_execute(type)
   end
 
   --- @type sia.ActionContext
-  local args = {
+  local context = {
     start_line = start_line,
     end_line = end_line,
     pos = { start_line, end_line },
@@ -74,14 +74,14 @@ function _G.__sia_execute(type)
   }
   local action
   if _G.__sia_execute_action == nil and vim.b.sia then
-    action = utils.resolve_action({ vim.b.sia }, args)
+    action = utils.resolve_action({ vim.b.sia }, context)
   elseif _G.__sia_execute_action then
-    action = utils.resolve_action({ _G.__sia_execute_action }, args)
+    action = utils.resolve_action({ _G.__sia_execute_action }, context)
   end
   _G.__sia_execute_action = nil
 
   if action and not utils.is_action_disabled(action) then
-    require("sia").main(action, args)
+    require("sia").main(action, { context = context })
   else
     vim.api.nvim_echo(
       { { "Sia: No available action selected. Please ensure the action is enabled.", "ErrorMsg" } },
