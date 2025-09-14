@@ -5,30 +5,22 @@
 
 An LLM assistant for Neovim.
 
-Supports: OpenAI, Copilot and Gemini (and any other OpenAI API compliant LLM).
+Supports: OpenAI, Copilot, OpenRouter and Gemini (and any other OpenAI API compliant LLM).
 
 Default configuration has the following models: `gpt-4.1`, `gpt-4.1-mini`,
 `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `o3-mini`, `copilot-gpt-4o`,
 `copilot-o3-mini`, `copilot-sonnet-3.5`, `gemini-1.5-flash-8b`,
 `gemini-1.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-pro`, `gemini-2.5-pro`,
-`claude-3-5-sonnet` and `claude-3-7-sonnet`.
+`claude-3-5-sonnet` and `claude-3-7-sonnet` and more.
 
-Based on my experience, `claude-3-5-sonnet`, `gpt-4.1`, and `gemini-2.5-pro`
+Based on my experience, `claude`, `gpt-5`, and `gemini-2.5-pro`
 are best suited for coding.
 
 ## ✨ Features
 
-https://github.com/user-attachments/assets/f43175ac-dfb5-46b1-9bfb-042a689a7c05
-
-https://github.com/user-attachments/assets/aca42a2e-c44f-4312-a75f-81aeff684fb6
-
-https://github.com/user-attachments/assets/7e8ba341-afa7-45c5-8571-225b27a1a2ef
-
-https://github.com/user-attachments/assets/26f0a7e6-2afd-4b69-b4c3-f9945721f442
+https://github.com/user-attachments/assets/48cb1bb6-633b-412c-b33c-ae0b6792a485
 
 https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
-
-https://github.com/user-attachments/assets/aac7b52d-0e53-4afc-be81-48e3268fca27
 
 ## ⚡️ Requirements
 
