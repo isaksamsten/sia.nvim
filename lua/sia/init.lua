@@ -122,12 +122,12 @@ end
 function M.remove_message()
   local chat = ChatStrategy.by_buf()
   if chat then
-    local contexts, mappings = chat.conversation:get_messages({ mapping = true })
-    if #contexts == 0 then
+    local messages, mappings = chat.conversation:get_messages({ mapping = true })
+    if #messages == 0 then
       vim.notify("Sia: No messages in current conversation.")
       return
     end
-    vim.ui.select(contexts, {
+    vim.ui.select(messages, {
       prompt = "Delete message",
       format_item = function(item)
         return item:get_description()
@@ -208,21 +208,6 @@ function M.show_messages(opts)
             vim.bo[buf].buftype = "acwrite"
             vim.bo[buf].modified = false
             vim.api.nvim_win_set_buf(0, buf)
-            -- if opts.edit then
-            --   vim.bo[buf].modifiable = chat.conversation:is_instruction_editable(mappings[idx])
-            --   vim.api.nvim_create_autocmd("BufWriteCmd", {
-            --     buffer = buf,
-            --     callback = function()
-            --       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            --       local updated = chat.conversation:update_instruction(mappings[idx], lines)
-            --       if updated then
-            --         vim.api.nvim_echo({ { "Instruction updated...", "Normal" } }, false, {})
-            --       end
-            --       vim.bo[buf].modified = false
-            --       chat:redraw()
-            --     end,
-            --   })
-            -- end
           end
         end
       end
@@ -442,33 +427,6 @@ function M.setup(options)
         end
       end
       return complete
-    end,
-  })
-
-  vim.api.nvim_create_user_command("SiaRemove", function(args)
-    local chat = ChatStrategy.by_buf()
-    if chat then
-      chat.conversation:remove_files(args.fargs)
-    else
-      Conversation.remove_global_files(args.fargs)
-    end
-  end, {
-    nargs = "+",
-    complete = function(arg_lead)
-      local chat = ChatStrategy.by_buf()
-      local files = {}
-      if chat then
-        files = chat.conversation.files
-      else
-        files = Conversation.pending_files
-      end
-      local matches = {}
-      for _, file in ipairs(files) do
-        if vim.fn.match(file.path, "^" .. vim.fn.escape(arg_lead, "\\")) >= 0 then
-          table.insert(matches, file)
-        end
-      end
-      return matches
     end,
   })
 

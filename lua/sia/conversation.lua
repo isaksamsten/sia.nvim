@@ -284,12 +284,9 @@ end
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
 --- @field context sia.Context?
---- @field system_messages sia.Message[]
 --- @field messages sia.Message[]
---- @field indexed_instructions table<integer, {instruction: sia.InstructionOption, context: sia.Context?}>
 --- @field tools sia.config.Tool[]?
 --- @field model string?
---- @field files { path: string, pos: [integer, integer]?}[]
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field ignore_tool_confirm boolean?
@@ -299,7 +296,6 @@ local Conversation = {}
 
 Conversation.__index = Conversation
 Conversation.pending_messages = {}
-Conversation.pending_files = {}
 Conversation.pending_tools = {}
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
@@ -325,8 +321,6 @@ function Conversation:new(action, context)
   obj.temperature = action.temperature
   obj.mode = action.mode
 
-  obj.indexed_instructions = {}
-  obj.system_messages = {}
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
   obj.auto_confirm_tools = {}
@@ -370,15 +364,6 @@ function Conversation:add_tool(tool)
   end
 end
 
---- @param needle { path: string, pos: [integer, integer]?}
-function Conversation:_find_file(needle)
-  for _, haystack in ipairs(self.files) do
-    if haystack.path == needle.path and vim.deep_equal(haystack, needle) then
-      return true
-    end
-  end
-end
-
 function Conversation:clear_user_instructions()
   self.messages = vim
     .iter(self.messages)
@@ -399,17 +384,14 @@ end
 --- @param existing_interval sia.Context
 --- @return boolean
 local function should_mask_existing(new_interval, existing_interval)
-  -- Different buffers don't overlap
   if new_interval.buf ~= existing_interval.buf then
     return false
   end
 
-  -- If new interval has no pos (entire file), mask any existing content for this buffer
   if not new_interval.pos then
     return true
   end
 
-  -- If existing interval has no pos (entire file), don't mask it unless new is also entire file
   if not existing_interval.pos then
     return false
   end
@@ -417,7 +399,6 @@ local function should_mask_existing(new_interval, existing_interval)
   local new_start, new_end = new_interval.pos[1], new_interval.pos[2]
   local existing_start, existing_end = existing_interval.pos[1], existing_interval.pos[2]
 
-  -- Mask existing if new completely encompasses it (new is superset of existing)
   return new_start <= existing_start and existing_end <= new_end
 end
 
@@ -496,74 +477,10 @@ function Conversation:last_message()
   return self.messages[#self.messages]
 end
 
---- @param index {kind:string, index:number}
+--- @param index integer
+--- @return sia.Message?
 function Conversation:remove_instruction(index)
-  local removed
-
-  if index.kind == "system" then
-    removed = table.remove(self.system_messages, index.index)
-  elseif index.kind == "user" then
-    removed = table.remove(self.messages, index.index)
-  else
-    removed = nil
-  end
-  if removed and removed.index then
-    self.indexed_instructions[removed.index] = nil
-  end
-end
-
---- @param index {kind:string, index:number}
---- @param content string[]
---- @return boolean success
-function Conversation:update_instruction(index, content)
-  if not self:is_instruction_editable(index) then
-    return false
-  end
-  local instruction_option = self:get_instruction(index)
-  if instruction_option then
-    instruction_option.instruction.content = content
-    if instruction_option.index then
-      self.indexed_instructions[instruction_option.index].instruction.content = content
-    end
-    return true
-  end
-end
-
---- @param index {kind: string, index: integer}
-function Conversation:get_instruction(index)
-  if index.kind == "system" then
-    return self.system_messages[index.index]
-  elseif index.kind == "example" then
-    return self.example_messages[index.index]
-  elseif index.kind == "files" then
-    return self.files[index.index]
-  elseif index.kind == "user" then
-    return self.messages[index.index]
-  else
-    return nil
-  end
-end
-
---- @param index {kind: string, index: integer}
-function Conversation:is_instruction_editable(index)
-  local instruction_option = self:get_instruction(index)
-  if instruction_option == nil then
-    return false
-  end
-  if type(instruction_option.instruction) == "function" or type(instruction_option.instruction) == "string" then
-    return false
-  end
-
-  --- @diagnostic disable-next-line param-type-mismatch
-  if vim.islist(instruction_option.instruction) then
-    return false
-  end
-
-  if type(instruction_option.instruction.content) == "function" then
-    return false
-  end
-
-  return true
+  return table.remove(self.messages, index)
 end
 
 --- @param name string
@@ -583,26 +500,18 @@ function Conversation:execute_tool(name, arguments, opts)
   end
 end
 
---- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?, kind: string?}?
+--- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?}?
 --- @return sia.Message[] messages
---- @return {kind: string, index: integer}[]? mappings if mapping is set to true
+--- @return table<integer, integer>? mappings if mapping is set to true
 function Conversation:get_messages(opts)
   opts = opts or {}
 
-  local message_kinds = {
-    { kind = "system", messages = self.system_messages },
-    { kind = "user", messages = self.messages },
-  }
   local mappings = {}
   local return_messages = {}
-  for _, message_kind in ipairs(message_kinds) do
-    if opts.kind == nil or opts.kind == message_kind.kind then
-      for i, message in ipairs(message_kind.messages) do
-        if opts.filter == nil or opts.filter(message) then
-          table.insert(return_messages, message)
-          table.insert(mappings, { kind = message_kind.kind, index = i })
-        end
-      end
+  for i, message in ipairs(self.messages) do
+    if opts.filter == nil or opts.filter(message) then
+      table.insert(return_messages, message)
+      table.insert(mappings, i)
     end
   end
 
@@ -613,20 +522,11 @@ function Conversation:get_messages(opts)
   end
 end
 
-function Conversation:unpack_instruction(instruction)
-  if type(instruction) == "function" then
-    return instruction(self)
-  else
-    return instruction
-  end
-end
-
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
   local prompt = vim
-    .iter({ self.system_messages, self.messages })
-    :flatten()
+    .iter(self.messages)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
