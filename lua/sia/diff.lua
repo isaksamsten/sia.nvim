@@ -41,7 +41,7 @@ function M.highlight_diff_changes(buf, original_content)
     }
   end
   local diff_state = buffer_diff_state[buf]
-
+  diff_state.hunks = {}
   local baseline = table.concat(buffer_diff_state[buf].original_content, "\n")
   vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
 
@@ -53,7 +53,6 @@ function M.highlight_diff_changes(buf, original_content)
   --- @cast diff_result integer[]
 
   if not diff_result then
-    buffer_diff_state[buf].hunks = {}
     return
   end
 
