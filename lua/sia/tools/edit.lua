@@ -123,7 +123,7 @@ rather than multiple messages with a single call each.
   end
   local matching = require("sia.matcher")
 
-  local old_string = vim.split(args.old_string, "\n", { trimempty = true })
+  local old_string = vim.split(args.old_string, "\n")
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
   local matches
