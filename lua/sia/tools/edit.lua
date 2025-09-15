@@ -155,16 +155,16 @@ rather than multiple messages with a single call each.
     local new_string = vim.split(args.new_string, "\n")
     local span = matches[1].span
 
-    tracker.non_tracked_edit(buf, function()
-      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-      vim.api.nvim_buf_call(buf, function()
-        pcall(vim.cmd, "noa silent write!")
-      end)
-    end)
     opts.user_choice(string.format("Edit %s", args.target_file), {
       choices = CHOICES,
       on_accept = function(choice)
         if choice == 1 or choice == 2 then
+          tracker.non_tracked_edit(buf, function()
+            vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+            vim.api.nvim_buf_call(buf, function()
+              pcall(vim.cmd, "noa silent write!")
+            end)
+          end)
           diff.highlight_diff_changes(buf, old_content)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
