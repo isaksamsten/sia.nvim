@@ -304,7 +304,6 @@ local defaults = {
       },
     },
     commit = require("sia.actions").commit(),
-    review = require("sia.actions").review(),
     doc = require("sia.actions").doc(),
   },
   report_usage = true,
