@@ -47,7 +47,8 @@ function M.highlight_diff_changes(buf, original_content)
 
   local diff_result = vim.diff(baseline, new_content, {
     result_type = "indices",
-    algorithm = "histogram",
+    algorithm = "patience",
+    linematch = true,
   })
 
   --- @cast diff_result integer[]

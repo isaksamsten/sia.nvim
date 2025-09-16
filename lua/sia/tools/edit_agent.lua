@@ -157,6 +157,8 @@ example: // ... existing code ...  ]],
 
           local diff_output = vim.diff(initial_code, result, {
             result_type = "indices",
+            algorithm = "patience",
+            linematch = true,
           })
 
           local all_snippet_lines = {}
