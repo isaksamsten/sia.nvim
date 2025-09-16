@@ -5,9 +5,12 @@ local confirmation_buf = nil
 
 --- Create or update the confirmation floating window
 --- @param content string[] Lines to display
+--- @param opts table?
 --- @return function clear_function Function to call to clear the confirmation
-function M.show(content)
+function M.show(content, opts)
   M.clear()
+  opts = opts or {}
+  local reflow = opts.reflow ~= false
 
   if not content or #content == 0 then
     return function() end
@@ -46,19 +49,21 @@ function M.show(content)
   -- Set window highlight to match command line
   vim.wo[confirmation_win].winhighlight = "Normal:MsgArea"
 
-  vim.cmd("normal! ggVGgw")
+  if reflow then
+    vim.cmd("normal! ggVGgw")
 
-  local wrapped_content = vim.api.nvim_buf_get_lines(confirmation_buf, 0, -1, false)
-  local actual_height = math.min(#wrapped_content, math.floor(screen_height * 0.3))
+    local wrapped_content = vim.api.nvim_buf_get_lines(confirmation_buf, 0, -1, false)
+    local actual_height = math.min(#wrapped_content, math.floor(screen_height * 0.3))
 
-  if actual_height ~= initial_height then
-    vim.api.nvim_win_set_config(confirmation_win, {
-      height = actual_height,
-    })
+    if actual_height ~= initial_height then
+      vim.api.nvim_win_set_config(confirmation_win, {
+        height = actual_height,
+      })
+    end
+
+    vim.api.nvim_win_set_config(confirmation_win, { focusable = false })
+    vim.cmd("wincmd p")
   end
-
-  vim.api.nvim_win_set_config(confirmation_win, { focusable = false })
-  vim.cmd("wincmd p")
 
   return M.clear
 end
@@ -69,9 +74,6 @@ function M.clear()
     vim.api.nvim_win_close(confirmation_win, true)
   end
   confirmation_win = nil
-
-  -- Clear autocmds
-  pcall(vim.api.nvim_del_augroup_by_name, "SiaConfirmation")
 end
 
 return M
