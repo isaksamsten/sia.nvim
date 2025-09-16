@@ -143,18 +143,28 @@ M.new_tool = function(opts, execute)
           choice_args.on_accept(auto_apply_choice)
           return
         end
-        vim.ui.select(
-          choice_args.choices,
-          { prompt = string.format("%s\nChoose an action (Esc to cancel):", prompt) },
-          function(_, idx)
-            if idx == nil or idx < 1 or idx > #choice_args.choices then
-              callback({ content = { string.format("User cancelled %s operation.", opts.name) } })
-              return
-            end
-            choice_args.on_accept(idx)
+        local choices = vim.split(prompt, "\n")
+        for i, item in ipairs(choice_args.choices) do
+          table.insert(choices, string.format("%d: %s", i, item))
+        end
+        local clear_confirmation = require("sia.confirmation").show(choices)
+        vim.cmd.redraw()
+        vim.ui.input({ prompt = "Type number and Enter or (Esc or empty cancels): " }, function(resp)
+          if clear_confirmation then
+            clear_confirmation()
           end
-        )
-        -- end
+
+          local idx = tonumber(resp or "")
+          if resp == nil or idx < 0 or idx > #choice_args.choices then
+            callback({
+              content = {
+                string.format("User cancelled %s operation. Ask the user what they want you to do!", opts.name),
+              },
+            })
+            return
+          end
+          choice_args.on_accept(idx)
+        end)
       end
       execute(args, conversation, callback, {
         cancellable = cancellable,
