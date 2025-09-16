@@ -22,6 +22,10 @@ https://github.com/user-attachments/assets/48cb1bb6-633b-412c-b33c-ae0b6792a485
 
 https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
+https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
+
+
+
 ## ⚡️ Requirements
 
 - Neovim >= **0.10**
