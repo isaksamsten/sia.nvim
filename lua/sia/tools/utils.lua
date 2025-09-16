@@ -83,7 +83,7 @@ M.new_tool = function(opts, execute)
         end
 
         local clear_confirmation
-        if #confirmation_text > 80 then
+        if #prompt > 80 or prompt:find("\n") then
           clear_confirmation =
             require("sia.confirmation").show(vim.split(prompt, "\n", { trimempty = true, plain = true }))
           vim.cmd.redraw()
