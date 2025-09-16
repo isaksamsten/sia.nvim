@@ -15,7 +15,7 @@ function M.current_buffer(global)
         return string.format("%s", utils.get_filename(ctx.buf, ":."))
       end,
       content = function(ctx)
-        if vim.api.nvim_buf_is_valid(ctx.buf) and vim.api.nvim_buf_is_loaded(ctx.buf) then
+        if not vim.api.nvim_buf_is_loaded(ctx.buf) then
           return nil
         end
         local filename = utils.get_filename(ctx.buf, ":p")
