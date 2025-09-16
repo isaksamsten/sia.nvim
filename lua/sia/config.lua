@@ -243,8 +243,8 @@ local defaults = {
         temperature = 0.2,
         system = { "diff_system" },
         instructions = {
-          require("sia.instructions").current_buffer({ fences = false }),
-          require("sia.instructions").current_context({ show_line_numbers = false, fences = false }),
+          require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true }),
+          require("sia.instructions").current_context({ show_line_numbers = true, fences = false }),
         },
       },
       --- @type sia.config.Action

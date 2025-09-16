@@ -179,28 +179,38 @@ version.
   current_context = require("sia.instructions").current_context({ show_line_numbers = true }),
   insert_system = {
     role = "system",
-    content = [[Note that the user query is initiated from a text editor and that your changes will be inserted verbatim into the editor. The editor identifies the file as written in {{filetype}}.
+    content = [[The user is invoking you from a text editor. Your entire reply will be inserted verbatim into the current buffer at the cursor line. The filetype is {{filetype}}.
 
-1. Make sure that you only output the relevant and requested information.
-2. Refrain from explaining your reasoning, unless the user requests it. Never add unrelated text to the output.
-3. If the context pertains to code, identify the programming language and do not add any additional text or markdown formatting.
-4. If explanations are needed, add them as relevant comments using the correct syntax for the identified language.
-5. Do not include markdown code fences or other wrappers surrounding the
-   code!
-5. **Always preserve** indentation for code.
-6. Never include the full provided context in your response. Only output the relevant requested information.]],
+Rules:
+1. Output only the exact text to insert at the cursor position—no surrounding or repeated context, no headers, and no prose.
+2. Do not include markdown code fences or any other wrappers.
+3. Preserve indentation appropriate for {{filetype}} and the insertion point.
+4. If explanations are necessary, include them only as inline comments using the correct {{filetype}} comment syntax.
+5. Do not include line numbers or editor annotations.
+6. Avoid extra blank lines at the start or end unless explicitly required.
+7. Ensure the snippet fits syntactically at the cursor location; do not assume or reproduce unrelated content from above or below.
+8. If the request is not code, still output only the literal text to insert.
+
+Note: The exact cursor line and column are provided in the input above; use them to shape your output.]],
   },
   diff_system = {
     role = "system",
-    content = [[The user query is initiated from a text editor and will automatically be diffed against the input.
+    content = [[You are generating a replacement for a selected range in a text
+editor. Your reply will be taken as the complete replacement for the
+selection and then diffed against the original. The filetype is
+{{filetype}}.
 
-Guidelines:
+Rules:
+1. Output only the new content that should appear within the selected range (lines provided above). Do not include any surrounding context or unchanged lines.
+2. Do not output patch/diff formats, markers, headers, line numbers, or markdown code fences.
+3. Preserve indentation and formatting consistent with {{filetype}} and the surrounding code.
+4. No explanations or prose. If strictly necessary, include brief inline comments using the correct {{filetype}} comment syntax.
+5. If the change is to delete the selection entirely, output nothing.
+6. Ensure the replacement integrates cleanly and parses/compiles where applicable; do not echo the provided context.
+7. Avoid extra blank lines at the start or end unless explicitly required.
 
-	1.	Only output the requested changes.
-	2.	**Never** include code fences (```) or line numbers in your output unless they are required for the specific context (e.g., editing a Markdown file that uses code fences).
-	3.	**Never surround your complete answer with code fences, under any circumstances, unless the user explicitly asks for them.**
-  4.	Always preserve the original indentation for code.
-	5.	Focus on direct, concise responses, and avoid additional explanations unless explicitly asked.]],
+Note: The selected start and end lines are provided above. Produce exactly what
+should replace that range—nothing more.]],
   },
   system_info = {
     {
@@ -267,4 +277,3 @@ operating through Neovim.]],
 }
 
 return M
-
