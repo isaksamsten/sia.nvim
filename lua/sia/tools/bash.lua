@@ -197,11 +197,23 @@ git commit -m "$(cat <<'EOF'
 
         local display_msg
         if code == 0 then
-          display_msg = string.format("⚡ Executed `%s`", args.command)
+          if args.description then
+            display_msg = string.format("⚡ %s: `%s`", args.description, args.command)
+          else
+            display_msg = string.format("⚡ Executed `%s`", args.command)
+          end
         elseif result.interrupted then
-          display_msg = string.format("⚡ Stopped `%s`", args.command)
+          if args.description then
+            display_msg = string.format("⚡ Stopped %s: `%s`", args.description, args.command)
+          else
+            display_msg = string.format("⚡ Stopped `%s`", args.command)
+          end
         else
-          display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
+          if args.description then
+            display_msg = string.format("⚡ %s: `%s` (exit code %d)", args.description, args.command, code)
+          else
+            display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
+          end
         end
 
         callback({
