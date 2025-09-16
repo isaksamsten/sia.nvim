@@ -4,8 +4,11 @@ local FAILED_TO_EXECUTE = "❌ Failed to execute command"
 
 return tool_utils.new_tool({
   name = "bash",
-  message = function(_)
-    return string.format("Running command`...")
+  message = function(args)
+    if args.description then
+      return string.format("%s...", args.description)
+    end
+    return string.format("Running command...")
   end,
   description = "Execute bash commands safely within the project directory",
   system_prompt = string.format(
@@ -102,6 +105,10 @@ git commit -m "$(cat <<'EOF'
     command = {
       type = "string",
       description = "The bash command to execute",
+    },
+    description = {
+      type = "string",
+      description = "Clear, consice description of what the command does in 3-10 words.Example:\nInput: ls\nOutput: Lists files in current directory",
     },
     timeout = {
       type = "number",
