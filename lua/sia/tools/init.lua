@@ -12,4 +12,5 @@ return {
   agent = require("sia.tools.agent"),
   diagnostics = require("sia.tools.diagnostics"),
   compact = require("sia.tools.compact"),
+  fetch = require("sia.tools.fetch"),
 }

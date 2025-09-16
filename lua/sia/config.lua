@@ -224,6 +224,7 @@ local defaults = {
         rename = require("sia.tools").rename,
         remove = require("sia.tools").remove,
         bash = require("sia.tools").bash,
+        fetch = require("sia.tools").fetch,
       },
     },
     actions = {
@@ -273,6 +274,7 @@ local defaults = {
           "rename",
           "remove",
           "bash",
+          "fetch",
         },
       },
     },
