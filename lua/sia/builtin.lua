@@ -72,6 +72,11 @@ run 3 tool calls in parallel to read all 3 files into context at the same time.
 When running multiple read-only commands like `list_files` or `grep`, always
 run all of the commands in parallel. Err on the side of maximizing parallel
 tool calls rather than running too many tools sequentially.
+
+IMPORTANT: For file edits, when you need to make multiple changes to the same file,
+use multiple parallel edit tool calls in a single message rather than trying to
+handle multiple edits in one tool call. Each edit call should handle one specific
+change with clear context. For example:
 </use_parallel_tool_calls>
 
 <planning>

@@ -64,9 +64,10 @@ If you want to create a new file, use:
 - An empty old_string
 - The new file's contents as new_string
 
-Remember: when making multiple file edits in a row to the same file, you should
-prefer to send all edits in a single message with multiple calls to this tool,
-rather than multiple messages with a single call each.
+MULTIPLE EDITS: When you need to make multiple changes to the same file, use
+multiple parallel calls to this tool in a single message. Each call should handle
+one specific change with clear, unique context.
+```
 ]],
   parameters = {
 
@@ -165,7 +166,7 @@ rather than multiple messages with a single call each.
               pcall(vim.cmd, "noa silent write!")
             end)
           end)
-          diff.highlight_diff_changes(buf, old_content)
+          -- diff.highlight_diff_changes(buf, old_content)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
           end
