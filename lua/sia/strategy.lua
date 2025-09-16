@@ -589,8 +589,9 @@ function ChatStrategy:on_complete(control)
         self.canvas:clear_extmarks()
         vim.bo[self.buf].modifiable = false
         if not self._is_named then
+          local config = require("sia.config")
           assistant.execute_query({
-            model = "openai/gpt-4o-mini",
+            model = config.options.defaults.fast_model,
             prompt = {
               {
                 role = "system",
