@@ -96,7 +96,7 @@ function M.create_context(args)
   else
     opts.mode = "v"
   end
-  if args.line1 == 1 and args.line2 == vim.api.nvim_buf_line_count(opts.buf) then
+  if args.line1 == 1 and args.line2 == vim.api.nvim_buf_line_count(opts.buf) and args.line1 ~= args.line2 then
     opts.pos = nil
   end
   return opts
@@ -814,9 +814,9 @@ function M.detect_dangerous_command_patterns(command)
     "\\m",
     "\\s",
     -- Quoted command bypasses
-    "\"r\"",
+    '"r"',
     "'s'",
-    "\"s\"",
+    '"s"',
     "'r'",
   }
 
