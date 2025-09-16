@@ -166,7 +166,7 @@ one specific change with clear, unique context.
               pcall(vim.cmd, "noa silent write!")
             end)
           end)
-          -- diff.highlight_diff_changes(buf, old_content)
+          diff.highlight_diff_changes(buf, old_content)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
           end
