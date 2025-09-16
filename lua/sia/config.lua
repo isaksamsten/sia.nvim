@@ -65,14 +65,10 @@ local providers = require("sia.provider")
 --- @field chat sia.config.Chat?
 --- @field hidden sia.config.Hidden?
 
---- @class sia.config.AutoNaming
---- @field enabled boolean
---- @field model string
-
 --- @class sia.config.Defaults
 --- @field model string
+--- @field fast_model string
 --- @field temperature number
---- @field auto_naming sia.config.AutoNaming
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
 --- @field replace sia.config.Replace
@@ -186,13 +182,10 @@ local defaults = {
   --- @type sia.config.Defaults
   defaults = {
     model = "openai/gpt-4.1",
+    fast_model = "openai/gpt-4.1-mini",
     temperature = 0.3, -- default temperature
     prefix = 1, -- prefix lines in insert
     suffix = 0, -- suffix lines in insert
-    auto_naming = {
-      enabled = true,
-      model = "openai/gpt-4o-mini",
-    },
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },

@@ -1,5 +1,6 @@
---- @type sia.config.Tool
-return {
+local tool_utils = require("sia.tools.utils")
+
+return tool_utils.new_tool({
   name = "dispatch_agent",
   message = "Launching autonomous agent...",
   read_only = true,
@@ -44,35 +45,41 @@ Usage notes:
     },
   },
   required = { "prompt" },
-  execute = function(args, _, callback, cancellable)
-    local HiddenStrategy = require("sia.strategy").HiddenStrategy
-    local Conversation = require("sia.conversation").Conversation
-    local conversation = Conversation:new({
-      mode = "hidden",
-      system = {
-        {
-          role = "system",
-          content = [[You are a autonomous agent. You perform the user request
+}, function(args, _, callback, opts)
+  local confirm_message = string.format("Launch agent with task: %s", args.prompt)
+  
+  opts.user_input(confirm_message, {
+    on_accept = function()
+      local HiddenStrategy = require("sia.strategy").HiddenStrategy
+      local Conversation = require("sia.conversation").Conversation
+      local conversation = Conversation:new({
+        mode = "hidden",
+        model = require("sia.config").options.defaults.fast_model,
+        system = {
+          {
+            role = "system",
+            content = [[You are a autonomous agent. You perform the user request
 and use tools to provide an answer. You cannot interact; you perform
 the requested action using the tools at your disposal and provide a
 response]],
+          },
         },
-      },
-      instructions = {
-        { role = "user", content = args.prompt },
-      },
-      ignore_tool_confirm = true,
-      tools = {
-        "glob",
-        "grep",
-        "read",
-      },
-    }, nil)
-    local strategy = HiddenStrategy:new(conversation, {
-      callback = function(_, reply)
-        callback({ content = reply, display_content = { "🤖 Agent completed task" } })
-      end,
-    }, cancellable)
-    require("sia.assistant").execute_strategy(strategy)
-  end,
-}
+        instructions = {
+          { role = "user", content = args.prompt },
+        },
+        ignore_tool_confirm = true,
+        tools = {
+          "glob",
+          "grep",
+          "read",
+        },
+      }, nil)
+      local strategy = HiddenStrategy:new(conversation, {
+        callback = function(_, reply)
+          callback({ content = reply, display_content = { "🤖 Agent completed task" } })
+        end,
+      }, opts.cancellable)
+      require("sia.assistant").execute_strategy(strategy)
+    end,
+  })
+end)
