@@ -1,5 +1,132 @@
-local M = {}
 local providers = require("sia.provider")
+local M = {}
+
+--- @type table<string, {mtime: integer, json: table}?>
+local config_cache = {}
+
+local function validate_permission_patterns(patterns, path)
+  if type(patterns) ~= "table" then
+    return false, path .. " must be an array, got " .. type(patterns)
+  end
+
+  for i, pattern in ipairs(patterns) do
+    if type(pattern) ~= "string" then
+      return false, path .. "[" .. i .. "] must be a string, got " .. type(pattern)
+    end
+    local ok, err = pcall(string.match, "test", "^" .. pattern .. "$")
+    if not ok then
+      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. err
+    end
+  end
+  return true
+end
+
+local function validate_permissions(permission)
+  if not permission then
+    return true
+  end
+
+  if type(permission) ~= "table" then
+    return false, "'permission' must be an object, got " .. type(permission)
+  end
+
+  for section_name, section in pairs(permission) do
+    if type(section) ~= "table" then
+      return false, "permission." .. section_name .. " must be an object, got " .. type(section)
+    end
+
+    for tool_name, tool_perms in pairs(section) do
+      if type(tool_perms) ~= "table" then
+        return false,
+          "permission." .. section_name .. "." .. tool_name .. " must be an object, got " .. type(tool_perms)
+      end
+
+      if not tool_perms.arguments then
+        return false, "permission." .. section_name .. "." .. tool_name .. " must have an 'arguments' field"
+      end
+
+      if type(tool_perms.arguments) ~= "table" then
+        return false,
+          "permission." .. section_name .. "." .. tool_name .. ".arguments must be an object, got " .. type(
+            tool_perms.arguments
+          )
+      end
+
+      for param_name, patterns in pairs(tool_perms.arguments) do
+        local path = "permission." .. section_name .. "." .. tool_name .. ".arguments." .. param_name
+        local ok, err = validate_permission_patterns(patterns, path)
+        if not ok then
+          return false, err
+        end
+      end
+
+      if section_name == "allow" and tool_perms.choice ~= nil then
+        if
+          type(tool_perms.choice) ~= "number"
+          or tool_perms.choice < 1
+          or tool_perms.choice ~= math.floor(tool_perms.choice)
+        then
+          return false,
+            "permission." .. section_name .. "." .. tool_name .. ".choice must be a positive integer, got " .. type(
+              tool_perms.choice
+            )
+        end
+      end
+    end
+  end
+  return true
+end
+
+function M.get_local_config()
+  local root = vim.fs.root(0, ".sia")
+  if not root then
+    return nil
+  end
+
+  local local_config = vim.fs.joinpath(root, ".sia", "config.json")
+  local stat = vim.uv.fs_stat(local_config)
+  if not stat then
+    return nil
+  end
+
+  local cache = config_cache[root]
+  if cache and stat.mtime.sec == cache.mtime then
+    return cache.json
+  end
+
+  local read_ok, file_content = pcall(vim.fn.readfile, local_config)
+  if not read_ok then
+    vim.notify(
+      string.format("Sia: Failed to read config file %s: %s", local_config, file_content),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  local content = table.concat(file_content, " ")
+  local decode_ok, json = pcall(vim.json.decode, content)
+  if not decode_ok then
+    vim.notify(string.format("Sia: Invalid JSON in config file %s: %s", local_config, json), vim.log.levels.ERROR)
+    return nil
+  end
+
+  if type(json) ~= "table" then
+    vim.notify(
+      string.format("Sia: Config file %s must contain a JSON object, got %s", local_config, type(json)),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  local ok, err = validate_permissions(json.permission)
+  if not ok then
+    vim.notify(string.format("Sia: Config file %s: %s", local_config, err), vim.log.levels.ERROR)
+    return nil
+  end
+
+  config_cache[root] = { mtime = stat.mtime.sec, json = json }
+  return json
+end
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"

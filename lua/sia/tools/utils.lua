@@ -1,8 +1,49 @@
 local M = {}
 
---- @type table<string, {mtime: integer, json: table}?>
-local config_cache = {}
+--- @param name string
+--- @param args table
+--- @return integer?
+local function is_auto_allowed(name, args)
+  local config = require("sia.config")
+  local lc = config.get_local_config()
 
+  local denied = lc and lc.permission and lc.permission.deny and lc.permission.deny[name] or {}
+  if denied.arguments then
+    for key, patterns in pairs(denied.arguments) do
+      local arg_value = args[key]
+      if arg_value then
+        for _, pattern in ipairs(patterns) do
+          if string.match(arg_value, "^" .. pattern .. "$") then
+            return nil
+          end
+        end
+      end
+    end
+  end
+
+  local allowed = lc and lc.permission and lc.permission.allow and lc.permission.allow[name] or {}
+  if not allowed.arguments or vim.tbl_isempty(allowed.arguments) then
+    return nil
+  end
+
+  for key, patterns in pairs(allowed.arguments) do
+    local found_match = false
+    local arg_value = args[key]
+    if arg_value then
+      for _, pattern in ipairs(patterns) do
+        if string.match(arg_value, "^" .. pattern .. "$") then
+          found_match = true
+          break
+        end
+      end
+    end
+    if not found_match then
+      return nil
+    end
+  end
+
+  return allowed.choice or 1
+end
 --- @param items string[]
 --- @param opts table
 --- @param on_choice fun(item: string?, idx:integer?):nil
@@ -65,32 +106,6 @@ local function input(opts, on_confirm)
   end)
 end
 
-local function read_local_config()
-  local root = vim.fs.root(0, ".sia")
-  if not root then
-    return nil
-  end
-
-  local local_config = vim.fs.joinpath(root, ".sia", "config.json")
-  local stat = vim.uv.fs_stat(local_config)
-  if not stat then
-    return nil
-  end
-
-  local cache = config_cache[root]
-  if cache and stat.mtime.sec == cache.mtime then
-    return cache.json
-  end
-
-  local ok, json = pcall(vim.json.decode, table.concat(vim.fn.readfile(local_config), " "))
-  if ok then
-    config_cache[root] = { mtime = stat.mtime.sec, json = json }
-    return json
-  else
-    return nil
-  end
-end
-
 ---@class sia.NewToolOpts
 ---@field name string
 ---@field description string
@@ -122,19 +137,16 @@ end
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
   local auto_apply = function(args, conversation)
-    local config = read_local_config()
-    local allowed = config and config.permission and config.permission.allow and config.permission.allow[opts.name]
-      or {}
-    for key, value in pairs(args) do
-      for _, pattern in ipairs(allowed[key] or {}) do
-        if string.match(value, "^" .. pattern .. "$") then
-          return 1
-        end
-      end
-    end
+    -- The user has marked this as "allow all" in conversation
     if conversation.auto_confirm_tools[opts.name] then
       return 1
     else
+      -- this is allowed in the local configuration file
+      local auto_apply_choice = is_auto_allowed(opts.name, args)
+      if auto_apply_choice then
+        return auto_apply_choice
+      end
+
       return (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
     end
   end
