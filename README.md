@@ -24,8 +24,6 @@ https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
 https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
-
-
 ## ⚡️ Requirements
 
 - Neovim >= **0.10**
@@ -69,7 +67,6 @@ TODO
 - `SiaProgress`: a response has been received
 - `SiaComplete`: the query is completed
 - `SiaError`: on errors in the LLM
-- `SiaEditPost`: after a buffer has been edited
 
 ## 🚀 Usage
 
@@ -79,10 +76,6 @@ TODO
 - `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
-
-- `:SiaAdd file` - Displays the files in the global file list; if run from a chat, shows the files associated with the current conversation.
-- `:SiaAdd file patterns` - Adds files matching the specified patterns to the global file list; if run from a chat, adds them to the current conversation.
-- `:SiaRemove patterns` - Removes files matching the specified patterns from the global file list; if run from a chat, removes them from the current conversation.
 
 **Ranges**
 
@@ -97,8 +90,160 @@ Any range is supported. For example:
 - `:%Sia fix the test function` - Opens a chat with a suggested fix for the test function.
 - `:Sia write snake in pygame` - Opens a chat with the generated answer for the query.
 - `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
-- `:SiaAdd a.py b.py | Sia move the function foo_a to b.py` - Moves the function `foo_a` from `a.py` to `b.py`.
-- `:%Sia /diagnostic` - Opens a chat with a solution to diagnostics in the current file.
+
+## Tools
+
+Sia comes with a comprehensive set of tools that enable the AI assistant to
+interact with your codebase and development environment:
+
+### File Operations
+
+- **read** - Read file contents with optional line ranges and limits (up to
+  2000 lines by default, with line number display)
+- **write** - Write complete file contents to create new files or overwrite
+  existing ones (ideal for large changes >50% of file content)
+- **edit** - Make precise targeted edits using search and replace with fuzzy
+  matching and context validation
+- **rename_file** - Rename or move files within the project with automatic
+  buffer updates
+- **remove_file** - Safely delete files with optional trash functionality
+  (moves to `.sia_trash` by default)
+
+### Code Navigation & Search
+
+- **grep** - Fast content search using ripgrep with regex support and glob
+  patterns (max 100 results, sorted by file modification time)
+- **glob** - Find files matching patterns using `fd` (supports `*.lua`,
+  `**/*.py`, etc.) with hidden file options
+- **workspace** - Show currently visible files with line ranges, cursor
+  positions, and background buffers
+- **show_locations** - Create navigable quickfix lists for multiple locations
+  (supports error/warning/info/note types)
+- **get_diagnostics** - Retrieve diagnostics with severity levels and
+  source information
+
+### Development Environment
+
+- **bash** - Execute shell commands in persistent sessions with security
+  restrictions and output truncation (8000 char limit)
+- **fetch** - Retrieve and convert web content to markdown using pandoc, with
+  AI-powered content analysis
+
+### Advanced Capabilities
+
+- **dispatch_agent** - Launch autonomous agents with access to read-only tools
+  (glob, grep, read) for complex search tasks
+- **compact_conversation** - Intelligently summarize and compact conversation
+  history when topics change
+
+The assistant combines these tools intelligently to handle complex development
+workflows, from simple file edits to multi-file refactoring, debugging, and
+project analysis.
+
+## Local Configuration
+
+Sia supports project-specific configuration through `.sia/config.json` files.
+This allows you to customize tool behavior and permissions on a per-project
+basis.
+
+### Setting Up Local Configuration
+
+Create a `.sia/config.json` file in your project root:
+
+```json
+{
+  "permission": {
+    "allow": {
+      "bash": {
+        "arguments": {
+          "command": ["git diff .*", "git status", "uv build"]
+        }
+      },
+      "edit": {
+        "arguments": {
+          "target_file": [".*%.lua", ".*%.py", ".*%.js$"]
+        }
+      }
+    },
+    "deny": {
+      "bash": {
+        "arguments": {
+          "command": ["rm -rf .*", "sudo .*"]
+        }
+      },
+      "remove_file": {
+        "arguments": {
+          "path": [".*important.*", ".*config.*"]
+        }
+      }
+    }
+  }
+}
+```
+
+### Permission System
+
+The permission system uses Lua patterns to control tool access:
+
+**Allow Rules**: Auto-approve tools when arguments match patterns
+
+- `choice`: Optional auto-selection for multi-choice prompts (1-based index)
+- `arguments`: Object mapping parameter names to regex pattern arrays
+
+**Deny Rules**: Block tools when arguments match patterns
+
+- Takes precedence over allow rules
+- Same structure as allow rules (without `choice`)
+
+### Pattern Matching
+
+- All patterns are anchored Lua patterns (automatically wrapped with `^...$`)
+- Multiple patterns in an array are OR'd together
+- All argument patterns must match for the rule to apply
+
+### Examples
+
+**Auto-approve safe git commands:**
+
+```json
+{
+  "permission": {
+    "allow": {
+      "bash": {
+        "arguments": {
+          "command": ["git status", "git diff.*", "git log.*"]
+        }
+      }
+    }
+  }
+}
+```
+
+**Restrict file operations to source code:**
+
+```json
+{
+  "permission": {
+    "allow": {
+      "edit": {
+        "arguments": {
+          "target_file": ["src/.*%.(js|ts|py)"]
+        }
+      }
+    },
+    "deny": {
+      "remove_file": {
+        "arguments": {
+          "path": [".*%.(config|env).*"]
+        }
+      }
+    }
+  }
+}
+```
+
+This system provides fine-grained control over AI assistant capabilities while
+maintaining security and preventing accidental destructive operations.
 
 ### Suggested Keybindings
 
@@ -132,104 +277,21 @@ In the chat view (with `ft=sia`), you can bind the following mappings for effici
 
 ```lua
 keys = {
-  { "p", mode = "n", require("sia").preview_context, ft = "sia" },
-  { "x", mode = "n", require("sia").remove_context, ft = "sia" },
-  { "i", mode = "n", require("sia").replace, ft = "sia" },
-  { "I", mode = "n", require("sia").replace_all, ft = "sia" },
-  { "r", mode = "n", function() require("sia").replace({apply_marker = true}) end, ft = "sia" },
-  { "R", mode = "n", function() require("sia").replace_all({apply_marker = true}) end, ft = "sia" },
-  { "a", mode = "n", function() require("sia").insert({above=true}) end, ft = "sia" },
-  { "b", mode = "n", require("sia").insert, ft = "sia" },
+  { "p", mode = "n", require("sia").show_messages, ft = "sia" },
+  { "x", mode = "n", require("sia").remove_message, ft = "sia" },
   { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
 }
 ```
 
-- **View Context**: View each context added to the chat.
-- **Delete Instruction**: Remove instructions from the chat.
-- **Replace Block**: Apply the suggested edit when the cursor is on a code block.
-- **Replace All Blocks**: Apply suggested edits to all code blocks in the current response and open a quickfix list.
-- **Insert Block Above**: Insert a code block above the cursor.
-- **Insert Block Below**: Insert a code block below the cursor.
-- **Compose Longer Query**: Open a chat view to compose a longer query.
-
-### Accepting and Rejecting Suggestions
-
-When inserting suggestions, Sia will create markers in the code that need to be accepted or rejected.
-
-Consider using
-[conflicting.nvim](https://github.com/isaksamsten/conflicting.nvim) to
-highlight and resolve the conflicts.
-
-Add `conflicting.nvim` to dependencies (or separately to also deal with Git merges), and setup an auto command:
-
-```lua
-vim.api.nvim_create_autocmd("User", {
-  pattern = "SiaEditPost",
-  callback = function(args)
-    local buf = args.data.buf
-    if buf then
-      require("conflicting").track(buf)
-    end
-  end,
-})
-```
-
-Markers will look like this when replacing all blocks:
-
-```python
-<<<<<<< User
-def range_inclusive(start, end):
-    return list(range(start, end + 1))
-
-def range_exclusive(start, end):
-    return list(range(start, end))
-
-def range_with_step(start, end, step):
-    return list(range(start, end, step))
-
-=======
-from ranges import range_inclusive, range_exclusive, range_with_step
->>>>>>> Sia
-```
-
-If you are using `conflicting.nvim`, you can accept the suggestion from `Sia`
-with `Conflicting incoming` (or for all changes in the quickfix list with `:cdo
-Conflicting incoming`)
-
 ## Customize configuration
-
-### Default actions
-
-In Sia, you can execute various actions using the command `:Sia <action>`. The following actions are bundled in the default configuration:
-
-- **edit**: Edit a selection without confirmation using the instructions.
-
-  - Example: `'<,'>Sia /edit optimize`
-
-- **diagnostic**: Open a chat window with explanations for the diagnostics in the specified range.
-
-  - Example: `'<,'>Sia /diagnostic`
 
 - **commit**: Insert a commit message (enabled only if inside a Git repository and the current file type is `gitcommit`).
 
   - Example: `Sia /commit`
 
-- **review**: Review the code in the specified range and open a quickfix window with comments.
-
-  - Example: `'<,'>Sia /review`
-
-- **explain**: Open a chat window explaining the current range.
-
-  - Example: `'<,'>Sia /explain focus on the counter`
-
-- **unittest**: Open a chat window with unit tests for the current range or the captured function under the cursor.
-
 - **doc**: Insert documentation for the function or class under the cursor.
 
   - Example: `Sia /doc`
-
-- **fix**: Inline fix for the issue provided in a quickfix window.
-  - Example: `Sia /fix`
 
 ### Customizing actions
 

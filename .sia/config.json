@@ -1,0 +1,29 @@
+{
+  "permission": {
+    "allow": {
+      "edit": {
+        "arguments": {
+          "target_file": [".*%.md"]
+        }
+      },
+      "bash": {
+        "arguments": {
+          "command": ["git diff.*", "git status.*", "git log.*"]
+        }
+      },
+      "read": {
+        "arguments": {
+          "path": [".*%.lua", "README.md"]
+        }
+      },
+      "fetch": {
+        "arguments": {
+          "url": [
+            "https://github.com/.*",
+            "https://raw.githubusercontent.com/.*"
+          ]
+        }
+      }
+    }
+  }
+}
