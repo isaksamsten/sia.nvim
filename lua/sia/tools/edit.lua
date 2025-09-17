@@ -159,13 +159,13 @@ one specific change with clear, unique context.
     opts.user_choice(string.format("Edit %s", args.target_file), {
       choices = CHOICES,
       on_accept = function(choice)
-        if choice == 1 or choice == 2 then
-          tracker.non_tracked_edit(buf, function()
-            vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
-            vim.api.nvim_buf_call(buf, function()
-              pcall(vim.cmd, "noa silent write!")
-            end)
+        tracker.non_tracked_edit(buf, function()
+          vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_string)
+          vim.api.nvim_buf_call(buf, function()
+            pcall(vim.cmd, "noa silent write!")
           end)
+        end)
+        if choice == 1 or choice == 2 then
           diff.highlight_diff_changes(buf, old_content)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
