@@ -1,5 +1,8 @@
 local M = {}
 
+--- @type table<string, {mtime: integer, json: table}?>
+local config_cache = {}
+
 --- @param items string[]
 --- @param opts table
 --- @param on_choice fun(item: string?, idx:integer?):nil
@@ -62,6 +65,32 @@ local function input(opts, on_confirm)
   end)
 end
 
+local function read_local_config()
+  local root = vim.fs.root(0, ".sia")
+  if not root then
+    return nil
+  end
+
+  local local_config = vim.fs.joinpath(root, ".sia", "config.json")
+  local stat = vim.uv.fs_stat(local_config)
+  if not stat then
+    return nil
+  end
+
+  local cache = config_cache[root]
+  if cache and stat.mtime.sec == cache.mtime then
+    return cache.json
+  end
+
+  local ok, json = pcall(vim.json.decode, table.concat(vim.fn.readfile(local_config), " "))
+  if ok then
+    config_cache[root] = { mtime = stat.mtime.sec, json = json }
+    return json
+  else
+    return nil
+  end
+end
+
 ---@class sia.NewToolOpts
 ---@field name string
 ---@field description string
@@ -93,6 +122,16 @@ end
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
   local auto_apply = function(args, conversation)
+    local config = read_local_config()
+    local allowed = config and config.permission and config.permission.allow and config.permission.allow[opts.name]
+      or {}
+    for key, value in pairs(args) do
+      for _, pattern in ipairs(allowed[key] or {}) do
+        if string.match(value, "^" .. pattern .. "$") then
+          return 1
+        end
+      end
+    end
     if conversation.auto_confirm_tools[opts.name] then
       return 1
     else
@@ -128,7 +167,7 @@ M.new_tool = function(opts, execute)
 
       local auto_apply_choice = auto_apply(args, conversation)
       user_input = function(prompt, input_args)
-        if (conversation.ignore_tool_confirm or auto_apply_choice) and not input_args.must_confirm then
+        if conversation.ignore_tool_confirm or auto_apply_choice then
           input_args.on_accept()
           return
         end
