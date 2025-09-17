@@ -1,4 +1,6 @@
 local tool_utils = require("sia.tools.utils")
+local MAX_LINE_LENGTH = 200
+local MAX_MATCHES = 100
 
 return tool_utils.new_tool({
   name = "grep",
@@ -27,8 +29,6 @@ return tool_utils.new_tool({
     table.insert(command, args.glob)
   end
 
-  local max_count = 100
-
   if args.pattern == nil then
     callback({ content = { "No pattern was given" } })
     return
@@ -56,7 +56,15 @@ return tool_utils.new_tool({
         for _, line in ipairs(lines) do
           local file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
           if file and lnum and col then
-            table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = line })
+            local truncated_line = line
+            if #line > MAX_LINE_LENGTH then
+              local prefix = string.format("%s:%s:%s:", file, lnum, col)
+              local available_length = MAX_LINE_LENGTH - #prefix - 10
+              local truncated_rest = rest:sub(1, available_length)
+              truncated_line = prefix .. truncated_rest .. "...[TRUNCATED]"
+            end
+
+            table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = truncated_line })
             if not file_mtimes[file] then
               local stat = vim.loop.fs_stat(file)
               file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
@@ -81,12 +89,12 @@ return tool_utils.new_tool({
         end)
 
         local header = "The following search results were returned"
-        if #matches > max_count then
+        if #matches > MAX_MATCHES then
           header = header
             .. string.format(
               "\n\nWARNING: Search returned %d matches (showing %d most recent by file mtime). Results may be incomplete.",
               #matches,
-              max_count
+              MAX_MATCHES
             )
           header = header .. "\nConsider:"
           header = header .. "\n- Using a more specific search pattern"
@@ -100,7 +108,7 @@ return tool_utils.new_tool({
           table.insert(output, line)
         end
 
-        for i = 1, math.min(#matches, max_count) do
+        for i = 1, math.min(#matches, MAX_MATCHES) do
           table.insert(output, matches[i].text)
         end
         local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
