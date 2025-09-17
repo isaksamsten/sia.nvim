@@ -1,5 +1,67 @@
 local M = {}
 
+--- @param items string[]
+--- @param opts table
+--- @param on_choice fun(item: string?, idx:integer?):nil
+local function select(items, opts, on_choice)
+  local choices = vim.split(opts.prompt, "\n")
+  for i, item in ipairs(items) do
+    table.insert(choices, string.format("%d: %s", i, item))
+  end
+  local clear_confirmation = require("sia.confirmation").show(choices)
+  vim.cmd.redraw()
+  vim.ui.input({ prompt = "Type number and Enter or (Esc or empty cancels): " }, function(resp)
+    if clear_confirmation then
+      clear_confirmation()
+    end
+
+    local idx = tonumber(resp or "")
+    if resp == nil or idx < 0 or idx > #items then
+      on_choice(nil, nil)
+    end
+    on_choice(items[idx], idx)
+  end)
+end
+
+local function input(opts, on_confirm)
+  local last_dash_pos = nil
+  local search_pos = 1
+  while true do
+    local found = opts.prompt:find(" %- ", search_pos)
+    if not found then
+      break
+    end
+    last_dash_pos = found
+    search_pos = found + 1
+  end
+
+  local prompt, confirmation_text
+  if last_dash_pos then
+    prompt = opts.prompt:sub(1, last_dash_pos - 1)
+    confirmation_text = opts.prompt:sub(last_dash_pos + 3)
+  else
+    prompt = opts.prompt
+    confirmation_text = nil
+  end
+
+  local clear_confirmation
+  if #prompt > 80 or prompt:find("\n") then
+    clear_confirmation = require("sia.confirmation").show(vim.split(prompt, "\n", { trimempty = true, plain = true }))
+    vim.cmd.redraw()
+  elseif confirmation_text then
+    confirmation_text = string.format("%s - %s", prompt, confirmation_text)
+  else
+    confirmation_text = prompt
+  end
+
+  vim.ui.input({ prompt = confirmation_text }, function(resp)
+    if clear_confirmation then
+      clear_confirmation()
+    end
+    on_confirm(resp)
+  end)
+end
+
 ---@class sia.NewToolOpts
 ---@field name string
 ---@field description string
@@ -82,20 +144,12 @@ M.new_tool = function(opts, execute)
           confirmation_text = "Proceed? (Y/n/[a]lways): "
         end
 
-        local clear_confirmation
-        if #prompt > 80 or prompt:find("\n") then
-          clear_confirmation =
-            require("sia.confirmation").show(vim.split(prompt, "\n", { trimempty = true, plain = true }))
-          vim.cmd.redraw()
-        else
-          confirmation_text = string.format("%s - %s", prompt, confirmation_text)
+        local input_fn = input
+        if require("sia.config").options.defaults.ui.use_vim_ui then
+          input_fn = vim.ui.input
         end
 
-        vim.ui.input({ prompt = confirmation_text }, function(resp)
-          if clear_confirmation then
-            clear_confirmation()
-          end
-
+        input({ prompt = string.format("%s - %s", prompt, confirmation_text) }, function(resp)
           if resp == nil then
             callback({
               content = {
@@ -143,27 +197,20 @@ M.new_tool = function(opts, execute)
           choice_args.on_accept(auto_apply_choice)
           return
         end
-        local choices = vim.split(prompt, "\n")
-        for i, item in ipairs(choice_args.choices) do
-          table.insert(choices, string.format("%d: %s", i, item))
+        local select_fn = select
+        if require("sia.config").options.defaults.ui.use_vim_ui then
+          select_fn = vim.ui.select
         end
-        local clear_confirmation = require("sia.confirmation").show(choices)
-        vim.cmd.redraw()
-        vim.ui.input({ prompt = "Type number and Enter or (Esc or empty cancels): " }, function(resp)
-          if clear_confirmation then
-            clear_confirmation()
-          end
-
-          local idx = tonumber(resp or "")
-          if resp == nil or idx < 0 or idx > #choice_args.choices then
+        select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
+          if idx then
+            choice_args.on_accept(idx)
+          else
             callback({
               content = {
                 string.format("User cancelled %s operation. Ask the user what they want you to do!", opts.name),
               },
             })
-            return
           end
-          choice_args.on_accept(idx)
         end)
       end
       execute(args, conversation, callback, {

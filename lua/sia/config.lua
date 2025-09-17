@@ -77,6 +77,7 @@ local providers = require("sia.provider")
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
+--- @field ui {use_vim_ui: boolean?}?
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -207,6 +208,9 @@ local defaults = {
       trash = true,
       create_dirs_on_rename = true,
       restrict_to_project_root = true,
+    },
+    ui = {
+      use_vim_ui = false,
     },
     tools = {
       enable = true,
