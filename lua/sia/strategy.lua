@@ -116,19 +116,22 @@ end
 
 --- @class sia.Strategy
 --- @field is_busy boolean?
---- @field cancellable sia.Cancellable?
+--- @field cancellable sia.Cancellable
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
 local Strategy = {}
 Strategy.__index = Strategy
 
+--- @param conversation sia.Conversation
+--- @param cancellable sia.Cancellable?
 --- @return sia.Strategy
-function Strategy:new(conversation)
+function Strategy:new(conversation, cancellable)
   local obj = setmetatable({}, self)
   obj.conversation = conversation
   obj.tools = {}
   obj.modified = {}
+  obj.cancellable = cancellable or { is_cancelled = false }
   return obj
 end
 
@@ -137,18 +140,24 @@ function Strategy:on_init() end
 function Strategy:on_continue() end
 
 --- Callback triggered when the strategy starts.
---- @param job number
-function Strategy:on_start(job) end
+--- @return boolean success
+function Strategy:on_start()
+  return true
+end
 
 --- Callback triggered on each streaming content.
 --- @param content string
---- @param job integer
-function Strategy:on_progress(content, job) end
+--- @return boolean success
+function Strategy:on_progress(content)
+  return true
+end
 
 --- Callback triggered when the model is reasoning
 --- @param content string
---- @param job integer
-function Strategy:on_reasoning(content, job) end
+--- @return boolean success
+function Strategy:on_reasoning(content)
+  return true
+end
 
 --- Callback triggered when the strategy is completed.
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil), job: number? }
@@ -162,8 +171,8 @@ function Strategy:on_cancelled() end
 ---
 --- Collects a streaming function call response
 --- @param t table
---- @param job integer
-function Strategy:on_tool_call(t, _)
+--- @return boolean success
+function Strategy:on_tool_call(t)
   for i, v in ipairs(t) do
     local func = v["function"]
     --- Patch for gemini models
@@ -182,6 +191,7 @@ function Strategy:on_tool_call(t, _)
       self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments .. func.arguments
     end
   end
+  return true
 end
 
 --- @class sia.ParsedTool
@@ -431,7 +441,6 @@ function ChatStrategy:new(conversation, options)
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
   obj._is_named = false
-  obj.cancellable = { is_cancelled = false }
   local augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup,
@@ -473,13 +482,12 @@ function ChatStrategy:on_error()
   self.canvas:update_progress({ { "Something went wrong. Please try again.", "Error" } })
 end
 
-function ChatStrategy:on_start(job)
+function ChatStrategy:on_start()
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self.canvas:clear_reasoning()
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     set_abort_keymap(self.buf, function()
       self.cancellable.is_cancelled = true
-      vim.fn.jobstop(job)
     end)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
@@ -492,30 +500,32 @@ function ChatStrategy:on_start(job)
 
     self._writer = Writer:new(self.canvas, self.buf, line_count - 1, 0)
     self._reasoning_writer = Writer:new(self.canvas, nil, line_count - 1, 0, false)
+    return true
   end
+  return false
 end
 
-function ChatStrategy:on_reasoning(content, job)
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-  else
-    vim.fn.jobstop(job)
+function ChatStrategy:on_reasoning(_)
+  if not vim.api.nvim_buf_is_loaded(self.buf) then
+    return false
   end
+  return true
 end
 
-function ChatStrategy:on_progress(content, job)
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self._writer:append(content)
-  else
-    vim.fn.jobstop(job)
+function ChatStrategy:on_progress(content)
+  if not vim.api.nvim_buf_is_loaded(self.buf) then
+    return false
   end
+  self._writer:append(content)
+  return true
 end
 
-function ChatStrategy:on_tool_call(tool, job)
+function ChatStrategy:on_tool_call(tool)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
-    Strategy.on_tool_call(self, tool)
+    return Strategy.on_tool_call(self, tool)
   else
-    vim.fn.jobstop(job)
+    return false
   end
 end
 
@@ -733,10 +743,9 @@ function DiffStrategy:on_error()
   vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
 end
 
---- @param job number
-function DiffStrategy:on_start(job)
+function DiffStrategy:on_start()
   set_abort_keymap(self.buf, function()
-    vim.fn.jobstop(job)
+    self.cancellable.is_cancelled = true
   end)
   self._writer = Writer:new(nil, self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
 end
@@ -750,7 +759,9 @@ function DiffStrategy:on_progress(content)
       end_col = self._writer.column,
       hl_group = "SiaInsert",
     })
+    return true
   end
+  return false
 end
 
 function DiffStrategy:on_complete(control)
@@ -846,9 +857,11 @@ function InsertStrategy:on_init()
 end
 
 --- @param job number
-function InsertStrategy:on_start(job)
+function InsertStrategy:on_start()
   local context = self.conversation.context
-
+  if not vim.api.nvim_buf_is_loaded(context.buf) then
+    return false
+  end
   if self._padding_direction == "below" or self._padding_direction == "above" then
     vim.api.nvim_buf_set_lines(context.buf, self._line - 1, self._line - 1, false, { "" })
   end
@@ -856,8 +869,9 @@ function InsertStrategy:on_start(job)
   self._cal = #content
   vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   set_abort_keymap(context.buf, function()
-    vim.fn.jobstop(job)
+    self.cancellable.is_cancelled = true
   end)
+  return true
 end
 
 function InsertStrategy:on_error()
@@ -866,6 +880,9 @@ end
 
 function InsertStrategy:on_progress(content)
   local context = self.conversation.context
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
+    return false
+  end
   if self._writer then
     vim.api.nvim_buf_call(context.buf, function()
       pcall(vim.cmd.undojoin)
@@ -885,6 +902,7 @@ function InsertStrategy:on_progress(content)
       hl_group = "SiaInsert",
     }
   )
+  return true
 end
 
 function InsertStrategy:on_complete(control)
@@ -976,10 +994,9 @@ HiddenStrategy.__index = HiddenStrategy
 --- @param options sia.config.Hidden
 --- @param cancellable sia.Cancellable?
 function HiddenStrategy:new(conversation, options, cancellable)
-  local obj = setmetatable(Strategy:new(conversation), self)
+  local obj = setmetatable(Strategy:new(conversation, cancellable), self)
   obj._options = options
   obj._writer = nil
-  obj.cancellable = cancellable
   return obj
 end
 
@@ -998,15 +1015,15 @@ function HiddenStrategy:on_init()
   end
 end
 
---- @param job number
-function HiddenStrategy:on_start(job)
+function HiddenStrategy:on_start()
   local context = self.conversation.context
   if context then
     set_abort_keymap(context.buf, function()
-      vim.fn.jobstop(job)
+      self.cancellable.is_cancelled = true
     end)
   end
   self._writer = Writer:new()
+  return true
 end
 
 function HiddenStrategy:on_error()

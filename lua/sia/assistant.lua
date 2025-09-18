@@ -136,6 +136,7 @@ function M.execute_strategy(strategy)
   local config = require("sia.config")
 
   local function execute_round(is_initial)
+    local timer
     if is_initial then
       strategy:on_init()
       vim.api.nvim_exec_autocmds("User", {
@@ -152,7 +153,7 @@ function M.execute_strategy(strategy)
     local incomplete = nil
     local error_initialize = false
 
-    call_provider(query, {
+    local job = call_provider(query, {
       on_stdout = function(job_id, responses, _)
         if first_on_stdout then
           first_on_stdout = false
@@ -172,7 +173,9 @@ function M.execute_strategy(strategy)
             end
           end
           if not error_initialize then
-            strategy:on_start(job_id)
+            if not strategy:on_start() then
+              vim.fn.jobstop(job_id)
+            end
             vim.api.nvim_exec_autocmds("User", {
               pattern = "SiaStart",
               --- @diagnostic disable-next-line: undefined-field
@@ -204,16 +207,17 @@ function M.execute_strategy(strategy)
                   local delta = obj.choices[1].delta
                   if delta then
                     if delta.reasoning then
-                      strategy:on_reasoning(delta.reasoning, job_id)
+                      if not strategy:on_reasoning(delta.reasoning) then
+                        vim.fn.jobstop(job_id)
+                      end
                     elseif delta.content then
-                      strategy:on_progress(delta.content, job_id)
-                      vim.api.nvim_exec_autocmds("User", {
-                        pattern = "SiaProgress",
-                        --- @diagnostic disable-next-line: undefined-field
-                        data = { buf = strategy.buf, content = delta.content },
-                      })
+                      if not strategy:on_progress(delta.content) then
+                        vim.fn.jobstop(job_id)
+                      end
                     elseif delta.tool_calls then
-                      strategy:on_tool_call(delta.tool_calls, job_id)
+                      if not strategy:on_tool_call(delta.tool_calls) then
+                        vim.fn.jobstop(job_id)
+                      end
                     end
                   end
                 end
@@ -223,6 +227,10 @@ function M.execute_strategy(strategy)
         end
       end,
       on_exit = function(jobid, code, _)
+        if timer then
+          timer:stop()
+          timer:close()
+        end
         if error_initialize then
           return
         end
@@ -247,7 +255,7 @@ function M.execute_strategy(strategy)
         end
 
         local continue_execution = function()
-          if strategy.cancellable and strategy.cancellable.is_cancelled then
+          if strategy.cancellable.is_cancelled then
             strategy:on_cancelled()
             finish()
           else
@@ -263,6 +271,18 @@ function M.execute_strategy(strategy)
       end,
       stream = true,
     })
+    timer = vim.uv.new_timer()
+    timer:start(
+      0,
+      100,
+      vim.schedule_wrap(function()
+        if strategy.cancellable.is_cancelled then
+          if job then
+            vim.fn.jobstop(job)
+          end
+        end
+      end)
+    )
   end
 
   execute_round(true)
