@@ -189,6 +189,9 @@ Create a `.sia/config.json` file in your project root:
 }
 ```
 
+Use the local option `model` to override the local default model. The local
+configuration can also override both `plan_model` and `fast_model`.
+
 ### Permission System
 
 The permission system uses Lua patterns to control tool access:

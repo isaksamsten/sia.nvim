@@ -92,6 +92,24 @@ local function validate_permissions(permission)
   return true
 end
 
+local function validate_model_field(json, field)
+  if json[field] ~= nil then
+    if type(json[field]) ~= "string" then
+      return false, string.format("'%s' must be a string, got %s", field, type(json[field]))
+    elseif not M.options.models[json[field]] then
+      return false, string.format("'%s' must be one of the allowed models, got '%s'", field, tostring(json[field]))
+    end
+  end
+  return true
+end
+
+--- @class sia.LocalConfig
+--- @field model string?
+--- @field fast_model string?
+--- @field plan_model string?
+--- @field permission { deny: table?, allow: table?, ask: table?}?
+
+--- @return sia.LocalConfig?
 function M.get_local_config()
   local root = vim.fs.root(0, ".sia")
   if not root then
@@ -118,11 +136,21 @@ function M.get_local_config()
     return nil
   end
 
+  local has_failed = false
+  local function validate(fun, ...)
+    if not has_failed then
+      local ok, err = fun(...)
+      if not ok then
+        vim.notify(string.format("Sia: Config file %s: %s", local_config, err), vim.log.levels.ERROR)
+        has_failed = true
+      end
+    end
+  end
   local content = table.concat(file_content, " ")
   local decode_ok, json = pcall(vim.json.decode, content)
   if not decode_ok then
     vim.notify(string.format("Sia: Invalid JSON in config file %s: %s", local_config, json), vim.log.levels.ERROR)
-    json = nil
+    has_failed = true
   end
 
   if type(json) ~= "table" then
@@ -130,17 +158,24 @@ function M.get_local_config()
       string.format("Sia: Config file %s must contain a JSON object, got %s", local_config, type(json)),
       vim.log.levels.ERROR
     )
-    json = nil
+    has_failed = true
   end
 
-  local ok, err = validate_permissions(json.permission)
-  if not ok then
-    vim.notify(string.format("Sia: Config file %s: %s", local_config, err), vim.log.levels.ERROR)
-    json = nil
-  end
+  validate(validate_permissions, json.permission)
+  validate(validate_model_field, json, "model")
+  validate(validate_model_field, json, "fast_model")
+  validate(validate_model_field, json, "plan_model")
 
-  config_cache[root] = { mtime = stat.mtime.sec, json = json }
+  config_cache[root] = { mtime = stat.mtime.sec, json = not has_failed and json or nil }
   return json
+end
+
+--- @param type ("model"|"fast_model"|"plan_model")?
+--- @return string
+function M.get_default_model(type)
+  local lc = M.get_local_config() or {}
+  type = type or "model"
+  return lc[type] or M.options.defaults[type]
 end
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
@@ -207,6 +242,7 @@ end
 --- @class sia.config.Defaults
 --- @field model string
 --- @field fast_model string
+--- @field plan_model string
 --- @field temperature number
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
@@ -244,52 +280,22 @@ local defaults = {
     openrouter = providers.openrouter,
   },
   models = {
-    ["openai/gpt-5"] = {
-      "openai",
-      "gpt-5",
-      temperature = 1,
-      cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 },
-    },
-    ["openai/gpt-4.1"] = { "openai", "gpt-4.1", cost = { completion_tokens = 0.000008, prompt_tokens = 0.000002 } },
-    ["openai/gpt-4.1-mini"] = {
-      "openai",
-      "gpt-4.1-mini",
-      cost = { completion_tokens = 0.0000016, prompt_tokens = 0.0000004 },
-    },
-    ["openai/gpt-4.1-nano"] = {
-      "openai",
-      "gpt-4.1-nano",
-      cost = { completion_tokens = 0.0000004, prompt_tokens = 0.0000001 },
-    },
-    ["openai/gpt-4o"] = { "openai", "gpt-4o", cost = { completion_tokens = 0.00001, prompt_tokens = 0.0000025 } },
-    ["openai/gpt-4o-mini"] = {
-      "openai",
-      "gpt-4o-mini",
-      cost = { completion_tokens = 0.00000015, prompt_tokens = 0.0000006 },
-    },
+    ["openai/gpt-5"] = { "openai", "gpt-5", temperature = 1 },
+    ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },
+    ["openai/gpt-4.1-mini"] = { "openai", "gpt-4.1-mini" },
+    ["openai/gpt-4.1-nano"] = { "openai", "gpt-4.1-nano" },
+    ["openai/gpt-4o"] = { "openai", "gpt-4o" },
+    ["openai/gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
     ["openai/o3"] = { "openai", "o3", reasoning_effort = "medium" },
     ["openai/o4-mini"] = { "openai", "o4-mini", reasoning_effort = "medium" },
-    ["openai/o3-mini"] = {
-      "openai",
-      "o3-mini",
-      reasoning_effort = "medium",
-      cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
-    },
-    ["openai/o3-mini-low"] = {
-      "openai",
-      "o3-mini",
-      reasoning_effort = "low",
-      cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
-    },
-    ["openai/o3-mini-high"] = {
-      "openai",
-      "o3-mini",
-      reasoning_effort = "high",
-      cost = { completion_tokens = 0.0000044, prompt_tokens = 0.0000011 },
-    },
+    ["openai/o3-mini"] = { "openai", "o3-mini", reasoning_effort = "medium" },
+    ["openai/o3-mini-low"] = { "openai", "o3-mini", reasoning_effort = "low" },
+    ["openai/o3-mini-high"] = { "openai", "o3-mini", reasoning_effort = "high" },
     ["openai/chatgpt-4o-latest"] = { "openai", "chatgpt-4o-latest" },
     ["copilot/gpt-4o"] = { "copilot", "gpt-4o" },
     ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1" },
+    ["copilot/gpt-5"] = { "copilot", "gpt-5" },
+    ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini" },
     ["copilot/gpt-4.1-mini"] = { "copilot", "gpt-4.1-mini" },
     ["copilot/gpt-4.1-nano"] = { "copilot", "gpt-4.1-nano" },
     ["copilot/o3"] = { "copilot", "o3", reasoning_effort = "medium" },
@@ -322,9 +328,8 @@ local defaults = {
   defaults = {
     model = "openai/gpt-4.1",
     fast_model = "openai/gpt-4.1-mini",
+    plan_model = "openai/o3-mini",
     temperature = 0.3, -- default temperature
-    prefix = 1, -- prefix lines in insert
-    suffix = 0, -- suffix lines in insert
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },

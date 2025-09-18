@@ -427,7 +427,7 @@ function ChatStrategy:new(conversation, options)
   pcall(vim.api.nvim_buf_set_name, buf, obj.name)
   obj.canvas = ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
-  local model = obj.conversation.model or require("sia.config").options.defaults.model
+  local model = obj.conversation.model or require("sia.config").get_default_model()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
 
   obj._is_named = false
@@ -447,7 +447,7 @@ end
 function ChatStrategy:redraw()
   vim.bo[self.buf].modifiable = true
   self.canvas:clear()
-  local model = self.conversation.model or require("sia.config").options.defaults.model
+  local model = self.conversation.model or require("sia.config").get_default_model()
   self.canvas:render_messages(self.conversation:get_messages(), model)
   vim.bo[self.buf].modifiable = false
 end
@@ -456,7 +456,7 @@ function ChatStrategy:on_init()
   self.cancellable.is_cancelled = false
   if vim.api.nvim_buf_is_loaded(self.buf) then
     vim.bo[self.buf].modifiable = true
-    local model = self.conversation.model or require("sia.config").options.defaults.model
+    local model = self.conversation.model or require("sia.config").get_default_model()
     self.canvas:render_messages({ self.conversation:last_message() }, model)
     if not self.hide_header then
       self.canvas:render_assistant_header(model)
@@ -591,7 +591,7 @@ function ChatStrategy:on_complete(control)
         if not self._is_named then
           local config = require("sia.config")
           assistant.execute_query({
-            model = config.options.defaults.fast_model,
+            model = config.get_default_model("fast_model"),
             prompt = {
               {
                 role = "system",

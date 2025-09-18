@@ -218,7 +218,7 @@ Usage notes:
             if args.prompt then
               local config = require("sia.config")
               require("sia.assistant").execute_query({
-                model = config.options.defaults.fast_model,
+                model = config.get_default_model("fast_model"),
                 prompt = {
                   {
                     role = "system",

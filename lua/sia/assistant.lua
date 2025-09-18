@@ -15,7 +15,7 @@ local function call_provider(query, opts)
   local model
   local provider
   if query.model == nil or type(query.model) == "string" then
-    model = config.options.models[query.model or config.options.defaults.model]
+    model = config.options.models[query.model or config.get_default_model()]
     provider = config.options.providers[model[1]]
   else
     model =

@@ -47,14 +47,15 @@ Usage notes:
   required = { "prompt" },
 }, function(args, _, callback, opts)
   local confirm_message = string.format("Launch agent with task: %s", args.prompt)
-  
+  local config = require("sia.config")
+
   opts.user_input(confirm_message, {
     on_accept = function()
       local HiddenStrategy = require("sia.strategy").HiddenStrategy
       local Conversation = require("sia.conversation").Conversation
       local conversation = Conversation:new({
         mode = "hidden",
-        model = require("sia.config").options.defaults.fast_model,
+        model = config.get_default_model("fast_model"),
         system = {
           {
             role = "system",
