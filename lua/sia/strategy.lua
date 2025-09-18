@@ -1015,6 +1015,7 @@ function HiddenStrategy:on_error()
     vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
     del_abort_keymap(context.buf)
   end
+  self._options.callback(context, { "The operation failed" })
 end
 
 function HiddenStrategy:on_progress(content)
@@ -1079,9 +1080,8 @@ function HiddenStrategy:on_complete(control)
         end,
       })
       local content = Message.merge_content(messages)
-      if content then
-        self._options.callback(context, content)
-      else
+      self._options.callback(context, content)
+      if not content then
         vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
       end
       control.finish()
