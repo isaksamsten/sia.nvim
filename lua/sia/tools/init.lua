@@ -10,6 +10,7 @@ return {
   locations = require("sia.tools.locations"),
   workspace = require("sia.tools.workspace"),
   agent = require("sia.tools.agent"),
+  plan = require("sia.tools.plan"),
   diagnostics = require("sia.tools.diagnostics"),
   compact = require("sia.tools.compact"),
   fetch = require("sia.tools.fetch"),
