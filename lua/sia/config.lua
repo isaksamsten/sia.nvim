@@ -165,9 +165,6 @@ end
 --- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
 --- @field messages { on_start: string?, on_progress: string[]? }?
 
---- @class sia.config.Replace
---- @field timeout number?
-
 --- @class sia.config.Instruction
 --- @field role sia.config.Role
 --- @field hide boolean?
@@ -213,7 +210,6 @@ end
 --- @field temperature number
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
---- @field replace sia.config.Replace
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
@@ -342,9 +338,6 @@ local defaults = {
     },
     insert = {
       placement = "cursor",
-    },
-    replace = {
-      timeout = 300,
     },
     file_ops = {
       trash = true,
