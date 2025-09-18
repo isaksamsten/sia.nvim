@@ -9,11 +9,26 @@ local function validate_permission_patterns(patterns, path)
     return false, path .. " must be an array, got " .. type(patterns)
   end
 
-  for i, pattern in ipairs(patterns) do
-    if type(pattern) ~= "string" then
-      return false, path .. "[" .. i .. "] must be a string, got " .. type(pattern)
+  for i, pattern_def in ipairs(patterns) do
+    local pattern
+
+    if type(pattern_def) == "string" then
+      pattern = pattern_def
+    elseif type(pattern_def) == "table" then
+      if type(pattern_def.pattern) ~= "string" then
+        return false, path .. "[" .. i .. "].pattern must be a string, got " .. type(pattern_def.pattern)
+      end
+
+      if pattern_def.negate ~= nil and type(pattern_def.negate) ~= "boolean" then
+        return false, path .. "[" .. i .. "].negate must be a boolean, got " .. type(pattern_def.negate)
+      end
+
+      pattern = pattern_def.pattern
+    else
+      return false, path .. "[" .. i .. "] must be a string or object with 'pattern' field, got " .. type(pattern_def)
     end
-    local ok, err = pcall(string.match, "test", "^" .. pattern .. "$")
+
+    local ok, err = pcall(string.match, "test", pattern)
     if not ok then
       return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. err
     end
@@ -107,7 +122,7 @@ function M.get_local_config()
   local decode_ok, json = pcall(vim.json.decode, content)
   if not decode_ok then
     vim.notify(string.format("Sia: Invalid JSON in config file %s: %s", local_config, json), vim.log.levels.ERROR)
-    return nil
+    json = nil
   end
 
   if type(json) ~= "table" then
@@ -115,13 +130,13 @@ function M.get_local_config()
       string.format("Sia: Config file %s must contain a JSON object, got %s", local_config, type(json)),
       vim.log.levels.ERROR
     )
-    return nil
+    json = nil
   end
 
   local ok, err = validate_permissions(json.permission)
   if not ok then
     vim.notify(string.format("Sia: Config file %s: %s", local_config, err), vim.log.levels.ERROR)
-    return nil
+    json = nil
   end
 
   config_cache[root] = { mtime = stat.mtime.sec, json = json }

@@ -165,7 +165,7 @@ Create a `.sia/config.json` file in your project root:
         }
       }
     },
-    "deny": {
+    "ask": {
       "bash": {
         "arguments": {
           "command": ["rm -rf .*", "sudo .*"]
@@ -190,7 +190,7 @@ The permission system uses Lua patterns to control tool access:
 - `choice`: Optional auto-selection for multi-choice prompts (1-based index)
 - `arguments`: Object mapping parameter names to regex pattern arrays
 
-**Deny Rules**: Block tools when arguments match patterns
+**Ask Rules**: Block tools when arguments match patterns
 
 - Takes precedence over allow rules
 - Same structure as allow rules (without `choice`)

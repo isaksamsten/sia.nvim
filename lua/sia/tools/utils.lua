@@ -1,26 +1,63 @@
 local M = {}
 
+--- @alias sia.PermissionOpts { auto_allow: integer}|{deny: boolean}|{ask: boolean}
+--- @alias sia.PatternDef string|{pattern: string, negate: boolean?}
+
+--- Helper function for consistent pattern matching with negate support
+--- @param value string
+--- @param pattern_def sia.PatternDef
+--- @return boolean
+local function matches_pattern(value, pattern_def)
+  local pattern, negate
+  if type(pattern_def) == "string" then
+    pattern = pattern_def
+    negate = false
+  else
+    pattern = pattern_def.pattern
+    negate = pattern_def.negate or false
+  end
+
+  local matches = string.match(value, pattern)
+  return negate and not matches or not negate and matches
+end
+
 --- @param name string
 --- @param args table
---- @return integer?
-local function is_auto_allowed(name, args)
+--- @return sia.PermissionOpts?
+local function get_permission(name, args)
   local config = require("sia.config")
   local lc = config.get_local_config()
 
-  local denied = lc and lc.permission and lc.permission.deny and lc.permission.deny[name] or {}
-  if denied.arguments then
-    for key, patterns in pairs(denied.arguments) do
-      local arg_value = args[key]
+  -- If any argument is denied
+  local deny = lc and lc.permission and lc.permission.deny and lc.permission.deny[name] or {}
+  if deny.arguments then
+    for key, arg_value in pairs(args) do
       if arg_value then
-        for _, pattern in ipairs(patterns) do
-          if string.match(arg_value, "^" .. pattern .. "$") then
-            return nil
+        for _, pattern_def in ipairs(deny.arguments[key] or {}) do
+          if matches_pattern(arg_value, pattern_def) then
+            return { deny = true }
           end
         end
       end
     end
   end
 
+  -- If any argument requires user confirmation
+  local ask = lc and lc.permission and lc.permission.ask and lc.permission.ask[name] or {}
+  if ask.arguments then
+    for key, patterns in pairs(ask.arguments) do
+      local arg_value = args[key]
+      if arg_value then
+        for _, pattern_def in ipairs(patterns) do
+          if matches_pattern(arg_value, pattern_def) then
+            return { ask = true }
+          end
+        end
+      end
+    end
+  end
+
+  --- If all arguments allow automatic confirmation
   local allowed = lc and lc.permission and lc.permission.allow and lc.permission.allow[name] or {}
   if not allowed.arguments or vim.tbl_isempty(allowed.arguments) then
     return nil
@@ -30,8 +67,8 @@ local function is_auto_allowed(name, args)
     local found_match = false
     local arg_value = args[key]
     if arg_value then
-      for _, pattern in ipairs(patterns) do
-        if string.match(arg_value, "^" .. pattern .. "$") then
+      for _, pattern_def in ipairs(patterns) do
+        if matches_pattern(arg_value, pattern_def) then
           found_match = true
           break
         end
@@ -42,8 +79,9 @@ local function is_auto_allowed(name, args)
     end
   end
 
-  return allowed.choice or 1
+  return { auto_allow = allowed.choice or 1 }
 end
+
 --- @param items string[]
 --- @param opts table
 --- @param on_choice fun(item: string?, idx:integer?):nil
@@ -136,18 +174,21 @@ end
 ---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: sia.NewToolExecuteOpts?)
 ---@return sia.config.Tool
 M.new_tool = function(opts, execute)
-  local auto_apply = function(args, conversation)
-    -- The user has marked this as "allow all" in conversation
-    if conversation.auto_confirm_tools[opts.name] then
-      return 1
-    else
-      -- this is allowed in the local configuration file
-      local auto_apply_choice = is_auto_allowed(opts.name, args)
-      if auto_apply_choice then
-        return auto_apply_choice
-      end
+  --- @param args table
+  --- @param conversation sia.Conversation
+  --- @return sia.PermissionOpts?
+  local resolve_permission = function(args, conversation)
+    local permission = get_permission(opts.name, args)
 
-      return (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
+    if permission then
+      return permission
+    elseif not permission or not permission.ask then
+      if conversation.auto_confirm_tools[opts.name] then
+        return { auto_allow = conversation.auto_confirm_tools[opts.name] }
+      else
+        local choice = (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
+        return choice and { auto_allow = choice } or nil
+      end
     end
   end
 
@@ -166,7 +207,8 @@ M.new_tool = function(opts, execute)
         return false
       end
 
-      return auto_apply(args, conversation) ~= nil
+      local permission = resolve_permission(args, conversation)
+      return permission ~= nil and permission.auto_allow ~= nil
     end,
     description = opts.description,
     required = opts.required,
@@ -177,9 +219,9 @@ M.new_tool = function(opts, execute)
       --- @type sia.NewToolExecuteUserChoice
       local user_choice
 
-      local auto_apply_choice = auto_apply(args, conversation)
+      local permission = resolve_permission(args, conversation)
       user_input = function(prompt, input_args)
-        if conversation.ignore_tool_confirm or auto_apply_choice then
+        if conversation.ignore_tool_confirm or (permission and permission.auto_allow) then
           input_args.on_accept()
           return
         end
@@ -200,7 +242,7 @@ M.new_tool = function(opts, execute)
           input_fn = vim.ui.input
         end
 
-        input({ prompt = string.format("%s - %s", prompt, confirmation_text) }, function(resp)
+        input_fn({ prompt = string.format("%s - %s", prompt, confirmation_text) }, function(resp)
           if resp == nil then
             callback({
               content = {
@@ -244,8 +286,8 @@ M.new_tool = function(opts, execute)
         end)
       end
       user_choice = function(prompt, choice_args)
-        if auto_apply_choice and not choice_args.must_confirm then
-          choice_args.on_accept(auto_apply_choice)
+        if permission and permission.auto_allow and not choice_args.must_confirm then
+          choice_args.on_accept(permission.auto_allow)
           return
         end
         local select_fn = select
@@ -264,11 +306,19 @@ M.new_tool = function(opts, execute)
           end
         end)
       end
-      execute(args, conversation, callback, {
-        cancellable = cancellable,
-        user_input = user_input,
-        user_choice = user_choice,
-      })
+      if not permission or not permission.deny then
+        execute(args, conversation, callback, {
+          cancellable = cancellable,
+          user_input = user_input,
+          user_choice = user_choice,
+        })
+      else
+        callback({
+          content = {
+            string.format("User has denied %s with the provided parameters in its local configuration", opts.name),
+          },
+        })
+      end
     end,
   }
 end
