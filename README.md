@@ -7,15 +7,6 @@ An LLM assistant for Neovim.
 
 Supports: OpenAI, Copilot, OpenRouter and Gemini (and any other OpenAI API compliant LLM).
 
-Default configuration has the following models: `gpt-4.1`, `gpt-4.1-mini`,
-`gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `o3-mini`, `copilot-gpt-4o`,
-`copilot-o3-mini`, `copilot-sonnet-3.5`, `gemini-1.5-flash-8b`,
-`gemini-1.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-pro`, `gemini-2.5-pro`,
-`claude-3-5-sonnet` and `claude-3-7-sonnet` and more.
-
-Based on my experience, `claude`, `gpt-5`, and `gemini-2.5-pro`
-are best suited for coding.
-
 ## ✨ Features
 
 https://github.com/user-attachments/assets/48cb1bb6-633b-412c-b33c-ae0b6792a485
@@ -26,7 +17,7 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
 ## ⚡️ Requirements
 
-- Neovim >= **0.10**
+- Neovim >= **0.11**
 - curl
 - Access to OpenAI API, Copilot or Gemini
 
@@ -64,7 +55,6 @@ TODO
 
 - `SiaUsageReport`: when the number of tokens are known
 - `SiaStart`: query has been submitted
-- `SiaProgress`: a response has been received
 - `SiaComplete`: the query is completed
 - `SiaError`: on errors in the LLM
 
@@ -152,6 +142,7 @@ Create a `.sia/config.json` file in your project root:
 
 ```json
 {
+  "model": "copilot/gpt-5-mini",
   "permission": {
     "allow": {
       "bash": {
