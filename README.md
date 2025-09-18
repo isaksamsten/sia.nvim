@@ -156,24 +156,32 @@ Create a `.sia/config.json` file in your project root:
     "allow": {
       "bash": {
         "arguments": {
-          "command": ["git diff .*", "git status", "uv build"]
+          "command": ["^git diff", "^git status$", "^uv build"]
         }
       },
       "edit": {
         "arguments": {
-          "target_file": [".*%.lua", ".*%.py", ".*%.js$"]
+          "target_file": [".*%.lua$", ".*%.py$", ".*%.js$$"]
         }
       }
     },
-    "ask": {
+    "deny": {
       "bash": {
         "arguments": {
-          "command": ["rm -rf .*", "sudo .*"]
+          "command": ["rm -rf", "sudo"]
         }
       },
       "remove_file": {
         "arguments": {
           "path": [".*important.*", ".*config.*"]
+        }
+      }
+    }
+    "ask": {
+      // ask before writing to anything except .md files
+      "write": {
+        "arguments": {
+          "path": [{"pattern": "%.md$", "negate": true}]
         }
       }
     }
@@ -185,15 +193,23 @@ Create a `.sia/config.json` file in your project root:
 
 The permission system uses Lua patterns to control tool access:
 
-**Allow Rules**: Auto-approve tools when arguments match patterns
+**Allow Rules**: Auto-approve
 
-- `choice`: Optional auto-selection for multi-choice prompts (1-based index)
-- `arguments`: Object mapping parameter names to regex pattern arrays
+- `choice`: Optional auto-selection for multi-choice prompts
+- `arguments`: Object mapping parameter names to patterns. Patterns can
+  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
 
-**Ask Rules**: Block tools when arguments match patterns
+**Ask Rules**: Require confirmation
 
 - Takes precedence over allow rules
-- Same structure as allow rules (without `choice`)
+- `arguments`: Object mapping parameter names to patterns. Patterns can
+  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
+
+**Deny rules**: Deny (without confirmation)
+
+- Take precedence over allow and ask rules
+- `arguments`: Object mapping parameter names to patterns. Patterns can
+  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
 
 ### Pattern Matching
 
