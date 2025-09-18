@@ -64,9 +64,9 @@ local function copilot_api_key()
     local cmd = table.concat({
       "curl",
       "--silent",
-      "--header \"Authorization: Bearer " .. oauth .. "\"",
-      "--header \"Content-Type: application/json\"",
-      "--header \"Accept: application/json\"",
+      '--header "Authorization: Bearer ' .. oauth .. '"',
+      '--header "Content-Type: application/json"',
+      '--header "Accept: application/json"',
       "https://api.github.com/copilot_internal/v2/token",
     }, " ")
     local response = vim.fn.system(cmd)
@@ -103,12 +103,14 @@ M.anthropic = {
   end,
 }
 
-M.ollama = {
-  base_url = "http://localhost:11434/v1/chat/completions",
-  api_key = function()
-    return "ollama"
-  end,
-}
+M.ollama = function(port)
+  return {
+    base_url = string.format("http://localhost:%d/v1/chat/completions", port),
+    api_key = function()
+      return "ollama"
+    end,
+  }
+end
 
 M.morph = {
   base_url = "https://api.morphllm.com/v1/chat/completions",

@@ -258,7 +258,7 @@ end
 --- @class sia.config.Provider
 --- @field base_url string
 --- @field api_key fun():string?
---- @field format_messages fun(model:string, prompt:sia.Prompt[]):nil
+--- @field format_messages (fun(model:string, prompt:sia.Prompt[]):nil)?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
@@ -276,7 +276,8 @@ local defaults = {
     copilot = providers.copilot,
     gemini = providers.gemini,
     anthropic = providers.anthropic,
-    ollama = providers.ollama,
+    ollama = providers.ollama(11434),
+    shimmy = providers.ollama(11435),
     openrouter = providers.openrouter,
   },
   models = {
