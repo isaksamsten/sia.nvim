@@ -426,29 +426,6 @@ local defaults = {
     },
   },
   actions = {
-    agent = {
-      mode = "chat",
-      temperature = 0.1,
-      system = {
-        "default_system",
-        "directory_structure",
-        "agents_md",
-      },
-      instructions = {
-        "current_context",
-      },
-      tools = {
-        "grep",
-        "read",
-        "edit",
-        "glob",
-        "diagnostics",
-        "agent",
-        "compact",
-        "rename",
-        "remove",
-      },
-    },
     commit = require("sia.actions").commit(),
     doc = require("sia.actions").doc(),
   },
