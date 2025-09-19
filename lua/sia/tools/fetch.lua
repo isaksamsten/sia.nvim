@@ -10,9 +10,7 @@ Link format:
 URL: [full_url]
 RELEVANCE: [specific value for original question]
 
-Prioritize links that: provide official docs/APIs, fill summary gaps, offer actionable resources, or connect related concepts.
-
-Output "RELATED_LINKS: None found" if no useful links exist.]]
+Prioritize links that: provide official docs/APIs, fill summary gaps, offer actionable resources, or connect related concepts.]]
 
 local ALLOWED_CONTENT_TYPES = {
   "text/html",
@@ -180,37 +178,40 @@ Usage notes:
           end
 
           local content_type = headers:match("[Cc]ontent%-[Tt]ype:%s*([^%s;%r%n]+)")
-          if not content_type then
-            callback({
-              content = { "Error: Could not determine content type. Only text-based content is supported." },
-              display_content = { "❌ Unknown content type" },
-            })
-            return
-          end
 
-          content_type = content_type:lower()
-
-          local is_text_based = false
-          for _, allowed in ipairs(ALLOWED_CONTENT_TYPES) do
-            if
-              content_type == allowed or content_type:find("^" .. allowed:gsub("([%.%+%-%*%?%[%]%^%$%(%)%%])", "%%%1"))
-            then
-              is_text_based = true
-              break
+          if content_type then
+            if not content_type then
+              callback({
+                content = { "Error: Could not determine content type. Only text-based content is supported." },
+                display_content = { "❌ Unknown content type" },
+              })
+              return
             end
-          end
+            content_type = content_type:lower()
 
-          if not is_text_based then
-            callback({
-              content = {
-                string.format(
-                  "Error: Content type '%s' is not text-based. Only text content (HTML, JSON, XML, plain text) is supported.",
-                  content_type
-                ),
-              },
-              display_content = { "❌ Binary content not supported" },
-            })
-            return
+            local is_text_based = false
+            for _, allowed in ipairs(ALLOWED_CONTENT_TYPES) do
+              if
+                content_type == allowed
+                or content_type:find("^" .. allowed:gsub("([%.%+%-%*%?%[%]%^%$%(%)%%])", "%%%1"))
+              then
+                is_text_based = true
+                break
+              end
+            end
+
+            if not is_text_based then
+              callback({
+                content = {
+                  string.format(
+                    "Error: Content type '%s' is not text-based. Only text content (HTML, JSON, XML, plain text) is supported.",
+                    content_type
+                  ),
+                },
+                display_content = { "❌ Binary content not supported" },
+              })
+              return
+            end
           end
 
           html_to_markdown(body, function(markdown_content)
@@ -232,13 +233,13 @@ Usage notes:
               }, function(response)
                 callback({
                   content = vim.split(response, "\n", { trimempty = true }),
-                  display_content = { string.format("📄 Fetched: %s", args.url) },
+                  display_content = { string.format("📄 Fetched %s", args.url) },
                 })
               end)
             else
               callback({
                 content = vim.split(final_content, "\n", { trimempty = true }),
-                display_content = { string.format("📄 Fetched: %s", args.url) },
+                display_content = { string.format("📄 Fetched %s", args.url) },
               })
             end
           end)
