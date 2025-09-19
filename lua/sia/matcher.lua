@@ -196,6 +196,113 @@ function M.find_subsequence_span(needle, haystack, opts)
   return nil
 end
 
+--- @param needle_str string The string to search for
+--- @param haystack_lines string[] Array of lines to search in
+--- @param opts {threshold: number?, ignore_case: boolean?}? Options for matching
+--- @return {span: [integer, integer], col_span: [integer, integer], score: number}[]
+function M.find_inline_matches(needle_str, haystack_lines, opts)
+  opts = opts or {}
+  local threshold = opts.threshold
+  local ignore_case = opts.ignore_case or false
+  local matches = {}
+
+  local search_needle = ignore_case and needle_str:lower() or needle_str
+
+  for i, line in ipairs(haystack_lines) do
+    local search_line = ignore_case and line:lower() or line
+
+    if threshold then
+      local best_score = 0
+      local best_start = nil
+      local best_end = nil
+
+      local needle_len = #needle_str
+      local min_len = math.max(1, math.floor(needle_len * threshold))
+      local max_len = math.ceil(needle_len / threshold)
+
+      for start_pos = 1, #search_line do
+        for len = min_len, math.min(max_len, #search_line - start_pos + 1) do
+          local substring = search_line:sub(start_pos, start_pos + len - 1)
+          local score = M.similarity_ratio(search_needle, substring)
+
+          if score >= threshold and score > best_score then
+            best_score = score
+            best_start = start_pos
+            best_end = start_pos + len - 1
+          end
+        end
+      end
+
+      if best_start then
+        table.insert(matches, {
+          span = { i, i },
+          col_span = { best_start, best_end },
+          score = best_score,
+        })
+      end
+    else
+      local start_pos = 1
+      while true do
+        local start_col = search_line:find(search_needle, start_pos, true)
+        if not start_col then
+          break
+        end
+
+        table.insert(matches, {
+          span = { i, i },
+          col_span = { start_col, start_col + #needle_str - 1 },
+          score = 1.0,
+        })
+
+        start_pos = start_col + 1
+      end
+    end
+  end
+
+  table.sort(matches, function(a, b)
+    return a.score > b.score
+  end)
+
+  return matches
+end
+
+--- @param needle string The text to search for (can contain newlines)
+--- @param haystack string[] Array of lines to search in
+--- @return {span: [integer, integer], col_span: [integer, integer]?, score: number}[], boolean fuzzy_used
+function M.find_best_match(needle, haystack)
+  local needle_lines = vim.split(needle, "\n")
+  local matches
+  local fuzzy = false
+
+  if needle == "" then
+    if #haystack == 0 or (#haystack == 1 and haystack[1] == "") then
+      return { { span = { 1, -1 }, score = 1.0 } }, false
+    else
+      return {}, false
+    end
+  end
+
+  matches = M.find_best_subsequence_span(needle_lines, haystack)
+  if #matches == 0 then
+    fuzzy = true
+    matches = M.find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true })
+    if #matches == 0 then
+      matches = M.find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, threshold = 0.9 })
+    end
+  end
+
+  if #matches == 0 and #needle_lines == 1 then
+    fuzzy = false
+    matches = M.find_inline_matches(needle_lines[1], haystack)
+    if #matches == 0 then
+      fuzzy = true
+      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true })
+    end
+  end
+
+  return matches, fuzzy
+end
+
 --- Find the top-k spans of lines in needle that match in haystack with similarity scoring.
 ---  - if ignore_whitespace, then empty lines are ignored and two spans with
 ---    the same content but differences in whitespace is considered similar
