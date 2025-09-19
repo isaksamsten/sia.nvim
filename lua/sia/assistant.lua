@@ -1,6 +1,11 @@
 local M = {}
 
 local ERROR_API_KEY_MISSING = -100
+--- @class sia.Usage
+--- @field total integer?
+--- @field prompt integer?
+--- @field completion integer?
+
 --- @class sia.ProviderOpts
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
 --- @field on_exit (fun(_: any, code:number, _:any?):nil)
@@ -152,6 +157,8 @@ function M.execute_strategy(strategy)
     local first_on_stdout = true
     local incomplete = nil
     local error_initialize = false
+    --- @type sia.Usage
+    local usage
 
     local job = call_provider(query, {
       on_stdout = function(job_id, responses, _)
@@ -197,11 +204,11 @@ function M.execute_strategy(strategy)
                 incomplete = "data: " .. resp
               else
                 if obj.usage then
-                  local model = config.options.models[query.model or config.options.defaults.model]
-                  vim.api.nvim_exec_autocmds("User", {
-                    pattern = "SiaUsageReport",
-                    data = { usage = obj.usage, model = { name = model[2], cost = model.cost } },
-                  })
+                  usage = {
+                    total = obj.usage.total_tokens or nil,
+                    prompt = obj.usage.prompt_tokens or nil,
+                    completion = obj.usage.completion_tokens or nil,
+                  }
                 end
                 if obj.choices and #obj.choices > 0 then
                   local delta = obj.choices[1].delta
@@ -250,7 +257,7 @@ function M.execute_strategy(strategy)
           vim.api.nvim_exec_autocmds("User", {
             pattern = "SiaComplete",
             --- @diagnostic disable-next-line: undefined-field
-            data = { buf = strategy.buf, job = jobid },
+            data = { buf = strategy.buf, job = jobid, usage = usage },
           })
         end
 
@@ -266,7 +273,7 @@ function M.execute_strategy(strategy)
         strategy:on_complete({
           continue_execution = continue_execution,
           finish = finish,
-          job = jobid,
+          usage = usage,
         })
       end,
       stream = true,

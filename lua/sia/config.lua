@@ -267,7 +267,6 @@ end
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
---- @field report_usage boolean?
 M.options = {}
 
 --- @type sia.config.Options
@@ -433,7 +432,6 @@ local defaults = {
     commit = require("sia.actions").commit(),
     doc = require("sia.actions").doc(),
   },
-  report_usage = true,
 }
 
 function M.setup(options)

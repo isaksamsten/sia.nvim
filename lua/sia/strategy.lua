@@ -160,7 +160,7 @@ function Strategy:on_reasoning(content)
 end
 
 --- Callback triggered when the strategy is completed.
---- @param control { continue_execution: (fun():nil), finish: (fun():nil), job: number? }
+--- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage? }
 function Strategy:on_complete(control) end
 
 function Strategy:on_error() end
@@ -389,7 +389,9 @@ end
 --- @field buf integer the split view buffer
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
+--- @field total_tokens integer?
 --- @field name string
+--- @field _last_assistant_header_extmark integer?
 --- @field _is_named boolean
 --- @field _writer sia.Writer? the writer
 --- @field _reasoning_writer sia.Writer? reasoning writer
@@ -439,6 +441,7 @@ function ChatStrategy:new(conversation, options)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").get_default_model()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
+  obj._last_assistant_header_extmark = nil
 
   obj._is_named = false
   local augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = true })
@@ -468,7 +471,7 @@ function ChatStrategy:on_init()
     local model = self.conversation.model or require("sia.config").get_default_model()
     self.canvas:render_messages({ self.conversation:last_message() }, model)
     if not self.hide_header then
-      self.canvas:render_assistant_header(model)
+      self._last_assistant_header_extmark = self.canvas:render_assistant_header(model)
     end
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   end
@@ -587,11 +590,6 @@ function ChatStrategy:on_complete(control)
         end
 
         self.hide_header = nil
-        -- -- Show completion message briefly before continuing
-        -- self.canvas:update_progress({ { "Tools completed", "DiagnosticOk" } })
-        -- vim.defer_fn(function()
-        --   self.canvas:clear_extmarks()
-        -- end, 500)
         control.continue_execution()
       end,
       handle_empty_toolset = function(opts)
@@ -620,9 +618,15 @@ spaces. Only output the name, nothing else.]],
               pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
             end
             self._is_named = true
+            if control.usage then
+              self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+            end
             control.finish()
           end)
         else
+          if control.usage then
+            self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+          end
           control.finish()
         end
       end,

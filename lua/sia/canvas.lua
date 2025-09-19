@@ -12,7 +12,12 @@ local Canvas = {}
 function Canvas:render_messages(messages, model) end
 
 --- @param model string?
+--- @return integer? extmark_id
 function Canvas:render_assistant_header(model) end
+
+--- @param usage sia.Usage
+--- @param extmark_id integer
+function Canvas:update_usage(usage, extmark_id) end
 
 function Canvas:scroll_to_bottom() end
 
@@ -113,11 +118,61 @@ function ChatCanvas:scroll_to_bottom()
   end
 end
 
+--- @param usage sia.Usage
+--- @param extmark_id integer
+function ChatCanvas:update_usage(usage, extmark_id)
+  if extmark_id == nil then
+    return
+  end
+
+  local extmark_details = vim.api.nvim_buf_get_extmark_by_id(self.buf, CHAT_NS, extmark_id, { details = true })
+  if not extmark_details or #extmark_details < 3 then
+    return
+  end
+
+  local line = extmark_details[1]
+  local details = extmark_details[3]
+  if not details then
+    return nil
+  end
+
+  if not details.virt_text then
+    return
+  end
+
+  local usage_text = {}
+
+  if usage.prompt and usage.prompt > 0 then
+    table.insert(usage_text, { "  " .. usage.prompt, "SiaModel" })
+  end
+
+  if usage.completion and usage.completion > 0 then
+    table.insert(usage_text, { "  " .. usage.completion, "SiaModel" })
+  end
+
+  table.insert(usage_text, { "  " .. usage.total .. "  ", "SiaModel" })
+
+  for i = #usage_text, 1, -1 do
+    table.insert(details.virt_text, 1, usage_text[i])
+  end
+
+  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
+    id = extmark_id,
+    end_line = line + 1,
+    hl_eol = true,
+    hl_group = "SiaAssistant",
+    hl_mode = "combine",
+    virt_text = details.virt_text,
+    virt_text_pos = "right_align",
+  })
+end
+
+--- @return integer? extmark_id
 function ChatCanvas:_set_assistant_extmark(line, model)
   if model == nil then
-    return false
+    return nil
   end
-  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
+  return vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
     end_line = line,
     hl_eol = true,
     hl_group = "SiaAssistant",
@@ -171,16 +226,19 @@ function ChatCanvas:render_messages(messages, model)
 end
 
 --- @param model string?
+--- @return integer? extmark_id
 function ChatCanvas:render_assistant_header(model)
   local buf = self.buf
+  local id
   if self:line_count() == 1 then
     vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "/sia", "" })
-    self:_set_assistant_extmark(1, model)
+    id = self:_set_assistant_extmark(1, model)
   else
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "/sia", "" })
-    self:_set_assistant_extmark(self:line_count() - 1, model)
+    id = self:_set_assistant_extmark(self:line_count() - 1, model)
   end
   self:scroll_to_bottom()
+  return id
 end
 
 function ChatCanvas:clear()
