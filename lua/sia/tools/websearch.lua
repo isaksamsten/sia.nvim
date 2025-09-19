@@ -5,9 +5,7 @@ local FAILED_TO_ACCESS = "❌ Failed to access search"
 return tool_utils.new_tool({
   name = "websearch",
   is_available = function()
-    return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil
-      and os.getenv("GOOGLE_SEARCH_CX") ~= nil
-      and vim.fn.executable("curl") == 1
+    return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil and os.getenv("GOOGLE_SEARCH_CX") ~= nil
   end,
   message = function(args)
     if args.description then
