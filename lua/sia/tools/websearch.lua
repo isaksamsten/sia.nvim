@@ -10,6 +10,9 @@ return tool_utils.new_tool({
       and vim.fn.executable("curl") == 1
   end,
   message = function(args)
+    if args.description then
+      return string.format("%s...", args.description)
+    end
     return string.format("Searching for: %s", args.query)
   end,
   description = "Searches the web using Google",
@@ -115,9 +118,11 @@ Usage notes:
               table.insert(content, "No search results found for this query.")
             end
 
+            local display_content = args.description and string.format("🔍 %s", args.description)
+              or string.format("🔍 Search results for: %s", args.query)
             callback({
               content = content,
-              display_content = { string.format("🔍 Search results for: %s", args.query) },
+              display_content = { display_content },
             })
           else
             callback({
