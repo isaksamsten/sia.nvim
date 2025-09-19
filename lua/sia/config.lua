@@ -218,6 +218,7 @@ end
 --- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
 --- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>
+--- @field is_available (fun():boolean)?
 --- @field required string[]?
 --- @field execute sia.config.ToolExecute
 

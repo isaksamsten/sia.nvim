@@ -148,6 +148,7 @@ end
 ---@field name string
 ---@field description string
 ---@field read_only boolean?
+---@field is_available (fun():boolean)?
 ---@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?

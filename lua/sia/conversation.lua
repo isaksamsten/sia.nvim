@@ -363,7 +363,7 @@ function Conversation:add_tool(tool)
   if type(tool) == "string" then
     tool = require("sia.config").options.defaults.tools.choices[tool]
   end
-  if tool ~= nil and self.tool_fn[tool.name] == nil then
+  if tool ~= nil and self.tool_fn[tool.name] == nil and (tool.is_available == nil or tool.is_available()) then
     self.tool_fn[tool.name] = { message = tool.message, action = tool.execute, allow_parallel = tool.allow_parallel }
     table.insert(self.tools, tool)
   end
