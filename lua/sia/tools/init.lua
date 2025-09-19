@@ -14,4 +14,5 @@ return {
   diagnostics = require("sia.tools.diagnostics"),
   compact = require("sia.tools.compact"),
   fetch = require("sia.tools.fetch"),
+  websearch = require("sia.tools.websearch"),
 }

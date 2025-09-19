@@ -371,6 +371,7 @@ local defaults = {
         remove = require("sia.tools").remove,
         bash = require("sia.tools").bash,
         fetch = require("sia.tools").fetch,
+        websearch = require("sia.tools").websearch,
       },
     },
     actions = {
@@ -422,6 +423,7 @@ local defaults = {
           "remove",
           "bash",
           "fetch",
+          "websearch",
         },
       },
     },
