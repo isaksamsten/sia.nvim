@@ -1,18 +1,6 @@
 {
   "permission": {
-    "deny": {
-      "read": {
-        "arguments": {
-          "path": [{ "pattern": "%.lua$", "negate": true }]
-        }
-      }
-    },
     "allow": {
-      "edit": {
-        "arguments": {
-          "target_file": [".*%.md$"]
-        }
-      },
       "bash": {
         "arguments": {
           "command": ["^git diff", "^git status", "^git log"]
