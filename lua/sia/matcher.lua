@@ -266,11 +266,16 @@ function M.find_inline_matches(needle_str, haystack_lines, opts)
   return matches
 end
 
---- @param needle string The text to search for (can contain newlines)
+--- @param needle string|string[] The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
 --- @return {span: [integer, integer], col_span: [integer, integer]?, score: number}[], boolean fuzzy_used
 function M.find_best_match(needle, haystack)
-  local needle_lines = vim.split(needle, "\n")
+  local needle_lines
+  if type(needle) == "string" then
+    needle_lines = vim.split(needle, "\n")
+  else
+    needle_lines = needle
+  end
   local matches
   local fuzzy = false
 
@@ -449,6 +454,59 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   end
 
   return top_matches
+end
+
+--- @param text string The text that may contain line numbers
+--- @return string[] stripped_text Text with line numbers removed
+--- @return boolean had_line_numbers Whether line numbers were detected and stripped
+function M.strip_line_numbers(text)
+  local lines = vim.split(text, "\n")
+  local stripped_lines = {}
+  local had_line_numbers = false
+
+  for _, line in ipairs(lines) do
+    local stripped_line = line
+
+    local after_tab = line:match("^%s*%d+\t(.*)$")
+    if after_tab then
+      stripped_line = after_tab
+      had_line_numbers = true
+    else
+      local after_pipe = line:match("^%s*%d+%s*|%s*(.*)$")
+      if after_pipe then
+        stripped_line = after_pipe
+        had_line_numbers = true
+      else
+        local after_spaces = line:match("^%s*%d+%s%s+(.*)$")
+        if after_spaces then
+          stripped_line = after_spaces
+          had_line_numbers = true
+        end
+      end
+    end
+
+    table.insert(stripped_lines, stripped_line)
+  end
+
+  return stripped_lines, had_line_numbers
+end
+
+--- Find best match with automatic line number stripping fallback
+--- @param needle string The text to search for (can contain newlines)
+--- @param haystack string[] Array of lines to search in
+--- @return {span: [integer, integer], col_span: [integer, integer]?, score: number}[], boolean fuzzy_used, boolean stripped_line_numbers
+function M.find_best_match_with_fallback(needle, haystack)
+  local matches, fuzzy = M.find_best_match(needle, haystack)
+
+  if #matches == 0 then
+    local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
+    if had_line_numbers then
+      matches, fuzzy = M.find_best_match(stripped_needle, haystack)
+      return matches, fuzzy, true
+    end
+  end
+
+  return matches, fuzzy, false
 end
 
 return M

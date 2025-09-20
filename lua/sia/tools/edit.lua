@@ -125,7 +125,7 @@ one specific change with clear, unique context.
   local matching = require("sia.matcher")
 
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local matches, fuzzy = matching.find_best_match(args.old_string, old_content)
+  local matches, fuzzy, stripped_line_numbers = matching.find_best_match_with_fallback(args.old_string, old_content)
 
   if failed_matches[buf] == nil then
     failed_matches[buf] = 0
@@ -139,7 +139,12 @@ one specific change with clear, unique context.
     opts.user_choice(string.format("Edit %s", args.target_file), {
       choices = CHOICES,
       on_accept = function(choice)
-        local new_text_lines = vim.split(args.new_string, "\n")
+        local new_text_lines
+        if stripped_line_numbers then
+          new_text_lines = matching.strip_line_numbers(args.new_string)
+        else
+          new_text_lines = vim.split(args.new_string, "\n")
+        end
         tracker.non_tracked_edit(buf, function()
           if match.col_span then
             vim.api.nvim_buf_set_text(
@@ -170,14 +175,8 @@ one specific change with clear, unique context.
         local context_lines = 4
         local start_context = math.max(1, span[1] - context_lines)
 
-        local edit_start, edit_end
-        if match.col_span then
-          edit_start = span[1]
-          edit_end = span[1]
-        else
-          edit_start = span[1]
-          edit_end = span[1] + #new_text_lines - 1
-        end
+        local edit_start = span[1]
+        local edit_end = span[1] + #new_text_lines - 1
 
         local end_context = math.min(new_content_lines, edit_end + context_lines)
         local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
@@ -206,12 +205,12 @@ one specific change with clear, unique context.
             fuzzy and " - please double-check the changes" or ""
           )
         else
-          outdated_message =
-            string.format("Edited %s on lines %d-%d", vim.fn.fnamemodify(args.target_file, ":."), edit_start, edit_end)
+          local edit_span = edit_start ~= edit_end and string.format("lines %d-%d", edit_start, edit_end)
+            or string.format("line %d", edit_start)
+          outdated_message = string.format("Edited %s on %s", vim.fn.fnamemodify(args.target_file, ":."), edit_span)
           display_description = string.format(
-            "✏️ Edited lines %d-%d in %s%s",
-            edit_start,
-            edit_end,
+            "✏️ Edited %s in %s%s",
+            edit_span,
             vim.fn.fnamemodify(args.target_file, ":."),
             fuzzy and " - please double-check the changes" or ""
           )
