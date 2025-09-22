@@ -5,6 +5,7 @@ local ERROR_API_KEY_MISSING = -100
 --- @field total integer?
 --- @field prompt integer?
 --- @field completion integer?
+--- @field total_time number
 
 --- @class sia.ProviderOpts
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
@@ -138,7 +139,7 @@ function M.execute_strategy(strategy)
   end
 
   strategy.is_busy = true
-  local config = require("sia.config")
+  local start_time = vim.uv.hrtime()
 
   local function execute_round(is_initial)
     local timer
@@ -267,6 +268,15 @@ function M.execute_strategy(strategy)
             finish()
           else
             execute_round(false)
+          end
+        end
+
+        if start_time then
+          local total_time = (vim.uv.hrtime() - start_time) / 1000000 / 1000
+          if usage then
+            usage.total_time = total_time
+          else
+            usage = { total_time = total_time }
           end
         end
 

@@ -501,9 +501,7 @@ function ChatStrategy:on_init()
     vim.bo[self.buf].modifiable = true
     local model = self.conversation.model or require("sia.config").get_default_model()
     self.canvas:render_messages({ self.conversation:last_message() }, model)
-    if not self.hide_header then
-      self._last_assistant_header_extmark = self.canvas:render_assistant_header(model)
-    end
+    self._last_assistant_header_extmark = self.canvas:render_assistant_header(model)
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   end
 end
@@ -588,6 +586,9 @@ function ChatStrategy:on_complete(control)
     local handle_cleanup = function()
       del_abort_keymap(self.buf)
       self.canvas:clear_extmarks()
+      if control.usage then
+        self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+      end
       vim.bo[self.buf].modifiable = false
       if not self._is_named then
         local config = require("sia.config")
@@ -611,15 +612,9 @@ spaces. Only output the name, nothing else.]],
             pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
           end
           self._is_named = true
-          if control.usage then
-            self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
-          end
           control.finish()
         end)
       else
-        if control.usage then
-          self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
-        end
         control.finish()
       end
     end
@@ -657,8 +652,6 @@ spaces. Only output the name, nothing else.]],
             }, tool_result.result.context)
           end
         end
-
-        self.hide_header = nil
 
         if opts.cancelled then
           self:confirm_continue_after_cancelled_tool({
