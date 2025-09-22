@@ -172,7 +172,9 @@ function Strategy:on_cancelled() end
 
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil) }
 function Strategy:confirm_continue_after_cancelled_tool(control)
-  if not self.auto_continue_after_cancellation then
+  if self.auto_continue_after_cancellation or require("sia.config").get_local_config().auto_continue then
+    control.continue_execution()
+  else
     vim.ui.input({
       prompt = "Continue? (Y/n/[a]lways): ",
     }, function(response)
@@ -185,8 +187,6 @@ function Strategy:confirm_continue_after_cancelled_tool(control)
         control.finish()
       end
     end)
-  else
-    control.continue_execution()
   end
 end
 

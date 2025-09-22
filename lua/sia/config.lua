@@ -104,6 +104,7 @@ local function validate_model_field(json, field)
 end
 
 --- @class sia.LocalConfig
+--- @field auto_continue boolean?
 --- @field model string?
 --- @field fast_model string?
 --- @field plan_model string?
@@ -153,7 +154,7 @@ function M.get_local_config()
     has_failed = true
   end
 
-  if type(json) ~= "table" then
+  if not has_failed and type(json) ~= "table" then
     vim.notify(
       string.format("Sia: Config file %s must contain a JSON object, got %s", local_config, type(json)),
       vim.log.levels.ERROR
@@ -165,6 +166,12 @@ function M.get_local_config()
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
   validate(validate_model_field, json, "plan_model")
+  validate(function()
+    if json.auto_continue and type(json.auto_continue) ~= "boolean" then
+      return false, string.format("'%s' must be a boolean, got %s", json.auto_continue, type(json.auto_continue))
+    end
+    return true
+  end)
 
   config_cache[root] = { mtime = stat.mtime.sec, json = not has_failed and json or nil }
   return json
