@@ -15,7 +15,12 @@ local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
 
 return tool_utils.new_tool({
   name = "edit",
-  message = "Making code changes...",
+  message = function(args)
+    if args.target_file then
+      return string.format("Making changes to %s...", args.target_file)
+    end
+    return "Making file changes..."
+  end,
   description = "Tool for editing files",
   system_prompt = [[This is a tool for editing files.
 
