@@ -121,25 +121,21 @@ end
 --- @param usage sia.Usage
 --- @param extmark_id integer
 function ChatCanvas:update_usage(usage, extmark_id)
-  print(extmark_id)
   if extmark_id == nil then
     return
   end
 
   local extmark_details = vim.api.nvim_buf_get_extmark_by_id(self.buf, CHAT_NS, extmark_id, { details = true })
-  print(extmark_details and #extmark_details)
   if not extmark_details or #extmark_details < 3 then
     return
   end
 
   local line = extmark_details[1]
   local details = extmark_details[3]
-  print(details)
   if not details then
     return nil
   end
 
-  print(details.virt_text)
   if not details.virt_text then
     return
   end
