@@ -125,22 +125,22 @@ one specific change with clear, unique context.
   local matching = require("sia.matcher")
 
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local matches, fuzzy, stripped_line_numbers = matching.find_best_match_with_fallback(args.old_string, old_content)
+  local best_matches = matching.find_best_match(args.old_string, old_content)
 
   if failed_matches[buf] == nil then
     failed_matches[buf] = 0
   end
 
-  if #matches == 1 then
+  if #best_matches.matches == 1 then
     failed_matches[buf] = 0
-    local match = matches[1]
+    local match = best_matches.matches[1]
     local span = match.span
 
     opts.user_choice(string.format("Edit %s", args.target_file), {
       choices = CHOICES,
       on_accept = function(choice)
         local new_text_lines
-        if stripped_line_numbers then
+        if best_matches.strip_line_number then
           new_text_lines = matching.strip_line_numbers(args.new_string)
         else
           new_text_lines = vim.split(args.new_string, "\n")
@@ -184,7 +184,7 @@ one specific change with clear, unique context.
         local success_msg = string.format(
           "Successfully edited %s%s. Here`s the edited snippet as returned by cat -n:",
           args.target_file,
-          fuzzy and " (the match was not perfect)" or ""
+          best_matches.fuzzy and " (the match was not perfect)" or ""
         )
         table.insert(snippet_lines, 1, success_msg)
         local outdated_message, display_description
@@ -202,7 +202,7 @@ one specific change with clear, unique context.
             match.col_span[1],
             match.col_span[2],
             vim.fn.fnamemodify(args.target_file, ":."),
-            fuzzy and " - please double-check the changes" or ""
+            best_matches.fuzzy and " - please double-check the changes" or ""
           )
         else
           local edit_span = edit_start ~= edit_end and string.format("lines %d-%d", edit_start, edit_end)
@@ -212,7 +212,7 @@ one specific change with clear, unique context.
             "✏️ Edited %s in %s%s",
             edit_span,
             vim.fn.fnamemodify(args.target_file, ":."),
-            fuzzy and " - please double-check the changes" or ""
+            best_matches.fuzzy and " - please double-check the changes" or ""
           )
         end
 
@@ -236,7 +236,7 @@ one specific change with clear, unique context.
         content = {
           string.format(
             "Edit failed because %d matches was found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
-            #matches
+            #best_matches.matches
           ),
         },
         display_content = {
@@ -249,8 +249,8 @@ one specific change with clear, unique context.
           string.format(
             "Failed to edit %s since I couldn't find the exact text to replace (found %d%s matches instead of 1).",
             args.target_file,
-            #matches,
-            fuzzy and " fuzzy" or ""
+            #best_matches.matches,
+            best_matches.fuzzy and " fuzzy" or ""
           ),
         },
         display_content = {

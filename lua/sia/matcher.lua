@@ -1,4 +1,5 @@
 local M = {}
+--- @alias sia.matcher.Match {span: [integer, integer], col_span: [integer, integer]?, score: number}
 
 --- Find the longest common substring between two strings.
 --- @param a string
@@ -99,6 +100,7 @@ local function gen_in_conflict()
     end
   end
 end
+
 --- Find the span of lines in needle in haystack.
 ---  - if ignore_whitespace, then empty lines are ignored and two spans with
 ---    the same content but differences in whitespace is considered similar
@@ -268,8 +270,8 @@ end
 
 --- @param needle string|string[] The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
---- @return {span: [integer, integer], col_span: [integer, integer]?, score: number}[], boolean fuzzy_used
-function M.find_best_match(needle, haystack)
+--- @return sia.matcher.Match[], boolean fuzzy_used
+local function _find_best_match(needle, haystack)
   local needle_lines
   if type(needle) == "string" then
     needle_lines = vim.split(needle, "\n")
@@ -494,19 +496,19 @@ end
 --- Find best match with automatic line number stripping fallback
 --- @param needle string The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
---- @return {span: [integer, integer], col_span: [integer, integer]?, score: number}[], boolean fuzzy_used, boolean stripped_line_numbers
-function M.find_best_match_with_fallback(needle, haystack)
-  local matches, fuzzy = M.find_best_match(needle, haystack)
+--- @return {matches: sia.matcher.Match[],  fuzzy: boolean, strip_line_number: boolean}
+function M.find_best_match(needle, haystack)
+  local matches, fuzzy = _find_best_match(needle, haystack)
 
   if #matches == 0 then
     local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
     if had_line_numbers then
-      matches, fuzzy = M.find_best_match(stripped_needle, haystack)
-      return matches, fuzzy, true
+      matches, fuzzy = _find_best_match(stripped_needle, haystack)
+      return { matches = matches, fuzzy = true, strip_line_number = true }
     end
   end
 
-  return matches, fuzzy, false
+  return { matches = matches, fuzzy = fuzzy, strip_line_number = false }
 end
 
 return M
