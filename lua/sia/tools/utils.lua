@@ -1,5 +1,20 @@
 local M = {}
 
+local function cancellation_message(name)
+  return {
+    "OPERATION DECLINED BY USER",
+    "",
+    string.format("The USER declined to execute the %s operation.", name),
+    "",
+    "IMPORTANT: Do not proceed with your original plan. Instead:",
+    "1. Acknowledge that the operation was declined",
+    "2. Ask the USER how they would like to proceed",
+    "3. Wait for their guidance before taking any further action",
+    "",
+    "Do not attempt to continue with alternative approaches unless explicitly requested by the USER.",
+  }
+end
+
 --- @alias sia.PermissionOpts { auto_allow: integer}|{deny: boolean}|{ask: boolean}
 --- @alias sia.PatternDef string|{pattern: string, negate: boolean?}
 
@@ -246,18 +261,18 @@ M.new_tool = function(opts, execute)
         input_fn({ prompt = string.format("%s - %s", prompt, confirmation_text) }, function(resp)
           if resp == nil then
             callback({
-              content = {
-                string.format("User cancelled %s operation. Ask the user what they want you to do!", opts.name),
-              },
+              content = cancellation_message(opts.name),
+              kind = "user_cancelled",
+              cancelled = true,
             })
             return
           end
           local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
           if response == "n" or response == "no" then
             callback({
-              content = {
-                string.format("User declined to execute %s. Ask the user what they want you to do!", opts.name),
-              },
+              content = cancellation_message(opts.name),
+              kind = "user_declined",
+              cancelled = true,
             })
             return
           end
@@ -279,9 +294,9 @@ M.new_tool = function(opts, execute)
             input_args.on_accept()
           else
             callback({
-              content = {
-                string.format("User declined to execute %s. Ask the user what they want you to do!", opts.name),
-              },
+              content = cancellation_message(opts.name),
+              kind = "user_declined",
+              cancelled = true,
             })
           end
         end)
@@ -301,8 +316,19 @@ M.new_tool = function(opts, execute)
           else
             callback({
               content = {
-                string.format("User cancelled %s operation. Ask the user what they want you to do!", opts.name),
+                "OPERATION CANCELLED BY USER",
+                "",
+                string.format("The user cancelled the %s operation.", opts.name),
+                "",
+                "IMPORTANT: Do not proceed with your original plan. Instead:",
+                "1. Acknowledge that the operation was cancelled",
+                "2. Ask the user how they would like to proceed",
+                "3. Wait for their guidance before taking any further action",
+                "",
+                "Do not attempt to continue with alternative approaches unless explicitly requested by the user.",
               },
+              kind = "user_cancelled",
+              cancelled = true,
             })
           end
         end)

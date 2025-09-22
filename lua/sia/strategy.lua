@@ -11,6 +11,7 @@ local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 --- @field context sia.Context?
 --- @field kind string?
 --- @field display_content string[]?
+--- @field cancelled boolean?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.Writer
@@ -120,6 +121,7 @@ end
 --- @field tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
+--- @field auto_continue_after_cancellation boolean?
 local Strategy = {}
 Strategy.__index = Strategy
 
@@ -132,6 +134,7 @@ function Strategy:new(conversation, cancellable)
   obj.tools = {}
   obj.modified = {}
   obj.cancellable = cancellable or { is_cancelled = false }
+  obj.auto_continue_after_cancellation = false
   return obj
 end
 
@@ -167,6 +170,26 @@ function Strategy:on_error() end
 
 function Strategy:on_cancelled() end
 
+--- @param control { continue_execution: (fun():nil), finish: (fun():nil) }
+function Strategy:confirm_continue_after_cancelled_tool(control)
+  if not self.auto_continue_after_cancellation then
+    vim.ui.input({
+      prompt = "Continue? (Y/n/[a]lways): ",
+    }, function(response)
+      if response ~= nil and (response:lower() == "y" or response:lower() == "yes") then
+        control.continue_execution()
+      elseif response ~= nil and (response:lower() == "a" or response:lower() == "always") then
+        self.auto_continue_after_cancellation = true
+        control.continue_execution()
+      else
+        control.finish()
+      end
+    end)
+  else
+    control.continue_execution()
+  end
+end
+
 --- Callback triggered when LLM wants to call a function
 ---
 --- Collects a streaming function call response
@@ -201,7 +224,7 @@ end
 --- @field tool_call sia.ToolCall
 
 --- @class sia.ExecuteToolsOpts
---- @field handle_tools_completion fun(args: { results?: {tool: sia.ToolCall, result: sia.ToolResult}[]})
+--- @field handle_tools_completion fun(args: { results?: {tool: sia.ToolCall, result: sia.ToolResult}[], cancelled: boolean})
 --- @field handle_empty_toolset fun(args: table?)
 --- @field handle_status_updates? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
 --- @field cancellable sia.Cancellable?
@@ -291,14 +314,22 @@ function Strategy:execute_tools(opts)
 
       if completed_count == total_tools then
         local ordered_results = {}
+        local has_cancelled_tools = false
+
         for i = 1, total_tools do
           if tool_results[i] then
             table.insert(ordered_results, tool_results[i])
+            if tool_results[i].result.cancelled then
+              has_cancelled_tools = true
+            end
           end
         end
 
         if opts.handle_tools_completion then
-          opts.handle_tools_completion({ results = ordered_results })
+          opts.handle_tools_completion({
+            results = ordered_results,
+            cancelled = has_cancelled_tools,
+          })
         end
       end
     end
@@ -554,6 +585,44 @@ function ChatStrategy:on_complete(control)
     if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
       self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
     end
+    local handle_cleanup = function()
+      del_abort_keymap(self.buf)
+      self.canvas:clear_extmarks()
+      vim.bo[self.buf].modifiable = false
+      if not self._is_named then
+        local config = require("sia.config")
+        assistant.execute_query({
+          model = config.get_default_model("fast_model"),
+          prompt = {
+            {
+              role = "system",
+              content = [[Summarize the interaction. Make it suitable for a
+buffer name in neovim using three to five words separated by
+spaces. Only output the name, nothing else.]],
+            },
+            {
+              role = "user",
+              content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
+            },
+          },
+        }, function(resp)
+          if resp then
+            self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+            pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+          end
+          self._is_named = true
+          if control.usage then
+            self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+          end
+          control.finish()
+        end)
+      else
+        if control.usage then
+          self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+        end
+        control.finish()
+      end
+    end
 
     self:execute_tools({
       cancellable = self.cancellable,
@@ -590,45 +659,21 @@ function ChatStrategy:on_complete(control)
         end
 
         self.hide_header = nil
-        control.continue_execution()
+
+        if opts.cancelled then
+          self:confirm_continue_after_cancelled_tool({
+            continue_execution = control.continue_execution,
+            finish = function()
+              handle_cleanup()
+              self.canvas:update_progress({ { "Waiting for user...", "NonText" } })
+            end,
+          })
+        else
+          control.continue_execution()
+        end
       end,
       handle_empty_toolset = function(opts)
-        del_abort_keymap(self.buf)
-        self.canvas:clear_extmarks()
-        vim.bo[self.buf].modifiable = false
-        if not self._is_named then
-          local config = require("sia.config")
-          assistant.execute_query({
-            model = config.get_default_model("fast_model"),
-            prompt = {
-              {
-                role = "system",
-                content = [[Summarize the interaction. Make it suitable for a
-buffer name in neovim using three to five words separated by
-spaces. Only output the name, nothing else.]],
-              },
-              {
-                role = "user",
-                content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
-              },
-            },
-          }, function(resp)
-            if resp then
-              self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-              pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
-            end
-            self._is_named = true
-            if control.usage then
-              self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
-            end
-            control.finish()
-          end)
-        else
-          if control.usage then
-            self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
-          end
-          control.finish()
-        end
+        handle_cleanup()
       end,
     })
     self._writer = nil
@@ -806,7 +851,12 @@ function DiffStrategy:on_complete(control)
           }, tool_result.result.context)
         end
       end
-      control.continue_execution()
+
+      if opts.cancelled then
+        self:confirm_continue_after_cancelled_tool(control)
+      else
+        control.continue_execution()
+      end
     end,
     handle_empty_toolset = function()
       if vim.api.nvim_buf_is_loaded(self.buf) then
@@ -946,7 +996,12 @@ function InsertStrategy:on_complete(control)
           }, tool_result.result.context)
         end
       end
-      control.continue_execution()
+
+      if opts.cancelled then
+        self:confirm_continue_after_cancelled_tool(control)
+      else
+        control.continue_execution()
+      end
     end,
     handle_empty_toolset = function()
       if self._writer then
@@ -1088,7 +1143,12 @@ function HiddenStrategy:on_complete(control)
           }, tool_result.result.context)
         end
       end
-      control.continue_execution()
+
+      if opts.cancelled then
+        self:confirm_continue_after_cancelled_tool(control)
+      else
+        control.continue_execution()
+      end
     end,
     handle_empty_toolset = function()
       if context then
