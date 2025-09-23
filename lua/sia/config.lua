@@ -286,8 +286,10 @@ local defaults = {
     ollama = providers.ollama(11434),
     shimmy = providers.ollama(11435),
     openrouter = providers.openrouter,
+    zai = providers.zai_coding,
   },
   models = {
+    ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
     ["openai/gpt-5"] = { "openai", "gpt-5", temperature = 1 },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },
     ["openai/gpt-4.1-mini"] = { "openai", "gpt-4.1-mini" },

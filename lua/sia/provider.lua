@@ -103,6 +103,13 @@ M.anthropic = {
   end,
 }
 
+M.zai_coding = {
+  base_url = "https://api.z.ai/api/coding/paas/v4/chat/completions",
+  api_key = function()
+    return os.getenv("ZAI_CODING_API_KEY")
+  end,
+}
+
 M.ollama = function(port)
   return {
     base_url = string.format("http://localhost:%d/v1/chat/completions", port),
