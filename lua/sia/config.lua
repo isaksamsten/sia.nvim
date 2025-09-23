@@ -315,6 +315,7 @@ local defaults = {
     ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
     ["copilot/claude-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
     ["copilot/o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
+    ["copilot/grok-code-fast-1"] = { "copilot", "grok-code-fast-1" },
     ["gemini/1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
     ["gemini/1.5-flash"] = { "gemini", "gemini-1.5-flash" },
     ["gemini/2.0-flash-exp"] = { "gemini", "gemini-2.0-flash-exp" },
