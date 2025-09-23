@@ -19,7 +19,7 @@ end
 --- @alias sia.PatternDef string|{pattern: string, negate: boolean?}
 
 --- Helper function for consistent pattern matching with negate support
---- @param value string
+--- @param value string|any
 --- @param pattern_def sia.PatternDef
 --- @return boolean
 local function matches_pattern(value, pattern_def)
@@ -32,8 +32,15 @@ local function matches_pattern(value, pattern_def)
     negate = pattern_def.negate or false
   end
 
-  local matches = string.match(value, pattern)
-  return negate and not matches or not negate and matches
+  local s = value
+  if s == nil then
+    s = ""
+  elseif type(s) ~= "string" then
+    s = tostring(s)
+  end
+
+  local matches = string.match(s, pattern)
+  return (negate and not matches) or (not negate and matches)
 end
 
 --- @param name string
@@ -46,12 +53,11 @@ local function get_permission(name, args)
   -- If any argument is denied
   local deny = lc and lc.permission and lc.permission.deny and lc.permission.deny[name] or {}
   if deny.arguments then
-    for key, arg_value in pairs(args) do
-      if arg_value then
-        for _, pattern_def in ipairs(deny.arguments[key] or {}) do
-          if matches_pattern(arg_value, pattern_def) then
-            return { deny = true }
-          end
+    for key, patterns in pairs(deny.arguments) do
+      local arg_value = args[key]
+      for _, pattern_def in ipairs(patterns) do
+        if matches_pattern(arg_value, pattern_def) then
+          return { deny = true }
         end
       end
     end
@@ -62,11 +68,9 @@ local function get_permission(name, args)
   if ask.arguments then
     for key, patterns in pairs(ask.arguments) do
       local arg_value = args[key]
-      if arg_value then
-        for _, pattern_def in ipairs(patterns) do
-          if matches_pattern(arg_value, pattern_def) then
-            return { ask = true }
-          end
+      for _, pattern_def in ipairs(patterns) do
+        if matches_pattern(arg_value, pattern_def) then
+          return { ask = true }
         end
       end
     end
@@ -81,12 +85,10 @@ local function get_permission(name, args)
   for key, patterns in pairs(allowed.arguments) do
     local found_match = false
     local arg_value = args[key]
-    if arg_value then
-      for _, pattern_def in ipairs(patterns) do
-        if matches_pattern(arg_value, pattern_def) then
-          found_match = true
-          break
-        end
+    for _, pattern_def in ipairs(patterns) do
+      if matches_pattern(arg_value, pattern_def) then
+        found_match = true
+        break
       end
     end
     if not found_match then
