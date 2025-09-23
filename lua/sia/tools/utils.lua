@@ -315,18 +315,7 @@ M.new_tool = function(opts, execute)
             choice_args.on_accept(idx)
           else
             callback({
-              content = {
-                "OPERATION CANCELLED BY USER",
-                "",
-                string.format("The user cancelled the %s operation.", opts.name),
-                "",
-                "IMPORTANT: Do not proceed with your original plan. Instead:",
-                "1. Acknowledge that the operation was cancelled",
-                "2. Ask the user how they would like to proceed",
-                "3. Wait for their guidance before taking any further action",
-                "",
-                "Do not attempt to continue with alternative approaches unless explicitly requested by the user.",
-              },
+              content = cancellation_message(opts.name),
               kind = "user_cancelled",
               cancelled = true,
             })
@@ -342,7 +331,17 @@ M.new_tool = function(opts, execute)
       else
         callback({
           content = {
-            string.format("User has denied %s with the provided parameters in its local configuration", opts.name),
+            "OPERATION BLOCKED BY LOCAL CONFIGURATION",
+            "",
+            string.format(
+              "The USER's local configuration denies executing the %s operation with the provided parameters.",
+              opts.name
+            ),
+            "",
+            "IMPORTANT: Do not proceed with alternative approaches. Instead:",
+            "1. Acknowledge that this operation is denied by policy",
+            "2. Ask the USER if they want to adjust permissions or choose a different approach",
+            "3. Wait for their guidance before taking any further action",
           },
         })
       end
