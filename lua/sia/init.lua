@@ -9,13 +9,14 @@ local HiddenStrategy = require("sia.strategy").HiddenStrategy
 local M = {}
 
 local highlight_groups = {
-  SiaChatResponse = { link = "CursorLine" },
   SiaInsert = { link = "DiffAdd" },
   SiaReplace = { link = "DiffChange" },
   SiaProgress = { link = "NonText" },
-  SiaModel = { link = "NonText" },
+  SiaModel = {},
+  SiaUsage = {},
   SiaAssistant = { link = "DiffAdd" },
   SiaUser = { link = "DiffChange" },
+  SiaToolResult = { link = "DiffChange" },
 }
 
 local function set_highlight_groups()
@@ -366,6 +367,7 @@ local add_commands = {
 function M.setup(options)
   config.setup(options)
   require("sia.mappings").setup()
+  set_highlight_groups()
 
   vim.api.nvim_create_user_command("SiaAccept", function()
     M.accept_edits()

@@ -91,7 +91,7 @@ function ChatCanvas:append_tool_result(content)
     end_line = end_line,
     hl_mode = "combine",
     hl_eol = true,
-    hl_group = "DiffChange",
+    hl_group = "SiaToolResult",
   })
 end
 
@@ -143,19 +143,19 @@ function ChatCanvas:update_usage(usage, extmark_id)
   local usage_text = {}
 
   if usage.prompt and usage.prompt > 0 then
-    table.insert(usage_text, { "  " .. usage.prompt, "SiaModel" })
+    table.insert(usage_text, { "  " .. usage.prompt, "SiaUsage" })
   end
 
   if usage.completion and usage.completion > 0 then
-    table.insert(usage_text, { "  " .. usage.completion, "SiaModel" })
+    table.insert(usage_text, { "  " .. usage.completion, "SiaUsage" })
   end
 
   if usage.total then
-    table.insert(usage_text, { "  " .. usage.total, "SiaModel" })
+    table.insert(usage_text, { "  " .. usage.total, "SiaUsage" })
   end
 
   if usage.total_time then
-    table.insert(usage_text, { string.format(" 󰥔 %.1fs", usage.total_time), "SiaModel" })
+    table.insert(usage_text, { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" })
   end
 
   if #usage_text > 0 then
