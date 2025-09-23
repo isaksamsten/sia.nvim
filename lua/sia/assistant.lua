@@ -209,6 +209,7 @@ function M.execute_strategy(strategy)
                     total = obj.usage.total_tokens or nil,
                     prompt = obj.usage.prompt_tokens or nil,
                     completion = obj.usage.completion_tokens or nil,
+                    total_time = 0,
                   }
                 end
                 if obj.choices and #obj.choices > 0 then
