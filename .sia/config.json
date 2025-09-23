@@ -1,9 +1,24 @@
 {
+  "model": "copilot/gpt-4.1",
+  "auto_continue": true,
   "permission": {
+    "deny": {
+      "bash": {
+        "arguments": {
+          "command": ["^rm", "&&%s*rm"]
+        }
+      }
+    },
     "allow": {
       "bash": {
         "arguments": {
           "command": ["^git diff", "^git status", "^git log"]
+        }
+      },
+      "grep": {
+        "arguments": {
+          "pattern": [".*"],
+          "glob": ["%.lua$"]
         }
       },
       "read": {
