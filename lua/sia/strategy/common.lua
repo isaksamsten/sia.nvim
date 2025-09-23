@@ -114,7 +114,9 @@ function Strategy:new(conversation, cancellable)
   return obj
 end
 
-function Strategy:on_init() end
+function Strategy:on_init()
+  return true
+end
 
 function Strategy:on_continue() end
 

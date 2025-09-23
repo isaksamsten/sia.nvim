@@ -29,6 +29,10 @@ function DiffStrategy:new(conversation, options)
 end
 
 function DiffStrategy:on_init()
+  local context = self.conversation.context
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) or not vim.api.nvim_buf_is_loaded(self.buf) then
+    return false
+  end
   vim.bo[self.buf].modifiable = true
   vim.bo[self.buf].buftype = "nofile"
   vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
@@ -36,7 +40,6 @@ function DiffStrategy:on_init()
     vim.wo[self.win][wo] = vim.wo[self.conversation.context.win][wo]
   end
 
-  local context = self.conversation.context
   local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
   vim.api.nvim_buf_set_lines(self.buf, 0, 0, false, before)
 
@@ -47,6 +50,7 @@ function DiffStrategy:on_init()
     hl_group = "SiaReplace",
     end_line = context.pos[2],
   })
+  return true
 end
 
 function DiffStrategy:on_error()
@@ -99,6 +103,10 @@ function DiffStrategy:on_complete(control)
     handle_empty_toolset = function()
       if vim.api.nvim_buf_is_loaded(self.buf) then
         local context = self.conversation.context
+        if not context then
+          control.finish()
+          return
+        end
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
         if vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win) then

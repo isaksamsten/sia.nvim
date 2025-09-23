@@ -41,6 +41,7 @@ function InsertStrategy:on_init()
     virt_lines = { { { "🤖 ", "Normal" }, message } },
     virt_lines_above = self._line - 1 > 0,
   })
+  return true
 end
 
 --- @param job number
@@ -97,6 +98,7 @@ end
 function InsertStrategy:on_complete(control)
   local context = self.conversation.context
   if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
+    control.finish()
     return false
   end
 

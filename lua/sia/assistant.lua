@@ -144,7 +144,10 @@ function M.execute_strategy(strategy)
   local function execute_round(is_initial)
     local timer
     if is_initial then
-      strategy:on_init()
+      if not strategy:on_init() then
+        strategy:on_error()
+        return
+      end
       vim.api.nvim_exec_autocmds("User", {
         pattern = "SiaInit",
         --- @diagnostic disable-next-line: undefined-field
