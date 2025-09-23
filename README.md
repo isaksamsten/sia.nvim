@@ -15,6 +15,9 @@ https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
 https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
+https://github.com/user-attachments/assets/c5a6e074-34ac-4f1e-bdb0-a309c797b861
+
+
 ## ⚡️ Requirements
 
 - Neovim >= **0.11**
