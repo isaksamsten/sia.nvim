@@ -34,26 +34,24 @@ function M.show(content, opts)
   local initial_height = math.min(#content, math.floor(screen_height * 0.3))
 
   confirmation_win = vim.api.nvim_open_win(confirmation_buf, true, {
-    relative = "laststatus",
+    relative = "editor",
     fixed = true,
     width = screen_width,
+    row = screen_height - vim.o.cmdheight,
+    col = 0,
     anchor = "SW",
     height = initial_height,
-    row = 0,
-    col = 0,
     style = "minimal",
     border = "none",
     zindex = 251,
   })
 
-  -- Set window highlight to match command line
   vim.wo[confirmation_win].winhighlight = "Normal:MsgArea"
-
   if reflow then
-    vim.cmd("normal! ggVGgw")
+    vim.cmd("normal! ggVGgwgg")
 
     local wrapped_content = vim.api.nvim_buf_get_lines(confirmation_buf, 0, -1, false)
-    local actual_height = math.min(#wrapped_content, math.floor(screen_height * 0.3))
+    local actual_height = math.min(#wrapped_content, math.floor(screen_height * 0.7))
 
     if actual_height ~= initial_height then
       vim.api.nvim_win_set_config(confirmation_win, {
@@ -62,13 +60,12 @@ function M.show(content, opts)
     end
 
     vim.api.nvim_win_set_config(confirmation_win, { focusable = false })
-    vim.cmd("wincmd p")
   end
+  vim.cmd("wincmd p")
 
   return M.clear
 end
 
---- Clear the confirmation window
 function M.clear()
   if confirmation_win and vim.api.nvim_win_is_valid(confirmation_win) then
     vim.api.nvim_win_close(confirmation_win, true)
