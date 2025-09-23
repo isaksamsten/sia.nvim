@@ -214,15 +214,15 @@ function M.execute_strategy(strategy)
                 if obj.choices and #obj.choices > 0 then
                   local delta = obj.choices[1].delta
                   if delta then
-                    if delta.reasoning then
+                    if delta.reasoning and delta.reasoning ~= "" then
                       if not strategy:on_reasoning(delta.reasoning) then
                         vim.fn.jobstop(job_id)
                       end
-                    elseif delta.content then
+                    elseif delta.content and delta.content ~= "" then
                       if not strategy:on_progress(delta.content) then
                         vim.fn.jobstop(job_id)
                       end
-                    elseif delta.tool_calls then
+                    elseif delta.tool_calls and delta.tool_calls ~= "" then
                       if not strategy:on_tool_call(delta.tool_calls) then
                         vim.fn.jobstop(job_id)
                       end
