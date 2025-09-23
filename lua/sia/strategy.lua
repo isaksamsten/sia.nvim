@@ -1,7 +1,4 @@
 local M = {}
-local ChatCanvas = require("sia.canvas").ChatCanvas
-local assistant = require("sia.assistant")
-local Message = require("sia.conversation").Message
 
 local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
@@ -468,7 +465,7 @@ function ChatStrategy:new(conversation, options)
   end
 
   pcall(vim.api.nvim_buf_set_name, buf, obj.name)
-  obj.canvas = ChatCanvas:new(obj.buf)
+  obj.canvas = require("sia.canvas").ChatCanvas:new(obj.buf)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").get_default_model()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
@@ -592,7 +589,7 @@ function ChatStrategy:on_complete(control)
       vim.bo[self.buf].modifiable = false
       if not self._is_named then
         local config = require("sia.config")
-        assistant.execute_query({
+        require("sia.assistant").execute_query({
           model = config.get_default_model("fast_model"),
           prompt = {
             {
@@ -890,6 +887,11 @@ function InsertStrategy:new(conversation, options)
 end
 
 function InsertStrategy:on_init()
+  local context = self.conversation.context
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
+    return false
+  end
+
   local line, padding_direction = self:_get_insert_placement()
   self._line = line
   self._padding_direction = padding_direction
@@ -906,7 +908,7 @@ end
 --- @param job number
 function InsertStrategy:on_start()
   local context = self.conversation.context
-  if not vim.api.nvim_buf_is_loaded(context.buf) then
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
     return false
   end
   if self._padding_direction == "below" or self._padding_direction == "above" then
@@ -914,7 +916,6 @@ function InsertStrategy:on_start()
   end
   local content = vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
   self._cal = #content
-  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
   set_abort_keymap(context.buf, function()
     self.cancellable.is_cancelled = true
   end)
@@ -922,7 +923,11 @@ function InsertStrategy:on_start()
 end
 
 function InsertStrategy:on_error()
-  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
+  local context = self.conversation.context
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
+    return false
+  end
+  vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
 end
 
 function InsertStrategy:on_progress(content)
@@ -935,6 +940,7 @@ function InsertStrategy:on_progress(content)
       pcall(vim.cmd.undojoin)
     end)
   else
+    vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
     self._writer = Writer:new(nil, context.buf, self._line - 1, self._col)
   end
   self._writer:append(content)
@@ -954,27 +960,12 @@ end
 
 function InsertStrategy:on_complete(control)
   local context = self.conversation.context
+  if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
+    return false
+  end
+
   del_abort_keymap(context.buf)
   self:execute_tools({
-    -- handle_status_updates = function(statuses)
-    --   local status_icons = { pending = " ", running = " ", done = " " }
-    --   local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
-    --   local lines = {}
-    --   for _, s in ipairs(statuses) do
-    --     local icon = status_icons[s.status] or ""
-    --     local friendly_message = s.tool.message
-    --     local label = friendly_message or (s.tool.name or "tool")
-    --     local hl = status_hl[s.status] or "NonText"
-    --     table.insert(lines, { { icon, hl }, { label, "NonText" } })
-    --   end
-    --   if #lines > 0 then
-    --     vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
-    --     vim.api.nvim_buf_set_extmark(context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
-    --       virt_lines = lines,
-    --       virt_lines_above = self._line - 1 > 0,
-    --     })
-    --   end
-    -- end,
     handle_tools_completion = function(opts)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -1153,7 +1144,7 @@ function HiddenStrategy:on_complete(control)
           return message.role == "assistant" and message.kind == "<assistant-callback>"
         end,
       })
-      local content = Message.merge_content(messages)
+      local content = require("sia.conversation").Message.merge_content(messages)
       self._options.callback(context, content)
       if not content then
         vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
