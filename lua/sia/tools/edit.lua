@@ -202,7 +202,7 @@ one specific change with clear, unique context.
             match.col_span[2]
           )
           display_description = string.format(
-            "✏️ Edited line %d (cols %d-%d) in %s%s",
+            "✏️ Edited line %d (columns %d-%d) in %s%s",
             edit_start,
             match.col_span[1],
             match.col_span[2],

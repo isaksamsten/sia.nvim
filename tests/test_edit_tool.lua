@@ -102,7 +102,7 @@ T["sia.tools.edit"]["successful inline edit"] = function()
   eq("hello world lisa", new_content[1])
 
   eq("edit", result.kind)
-  eq(true, string.find(result.display_content[1], "✏️ Edited line 1 %(cols 13%-16%) in test%.txt") ~= nil)
+  eq(true, string.find(result.display_content[1], "✏️ Edited line 1 %(columns 13%-16%) in test%.txt") ~= nil)
 
   restore_file_loader()
   restore_tracker()
