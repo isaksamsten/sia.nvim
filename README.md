@@ -15,9 +15,6 @@ https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
 https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
-https://github.com/user-attachments/assets/c5a6e074-34ac-4f1e-bdb0-a309c797b861
-
-
 ## ⚡️ Requirements
 
 - Neovim >= **0.11**
@@ -175,7 +172,7 @@ Create a `.sia/config.json` file in your project root:
     "ask": {
       "write": {
         "arguments": {
-          "path": [{"pattern": "%.md$", "negate": true}]
+          "path": [{ "pattern": "%.md$", "negate": true }]
         }
       }
     }
@@ -192,12 +189,13 @@ Available configuration options in `.sia/config.json`:
 
 - **`model`**: Override the default model for this project
 - **`fast_model`**: Override the fast model used for quick operations
-- **`plan_model`**: Override the model used for planning operations  
+- **`plan_model`**: Override the model used for planning operations
 - **`auto_continue`**: Automatically continue execution after a tool is cancelled by the user (boolean, default: false)
-  
-  When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true` 
+
+  When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true`
   bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want
   the AI to keep working even if individual operations are cancelled.
+
 - **`permission`**: Fine-grained tool access control (see Permission System below)
 
 ### Permission System
@@ -205,23 +203,27 @@ Available configuration options in `.sia/config.json`:
 The permission system uses Lua patterns to control tool access:
 
 **Rule Precedence** (in order):
+
 1. **Deny rules**: Block operations immediately without confirmation
-2. **Ask rules**: Require user confirmation before proceeding  
+2. **Ask rules**: Require user confirmation before proceeding
 3. **Allow rules**: Auto-approve operations that match all configured patterns
 
 **Rule Structure**:
+
 - Each tool permission must have an `arguments` field
 - `arguments`: Object mapping parameter names to pattern arrays
 - `choice` (allow rules only): Auto-selection index for multi-choice prompts (default: 1)
 
 **Pattern Format**:
 Patterns can be either:
-- Simple strings: `"git status"`  
+
+- Simple strings: `"git status"`
 - Objects with negate option: `{"pattern": "%.md$", "negate": true}`
 
 **Pattern Matching**:
+
 - Uses Lua's `string.match()` function directly (not anchored)
-- Multiple patterns in an array are OR'd together  
+- Multiple patterns in an array are OR'd together
 - All configured argument patterns must match for the rule to apply
 - `nil` arguments are treated as empty strings (`""`)
 - Non-string arguments are converted to strings with `tostring()`
