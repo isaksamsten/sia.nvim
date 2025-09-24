@@ -22,6 +22,10 @@ local function call_provider(query, opts)
   local provider
   if query.model == nil or type(query.model) == "string" then
     model = config.options.models[query.model or config.get_default_model()]
+    if not model then
+      model = config.options.models[config.options.defaults.model]
+      vim.notif("missing model, using default fallback")
+    end
     provider = config.options.providers[model[1]]
   else
     model =
