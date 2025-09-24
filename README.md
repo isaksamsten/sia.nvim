@@ -146,6 +146,7 @@ Create a `.sia/config.json` file in your project root:
 ```json
 {
   "model": "copilot/gpt-5-mini",
+  "auto_continue": true,
   "permission": {
     "allow": {
       "bash": {
@@ -155,7 +156,7 @@ Create a `.sia/config.json` file in your project root:
       },
       "edit": {
         "arguments": {
-          "target_file": [".*%.lua$", ".*%.py$", ".*%.js$$"]
+          "target_file": [".*%.lua$", ".*%.py$", ".*%.js$"]
         }
       }
     },
@@ -170,9 +171,8 @@ Create a `.sia/config.json` file in your project root:
           "path": [".*important.*", ".*config.*"]
         }
       }
-    }
+    },
     "ask": {
-      // ask before writing to anything except .md files
       "write": {
         "arguments": {
           "path": [{"pattern": "%.md$", "negate": true}]
@@ -186,33 +186,45 @@ Create a `.sia/config.json` file in your project root:
 Use the local option `model` to override the local default model. The local
 configuration can also override both `plan_model` and `fast_model`.
 
+### Configuration Options
+
+Available configuration options in `.sia/config.json`:
+
+- **`model`**: Override the default model for this project
+- **`fast_model`**: Override the fast model used for quick operations
+- **`plan_model`**: Override the model used for planning operations  
+- **`auto_continue`**: Automatically continue execution after a tool is cancelled by the user (boolean, default: false)
+  
+  When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true` 
+  bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want
+  the AI to keep working even if individual operations are cancelled.
+- **`permission`**: Fine-grained tool access control (see Permission System below)
+
 ### Permission System
 
 The permission system uses Lua patterns to control tool access:
 
-**Allow Rules**: Auto-approve
+**Rule Precedence** (in order):
+1. **Deny rules**: Block operations immediately without confirmation
+2. **Ask rules**: Require user confirmation before proceeding  
+3. **Allow rules**: Auto-approve operations that match all configured patterns
 
-- `choice`: Optional auto-selection for multi-choice prompts
-- `arguments`: Object mapping parameter names to patterns. Patterns can
-  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
+**Rule Structure**:
+- Each tool permission must have an `arguments` field
+- `arguments`: Object mapping parameter names to pattern arrays
+- `choice` (allow rules only): Auto-selection index for multi-choice prompts (default: 1)
 
-**Ask Rules**: Require confirmation
+**Pattern Format**:
+Patterns can be either:
+- Simple strings: `"git status"`  
+- Objects with negate option: `{"pattern": "%.md$", "negate": true}`
 
-- Takes precedence over allow rules
-- `arguments`: Object mapping parameter names to patterns. Patterns can
-  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
-
-**Deny rules**: Deny (without confirmation)
-
-- Take precedence over allow and ask rules
-- `arguments`: Object mapping parameter names to patterns. Patterns can
-  optionally be negated with `{"pattern": "my_pattern", "negate": true}`
-
-### Pattern Matching
-
-- All patterns are anchored Lua patterns (automatically wrapped with `^...$`)
-- Multiple patterns in an array are OR'd together
-- All argument patterns must match for the rule to apply
+**Pattern Matching**:
+- Uses Lua's `string.match()` function directly (not anchored)
+- Multiple patterns in an array are OR'd together  
+- All configured argument patterns must match for the rule to apply
+- `nil` arguments are treated as empty strings (`""`)
+- Non-string arguments are converted to strings with `tostring()`
 
 ### Examples
 
