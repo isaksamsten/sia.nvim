@@ -56,12 +56,9 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-  local prompt
-  if vim.fn.filereadable(args.path) == 1 then
-    prompt = string.format("Overwrite existing file %s with new content", args.path)
-  else
-    prompt = string.format("Create new file %s", args.path)
-  end
+  local file_exists = vim.fn.filereadable(args.path) == 1
+  local prompt = file_exists and string.format("Overwrite existing file %s with new content", args.path)
+    or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
     on_accept = function()
       local buf = utils.ensure_file_is_loaded(args.path)
@@ -74,8 +71,6 @@ For small, targeted changes, prefer the edit tool instead.]],
       end
 
       local initial_code = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-      local file_exists = #initial_code > 0 and initial_code[1] ~= ""
-
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
