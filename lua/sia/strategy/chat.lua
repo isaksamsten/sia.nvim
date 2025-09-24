@@ -99,6 +99,9 @@ function ChatStrategy:on_init()
     self.canvas:render_messages({ self.conversation:last_message() }, model)
     self._last_assistant_header_extmark = self.canvas:render_assistant_header(model)
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+    return true
+  else
+    return false
   end
 end
 
