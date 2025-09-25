@@ -71,36 +71,6 @@ function M.similarity_ratio(a, b)
   return (2 * total_matching_chars) / total_length
 end
 
-local function gen_in_conflict()
-  local IN_SEARCH = 0
-  local IN_OURS = 1
-  local IN_THEIRS = 2
-  local conflict_start = "^<<<<<<?<?<?<?"
-  local conflict_end = "^>>>>>>?>?>?>?>"
-  local conflict_delimiter = "^======?=?=?=?"
-
-  local current_conflict_state = IN_SEARCH
-  return function(line)
-    if current_conflict_state == IN_OURS then
-      if line:match(conflict_delimiter) then
-        current_conflict_state = IN_THEIRS
-      end
-      return true
-    elseif current_conflict_state == IN_THEIRS then
-      if line:match(conflict_end) then
-        current_conflict_state = IN_SEARCH
-      end
-      return true
-    else
-      if line:match(conflict_start) then
-        current_conflict_state = IN_OURS
-        return true
-      end
-      return false
-    end
-  end
-end
-
 --- Find the span of lines in needle in haystack.
 ---  - if ignore_whitespace, then empty lines are ignored and two spans with
 ---    the same content but differences in whitespace is considered similar
@@ -119,21 +89,12 @@ function M.find_subsequence_span(needle, haystack, opts)
   local threshold = opts.threshold
   local ignore_emptylines = opts.ignore_emptylines or false
   local ignore_indent = opts.ignore_indent or false
-  local in_conflict = nil
-  if opts.ignore_conflicts ~= false then
-    in_conflict = gen_in_conflict()
-  end
 
   local needle_len = #needle
   local haystack_len = #haystack
 
   -- Iterate through y to find a potential starting point
   for i = 1, haystack_len do
-    -- Skip the starting position if it's in a conflict region
-    if in_conflict and in_conflict(haystack[i]) then
-      goto outer_continue
-    end
-
     local haystack_idx = i
     local needle_idx = 1
     local start_pos = -1
@@ -268,59 +229,23 @@ function M.find_inline_matches(needle_str, haystack_lines, opts)
   return matches
 end
 
---- @param needle string|string[] The text to search for (can contain newlines)
---- @param haystack string[] Array of lines to search in
---- @return sia.matcher.Match[], boolean fuzzy_used
-local function _find_best_match(needle, haystack)
-  local needle_lines
-  if type(needle) == "string" then
-    needle_lines = vim.split(needle, "\n")
-  else
-    needle_lines = needle
-  end
-  local matches
-  local fuzzy = false
-
-  if needle == "" then
-    if #haystack == 0 or (#haystack == 1 and haystack[1] == "") then
-      return { { span = { 1, -1 }, score = 1.0 } }, false
-    else
-      return {}, false
-    end
-  end
-
-  matches = M.find_best_subsequence_span(needle_lines, haystack)
-  if #matches == 0 then
-    fuzzy = true
-    matches = M.find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true })
-    if #matches == 0 then
-      matches = M.find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, threshold = 0.9 })
-    end
-  end
-
-  if #matches == 0 and #needle_lines == 1 then
-    fuzzy = false
-    matches = M.find_inline_matches(needle_lines[1], haystack)
-    if #matches == 0 then
-      fuzzy = true
-      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true })
-    end
-  end
-
-  return matches, fuzzy
-end
-
 --- Find the top-k spans of lines in needle that match in haystack with similarity scoring.
----  - if ignore_whitespace, then empty lines are ignored and two spans with
----    the same content but differences in whitespace is considered similar
----  - scores all potential spans regardless of threshold and returns the top-k highest scoring spans
----  - it uses some tricks but is still rather slow.
+--- Uses a sophisticated scoring algorithm that evaluates all potential matches and returns
+--- the highest scoring ones. Includes early pruning optimizations for performance.
 ---
---- @param needle string[]
---- @param haystack string[]
---- @param opts {ignore_emptylines: boolean?, ignore_indent: boolean, threshold: number?, limit: integer?, ignore_conflicts: boolean?}?
---- @return {span: [integer, integer], score: number}[]
-function M.find_best_subsequence_span(needle, haystack, opts)
+--- Features:
+---  - if ignore_emptylines is true, empty lines are ignored during matching
+---  - if ignore_indent is true, leading/trailing whitespace is normalized before comparison
+---  - if threshold is set, only matches with average similarity >= threshold are considered
+---  - scores all potential spans and returns the top-k highest scoring spans (limit parameter)
+---  - uses early pruning to avoid evaluating matches that cannot reach the minimum score
+---  - returns immediately on perfect matches (score = 1.0)
+---
+--- @param needle string[] Array of lines to search for
+--- @param haystack string[] Array of lines to search in
+--- @param opts {ignore_emptylines: boolean?, ignore_indent: boolean?, threshold: number?, limit: integer?, ignore_conflicts: boolean?}? Matching options
+--- @return {span: [integer, integer], score: number}[] Array of matches sorted by score (highest first)
+local function _find_best_subsequence_span(needle, haystack, opts)
   local function is_empty(line)
     return line:match("^%s*$") ~= nil
   end
@@ -330,10 +255,6 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   local ignore_indent = opts.ignore_indent or false
   local limit = opts.limit or 1
   local threshold = opts.threshold
-  local in_conflict = nil
-  if opts.ignore_conflicts ~= false then
-    in_conflict = gen_in_conflict()
-  end
 
   local needle_len = #needle
   local haystack_len = #haystack
@@ -351,10 +272,6 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   end
 
   for i = 1, haystack_len do
-    if in_conflict and in_conflict(haystack[i]) then
-      goto next_start_position
-    end
-
     local haystack_idx = i
     local needle_idx = 1
     local start_pos = -1
@@ -435,10 +352,6 @@ function M.find_best_subsequence_span(needle, haystack, opts)
           score = avg_score,
         }
 
-        if avg_score == 1.0 then
-          return { match }
-        end
-
         table.insert(top_matches, match)
 
         table.sort(top_matches, function(a, b)
@@ -456,6 +369,49 @@ function M.find_best_subsequence_span(needle, haystack, opts)
   end
 
   return top_matches
+end
+
+--- @param needle string|string[] The text to search for (can contain newlines)
+--- @param haystack string[] Array of lines to search in
+--- @return sia.matcher.Match[], boolean fuzzy_used
+local function _find_best_match(needle, haystack)
+  local needle_lines
+  if type(needle) == "string" then
+    needle_lines = vim.split(needle, "\n")
+  else
+    needle_lines = needle
+  end
+  local matches
+  local fuzzy = false
+
+  if needle == "" then
+    if #haystack == 0 or (#haystack == 1 and haystack[1] == "") then
+      return { { span = { 1, -1 }, score = 1.0 } }, false
+    else
+      return {}, false
+    end
+  end
+
+  matches = _find_best_subsequence_span(needle_lines, haystack, { limit = 2 })
+  if #matches == 0 then
+    fuzzy = true
+    matches = _find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, limit = 2 })
+    if #matches == 0 then
+      matches =
+        _find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, threshold = 0.9, limit = 2 })
+    end
+  end
+
+  if #matches == 0 and #needle_lines == 1 then
+    fuzzy = false
+    matches = M.find_inline_matches(needle_lines[1], haystack)
+    if #matches == 0 then
+      fuzzy = true
+      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true })
+    end
+  end
+
+  return matches, fuzzy
 end
 
 --- @param text string The text that may contain line numbers
