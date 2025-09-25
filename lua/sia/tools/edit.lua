@@ -236,12 +236,13 @@ one specific change with clear, unique context.
     })
   else
     failed_matches[buf] = failed_matches[buf] + 1
+    local match_description = #best_matches.matches == 0 and "no matches" or "multiple matches"
     if failed_matches[buf] >= MAX_FAILED_MATCHES then
       callback({
         content = {
           string.format(
-            "Edit failed because %d matches was found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
-            #best_matches.matches
+            "Edit failed because %s were found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
+            match_description
           ),
         },
         display_content = {
@@ -252,10 +253,10 @@ one specific change with clear, unique context.
       callback({
         content = {
           string.format(
-            "Failed to edit %s since I couldn't find the exact text to replace (found %d%s matches instead of 1).",
+            "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",
             args.target_file,
-            #best_matches.matches,
-            best_matches.fuzzy and " fuzzy" or ""
+            match_description,
+            best_matches.fuzzy and " with fuzzy matching" or ""
           ),
         },
         display_content = {

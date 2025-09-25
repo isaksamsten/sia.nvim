@@ -161,17 +161,23 @@ end
 
 --- @param needle_str string The string to search for
 --- @param haystack_lines string[] Array of lines to search in
---- @param opts {threshold: number?, ignore_case: boolean?}? Options for matching
+--- @param opts {threshold: number?, ignore_case: boolean?, limit: integer?}? Options for matching
 --- @return {span: [integer, integer], col_span: [integer, integer], score: number}[]
 function M.find_inline_matches(needle_str, haystack_lines, opts)
   opts = opts or {}
   local threshold = opts.threshold
   local ignore_case = opts.ignore_case or false
+  local limit = opts.limit
   local matches = {}
 
   local search_needle = ignore_case and needle_str:lower() or needle_str
 
   for i, line in ipairs(haystack_lines) do
+    -- Early exit if we've reached the limit
+    if limit and #matches >= limit then
+      break
+    end
+    
     local search_line = ignore_case and line:lower() or line
 
     if threshold then
@@ -206,6 +212,11 @@ function M.find_inline_matches(needle_str, haystack_lines, opts)
     else
       local start_pos = 1
       while true do
+        -- Early exit if we've reached the limit
+        if limit and #matches >= limit then
+          break
+        end
+        
         local start_col = search_line:find(search_needle, start_pos, true)
         if not start_col then
           break
@@ -404,10 +415,10 @@ local function _find_best_match(needle, haystack)
 
   if #matches == 0 and #needle_lines == 1 then
     fuzzy = false
-    matches = M.find_inline_matches(needle_lines[1], haystack)
+    matches = M.find_inline_matches(needle_lines[1], haystack, { limit = 2 })
     if #matches == 0 then
       fuzzy = true
-      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true })
+      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true, limit = 2 })
     end
   end
 

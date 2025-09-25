@@ -270,4 +270,144 @@ T["sia.matcher"]["strip_line_numbers edge cases"] = function()
   eq("", stripped[1])
 end
 
+T["sia.matcher"]["multiple matches across different lines"] = function()
+  local match = matcher.find_best_match("hello", { "hello world", "goodbye", "hello again" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches)
+  eq(1, match.matches[1].span[1])
+  eq(1, match.matches[1].span[2])
+  eq(1, match.matches[1].col_span[1])
+  eq(5, match.matches[1].col_span[2])
+  eq(3, match.matches[2].span[1])
+  eq(3, match.matches[2].span[2])
+  eq(1, match.matches[2].col_span[1])
+  eq(5, match.matches[2].col_span[2])
+end
+
+T["sia.matcher"]["multiple matches same line overlapping"] = function()
+  local match = matcher.find_best_match("aa", { "aaa bbb", "other line" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches)
+  eq(1, match.matches[1].col_span[1])
+  eq(2, match.matches[1].col_span[2])
+  eq(2, match.matches[2].col_span[1])
+  eq(3, match.matches[2].col_span[2])
+end
+
+T["sia.matcher"]["multiple matches with case variations"] = function()
+  local match = matcher.find_best_match("Test", { "Test this TEST", "another line" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(1, #match.matches) -- Only exact case match should be found in non-fuzzy mode
+  eq(1, match.matches[1].col_span[1])
+  eq(4, match.matches[1].col_span[2])
+end
+
+T["sia.matcher"]["multiple matches fuzzy case insensitive"] = function()
+  local match = matcher.find_best_match("TEST", { "Test this test", "another line" })
+
+  eq(true, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches)
+  eq(1, match.matches[1].col_span[1])
+  eq(4, match.matches[1].col_span[2])
+  eq(11, match.matches[2].col_span[1])
+  eq(14, match.matches[2].col_span[2])
+end
+
+T["sia.matcher"]["multiple matches with whitespace"] = function()
+  local match = matcher.find_best_match("  test  ", { "  test  and   test  ", "other" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches)
+  eq(1, match.matches[1].col_span[1])
+  eq(8, match.matches[1].col_span[2])
+  eq(13, match.matches[2].col_span[1])
+  eq(20, match.matches[2].col_span[2])
+end
+
+T["sia.matcher"]["multiple matches empty needle"] = function()
+  local match = matcher.find_best_match("", { "", "not empty", "" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(0, #match.matches)
+end
+
+T["sia.matcher"]["multiple matches single character"] = function()
+  local match = matcher.find_best_match("a", { "banana", "apple", "xyz" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(true, #match.matches >= 2)
+end
+
+T["sia.matcher"]["multiple matches at line boundaries"] = function()
+  local match = matcher.find_best_match("end", { "at the end", "end of start", "middle", "end" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(1, #match.matches) -- Only finds the exact line match, not inline matches
+  eq(4, match.matches[1].span[1]) -- Line 4: "end"
+  eq(4, match.matches[1].span[2])
+  eq(nil, match.matches[1].col_span) -- Line matches don't have col_span
+  eq(1.0, match.matches[1].score)
+end
+
+T["sia.matcher"]["multiple inline matches only"] = function()
+  local match = matcher.find_best_match("cat", { "catch the cat", "concatenate", "dog" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches) -- Limited to 2 matches now
+  eq(1, match.matches[1].span[1])
+  eq(1, match.matches[1].span[2])
+  eq(1, match.matches[1].col_span[1])
+  eq(3, match.matches[1].col_span[2])
+  eq(1, match.matches[2].span[1])
+  eq(1, match.matches[2].span[2])
+  eq(11, match.matches[2].col_span[1])
+  eq(13, match.matches[2].col_span[2])
+end
+
+T["sia.matcher"]["inline matches with limit parameter"] = function()
+  local haystack = { "test this test that test" }
+
+  -- No limit - should find all 3 matches
+  local matches_no_limit = matcher.find_inline_matches("test", haystack)
+  eq(3, #matches_no_limit)
+
+  -- Limit to 2 - should find only 2 matches
+  local matches_limited = matcher.find_inline_matches("test", haystack, { limit = 2 })
+  eq(2, #matches_limited)
+
+  -- Limit to 1 - should find only 1 match
+  local matches_one = matcher.find_inline_matches("test", haystack, { limit = 1 })
+  eq(1, #matches_one)
+
+  -- Limit larger than matches available - should find all available
+  local matches_large_limit = matcher.find_inline_matches("test", haystack, { limit = 10 })
+  eq(3, #matches_large_limit)
+end
+
+T["sia.matcher"]["multiple matches with special characters"] = function()
+  local match = matcher.find_best_match("()", { "function() and ()", "() at start", "no match" })
+
+  eq(false, match.fuzzy)
+  eq(false, match.strip_line_number)
+  eq(2, #match.matches) -- Maximum of 2 matches returned
+  eq(1, match.matches[1].span[1])
+  eq(9, match.matches[1].col_span[1])
+  eq(10, match.matches[1].col_span[2])
+  eq(1, match.matches[2].span[1])
+  eq(16, match.matches[2].col_span[1])
+  eq(17, match.matches[2].col_span[2])
+end
+
 return T

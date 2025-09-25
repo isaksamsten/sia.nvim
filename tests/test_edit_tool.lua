@@ -314,7 +314,7 @@ T["sia.tools.edit"]["multiple matches found"] = function()
     true,
     string.find(result.content[1], "Failed to edit test%.txt since I couldn't find the exact text to replace") ~= nil
   )
-  eq(true, string.find(result.content[1], "found 3 matches instead of 1") ~= nil)
+  eq(true, string.find(result.content[1], "found multiple matches instead of exactly one") ~= nil)
   eq("❌ Failed to edit test.txt", result.display_content[1])
 
   restore_file_loader()
@@ -342,7 +342,7 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   edit_tool.execute(args, create_mock_conversation(1), callback, nil)
 
   local final_result = results[3]
-  eq(true, string.find(final_result.content[1], "Edit failed because 0 matches was found") ~= nil)
+  eq(true, string.find(final_result.content[1], "Edit failed because no matches were found") ~= nil)
   eq(true, string.find(final_result.content[1], "let the user manually make the change") ~= nil)
 
   restore_file_loader()
