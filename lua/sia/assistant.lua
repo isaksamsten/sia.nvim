@@ -226,11 +226,13 @@ function M.execute_strategy(strategy)
                       if not strategy:on_reasoning(delta.reasoning) then
                         vim.fn.jobstop(job_id)
                       end
-                    elseif delta.content and delta.content ~= "" then
+                    end
+                    if delta.content and delta.content ~= "" then
                       if not strategy:on_progress(delta.content) then
                         vim.fn.jobstop(job_id)
                       end
-                    elseif delta.tool_calls and delta.tool_calls ~= "" then
+                    end
+                    if delta.tool_calls and delta.tool_calls ~= "" then
                       if not strategy:on_tool_call(delta.tool_calls) then
                         vim.fn.jobstop(job_id)
                       end
