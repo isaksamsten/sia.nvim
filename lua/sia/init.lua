@@ -37,6 +37,37 @@ function M.accept_edits(opts)
   end
 end
 
+--- Accept a single edit at the current cursor position
+--- @param opts { buf: integer? }?
+function M.accept_edit(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local current_line = cursor[1]
+  
+  local diff = require("sia.diff")
+  local hunk_info = diff.get_hunk_at_line(buf, current_line)
+  
+  if not hunk_info then
+    vim.api.nvim_echo({ { "Sia: No change found at cursor position", "WarningMsg" } }, false, {})
+    return
+  end
+  
+  if diff.accept_single_hunk(buf, hunk_info.index) then
+    local remaining_count = diff.get_hunk_count(buf)
+    if remaining_count > 0 then
+      vim.api.nvim_echo({ { 
+        string.format("Sia: Accepted edit (%d changes remaining)", remaining_count), 
+        "Normal" 
+      } }, false, {})
+    else
+      vim.api.nvim_echo({ { "Sia: Accepted last edit", "Normal" } }, false, {})
+    end
+  else
+    vim.api.nvim_echo({ { "Sia: Failed to accept edit", "WarningMsg" } }, false, {})
+  end
+end
+
 --- @param opts { buf: integer? }?
 function M.reject_edits(opts)
   opts = opts or {}
@@ -439,6 +470,10 @@ function M.setup(options)
 
   vim.api.nvim_create_user_command("SiaAccept", function()
     M.accept_edits()
+  end, {})
+
+  vim.api.nvim_create_user_command("SiaAcceptEdit", function()
+    M.accept_edit()
   end, {})
 
   vim.api.nvim_create_user_command("SiaReject", function()

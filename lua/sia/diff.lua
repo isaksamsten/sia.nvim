@@ -134,6 +134,84 @@ function M.accept_diff(buf)
   end
 end
 
+--- Accept a single hunk (change) while preserving others
+--- @param buf number Buffer handle
+--- @param hunk_index number Index of the hunk to accept (1-based)
+--- @return boolean success Whether the hunk was successfully accepted
+function M.accept_single_hunk(buf, hunk_index)
+  local diff_state = buffer_diff_state[buf]
+  
+  if not diff_state or #diff_state.hunks == 0 then
+    return false
+  end
+  
+  if hunk_index < 1 or hunk_index > #diff_state.hunks then
+    return false
+  end
+  
+  -- Remove the specific hunk from tracking
+  local accepted_hunk = table.remove(diff_state.hunks, hunk_index)
+  
+  -- Clear all highlights first
+  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+  
+  -- If no more hunks, clean up completely
+  if #diff_state.hunks == 0 then
+    buffer_diff_state[buf] = nil
+    return true
+  end
+  
+  -- Re-apply highlights for remaining hunks without recalculating diff
+  local old_lines = diff_state.original_content
+  
+  for _, hunk in ipairs(diff_state.hunks) do
+    local old_start, old_count, new_start, new_count = hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count
+
+    -- Handle virtual lines for deleted content
+    if old_count > 0 then
+      local old_text_lines = {}
+      for i = 0, old_count - 1 do
+        local old_line_idx = old_start + i
+        if old_line_idx <= #old_lines then
+          table.insert(old_text_lines, old_lines[old_line_idx])
+        end
+      end
+
+      local line_idx = math.max(0, new_start - 1)
+      if line_idx <= vim.api.nvim_buf_line_count(buf) then
+        local virt_lines = {}
+        for _, old_line in ipairs(old_text_lines) do
+          table.insert(virt_lines, { { old_line, "DiffDelete" } })
+        end
+
+        vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+          virt_lines = virt_lines,
+          virt_lines_above = true,
+          priority = 100,
+        })
+      end
+    end
+
+    -- Handle highlighting for new/modified content
+    if new_count > 0 then
+      for i = 0, new_count - 1 do
+        local line_idx = new_start - 1 + i
+        if line_idx < vim.api.nvim_buf_line_count(buf) then
+          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
+          vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
+            end_col = 0,
+            hl_group = hl_group,
+            line_hl_group = hl_group,
+            priority = 100,
+          })
+        end
+      end
+    end
+  end
+  
+  return true
+end
+
 function M.reject_diff(buf)
   if buffer_diff_state[buf] then
     vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
@@ -226,6 +304,38 @@ function M.get_hunk_count(buf)
     return 0
   end
   return #diff_state.hunks
+end
+
+--- Get the hunk at a specific line (or containing the line)
+--- @param buf number Buffer handle
+--- @param line number Line number (1-based)
+--- @return {hunk: sia.diff.Hunk, index: number}? hunk_info Hunk containing the line and its index, or nil
+function M.get_hunk_at_line(buf, line)
+  local diff_state = buffer_diff_state[buf]
+
+  if not diff_state or #diff_state.hunks == 0 then
+    return nil
+  end
+
+  local hunks = diff_state.hunks
+
+  -- Find the hunk that contains this line
+  for i, hunk in ipairs(hunks) do
+    local hunk_start = hunk.new_start
+    local hunk_end = hunk_start + hunk.new_count - 1
+    
+    -- For delete-only hunks, check if the line is at the deletion point
+    if hunk.type == "delete" and line == hunk_start then
+      return { hunk = hunk, index = i }
+    end
+    
+    -- For other hunks, check if line is within the range
+    if hunk.new_count > 0 and line >= hunk_start and line <= hunk_end then
+      return { hunk = hunk, index = i }
+    end
+  end
+
+  return nil
 end
 
 --- Get all diff hunks for quickfix list
