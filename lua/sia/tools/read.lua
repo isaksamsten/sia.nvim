@@ -67,7 +67,7 @@ return tool_utils.new_tool({
 
       -- Calculate actual range
       local start_line = math.max(1, offset)
-      local end_line = math.min(total_lines, start_line + limit)
+      local end_line = math.min(total_lines, start_line + limit - 1)
 
       local content = utils.get_content(
         buf,
