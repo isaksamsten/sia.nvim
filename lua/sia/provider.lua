@@ -133,7 +133,7 @@ M.openrouter = {
     return os.getenv("OPENROUTER_API_KEY")
   end,
   --- @param model string
-  --- @param prompt sia.Prompt[]
+  --- @param prompts sia.Prompt[]
   format_messages = function(model, prompts)
     local should_cache = false
     for _, prefix in ipairs(OR_CACHING_PREFIXES) do
@@ -159,10 +159,12 @@ M.openrouter = {
         end
       end
       for i, prompt in ipairs(prompts) do
-        if i == last_system_idx then
-          prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
-        elseif i == last_user_idx then
-          prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
+        if i == last_user_idx or i == last_system_idx then
+          if type(prompt.content) == "string" then
+            prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
+          else
+            prompt.content[#prompt.content].cache_control = { type = "ephemeral" }
+          end
         end
       end
     end

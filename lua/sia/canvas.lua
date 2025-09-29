@@ -205,7 +205,7 @@ function ChatCanvas:render_messages(messages, model)
   for _, message in ipairs(messages) do
     if message:is_shown() then
       local content = message:get_content()
-      if content then
+      if content and type(content) == "string" then
         local line_count = vim.api.nvim_buf_line_count(self.buf)
         local heading = "/you"
         if message.role == "assistant" then

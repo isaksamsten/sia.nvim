@@ -1,8 +1,13 @@
 local tracker = require("sia.tracker")
 
+--- @alias sia.CacheControl {type: "ephemeral"}
+--- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
+--- @alias sia.InstructionFileContent {type: "file", file: {filename: string, file_data: string}, cache_control: sia.CacheControl?}
+--- @alias sia.InstructionImageContent {type: "image_url", image_url: {url: string, detail:"high"|"low"}, cache_control: sia.CacheControl?}
+--- @alias sia.InstructionContent sia.InstructionTextContent|sia.InstructionFileContent|sia.InstructionImageContent
 --- @class sia.Prompt
 --- @field role sia.config.Role
---- @field content (string|{type:string, text: string, cache_control: {type: "ephemeral"}?})?
+--- @field content (string|sia.InstructionContent[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field tool_call_id string?
 
@@ -29,7 +34,7 @@ local tracker = require("sia.tracker")
 --- @field context sia.Context?
 --- @field hide boolean?
 --- @field kind string?
---- @field content string?
+--- @field content (string|sia.InstructionContent[])?
 --- @field content_gen fun(context: sia.Context?):string
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
@@ -56,15 +61,21 @@ end
 
 --- @param instruction sia.config.Instruction
 --- @param context sia.Context?
+--- @return (string|sia.InstructionContent[])?
 local function make_content(instruction, context)
-  --- @type string?
+  --- @type (string|sia.InstructionContent[])?
   local content
   if type(instruction.content) == "function" then
     content = generate_content(instruction.content, context)
-  elseif type(instruction.content) == "table" then
+  -- This is a normal text content
+  elseif type(instruction.content) == "table" and type(instruction.content[1]) == "string" then
     local tmp = instruction.content
     --- @cast tmp string[]
     content = table.concat(tmp, "\n")
+  elseif type(instruction.content) == "table" then
+    local tmp = instruction.content
+    --- @cast tmp sia.InstructionContent[]
+    content = tmp
   elseif instruction.content ~= nil and type(instruction.content) == "string" then
     local tmp = instruction.content
     --- @cast tmp string
@@ -161,7 +172,7 @@ function Message:new(instruction, context)
   end
 end
 
---- @return string?
+--- @return (string|sia.InstructionContent[])?
 function Message:get_content()
   if self.content then
     if self:is_outdated() then
