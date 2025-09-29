@@ -70,7 +70,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         return
       end
 
-      local initial_code = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      diff.init_baseline(buf)
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -80,7 +80,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       end)
 
       if file_exists then
-        diff.highlight_diff_changes(buf, initial_code)
+        diff.highlight_diff_changes(buf)
       end
 
       local action = file_exists and "overwritten" or "created"

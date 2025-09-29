@@ -28,6 +28,30 @@ local function set_highlight_groups()
   end
 end
 
+function M.reject_edit(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  local win = vim.fn.bufwinid(buf)
+  local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
+
+  local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
+  if hunk_idx then
+    require("sia.diff").reject_single_hunk(buf, hunk_idx)
+  end
+end
+
+function M.accept_edit(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_get_current_buf()
+  local win = vim.fn.bufwinid(buf)
+  local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
+
+  local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
+  if hunk_idx then
+    require("sia.diff").accept_single_hunk(buf, hunk_idx)
+  end
+end
+
 --- @param opts { buf: integer? }?
 function M.accept_edits(opts)
   opts = opts or {}

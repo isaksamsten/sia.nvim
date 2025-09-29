@@ -150,6 +150,8 @@ one specific change with clear, unique context.
         else
           new_text_lines = vim.split(args.new_string, "\n")
         end
+
+        diff.init_baseline(buf)
         tracker.non_tracked_edit(buf, function()
           if match.col_span then
             vim.api.nvim_buf_set_text(
@@ -168,12 +170,12 @@ one specific change with clear, unique context.
           end)
         end)
         if choice == 1 or choice == 2 then
-          diff.highlight_diff_changes(buf, old_content)
+          diff.highlight_diff_changes(buf)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
           end
         elseif choice == 3 then
-          diff.show_diff_preview(buf, old_content)
+          diff.show_diff_preview(buf)
         end
 
         local new_content_lines = vim.api.nvim_buf_line_count(buf)
