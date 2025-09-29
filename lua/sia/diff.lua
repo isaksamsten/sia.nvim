@@ -1,25 +1,67 @@
 local M = {}
 
---- @alias sia.diff.Hunk {old_start: integer, old_count: integer, new_start: integer, new_count: integer, type: "change"|"add"|"delete"}
---- @type table<integer, {original_content: string[], hunks: sia.diff.Hunk[], autocommand_group: integer?, user_changes: boolean?}>
+--- @type vim.diff.Opts
+local DIFF_OPTS = {
+  result_type = "indices",
+}
+
+--- @class sia.diff.Hunk
+--- @field old_start integer
+--- @field old_count integer
+--- @field new_start integer
+--- @field new_count integer
+--- @field type "change"|"add"|"delete"
+
+--- @class sia.diff.DiffState
+--- @field baseline string[]
+--- @field reference string[]
+--- @field reference_hunks sia.diff.Hunk[]?
+--- @field baseline_hunks sia.diff.Hunk[]?
+--- @field autocommand_group integer?
+
+--- @type table<integer, sia.diff.DiffState>
 local buffer_diff_state = {}
-local diff_ns = vim.api.nvim_create_namespace("sia_diff_highlights")
+local diff_ns = vim.api.nvim_create_namespace("sia_diff")
 
 -- Debounce timer for auto-updates
+--- @type table<number, uv_timer_t>
 local update_timers = {}
+
+--- Clean up automatic diff updates for a buffer
+--- @param buf integer Buffer handle
+local function cleanup_auto_diff_updates(buf)
+  local diff_state = buffer_diff_state[buf]
+  if diff_state and diff_state.autocommand_group then
+    vim.api.nvim_del_augroup_by_id(diff_state.autocommand_group)
+    diff_state.autocommand_group = nil
+  end
+
+  if update_timers[buf] then
+    update_timers[buf]:stop()
+    update_timers[buf] = nil
+  end
+end
+
+local function cleanup(buf)
+  if not buffer_diff_state[buf] then
+    return
+  end
+  cleanup_auto_diff_updates(buf)
+  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+  buffer_diff_state[buf] = nil
+end
 
 --- Set up automatic diff updates for a buffer with diff state
 --- @param buf integer Buffer handle
 local function setup_auto_diff_updates(buf)
   local diff_state = buffer_diff_state[buf]
   if not diff_state or diff_state.autocommand_group then
-    return -- Already set up or no diff state
+    return
   end
 
   local group = vim.api.nvim_create_augroup("SiaDiffUpdates_" .. buf, { clear = true })
   diff_state.autocommand_group = group
 
-  -- Update diff on text changes with debouncing
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
     buffer = buf,
     group = group,
@@ -27,7 +69,6 @@ local function setup_auto_diff_updates(buf)
       if not buffer_diff_state[buf] then
         return
       end
-      buffer_diff_state[buf].user_changes = true
 
       if update_timers[buf] then
         update_timers[buf]:stop()
@@ -39,6 +80,9 @@ local function setup_auto_diff_updates(buf)
         if buffer_diff_state[buf] then
           M.update_diff(buf)
           M.highlight_hunks(buf)
+          if not buffer_diff_state[buf].reference_hunks then
+            cleanup(buf)
+          end
         end
       end, 150)
     end,
@@ -57,25 +101,98 @@ local function setup_auto_diff_updates(buf)
   })
 end
 
---- Clean up automatic diff updates for a buffer
---- @param buf integer Buffer handle
-local function cleanup_auto_diff_updates(buf)
-  local diff_state = buffer_diff_state[buf]
-  if diff_state and diff_state.autocommand_group then
-    vim.api.nvim_del_augroup_by_id(diff_state.autocommand_group)
-    diff_state.autocommand_group = nil
-  end
-
-  if update_timers[buf] then
-    update_timers[buf]:stop()
-    update_timers[buf] = nil
-  end
+--- @param content string[]
+local function has_trailing_nl(content)
+  return #content > 0 and content[#content]:sub(-1) == ""
 end
 
-local function cleanup(buf)
-  cleanup_auto_diff_updates(buf)
-  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-  buffer_diff_state[buf] = nil
+--- @param hunk sia.diff.Hunk
+--- @param baseline string[]
+--- @param current string[]
+--- @return sia.diff.Hunk
+local function expand_hunk(hunk, baseline, current)
+  local baseline_has_nl = has_trailing_nl(baseline)
+  local current_has_nl = has_trailing_nl(current)
+  if baseline_has_nl == current_has_nl then
+    return hunk
+  end
+  local baseline_end = hunk.old_start + hunk.old_count - 1
+  local current_end = hunk.new_start + hunk.new_count - 1
+
+  local new_count = hunk.new_count
+  local old_count = hunk.old_count
+  if current_has_nl and not baseline_has_nl and current_end == #current - 1 then
+    new_count = new_count + 1
+  end
+
+  if baseline_has_nl and not current_has_nl and baseline_end == #baseline - 1 then
+    old_count = old_count + 1
+  end
+  return {
+    new_start = hunk.new_start,
+    new_count = new_count,
+    old_start = hunk.old_start,
+    old_count = old_count,
+    type = hunk.type,
+  }
+end
+
+--- Apply a set of hunks to the baseline using current buffer content (modifies in place)
+--- @param baseline_lines string[] The baseline to modify in place
+--- @param hunks sia.diff.Hunk[] List of hunks to apply
+--- @param current_content string[] Current buffer content to get new lines from
+local function apply_hunks_to_baseline(baseline_lines, hunks, current_content)
+  -- Sort hunks by position in reverse order to apply them without affecting positions
+  local sorted_hunks = {}
+  for _, hunk in ipairs(hunks) do
+    table.insert(sorted_hunks, hunk)
+  end
+  table.sort(sorted_hunks, function(a, b)
+    return a.old_start > b.old_start
+  end)
+
+  for _, hunk in ipairs(sorted_hunks) do
+    if hunk.type == "add" then
+      local lines_to_insert = {}
+      for i = 0, hunk.new_count - 1 do
+        local line_idx = hunk.new_start + i
+        if line_idx <= #current_content then
+          table.insert(lines_to_insert, current_content[line_idx])
+        end
+      end
+
+      local insert_pos = hunk.old_start + 1
+      for i = #lines_to_insert, 1, -1 do
+        table.insert(baseline_lines, insert_pos, lines_to_insert[i])
+      end
+    elseif hunk.type == "delete" then
+      for i = hunk.old_count, 1, -1 do
+        local line_idx = hunk.old_start + i - 1
+        if baseline_lines[line_idx] ~= nil then
+          table.remove(baseline_lines, line_idx)
+        end
+      end
+    else -- "change"
+      local replacement_lines = {}
+      for i = 0, hunk.new_count - 1 do
+        local line_idx = hunk.new_start + i
+        if line_idx <= #current_content then
+          table.insert(replacement_lines, current_content[line_idx])
+        end
+      end
+
+      for i = hunk.old_count, 1, -1 do
+        local line_idx = hunk.old_start + i - 1
+        if baseline_lines[line_idx] ~= nil then
+          table.remove(baseline_lines, line_idx)
+        end
+      end
+
+      for i = #replacement_lines, 1, -1 do
+        table.insert(baseline_lines, hunk.old_start, replacement_lines[i])
+      end
+    end
+  end
 end
 
 ---@param buf integer
@@ -87,7 +204,7 @@ function M.show_diff_preview(buf)
   local timestamp = os.date("%H:%M:%S")
   vim.cmd("tabnew")
   local left_buf = vim.api.nvim_get_current_buf()
-  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, diff_state.original_content)
+  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, diff_state.baseline)
   vim.api.nvim_buf_set_name(left_buf, string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp))
   vim.bo[left_buf].buftype = "nofile"
   vim.bo[left_buf].buflisted = false
@@ -105,19 +222,76 @@ function M.show_diff_preview(buf)
   vim.api.nvim_set_current_win(right_win)
 end
 
-function M.init_baseline(buf)
-  if not buffer_diff_state[buf] then
+function M.init_change_tracking(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     buffer_diff_state[buf] = {
-      original_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
-      hunks = {},
+      baseline = vim.deepcopy(current_lines),
+      reference = current_lines,
+      reference_hunks = {},
       autocommand_group = nil,
     }
-    -- Set up automatic diff updates for this buffer
     setup_auto_diff_updates(buf)
+  else
+    M.update_diff(buf)
+    local baseline_hunks = diff_state.baseline_hunks
+    if not baseline_hunks then
+      return
+    end
+
+    local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    apply_hunks_to_baseline(diff_state.baseline, baseline_hunks, current_content)
+    diff_state.baseline_hunks = nil
   end
 end
 
---- Create diff hunks between the original content and current buffer content
+--- Get the diff state for a buffer
+---@param buf number Buffer handle
+---@return sia.diff.DiffState?
+function M.get_diff_state(buf)
+  return buffer_diff_state[buf]
+end
+
+--- Update the AI baseline to current buffer state (call after AI edits)
+---@param buf number Buffer handle
+function M.update_reference_content(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return
+  end
+  diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+end
+
+--- Check if content matches between two line ranges
+---@param lines1 string[] First array of lines
+---@param start1 number Start line in first array (1-based)
+---@param count1 number Number of lines in first array
+---@param lines2 string[] Second array of lines
+---@param start2 number Start line in second array (1-based)
+---@param count2 number Number of lines in second array
+---@return boolean matches True if the content in both ranges is identical
+local function ranges_match(lines1, start1, count1, lines2, start2, count2)
+  if count1 ~= count2 then
+    return false
+  end
+
+  if count1 == 0 then
+    return true
+  end
+
+  for i = 0, count1 - 1 do
+    local line1 = (start1 + i <= #lines1) and lines1[start1 + i] or ""
+    local line2 = (start2 + i <= #lines2) and lines2[start2 + i] or ""
+    if line1 ~= line2 then
+      return false
+    end
+  end
+
+  return true
+end
+
+--- Create diff hunks between baseline and current, categorized by AI vs user changes
 ---@param buf number Buffer handle
 ---@return boolean
 function M.update_diff(buf)
@@ -125,40 +299,118 @@ function M.update_diff(buf)
     return false
   end
 
-  local new_content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local current_content = table.concat(current_lines, "\n")
   local diff_state = buffer_diff_state[buf]
-  local baseline = table.concat(diff_state.original_content, "\n")
+  local baseline = table.concat(diff_state.baseline, "\n")
+  local reference = table.concat(diff_state.reference, "\n")
 
-  local diff_result = vim.diff(baseline, new_content, {
-    result_type = "indices",
-    algorithm = "patience",
-    linematch = true,
-  })
+  local total_hunk_indices = vim.diff(baseline, current_content, DIFF_OPTS) or {}
+  local reference_hunk_indices = vim.diff(baseline, reference, DIFF_OPTS) or {}
 
-  --- @cast diff_result integer[]
+  --- @cast reference_hunk_indices integer[]
+  --- @cast total_hunk_indices integer[]
 
-  if not diff_result then
-    return {}
+  local reference_ranges = {}
+  for _, hunk in ipairs(reference_hunk_indices) do
+    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+    table.insert(reference_ranges, {
+      start = old_start,
+      finish = old_start + old_count - 1,
+      count = old_count,
+      new_start = new_start,
+      new_count = new_count,
+    })
   end
 
-  local hunks = {}
-  for _, hunk in ipairs(diff_result) do
+  local reference_hunks = {}
+  local baseline_hunks = {}
+  for _, hunk in ipairs(total_hunk_indices) do
     local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+    local current_old_start = old_start
+    local current_old_finish = old_start + old_count - 1
 
-    local hunk_info = {
+    local reference_change = false
+
+    for _, reference_range in ipairs(reference_ranges) do
+      if old_count == 0 and reference_range.count == 0 then
+        -- Both are insertions - check if they're at the same position
+        if current_old_start == reference_range.start then
+          -- Check if the inserted content also matches
+          if
+            ranges_match(
+              current_lines,
+              new_start,
+              new_count,
+              diff_state.reference,
+              reference_range.new_start,
+              reference_range.new_count
+            )
+          then
+            reference_change = true
+          else
+            reference_change = false
+          end
+          break
+        end
+      elseif old_count == 0 or reference_range.count == 0 then
+        -- One is insertion, one is not - check if insertion point overlaps with the other's range
+        if old_count == 0 then
+          -- Current is insertion - check if it's within reference
+          if current_old_start >= reference_range.start and current_old_start <= reference_range.finish then
+            reference_change = false
+            break
+          end
+        else
+          -- Reference is insertion - check if it's within current's range
+          if reference_range.start >= current_old_start and reference_range.count <= current_old_finish then
+            reference_change = false
+            break
+          end
+        end
+      else
+        -- Both are changes/deletions - use standard range overlap
+        if current_old_start <= reference_range.finish and reference_range.start <= current_old_finish then
+          -- Check if it's an exact match (same range) or partial overlap
+          if current_old_start == reference_range.start and current_old_finish == reference_range.finish then
+            -- Range matches exactly, now check if content also matches
+            if
+              ranges_match(
+                current_lines,
+                new_start,
+                new_count,
+                diff_state.reference,
+                reference_range.new_start,
+                reference_range.new_count
+              )
+            then
+              reference_change = true
+            else
+              reference_change = false
+            end
+          else
+            reference_change = false
+          end
+          break
+        end
+      end
+    end
+    local final_hunk = {
       old_start = old_start,
       old_count = old_count,
       new_start = new_start,
       new_count = new_count,
       type = old_count > 0 and new_count > 0 and "change" or (new_count > 0 and "add" or "delete"),
     }
-    table.insert(hunks, hunk_info)
+    if reference_change then
+      table.insert(reference_hunks, final_hunk)
+    else
+      table.insert(baseline_hunks, final_hunk)
+    end
   end
 
-  diff_state.hunks = hunks
-  if #diff_state.hunks == 0 then
-    cleanup(buf)
-  end
+  diff_state.reference_hunks = #reference_hunks > 0 and reference_hunks or nil
+  diff_state.baseline_hunks = #baseline_hunks > 0 and baseline_hunks or nil
   return true
 end
 
@@ -168,7 +420,7 @@ function M.get_hunks(buf)
   if not diff_state then
     return nil
   end
-  return diff_state.hunks
+  return diff_state.reference_hunks
 end
 
 --- @return string[]?
@@ -177,12 +429,11 @@ function M.get_baseline(buf)
   if not diff_state then
     return nil
   end
-  return diff_state.original_content
+  return diff_state.baseline
 end
 
 --- Highlight the diff hunks in the buffer
 ---@param buf number Buffer handle
----@param hunks sia.diff.Hunk[]? Optional hunks array (if nil, uses stored hunks from diff state)
 function M.highlight_hunks(buf)
   vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
   if not buffer_diff_state[buf] then
@@ -190,53 +441,61 @@ function M.highlight_hunks(buf)
   end
 
   local diff_state = buffer_diff_state[buf]
-  local hunks = diff_state.hunks
+  local hunks = diff_state.reference_hunks
 
   if not hunks or #hunks == 0 then
     return
   end
 
-  local old_lines = diff_state.original_content
-
+  local old_lines = diff_state.baseline
   for _, hunk in ipairs(hunks) do
-    local old_start, old_count, new_start, new_count = hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count
-
-    if old_count > 0 then
+    local buf_line_count = vim.api.nvim_buf_line_count(buf)
+    if hunk.old_count > 0 then
       local old_text_lines = {}
-      for i = 0, old_count - 1 do
-        local old_line_idx = old_start + i
+      for i = 0, hunk.old_count - 1 do
+        local old_line_idx = hunk.old_start + i
         if old_line_idx <= #old_lines then
           table.insert(old_text_lines, old_lines[old_line_idx])
         end
       end
 
-      local line_idx = math.max(0, new_start - 1)
-      if line_idx <= vim.api.nvim_buf_line_count(buf) then
+      local line_idx = math.max(0, hunk.new_start - 1)
+      if line_idx <= buf_line_count then
         local virt_lines = {}
         for _, old_line in ipairs(old_text_lines) do
-          table.insert(virt_lines, { { old_line, "DiffDelete" } })
+          local pad = string.rep(" ", vim.o.columns - #old_line)
+          table.insert(virt_lines, { { old_line .. pad, "DiffDelete" } })
         end
 
         vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
           virt_lines = virt_lines,
-          virt_lines_above = false,
-          priority = 100,
+          virt_lines_above = true,
+          priority = 300,
           undo_restore = false,
         })
       end
     end
 
-    if new_count > 0 then
-      for i = 0, new_count - 1 do
-        local line_idx = new_start - 1 + i
-        if line_idx < vim.api.nvim_buf_line_count(buf) then
-          local hl_group = (old_count > 0) and "DiffChange" or "DiffAdd"
-          vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-            end_col = 0,
-            hl_group = hl_group,
+    if hunk.new_count > 0 then
+      local start_row = hunk.new_start - 1
+      local end_row = start_row + hunk.new_count
+      if start_row < buf_line_count then
+        if end_row > buf_line_count then
+          end_row = buf_line_count
+        end
+        local is_change = hunk.old_count > 0
+        local hl_group = is_change and "DiffChange" or "DiffAdd"
+        --- @type string?
+        local sign = is_change and "󰦒" or "+"
+        if not require("sia.config").options.defaults.ui.show_signs then
+          sign = nil
+        end
+        for i = start_row, end_row - 1, 1 do
+          vim.api.nvim_buf_set_extmark(buf, diff_ns, i, 0, {
+            sign_text = sign,
             line_hl_group = hl_group,
+            hl_eol = true,
             priority = 100,
-            undo_restore = false,
           })
         end
       end
@@ -261,35 +520,31 @@ function M.accept_diff(buf)
 end
 
 function M.reject_diff(buf)
-  if buffer_diff_state[buf] then
-    -- TODO: We should not drop user changes....
-    if not buffer_diff_state[buf].user_changes then
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, buffer_diff_state[buf].original_content)
-    end
-    cleanup(buf)
-    return true
-  else
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
     return false
   end
+
+  if not diff_state.reference_hunks then
+    return false
+  end
+
+  while #diff_state.reference_hunks > 0 do
+    M.reject_single_hunk(buf, 1)
+  end
+
+  cleanup(buf)
+  return true
 end
 
 function M.show_diff_for_buffer(buf)
   if buffer_diff_state[buf] then
     M.show_diff_preview(buf)
-    cleanup_auto_diff_updates(buf)
-    vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-    buffer_diff_state[buf] = nil
+    cleanup(buf)
     return true
   else
     return false
   end
-end
-
---- Check if a buffer has active diff state with auto-updates
---- @param buf integer Buffer handle
---- @return boolean
-function M.has_active_diff(buf)
-  return buffer_diff_state[buf] ~= nil
 end
 
 --- Get the next diff hunk position relative to current line
@@ -298,19 +553,17 @@ end
 --- @return { line: number, index: number }? hunk_info Position and index of next hunk, or nil if none
 function M.get_next_hunk(buf, current_line)
   local diff_state = buffer_diff_state[buf]
-
-  if not diff_state or #diff_state.hunks == 0 then
+  if not diff_state then
     return nil
   end
 
-  local hunks = diff_state.hunks
+  local hunks = diff_state.reference_hunks
+  if not hunks then
+    return nil
+  end
 
-  -- Find the first hunk after current line
   for i, hunk in ipairs(hunks) do
     local hunk_line = hunk.new_start
-    if hunk.type == "delete" then
-      hunk_line = hunk.old_start
-    end
     if hunk_line > current_line then
       return { line = hunk_line, index = i }
     end
@@ -330,14 +583,15 @@ end
 --- @return { line: number, index: number }? hunk_info
 function M.get_prev_hunk(buf, current_line)
   local diff_state = buffer_diff_state[buf]
-
-  if not diff_state or #diff_state.hunks == 0 then
+  if not diff_state then
     return nil
   end
 
-  local hunks = diff_state.hunks
+  local hunks = diff_state.reference_hunks
+  if not hunks then
+    return nil
+  end
 
-  -- Find the last hunk before current line
   for i = #hunks, 1, -1 do
     local hunk = hunks[i]
     local hunk_line = hunk.new_start
@@ -346,7 +600,6 @@ function M.get_prev_hunk(buf, current_line)
     end
   end
 
-  -- If no hunk found before current line, wrap to last hunk
   if #hunks > 0 then
     local last_hunk = hunks[#hunks]
     return { line = last_hunk.new_start, index = #hunks }
@@ -363,7 +616,7 @@ function M.get_hunk_count(buf)
   if not diff_state then
     return 0
   end
-  return #diff_state.hunks
+  return diff_state.reference_hunks and #diff_state.reference_hunks or 0
 end
 
 --- Get all diff hunks for quickfix list
@@ -374,17 +627,17 @@ function M.get_all_hunks_for_quickfix(buf)
 
   if buf then
     local diff_state = buffer_diff_state[buf]
-    if diff_state and diff_state.hunks then
+    if diff_state and diff_state.reference_hunks then
       local bufname = vim.api.nvim_buf_get_name(buf)
       local line_count = vim.api.nvim_buf_line_count(buf)
 
-      for i, hunk in ipairs(diff_state.hunks) do
+      for i, hunk in ipairs(diff_state.reference_hunks) do
         if hunk.new_start > 0 and hunk.new_start <= line_count then
           local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
           local text = string.format(
             "Edit %d/%d: %s lines %d-%d",
             i,
-            #diff_state.hunks,
+            #diff_state.reference_hunks,
             hunk_type,
             hunk.new_start,
             hunk.new_start + hunk.new_count - 1
@@ -402,17 +655,17 @@ function M.get_all_hunks_for_quickfix(buf)
     end
   else
     for buffer_id, diff_state in pairs(buffer_diff_state) do
-      if diff_state.hunks and vim.api.nvim_buf_is_valid(buffer_id) then
+      if diff_state.reference_hunks and vim.api.nvim_buf_is_valid(buffer_id) then
         local bufname = vim.api.nvim_buf_get_name(buffer_id)
         local line_count = vim.api.nvim_buf_line_count(buffer_id)
 
-        for i, hunk in ipairs(diff_state.hunks) do
+        for i, hunk in ipairs(diff_state.reference_hunks) do
           if hunk.new_start > 0 and hunk.new_start <= line_count then
             local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
             local text = string.format(
               "Edit %d/%d: %s lines %d-%d",
               i,
-              #diff_state.hunks,
+              #diff_state.reference_hunks,
               hunk_type,
               hunk.new_start,
               hunk.new_start + hunk.new_count - 1
@@ -440,59 +693,22 @@ end
 --- @return boolean success True if hunk was successfully accepted
 function M.accept_single_hunk(buf, hunk_index)
   local diff_state = buffer_diff_state[buf]
-  if not diff_state or not diff_state.hunks or hunk_index < 1 or hunk_index > #diff_state.hunks then
+  if not diff_state or not diff_state.reference_hunks or hunk_index < 1 or hunk_index > #diff_state.reference_hunks then
     return false
   end
 
-  local hunk = diff_state.hunks[hunk_index]
-  local original_content = vim.tbl_deep_extend("force", {}, diff_state.original_content)
+  local hunk = diff_state.reference_hunks[hunk_index]
   local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-
-  if hunk.type == "add" then
-    local lines_to_insert = {}
-    for i = 0, hunk.new_count - 1 do
-      local line_idx = hunk.new_start + i
-      if current_content[line_idx] then
-        table.insert(lines_to_insert, current_content[line_idx])
-      end
-    end
-
-    local insert_pos = hunk.old_start + 1
-    for i = #lines_to_insert, 1, -1 do
-      table.insert(original_content, insert_pos, lines_to_insert[i])
-    end
-  elseif hunk.type == "delete" then
-    for i = hunk.old_count, 1, -1 do
-      local line_idx = hunk.old_start + i - 1
-      if original_content[line_idx] then
-        table.remove(original_content, line_idx)
-      end
-    end
-  else -- "change"
-    local replacement_lines = {}
-    for i = 0, hunk.new_count - 1 do
-      local line_idx = hunk.new_start + i
-      if current_content[line_idx] then
-        table.insert(replacement_lines, current_content[line_idx])
-      end
-    end
-
-    for i = hunk.old_count, 1, -1 do
-      local line_idx = hunk.old_start + i - 1
-      if original_content[line_idx] then
-        table.remove(original_content, line_idx)
-      end
-    end
-
-    for i = #replacement_lines, 1, -1 do
-      table.insert(original_content, hunk.old_start, replacement_lines[i])
-    end
+  if hunk_index == #diff_state.reference_hunks then
+    hunk = expand_hunk(hunk, diff_state.baseline, current_content)
   end
-
-  diff_state.original_content = original_content
+  apply_hunks_to_baseline(diff_state.baseline, { hunk }, current_content)
 
   M.update_diff(buf)
   M.highlight_hunks(buf)
+  if not diff_state.reference_hunks then
+    cleanup(buf)
+  end
 
   return true
 end
@@ -503,19 +719,22 @@ end
 --- @return boolean success True if hunk was successfully rejected
 function M.reject_single_hunk(buf, hunk_index)
   local diff_state = buffer_diff_state[buf]
-  if not diff_state or not diff_state.hunks or hunk_index < 1 or hunk_index > #diff_state.hunks then
+  if not diff_state or not diff_state.reference_hunks or hunk_index < 1 or hunk_index > #diff_state.reference_hunks then
     return false
   end
 
-  local hunk = diff_state.hunks[hunk_index]
-  local original_content = diff_state.original_content
+  local hunk = diff_state.reference_hunks[hunk_index]
+  if hunk_index == #diff_state.reference_hunks then
+    hunk = expand_hunk(hunk, diff_state.baseline, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+  end
+  local baseline = diff_state.baseline
 
   local replacement_lines = {}
   if hunk.old_count > 0 then
     for i = 0, hunk.old_count - 1 do
       local line_idx = hunk.old_start + i
-      if original_content[line_idx] then
-        table.insert(replacement_lines, original_content[line_idx])
+      if line_idx <= #baseline then
+        table.insert(replacement_lines, baseline[line_idx])
       end
     end
   end
@@ -533,8 +752,8 @@ function M.reject_single_hunk(buf, hunk_index)
     local insert_pos = 0
 
     -- If there are lines after the deleted section in original
-    if hunk.old_start + hunk.old_count <= #original_content then
-      local next_original_line = original_content[hunk.old_start + hunk.old_count]
+    if hunk.old_start + hunk.old_count <= #baseline then
+      local next_original_line = baseline[hunk.old_start + hunk.old_count]
       local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
       for i, line in ipairs(current_content) do
@@ -562,6 +781,9 @@ function M.reject_single_hunk(buf, hunk_index)
 
   M.update_diff(buf)
   M.highlight_hunks(buf)
+  if not diff_state.reference_hunks then
+    cleanup(buf)
+  end
 
   return true
 end
@@ -572,19 +794,14 @@ end
 --- @return number? hunk_index 1-based index of the hunk at this line, or nil if no hunk found
 function M.get_hunk_at_line(buf, line)
   local diff_state = buffer_diff_state[buf]
-  if not diff_state or not diff_state.hunks then
+  if not diff_state or not diff_state.reference_hunks then
     return nil
   end
 
-  for i, hunk in ipairs(diff_state.hunks) do
-    if hunk.type == "delete" then
-      if line == hunk.old_start then
-        return i
-      end
-    else
-      if line >= hunk.new_start and line < (hunk.new_start + hunk.new_count) then
-        return i
-      end
+  for i, hunk in ipairs(diff_state.reference_hunks) do
+    local end_line = hunk.new_count == 0 and line == hunk.new_start or line < (hunk.new_start + hunk.new_count)
+    if end_line and line >= hunk.new_start then
+      return i
     end
   end
 

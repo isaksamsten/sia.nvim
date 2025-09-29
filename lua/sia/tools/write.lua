@@ -70,7 +70,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         return
       end
 
-      diff.init_baseline(buf)
+      diff.init_change_tracking(buf)
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -78,6 +78,7 @@ For small, targeted changes, prefer the edit tool instead.]],
           pcall(vim.cmd, "noa silent write!")
         end)
       end)
+      diff.update_reference_content(buf)
 
       if file_exists then
         diff.highlight_diff_changes(buf)

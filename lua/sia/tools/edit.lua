@@ -151,7 +151,7 @@ one specific change with clear, unique context.
           new_text_lines = vim.split(args.new_string, "\n")
         end
 
-        diff.init_baseline(buf)
+        diff.init_change_tracking(buf)
         tracker.non_tracked_edit(buf, function()
           if match.col_span then
             vim.api.nvim_buf_set_text(
@@ -169,6 +169,7 @@ one specific change with clear, unique context.
             pcall(vim.cmd, "noa silent write!")
           end)
         end)
+        diff.update_reference_content(buf)
         if choice == 1 or choice == 2 then
           diff.highlight_diff_changes(buf)
           if choice == 2 then
