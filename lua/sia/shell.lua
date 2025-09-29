@@ -1,5 +1,19 @@
 local M = {}
 
+-- TODO: Fix potential memory/disk issues with large output from long-running commands:
+-- 1. Unbounded temp file growth - stdout is redirected to temp files with no size limit
+-- 2. Memory exhaustion - entire temp file is loaded into memory before truncation
+-- 3. Late truncation - output is truncated AFTER being fully loaded (lines 288-291)
+-- 4. Disk space issues - long-running programs could fill up /tmp
+-- 5. UI freeze - loading huge files could make Neovim unresponsive
+--
+-- Potential solutions:
+-- - Stream processing: read files in chunks rather than all at once
+-- - Early truncation: monitor file size during execution and truncate temp file itself
+-- - Size limits: set maximum file size limits on redirected output
+-- - Tail-only reading: for very large files, only read the last N lines
+-- - Check file size before reading with vim.fn.getfsize()
+
 ---@class sia.Shell
 ---@field private process vim.SystemObj? vim.system process handle
 ---@field private cwd string current working directory
@@ -87,13 +101,9 @@ function Shell:_start_shell()
     stdout = false,
     stderr = false,
     text = true,
-  }, function(result)
+  }, function(_)
     self.is_alive = false
     self:_cleanup_temp_files()
-
-    if result.code ~= 0 then
-      vim.notify(string.format("Sia: shell exited with code %d", result.code), vim.log.levels.WARN)
-    end
   end)
 
   if self.process then
@@ -343,9 +353,7 @@ end
 ---@private
 function Shell:_cleanup_temp_files()
   for _, file in pairs(self.temp_files) do
-    if vim.fn.filereadable(file) == 1 then
-      vim.fn.delete(file)
-    end
+    vim.uv.fs_unlink(file)
   end
 end
 
