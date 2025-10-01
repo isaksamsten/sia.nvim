@@ -259,7 +259,7 @@ end
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
---- @field ui {use_vim_ui: boolean?}?
+--- @field ui {use_vim_ui: boolean?, show_signs: boolean?}?
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -274,10 +274,7 @@ end
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
-M.options = {}
-
---- @type sia.config.Options
-local defaults = {
+M.options = {
   providers = {
     openai = providers.openai,
     copilot = providers.copilot,
@@ -360,6 +357,7 @@ local defaults = {
     },
     ui = {
       use_vim_ui = false,
+      show_signs = true,
     },
     tools = {
       enable = true,
@@ -468,7 +466,7 @@ local defaults = {
 }
 
 function M.setup(options)
-  M.options = vim.tbl_deep_extend("force", {}, defaults, options or {})
+  M.options = vim.tbl_deep_extend("force", {}, M.options, options or {})
 end
 
 return M
