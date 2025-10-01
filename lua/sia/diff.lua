@@ -464,14 +464,16 @@ function M.highlight_hunks(buf)
         end
         local is_change = hunk.old_count > 0
         local hl_group = is_change and "DiffChange" or "DiffAdd"
+        local sign_hl = is_change and "GitSignsChange" or "GitSignsAdd"
         --- @type string?
-        local sign = is_change and "󰦒" or "+"
+        local sign = is_change and "▎" or "▎"
         if not require("sia.config").options.defaults.ui.show_signs then
           sign = nil
         end
         for i = start_row, end_row - 1, 1 do
           vim.api.nvim_buf_set_extmark(buf, diff_ns, i, 0, {
             sign_text = sign,
+            sign_hl_group = sign_hl,
             line_hl_group = hl_group,
             hl_eol = true,
             priority = 100,
@@ -504,10 +506,10 @@ function M.reject_diff(buf)
   end
 
   if not diff_state.reference_hunks then
-    return false
+    return true
   end
 
-  while #diff_state.reference_hunks > 0 do
+  while diff_state.reference_hunks and #diff_state.reference_hunks > 0 do
     M.reject_single_hunk(buf, 1)
   end
 
