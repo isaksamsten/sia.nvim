@@ -106,6 +106,7 @@ local function has_trailing_nl(content)
   return #content > 0 and content[#content]:sub(-1) == ""
 end
 
+--- Expand the last hunk to include newline differences
 --- @param hunk sia.diff.Hunk
 --- @param baseline string[]
 --- @param current string[]
@@ -142,7 +143,6 @@ end
 --- @param hunks sia.diff.Hunk[] List of hunks to apply
 --- @param current_content string[] Current buffer content to get new lines from
 local function apply_hunks_to_baseline(baseline_lines, hunks, current_content)
-  -- Sort hunks by position in reverse order to apply them without affecting positions
   local sorted_hunks = {}
   for _, hunk in ipairs(hunks) do
     table.insert(sorted_hunks, hunk)
@@ -253,7 +253,7 @@ function M.get_diff_state(buf)
   return buffer_diff_state[buf]
 end
 
---- Update the AI baseline to current buffer state (call after AI edits)
+--- Update the reference baseline to current buffer state
 ---@param buf number Buffer handle
 function M.update_reference_content(buf)
   local diff_state = buffer_diff_state[buf]
@@ -291,9 +291,47 @@ local function ranges_match(lines1, start1, count1, lines2, start2, count2)
   return true
 end
 
+--- Check if a hunk matches a reference range
+---@param hunk sia.diff.Hunk
+---@param reference_range { start: number, finish: number, count: number, new_start: number, new_count: number }
+---@param current_lines string[] Current buffer content
+---@param reference_lines string[] Reference content
+---@return boolean is_reference_change True if this hunk matches the reference change
+local function is_reference_hunk(hunk, reference_range, current_lines, reference_lines)
+  if hunk.old_count == 0 and reference_range.count == 0 then
+    -- Both are insertions - check if they're at the same position
+    if hunk.old_start == reference_range.start then
+      return ranges_match(
+        current_lines,
+        hunk.new_start,
+        hunk.new_count,
+        reference_lines,
+        reference_range.new_start,
+        reference_range.new_count
+      )
+    end
+  else
+    -- Both are changes/deletions - check if it's an exact match
+    local current_old_finish = hunk.old_start + hunk.old_count - 1
+    if hunk.old_start == reference_range.start and current_old_finish == reference_range.finish then
+      -- Range matches exactly, now check if content also matches
+      return ranges_match(
+        current_lines,
+        hunk.new_start,
+        hunk.new_count,
+        reference_lines,
+        reference_range.new_start,
+        reference_range.new_count
+      )
+    end
+  end
+
+  return false
+end
+
 --- Create diff hunks between baseline and current, categorized by AI vs user changes
 ---@param buf number Buffer handle
----@return boolean
+---@return boolean should_update_highlights
 function M.update_diff(buf)
   if not buffer_diff_state[buf] then
     return false
@@ -308,8 +346,8 @@ function M.update_diff(buf)
   local total_hunk_indices = vim.diff(baseline, current_content, DIFF_OPTS) or {}
   local reference_hunk_indices = vim.diff(baseline, reference, DIFF_OPTS) or {}
 
-  --- @cast reference_hunk_indices integer[]
-  --- @cast total_hunk_indices integer[]
+  --- @cast reference_hunk_indices integer[][]
+  --- @cast total_hunk_indices integer[][]
 
   local reference_ranges = {}
   for _, hunk in ipairs(reference_hunk_indices) do
@@ -327,74 +365,7 @@ function M.update_diff(buf)
   local baseline_hunks = {}
   for _, hunk in ipairs(total_hunk_indices) do
     local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
-    local current_old_start = old_start
-    local current_old_finish = old_start + old_count - 1
-
-    local reference_change = false
-
-    for _, reference_range in ipairs(reference_ranges) do
-      if old_count == 0 and reference_range.count == 0 then
-        -- Both are insertions - check if they're at the same position
-        if current_old_start == reference_range.start then
-          -- Check if the inserted content also matches
-          if
-            ranges_match(
-              current_lines,
-              new_start,
-              new_count,
-              diff_state.reference,
-              reference_range.new_start,
-              reference_range.new_count
-            )
-          then
-            reference_change = true
-          else
-            reference_change = false
-          end
-          break
-        end
-      elseif old_count == 0 or reference_range.count == 0 then
-        -- One is insertion, one is not - check if insertion point overlaps with the other's range
-        if old_count == 0 then
-          -- Current is insertion - check if it's within reference
-          if current_old_start >= reference_range.start and current_old_start <= reference_range.finish then
-            reference_change = false
-            break
-          end
-        else
-          -- Reference is insertion - check if it's within current's range
-          if reference_range.start >= current_old_start and reference_range.count <= current_old_finish then
-            reference_change = false
-            break
-          end
-        end
-      else
-        -- Both are changes/deletions - use standard range overlap
-        if current_old_start <= reference_range.finish and reference_range.start <= current_old_finish then
-          -- Check if it's an exact match (same range) or partial overlap
-          if current_old_start == reference_range.start and current_old_finish == reference_range.finish then
-            -- Range matches exactly, now check if content also matches
-            if
-              ranges_match(
-                current_lines,
-                new_start,
-                new_count,
-                diff_state.reference,
-                reference_range.new_start,
-                reference_range.new_count
-              )
-            then
-              reference_change = true
-            else
-              reference_change = false
-            end
-          else
-            reference_change = false
-          end
-          break
-        end
-      end
-    end
+    --- @type sia.diff.Hunk
     local final_hunk = {
       old_start = old_start,
       old_count = old_count,
@@ -402,6 +373,14 @@ function M.update_diff(buf)
       new_count = new_count,
       type = old_count > 0 and new_count > 0 and "change" or (new_count > 0 and "add" or "delete"),
     }
+    local reference_change = false
+    for _, reference_range in ipairs(reference_ranges) do
+      if is_reference_hunk(final_hunk, reference_range, current_lines, diff_state.reference) then
+        reference_change = true
+        break
+      end
+    end
+
     if reference_change then
       table.insert(reference_hunks, final_hunk)
     else
@@ -411,7 +390,7 @@ function M.update_diff(buf)
 
   diff_state.reference_hunks = #reference_hunks > 0 and reference_hunks or nil
   diff_state.baseline_hunks = #baseline_hunks > 0 and baseline_hunks or nil
-  return true
+  return diff_state.reference_hunks ~= nil
 end
 
 --- @return sia.diff.Hunk[]?
@@ -503,9 +482,8 @@ function M.highlight_hunks(buf)
   end
 end
 
---- Legacy function that combines diff and highlight for backward compatibility
----@param buf number Buffer handle
-function M.highlight_diff_changes(buf)
+---@param buf number
+function M.update_and_highlight_diff(buf)
   M.update_diff(buf)
   M.highlight_hunks(buf)
 end
@@ -739,14 +717,9 @@ function M.reject_single_hunk(buf, hunk_index)
     end
   end
 
-  -- Handle different hunk types
   local start_line, end_line
 
   if hunk.type == "delete" then
-    -- For deletion hunks, we need to insert the deleted lines back at the correct position
-    -- We need to map the original position to current buffer considering previous changes
-    -- The safest approach is to find where to insert by looking at surrounding context
-
     -- Find the position where the deleted lines should be inserted
     -- by looking at the line that should come after the deleted content
     local insert_pos = 0

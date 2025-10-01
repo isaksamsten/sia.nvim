@@ -81,7 +81,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       diff.update_reference_content(buf)
 
       if file_exists then
-        diff.highlight_diff_changes(buf)
+        diff.update_and_highlight_diff(buf)
       end
 
       local action = file_exists and "overwritten" or "created"

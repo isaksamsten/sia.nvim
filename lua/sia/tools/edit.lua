@@ -171,7 +171,7 @@ one specific change with clear, unique context.
         end)
         diff.update_reference_content(buf)
         if choice == 1 or choice == 2 then
-          diff.highlight_diff_changes(buf)
+          diff.update_and_highlight_diff(buf)
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
           end

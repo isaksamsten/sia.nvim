@@ -140,7 +140,7 @@ example: // ... existing code ...  ]],
         choices = CHOICES,
         on_accept = function(choice)
           if choice == 1 or choice == 2 then
-            diff.highlight_diff_changes(buf, initial_code)
+            diff.update_and_highlight_diff(buf, initial_code)
             if choice == 2 then
               conversation.auto_confirm_tools["edit"] = 1
             end
