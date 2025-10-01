@@ -37,24 +37,37 @@ function M.ensure_tracked(buf)
     M.tracked_buffers[buf] = { tick = 0, editing = false }
 
     local group = vim.api.nvim_create_augroup("SiaTracker_" .. buf, { clear = true })
+
+    local function cleanup()
+      M.tracked_buffers[buf] = nil
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+    end
+
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       buffer = buf,
       group = group,
       callback = function()
         local tracker = M.tracked_buffers[buf]
+        if not tracker then
+          cleanup()
+          return
+        end
         if not tracker.editing then
           tracker.tick = tracker.tick + 1
         end
       end,
     })
 
-    -- Temporarily disable tracking when just entering a buffer
     vim.api.nvim_create_autocmd("BufEnter", {
       buffer = buf,
       group = group,
       callback = function()
         local tracker = M.tracked_buffers[buf]
-        if tracker and not tracker.editing then
+        if not tracker then
+          cleanup()
+          return
+        end
+        if not tracker.editing then
           tracker.editing = true
           vim.defer_fn(function()
             tracker.editing = false
@@ -68,7 +81,7 @@ function M.ensure_tracked(buf)
       group = group,
       once = true,
       callback = function()
-        M.tracked_buffers[buf] = nil
+        cleanup()
       end,
     })
   end
