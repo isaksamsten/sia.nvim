@@ -148,6 +148,7 @@ function M.execute_strategy(strategy)
     local timer
     if is_initial then
       if not strategy:on_init() then
+        strategy.is_busy = false
         strategy:on_error()
         return
       end
@@ -188,7 +189,10 @@ function M.execute_strategy(strategy)
           end
           if not error_initialize then
             if not strategy:on_start() then
+              strategy.is_busy = false
+              strategy:on_error()
               vim.fn.jobstop(job_id)
+              return
             end
             vim.api.nvim_exec_autocmds("User", {
               pattern = "SiaStart",

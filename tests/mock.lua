@@ -4,6 +4,13 @@ M.old_jobstart = vim.fn.jobstart
 
 function M.mock_fn_jobstart(data)
   vim.fn.jobstart = function(_, job_opts)
+    -- Check if this is an error response
+    if data.error then
+      job_opts.on_stdout(1, { vim.json.encode(data) }, 10)
+      job_opts.on_exit(1, 0, nil)
+      return 1
+    end
+
     for _, datum in ipairs(data) do
       job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
     end

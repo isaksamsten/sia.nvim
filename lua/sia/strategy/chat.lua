@@ -176,102 +176,111 @@ end
 
 function ChatStrategy:on_complete(control)
   if not self._writer then
+    control.finish()
     return
   end
 
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:scroll_to_bottom()
-    if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
-      self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
+  if not vim.api.nvim_buf_is_loaded(self.buf) then
+    control.finish()
+    return
+  end
+
+  self.canvas:scroll_to_bottom()
+  if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
+    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
+  end
+  local handle_cleanup = function()
+    if not vim.api.nvim_buf_is_loaded(self.buf) then
+      control.finish()
+      return
     end
-    local handle_cleanup = function()
-      self:del_abort_keymap(self.buf)
-      self.canvas:clear_extmarks()
-      if control.usage then
-        self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
-      end
-      vim.bo[self.buf].modifiable = false
-      if not self._is_named then
-        local config = require("sia.config")
-        require("sia.assistant").execute_query({
-          model = config.get_default_model("fast_model"),
-          prompt = {
-            {
-              role = "system",
-              content = [[Summarize the interaction. Make it suitable for a
+
+    self:del_abort_keymap(self.buf)
+    self.canvas:clear_extmarks()
+    if control.usage then
+      self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+    end
+    vim.bo[self.buf].modifiable = false
+    if not self._is_named then
+      local config = require("sia.config")
+      require("sia.assistant").execute_query({
+        model = config.get_default_model("fast_model"),
+        prompt = {
+          {
+            role = "system",
+            content = [[Summarize the interaction. Make it suitable for a
 buffer name in neovim using three to five words separated by
 spaces. Only output the name, nothing else.]],
-            },
-            {
-              role = "user",
-              content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
-            },
           },
-        }, function(resp)
-          if resp then
-            self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-            pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
-          end
-          self._is_named = true
-          control.finish()
-        end)
-      else
+          {
+            role = "user",
+            content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
+          },
+        },
+      }, function(resp)
+        if resp then
+          self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
+          pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+        end
+        self._is_named = true
         control.finish()
-      end
+      end)
+    else
+      control.finish()
     end
-
-    self:execute_tools({
-      cancellable = self.cancellable,
-      handle_status_updates = function(statuses)
-        local status_icons = { pending = " ", running = " ", done = " " }
-        local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
-        local lines = {}
-        for _, s in ipairs(statuses) do
-          local icon = status_icons[s.status] or ""
-          local friendly_message = s.tool.message
-          local label = friendly_message or (s.tool.name or "tool")
-          local hl = status_hl[s.status] or "NonText"
-          table.insert(lines, { { icon, hl }, { label, "NonText" } })
-        end
-        self.canvas:update_tool_progress(lines)
-      end,
-      handle_tools_completion = function(opts)
-        -- Add all tool instructions in order
-        if opts.results then
-          for _, tool_result in ipairs(opts.results) do
-            if tool_result.result.display_content then
-              self.canvas:append_tool_result(tool_result.result.display_content)
-            end
-            self.conversation:add_instruction({
-              { role = "assistant", tool_calls = { tool_result.tool } },
-              {
-                role = "tool",
-                content = tool_result.result.content,
-                _tool_call = tool_result.tool,
-                kind = tool_result.result.kind,
-              },
-            }, tool_result.result.context)
-          end
-        end
-
-        if opts.cancelled then
-          self:confirm_continue_after_cancelled_tool({
-            continue_execution = control.continue_execution,
-            finish = function()
-              handle_cleanup()
-              self.canvas:update_progress({ { "Waiting for user...", "NonText" } })
-            end,
-          })
-        else
-          control.continue_execution()
-        end
-      end,
-      handle_empty_toolset = function()
-        handle_cleanup()
-      end,
-    })
-    self._writer = nil
   end
+
+  self:execute_tools({
+    cancellable = self.cancellable,
+    handle_status_updates = function(statuses)
+      local status_icons = { pending = " ", running = " ", done = " " }
+      local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
+      local lines = {}
+      for _, s in ipairs(statuses) do
+        local icon = status_icons[s.status] or ""
+        local friendly_message = s.tool.message
+        local label = friendly_message or (s.tool.name or "tool")
+        local hl = status_hl[s.status] or "NonText"
+        table.insert(lines, { { icon, hl }, { label, "NonText" } })
+      end
+      self.canvas:update_tool_progress(lines)
+    end,
+    handle_tools_completion = function(opts)
+      -- Add all tool instructions in order
+      if opts.results then
+        for _, tool_result in ipairs(opts.results) do
+          if tool_result.result.display_content then
+            self.canvas:append_tool_result(tool_result.result.display_content)
+          end
+          self.conversation:add_instruction({
+            { role = "assistant", tool_calls = { tool_result.tool } },
+            {
+              role = "tool",
+              content = tool_result.result.content,
+              _tool_call = tool_result.tool,
+              kind = tool_result.result.kind,
+            },
+          }, tool_result.result.context)
+        end
+      end
+
+      if opts.cancelled then
+        self:confirm_continue_after_cancelled_tool({
+          continue_execution = control.continue_execution,
+          finish = function()
+            handle_cleanup()
+            self.canvas:update_progress({ { "Waiting for user...", "NonText" } })
+          end,
+        })
+      else
+        control.continue_execution()
+      end
+    end,
+    handle_empty_toolset = function()
+      handle_cleanup()
+    end,
+  })
+  self._writer = nil
 end
 
 --- Get the ChatStrategy associated with buf
