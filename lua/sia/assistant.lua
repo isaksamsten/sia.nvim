@@ -327,10 +327,10 @@ function M.execute_query(query, callback)
     on_exit = function()
       if response ~= "" then
         local ok, json = pcall(vim.json.decode, response, { luanil = { object = true } })
-        if ok then
-          if json and json.choices and #json.choices > 0 then
-            callback(json.choices[1].message.content)
-          end
+        if ok and json and json.choices and #json.choices > 0 then
+          callback(json.choices[1].message.content)
+        else
+          callback(nil)
         end
       end
     end,
