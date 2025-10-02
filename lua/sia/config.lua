@@ -309,6 +309,7 @@ M.options = {
     ["copilot/o4-mini"] = { "copilot", "o4-mini", reasoning_effort = "medium" },
     ["copilot/claude-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
     ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
+    ["copilot/claude-sonnet-4.5"] = { "copilot", "claude-sonnet-4.5" },
     ["copilot/claude-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
     ["copilot/o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["copilot/grok-code-fast-1"] = { "copilot", "grok-code-fast-1" },
