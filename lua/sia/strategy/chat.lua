@@ -106,11 +106,15 @@ function ChatStrategy:on_init()
 end
 
 function ChatStrategy:on_continue()
-  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+  end
 end
 
 function ChatStrategy:on_error()
-  self.canvas:update_progress({ { "Something went wrong. Please try again.", "Error" } })
+  if vim.api.nvim_buf_is_loaded(self.buf) then
+    self.canvas:update_progress({ { "Something went wrong. Please try again.", "Error" } })
+  end
 end
 
 function ChatStrategy:on_start()
