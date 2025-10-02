@@ -333,6 +333,7 @@ function ChatStrategy.remove(buf)
     return
   end
 
+  strategy.conversation:untrack_messages()
   ChatStrategy._buffers[buf] = nil
   for i, b in ipairs(ChatStrategy._order) do
     if b == buf then

@@ -380,7 +380,17 @@ function Conversation:add_tool(tool)
   end
 end
 
+function Conversation:untrack_messages()
+  for _, message in ipairs(self.messages) do
+    if message.context and message.context.buf and message.context.tick then
+      tracker.untrack(message.context.buf)
+    end
+  end
+end
+
 function Conversation:clear_user_instructions()
+  self:untrack_messages()
+
   self.messages = vim
     .iter(self.messages)
     :filter(function(m)

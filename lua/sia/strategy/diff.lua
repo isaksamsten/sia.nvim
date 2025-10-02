@@ -105,6 +105,7 @@ function DiffStrategy:on_complete(control)
         local context = self.conversation.context
         if not context then
           control.finish()
+          self.conversation:untrack_messages()
           return
         end
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
@@ -118,6 +119,7 @@ function DiffStrategy:on_complete(control)
         vim.bo[self.buf].modifiable = false
       end
       vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
+      self.conversation:untrack_messages()
       control.finish()
     end,
   })

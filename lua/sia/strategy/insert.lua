@@ -99,6 +99,7 @@ function InsertStrategy:on_complete(control)
   local context = self.conversation.context
   if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
     control.finish()
+    self.conversation:untrack_messages()
     return false
   end
 
@@ -130,6 +131,7 @@ function InsertStrategy:on_complete(control)
         self._writer = nil
       end
       vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
+      self.conversation:untrack_messages()
       control.finish()
     end,
   })

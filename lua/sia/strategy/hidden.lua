@@ -126,6 +126,7 @@ function HiddenStrategy:on_complete(control)
       if not content then
         vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
       end
+      self.conversation:untrack_messages()
       control.finish()
     end,
   })

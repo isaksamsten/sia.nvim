@@ -3,6 +3,7 @@ local mock = require("tests.mock")
 local config = require("sia.config")
 local ChatStrategy = require("sia.strategy").ChatStrategy
 local Conversation = require("sia.conversation").Conversation
+local tracker = require("sia.tracker")
 
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
@@ -32,6 +33,7 @@ T["strategy.chat"] = MiniTest.new_set({
     end,
   },
 })
+
 T["strategy.chat"]["simple message"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
@@ -71,6 +73,28 @@ T["strategy.chat"]["simple message"]["test correct output"] = function()
   assistant.execute_strategy(strategy)
   eq("Hello World", strategy.conversation.messages[2]:get_content())
   eq({ "/sia", "", "Hello World" }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+end
+
+T["strategy.chat"]["simple message"]["test tracking context"] = function()
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_name(buf, "buffer " .. buf)
+  local conversation = Conversation:new({
+    instructions = {
+      { role = "user", content = "Here's the content of the file" },
+    },
+  }, { tick = tracker.ensure_tracked(buf), buf = buf })
+  local strategy = ChatStrategy:new(conversation, { cmd = "split" })
+  assistant.execute_strategy(strategy)
+
+  eq(tracker.user_tick(buf), 0)
+  eq(tracker.tracked_buffers[buf].refcount, 1)
+
+  eq(strategy.conversation.messages[1].context.buf, buf)
+  eq(strategy.conversation.messages[1]:is_outdated(), false)
+
+  ChatStrategy.remove(strategy.buf)
+  eq(tracker.user_tick(buf), 0)
+  eq(tracker.tracked_buffers[buf], nil)
 end
 
 T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({

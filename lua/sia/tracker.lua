@@ -1,6 +1,6 @@
 local M = {}
 
---- @type table<integer, {tick:integer, editing: boolean}>
+--- @type table<integer, {tick:integer, editing: boolean, timer: uv_timer_t?, refcount: integer, group: integer?}>
 M.tracked_buffers = {}
 
 --- @param buf integer
@@ -26,6 +26,18 @@ local function should_track_buffer(buf)
   return true
 end
 
+local function cleanup(buf)
+  local tracker = M.tracked_buffers[buf]
+  if tracker then
+    pcall(vim.api.nvim_del_augroup_by_id, tracker.group)
+    if tracker.timer then
+      tracker.timer:stop()
+      tracker.timer = nil
+    end
+  end
+  M.tracked_buffers[buf] = nil
+end
+
 --- @param buf integer
 --- @return integer
 function M.ensure_tracked(buf)
@@ -34,14 +46,8 @@ function M.ensure_tracked(buf)
   end
 
   if not M.tracked_buffers[buf] then
-    M.tracked_buffers[buf] = { tick = 0, editing = false }
-
     local group = vim.api.nvim_create_augroup("SiaTracker_" .. buf, { clear = true })
-
-    local function cleanup()
-      M.tracked_buffers[buf] = nil
-      pcall(vim.api.nvim_del_augroup_by_id, group)
-    end
+    M.tracked_buffers[buf] = { tick = 0, editing = false, timer = nil, refcount = 1, group = group }
 
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       buffer = buf,
@@ -49,7 +55,7 @@ function M.ensure_tracked(buf)
       callback = function()
         local tracker = M.tracked_buffers[buf]
         if not tracker then
-          cleanup()
+          cleanup(buf)
           return
         end
         if not tracker.editing then
@@ -64,15 +70,18 @@ function M.ensure_tracked(buf)
       callback = function()
         local tracker = M.tracked_buffers[buf]
         if not tracker then
-          cleanup()
+          cleanup(buf)
           return
         end
-        if not tracker.editing then
-          tracker.editing = true
-          vim.defer_fn(function()
-            tracker.editing = false
-          end, 100)
+        if tracker.timer then
+          tracker.timer:stop()
+          tracker.timer = nil
         end
+        tracker.editing = true
+        tracker.timer = vim.defer_fn(function()
+          tracker.editing = false
+          tracker.timer = nil
+        end, 100)
       end,
     })
 
@@ -81,11 +90,28 @@ function M.ensure_tracked(buf)
       group = group,
       once = true,
       callback = function()
-        cleanup()
+        cleanup(buf)
       end,
     })
+  else
+    M.tracked_buffers[buf].refcount = M.tracked_buffers[buf].refcount + 1
   end
   return M.tracked_buffers[buf].tick
+end
+
+--- Decrement the reference count for a tracked buffer
+--- When refcount reaches 0, stop tracking and clean up
+--- @param buf integer
+function M.untrack(buf)
+  local tracker = M.tracked_buffers[buf]
+  if not tracker then
+    return
+  end
+
+  tracker.refcount = tracker.refcount - 1
+  if tracker.refcount <= 0 then
+    cleanup(buf)
+  end
 end
 
 --- @param buf integer
