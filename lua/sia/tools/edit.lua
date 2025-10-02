@@ -144,6 +144,15 @@ one specific change with clear, unique context.
     opts.user_choice(string.format("Edit %s", args.target_file), {
       choices = CHOICES,
       on_accept = function(choice)
+        local old_span_lines
+        if match.col_span then
+          old_span_lines = { old_content[span[1]] }
+        else
+          old_span_lines = {}
+          for i = span[1], span[2] do
+            table.insert(old_span_lines, old_content[i])
+          end
+        end
         local new_text_lines
         if best_matches.strip_line_number then
           new_text_lines = matching.strip_line_numbers(args.new_string)
@@ -179,31 +188,27 @@ one specific change with clear, unique context.
           diff.show_diff_preview(buf)
         end
 
-        local new_content_lines = vim.api.nvim_buf_line_count(buf)
-        local context_lines = 4
-        local start_context = math.max(1, span[1] - context_lines)
-
         local edit_start = span[1]
         local edit_end = span[1] + #new_text_lines - 1
 
-        local end_context = math.min(new_content_lines, edit_end + context_lines)
-        local snippet_lines = utils.get_content(buf, start_context - 1, end_context)
+        local old_text = table.concat(old_span_lines, "\n")
+        local new_text = table.concat(new_text_lines, "\n")
+        local unified_diff = vim.diff(old_text, new_text, { result_type = "unified", ctxlen = 3 })
+
+        --- @cast unified_diff string?
+        local diff_lines = vim.split(unified_diff or "", "\n")
 
         local success_msg = string.format(
-          "Successfully edited %s%s. Here`s the edited snippet as returned by cat -n:",
+          "Edited %s%s at line%s %d%s. Here's the unified diff:",
           args.target_file,
-          best_matches.fuzzy and " (the match was not perfect)" or ""
+          best_matches.fuzzy and " (the match was not perfect)" or "",
+          edit_start ~= edit_end and "s" or "",
+          edit_start,
+          edit_start ~= edit_end and ("-" .. edit_end) or ""
         )
-        table.insert(snippet_lines, 1, success_msg)
-        local outdated_message, display_description
+        table.insert(diff_lines, 1, success_msg)
+        local display_description
         if match.col_span then
-          outdated_message = string.format(
-            "Edited %s on line %d (columns %d-%d)",
-            vim.fn.fnamemodify(args.target_file, ":."),
-            edit_start,
-            match.col_span[1],
-            match.col_span[2]
-          )
           display_description = string.format(
             "✏️ Edited line %d (columns %d-%d) in %s%s",
             edit_start,
@@ -215,7 +220,6 @@ one specific change with clear, unique context.
         else
           local edit_span = edit_start ~= edit_end and string.format("lines %d-%d", edit_start, edit_end)
             or string.format("line %d", edit_start)
-          outdated_message = string.format("Edited %s on %s", vim.fn.fnamemodify(args.target_file, ":."), edit_span)
           display_description = string.format(
             "✏️ Edited %s in %s%s",
             edit_span,
@@ -225,12 +229,11 @@ one specific change with clear, unique context.
         end
 
         callback({
-          content = snippet_lines,
+          content = diff_lines,
           context = {
             buf = buf,
             pos = { edit_start, edit_end },
             tick = tracker.ensure_tracked(buf),
-            outdated_message = outdated_message,
           },
           kind = "edit",
           display_content = { display_description },

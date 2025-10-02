@@ -186,10 +186,13 @@ function Message:get_content()
   end
 end
 
---- Check if this message is outdated (has nil content when it should have content)
 --- @return boolean
 function Message:is_outdated()
   if self.live_content then
+    return false
+  end
+
+  if self.context and not self.context.outdated_message then
     return false
   end
 

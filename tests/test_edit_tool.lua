@@ -45,6 +45,37 @@ local function create_mock_conversation(auto_confirm_edit)
   }
 end
 
+T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
+  local buf = create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
+  local restore_file_loader = mock_file_loader(buf)
+  local restore_tracker = mock_tracker()
+
+  local result = nil
+  local callback = function(res)
+    result = res
+  end
+
+  local args = {
+    target_file = "test.lua",
+    old_string = "  print('world')\nend",
+    new_string = "  print('world')\nend\n\nfunction(test)\n  print(test)\nend",
+  }
+
+  edit_tool.execute(args, create_mock_conversation(1), callback, nil)
+
+  local new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq("function hello()", new_content[1])
+  eq("  print('world')", new_content[2])
+  eq("end", new_content[3])
+  eq("", new_content[4])
+  eq("  print(test)", new_content[6])
+
+  eq("edit", result.kind)
+  eq(result.content[1], "Edited test.lua at lines 2-7. Here's the unified diff:")
+  eq("+  print(test)", result.content[7])
+  restore_tracker()
+end
+
 T["sia.tools.edit"]["successful exact match edit"] = function()
   local buf = create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
   local restore_file_loader = mock_file_loader(buf)
@@ -70,10 +101,7 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   eq("other code", new_content[4])
 
   eq("edit", result.kind)
-  eq(
-    true,
-    vim.tbl_contains(result.content, "Successfully edited test.lua. Here`s the edited snippet as returned by cat -n:")
-  )
+  eq(result.content[1], "Edited test.lua at lines 1-3. Here's the unified diff:")
   eq(true, string.find(result.display_content[1], "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
 
   restore_file_loader()
@@ -161,13 +189,7 @@ T["sia.tools.edit"]["create new file"] = function()
   eq("print('hello world')", new_content[1])
 
   eq("edit", result.kind)
-  eq(
-    true,
-    vim.tbl_contains(
-      result.content,
-      "Successfully edited new_file.lua. Here`s the edited snippet as returned by cat -n:"
-    )
-  )
+  eq(result.content[1], "Edited new_file.lua at line 1. Here's the unified diff:")
 
   restore_file_loader()
   restore_tracker()
@@ -185,7 +207,7 @@ T["sia.tools.edit"]["auto confirm for AGENTS.md"] = function()
   }
 
   local result
-  local auto_apply_result = edit_tool.execute(args, create_mock_conversation(nil), function(res)
+  edit_tool.execute(args, create_mock_conversation(nil), function(res)
     result = res
   end)
   eq("edit", result.kind)

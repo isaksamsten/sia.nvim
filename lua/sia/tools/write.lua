@@ -97,11 +97,6 @@ For small, targeted changes, prefer the edit tool instead.]],
           buf = buf,
           kind = "edit",
           tick = tracker.ensure_tracked(buf),
-          outdated_message = string.format(
-            "%s %s",
-            file_exists and "Overwrote" or "Created",
-            vim.fn.fnamemodify(args.target_file, ":.")
-          ),
         },
         display_content = { "💾 " .. display_text },
       })

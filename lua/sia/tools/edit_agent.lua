@@ -216,12 +216,6 @@ example: // ... existing code ...  ]],
               buf = buf,
               pos = { edit_start, edit_end },
               tick = tracker.ensure_tracked(buf),
-              outdated_message = string.format(
-                "Edited %s on lines %d-%d",
-                vim.fn.fnamemodify(args.target_file, ":."),
-                edit_start,
-                edit_end
-              ),
             },
             kind = "edit",
             display_content = {

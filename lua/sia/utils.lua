@@ -89,7 +89,10 @@ function M.create_context(args)
   }
   opts.tick = require("sia.tracker").ensure_tracked(opts.buf)
   local name = vim.api.nvim_buf_get_name(opts.buf)
-  opts.outdated_message = string.format("%s was modified externally", name)
+  opts.outdated_message = string.format(
+    "Previously viewed content from %s - file was modified, read file if needed",
+    vim.fn.fnamemodify(name, ":.")
+  )
 
   if args.count == -1 then
     opts.mode = "n"

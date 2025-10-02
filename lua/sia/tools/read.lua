@@ -94,13 +94,32 @@ return tool_utils.new_tool({
         )
       end
 
+      local outdated_message
+      if args.offset or args.limit then
+        local span = start_line ~= end_line and string.format("lines %d-%d", start_line, end_line)
+          or string.format("line %d", start_line)
+        outdated_message = string.format(
+          "Previously read %s from %s - file was modified, use read tool to get current content",
+          span,
+          vim.fn.fnamemodify(args.path, ":.")
+        )
+      else
+        local span = end_line > 1 and string.format("lines %d-%d", start_line, end_line)
+          or string.format("line %d", start_line)
+        outdated_message = string.format(
+          "Previously read %s from %s - file was modified, use read tool to get current content",
+          span,
+          vim.fn.fnamemodify(args.path, ":.")
+        )
+      end
+
       callback({
         content = content,
         context = {
           buf = buf,
           pos = pos,
           tick = tracker.ensure_tracked(buf),
-          outdated_message = string.format("%s was modified externally", vim.fn.fnamemodify(args.path, ":.")),
+          outdated_message = outdated_message,
         },
         kind = "context",
         display_content = display_lines,

@@ -22,7 +22,10 @@ function _G.__sia_add_buffer()
         buf = vim.api.nvim_get_current_buf(),
         cursor = vim.api.nvim_win_get_cursor(0),
         tick = require("sia.tracker").ensure_tracked(buf),
-        outdated_message = string.format("the content of %s has been externally modified", name),
+        outdated_message = string.format(
+          "Previously viewed content from %s - file was modified, read file if needed",
+          vim.fn.fnamemodify(name, ":.")
+        ),
       })
     end,
     only_visible = true,
@@ -44,7 +47,10 @@ function _G.__sia_add_context(type)
           pos = { start_line, end_line },
           mode = "v",
           tick = require("sia.tracker").ensure_tracked(buf),
-          outdated_message = string.format("the content of %s has been externally modified", name),
+          outdated_message = string.format(
+            "Previously viewed content from %s - file was modified, read file if needed",
+            vim.fn.fnamemodify(name, ":.")
+          ),
         })
       end,
       only_visible = true,
@@ -134,7 +140,7 @@ function M.setup()
     vim.api.nvim_set_keymap(
       "n",
       "<Plug>(sia-execute-" .. action .. ")",
-      "v:lua.require(\"sia.mappings\").execute_op_with_action(\"/" .. action .. "\")",
+      'v:lua.require("sia.mappings").execute_op_with_action("/' .. action .. '")',
       { noremap = true, silent = true, expr = true }
     )
     vim.api.nvim_set_keymap(
