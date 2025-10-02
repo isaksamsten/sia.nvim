@@ -558,7 +558,6 @@ function M.setup(options)
     pattern = "SiaError",
     callback = function(args)
       local data = args.data
-      print(vim.inspect(data))
       if data.message then
         if type(data.message) == "string" then
           vim.notify("Sia: " .. data.message, vim.log.levels.WARN)
