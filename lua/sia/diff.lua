@@ -84,7 +84,7 @@ local function setup_auto_diff_updates(buf)
             cleanup(buf)
           end
         end
-      end, 150)
+      end, 300)
     end,
   })
 
