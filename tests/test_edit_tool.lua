@@ -71,7 +71,7 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   eq("  print(test)", new_content[6])
 
   eq("edit", result.kind)
-  eq(result.content[1], "Edited test.lua at lines 2-7. Here's the unified diff:")
+  eq(result.content[1], "Edited test.lua:")
   eq("+  print(test)", result.content[7])
   restore_tracker()
 end
@@ -101,7 +101,7 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   eq("other code", new_content[4])
 
   eq("edit", result.kind)
-  eq(result.content[1], "Edited test.lua at lines 1-3. Here's the unified diff:")
+  eq(result.content[1], "Edited test.lua:")
   eq(true, string.find(result.display_content[1], "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
 
   restore_file_loader()
@@ -189,7 +189,7 @@ T["sia.tools.edit"]["create new file"] = function()
   eq("print('hello world')", new_content[1])
 
   eq("edit", result.kind)
-  eq(result.content[1], "Edited new_file.lua at line 1. Here's the unified diff:")
+  eq(result.content[1], "Edited new_file.lua:")
 
   restore_file_loader()
   restore_tracker()
