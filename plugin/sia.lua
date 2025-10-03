@@ -83,7 +83,7 @@ end, {
       is_range = require("sia.utils").is_range_commend(CmdLine)
     end
 
-    local match = string.match(string.sub(CmdLine, 1, CursorPos), "-m ([%w-_/]*)$")
+    local match = string.match(string.sub(CmdLine, 1, CursorPos), "-m ([%w-_/.]*)$")
     if match then
       local models = vim
         .iter(config.options.models)

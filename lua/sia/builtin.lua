@@ -183,6 +183,8 @@ version.
       end,
     },
   },
+
+  visible_buffers = require("sia.instructions").visible_buffers(),
   current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = true }),
   current_context = require("sia.instructions").current_context({ show_line_numbers = true }),
   insert_system = {

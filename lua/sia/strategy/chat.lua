@@ -56,7 +56,6 @@ function ChatStrategy:new(conversation, options)
   ChatStrategy._buffers[obj.buf] = obj
   ChatStrategy._order[#ChatStrategy._order + 1] = obj.buf
 
-  -- Ensure that the count has been incremented
   if ChatStrategy.count() == 1 then
     obj.name = "*sia*"
   else
@@ -125,7 +124,7 @@ function ChatStrategy:on_start()
     local line_count = vim.api.nvim_buf_line_count(self.buf)
     if line_count > 0 then
       local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
-      if last_line[1]:match("%S") then -- Contains non-whitespace characters
+      if last_line[1]:match("%S") then
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
         line_count = line_count + 1
       end
@@ -246,7 +245,6 @@ spaces. Only output the name, nothing else.]],
       self.canvas:update_tool_progress(lines)
     end,
     handle_tools_completion = function(opts)
-      -- Add all tool instructions in order
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           if tool_result.result.display_content then

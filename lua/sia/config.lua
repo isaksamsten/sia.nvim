@@ -412,6 +412,7 @@ M.options = {
           "agents_md",
         },
         instructions = {
+          "visible_buffers",
           "current_context",
         },
         tools = {
@@ -444,6 +445,7 @@ M.options = {
         "agents_md",
       },
       instructions = {
+        "visible_buffers",
         "current_context",
       },
       tools = {
@@ -454,7 +456,6 @@ M.options = {
         "read",
         "glob",
         "grep",
-        "compact",
         "rename",
         "remove",
         "fetch",

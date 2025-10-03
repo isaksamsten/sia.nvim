@@ -5,6 +5,7 @@ local ChatStrategy = require("sia.strategy").ChatStrategy
 local DiffStrategy = require("sia.strategy").DiffStrategy
 local InsertStrategy = require("sia.strategy").InsertStrategy
 local HiddenStrategy = require("sia.strategy").HiddenStrategy
+local tracker = require("sia.tracker")
 
 local M = {}
 
@@ -183,8 +184,13 @@ function M.show_messages(opts)
       format_item = function(message)
         local outdated = message:is_outdated()
         local description = message:get_description()
+        local empty = message:get_content()
         if outdated then
           return "[outdated] " .. description
+        elseif empty == nil and message.role == "user" then
+          return "[empty] " .. description
+        elseif message.superseded then
+          return "[superseded] " .. description
         else
           return description
         end
@@ -370,21 +376,28 @@ local add_commands = {
       return vim.fn.getcompletion(lead, "file")
     end,
     execute_global = function(args)
-      local fargs = args.fargs
-      if args.bang then
-        -- Conversation.clear_pending_files()
+      local files = utils.glob_pattern_to_files(args.fargs)
+      for _, file in ipairs(files) do
+        local buf = utils.ensure_file_is_loaded(file)
+        if buf then
+          Conversation.add_pending_instruction(
+            "current_context",
+            { buf = buf, tick = tracker.ensure_tracked(buf), kind = "context", mode = "v" }
+          )
+        end
       end
-      local files = utils.glob_pattern_to_files(fargs)
-      -- Conversation.add_pending_instruction("current_context", {
     end,
     execute_local = function(args, conversation)
-      local fargs = args.fargs
-      if args.bang then
-        -- conversation.files = {}
+      local files = utils.glob_pattern_to_files(args.fargs)
+      for _, file in ipairs(files) do
+        local buf = utils.ensure_file_is_loaded(file)
+        if buf then
+          conversation:add_instruction(
+            "current_context",
+            { buf = buf, tick = tracker.ensure_tracked(buf), kind = "context", mode = "v" }
+          )
+        end
       end
-      local files = utils.glob_pattern_to_files(fargs)
-
-      -- conversation:add_files(files)
     end,
   },
   context = {
@@ -431,7 +444,7 @@ local add_commands = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          conversation:add_instruction("current_context", { buf = buf, pos = { 0, 0 }, file = true })
+          conversation:add_instruction("current_context", { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" })
         end
       end
     end,
@@ -439,19 +452,12 @@ local add_commands = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          Conversation.add_pending_instruction("current_context", { buf = buf, pos = { 0, 0 }, file = true })
+          Conversation.add_pending_instruction(
+            "current_context",
+            { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" }
+          )
         end
       end
-    end,
-  },
-  symbols = {
-    require_range = false,
-    non_sia_buf = true,
-    execute_global = function(args)
-      Conversation.add_pending_instruction("current_document_symbols", utils.create_context(args))
-    end,
-    execute_local = function(args, conversation)
-      conversation:add_instruction("current_document_symbols", utils.create_context(args))
     end,
   },
 }
@@ -461,13 +467,21 @@ function M.setup(options)
   require("sia.mappings").setup()
   set_highlight_groups()
 
-  vim.api.nvim_create_user_command("SiaAccept", function()
-    M.accept_edits()
-  end, {})
+  vim.api.nvim_create_user_command("SiaAccept", function(args)
+    if args.bang then
+      M.accept_edits()
+    else
+      M.accept_edit()
+    end
+  end, { bang = true })
 
-  vim.api.nvim_create_user_command("SiaReject", function()
-    M.reject_edits()
-  end, {})
+  vim.api.nvim_create_user_command("SiaReject", function(args)
+    if args.bang then
+      M.reject_edits()
+    else
+      M.reject_edit()
+    end
+  end, { bang = true })
 
   vim.api.nvim_create_user_command("SiaDiff", function()
     M.show_edits_diff()
@@ -524,16 +538,6 @@ function M.setup(options)
     end,
   })
 
-  local running_jobs = {}
-
-  vim.api.nvim_create_user_command("SiaAbort", function()
-    for _, job in ipairs(running_jobs) do
-      vim.fn.jobstop(job)
-    end
-    running_jobs = {}
-    vim.api.nvim_echo({ { "Sia: Aborted all running jobs", "Normal" } }, false, {})
-  end, {})
-
   vim.api.nvim_create_user_command("SiaCompact", function()
     local chat = ChatStrategy.by_buf()
 
@@ -544,8 +548,6 @@ function M.setup(options)
         chat.is_busy = false
         chat:redraw()
       end)
-    else
-      -- echo that not called from a chat
     end
   end, {})
 
@@ -577,26 +579,6 @@ function M.setup(options)
       set_highlight_groups()
     end,
   })
-
-  vim.api.nvim_create_autocmd("User", {
-    pattern = "SiaStart",
-    callback = function(args)
-      table.insert(running_jobs, args.data.job)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("User", {
-    pattern = "SiaComplete",
-    callback = function(args)
-      local job = args.data.job
-      for i, j in ipairs(running_jobs) do
-        if j == job then
-          table.remove(running_jobs, i)
-          break
-        end
-      end
-    end,
-  })
 end
 
 --- @param action sia.config.Action
@@ -609,10 +591,6 @@ function M.main(action, opts)
       strategy = ChatStrategy.by_buf(context.buf)
 
       if strategy and not strategy.is_busy then
-        for _, tool in ipairs(action.tools or {}) do
-          strategy.conversation:add_tool(tool)
-        end
-
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
         strategy.conversation:add_instruction(last_instruction, nil)
 
