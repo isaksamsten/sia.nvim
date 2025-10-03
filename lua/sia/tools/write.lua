@@ -45,6 +45,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     callback({
       content = { "Error: No file path provided" },
       display_content = { FAILED_TO_WRITE },
+      kind = "failed",
     })
     return
   end
@@ -53,6 +54,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     callback({
       content = { "Error: No content provided" },
       display_content = { FAILED_TO_WRITE },
+      kind = "failed",
     })
     return
   end
@@ -66,6 +68,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         callback({
           content = { "Error: Cannot create buffer for " .. args.path },
           display_content = { FAILED_TO_WRITE },
+          kind = "failed",
         })
         return
       end

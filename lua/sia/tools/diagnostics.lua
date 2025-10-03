@@ -17,6 +17,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: No file path was provided" },
       display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      kind = "failed",
     })
     return
   end
@@ -25,6 +26,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: File cannot be found or is not readable" },
       display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      kind = "failed",
     })
     return
   end
@@ -33,6 +35,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: Cannot load file into buffer" },
       display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      kind = "failed",
     })
     return
   end

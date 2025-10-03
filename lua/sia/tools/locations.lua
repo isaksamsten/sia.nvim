@@ -42,6 +42,7 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
     callback({
       content = { "Error: No items provided for quickfix list" },
       display_content = { FAILED_TO_CREATE_QF },
+      kind = "failed",
     })
     return
   end
@@ -54,6 +55,7 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
       callback({
         content = { string.format("Error: Item %d missing required fields (filename, lnum, text)", i) },
         display_content = { FAILED_TO_CREATE_QF },
+        kind = "failed",
       })
       return
     end

@@ -28,6 +28,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: No file path was provided" },
       display_content = { FAILED_TO_READ },
+      kind = "failed",
     })
     return
   end
@@ -36,6 +37,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: File cannot be found" },
       display_content = { FAILED_TO_READ },
+      kind = "failed",
     })
     return
   end
@@ -61,6 +63,7 @@ return tool_utils.new_tool({
             string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
           },
           display_content = { FAILED_TO_READ },
+          kind = "failed",
         })
         return
       end

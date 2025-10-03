@@ -521,7 +521,7 @@ function Conversation:execute_tool(name, arguments, opts)
     local ok, err = pcall(self.tool_fn[name].action, arguments, self, opts.callback, opts.cancellable)
     if not ok then
       print(vim.inspect(err))
-      opts.callback({ content = { "Tool execution failed. " } })
+      opts.callback({ content = { "Tool execution failed. " }, kind = "failed" })
     end
     return
   else
@@ -554,12 +554,35 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
+  -- Collect all failed tool call IDs
+  local failed_tool_call_ids = {}
+
+  for i, m in ipairs(self.messages) do
+    if m.kind == "failed" and m._tool_call and m._tool_call.id then
+      failed_tool_call_ids[m._tool_call.id] = true
+    end
+  end
+
+  local last_message = self.messages[#self.messages]
+  if last_message and last_message.kind == "failed" and last_message._tool_call and last_message._tool_call.id then
+    failed_tool_call_ids[last_message._tool_call.id] = false
+  end
+
   local prompt = vim
     .iter(self.messages)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
       if m.superseded then
+        return false
+      end
+
+      local tool_call_id = m._tool_call and m._tool_call.id
+      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
+        tool_call_id = m.tool_calls[1].id
+      end
+
+      if tool_call_id and failed_tool_call_ids[tool_call_id] == true then
         return false
       end
 

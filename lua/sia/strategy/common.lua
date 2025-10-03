@@ -321,7 +321,7 @@ function Strategy:execute_tools(opts)
               cancellable = opts.cancellable,
               callback = vim.schedule_wrap(function(tool_result)
                 if not tool_result then
-                  tool_result = { content = { "Could not find tool..." } }
+                  tool_result = { content = { "Could not find tool..." }, kind = "failed" }
                 end
                 on_tool_finished(tool.index, tool.tool_call, tool_result)
               end),
@@ -329,10 +329,10 @@ function Strategy:execute_tools(opts)
           else
             local error_message = { "Could not parse tool arguments" }
             tool.tool_call["function"].arguments = "{}"
-            on_tool_finished(tool.index, tool.tool_call, { content = error_message })
+            on_tool_finished(tool.index, tool.tool_call, { content = error_message, kind = "failed" })
           end
         else
-          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } })
+          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" }, kind = "failed" })
         end
       end)
     end
@@ -352,7 +352,7 @@ function Strategy:execute_tools(opts)
             cancellable = opts.cancellable,
             callback = vim.schedule_wrap(function(tool_result)
               if not tool_result then
-                tool_result = { content = { "Could not find tool..." } }
+                tool_result = { content = { "Could not find tool..." }, kind = "failed" }
               end
               on_tool_finished(tool.index, tool.tool_call, tool_result)
               process_next_tool()
@@ -361,11 +361,11 @@ function Strategy:execute_tools(opts)
         else
           local error_message = { "Could not parse tool arguments" }
           tool.tool_call["function"].arguments = "{}"
-          on_tool_finished(tool.index, tool.tool_call, { content = error_message })
+          on_tool_finished(tool.index, tool.tool_call, { content = error_message, kind = "failed" })
           process_next_tool()
         end
       else
-        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" } })
+        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" }, kind = "failed" })
         process_next_tool()
       end
     end

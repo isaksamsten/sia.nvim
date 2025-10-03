@@ -27,7 +27,11 @@ Notes:
   local restrict_root = config.restrict_to_project_root ~= false
 
   if not args.src or not args.dest then
-    callback({ content = { "Error: src and dest are required" }, display_content = { FAILED_TO_RENAME } })
+    callback({
+      content = { "Error: src and dest are required" },
+      display_content = { FAILED_TO_RENAME },
+      kind = "failed",
+    })
     return
   end
 
@@ -40,6 +44,7 @@ Notes:
       callback({
         content = { string.format("Error: Operation must stay within project root: %s", root) },
         display_content = { FAILED_TO_RENAME },
+        kind = "failed",
       })
       return
     end
@@ -50,6 +55,7 @@ Notes:
     callback({
       content = { string.format("Error: Source not found: %s", args.src) },
       display_content = { FAILED_TO_RENAME },
+      kind = "failed",
     })
     return
   end
@@ -57,6 +63,7 @@ Notes:
     callback({
       content = { "Error: Only file renames are supported" },
       display_content = { FAILED_TO_RENAME },
+      kind = "failed",
     })
     return
   end
@@ -66,6 +73,7 @@ Notes:
     callback({
       content = { string.format("Error: Destination exists and overwriting is not allowed: %s", args.dest) },
       display_content = { FAILED_TO_RENAME },
+      kind = "failed",
     })
     return
   end
@@ -95,6 +103,7 @@ Notes:
         callback({
           content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") },
           display_content = { FAILED_TO_RENAME },
+          kind = "failed",
         })
         return
       end

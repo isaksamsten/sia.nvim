@@ -40,7 +40,11 @@ return tool_utils.new_tool({
   local trash_dir_name = ".sia_trash"
 
   if not args.path then
-    callback({ content = { "Error: path is required" }, display_content = { FAILED_TO_REMOVE } })
+    callback({
+      content = { "Error: path is required" },
+      display_content = { FAILED_TO_REMOVE },
+      kind = "failed",
+    })
     return
   end
 
@@ -50,6 +54,7 @@ return tool_utils.new_tool({
     callback({
       content = { string.format("Error: Operation must stay within project root: %s", root) },
       display_content = { FAILED_TO_REMOVE },
+      kind = "failed",
     })
     return
   end
@@ -59,6 +64,7 @@ return tool_utils.new_tool({
     callback({
       content = { string.format("Error: Path not found: %s", args.path) },
       display_content = { FAILED_TO_REMOVE },
+      kind = "failed",
     })
     return
   end
@@ -66,6 +72,7 @@ return tool_utils.new_tool({
     callback({
       content = { "Error: Directory removal is disabled by config" },
       display_content = { FAILED_TO_REMOVE },
+      kind = "failed",
     })
     return
   end
@@ -89,6 +96,7 @@ return tool_utils.new_tool({
           callback({
             content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") },
             display_content = { FAILED_TO_REMOVE },
+            kind = "failed",
           })
           return
         end
@@ -105,6 +113,7 @@ return tool_utils.new_tool({
           callback({
             content = { string.format("Error: Failed to delete %s", args.path) },
             display_content = { FAILED_TO_REMOVE },
+            kind = "failed",
           })
           return
         end

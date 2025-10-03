@@ -102,12 +102,17 @@ one specific change with clear, unique context.
     callback({
       content = { "Error: No target_file was provided" },
       display_content = { FAILED_TO_EDIT },
+      kind = "failed",
     })
     return
   end
 
   if not args.old_string then
-    callback({ content = { "Error: No old_string was provided" }, display_content = { FAILED_TO_EDIT } })
+    callback({
+      content = { "Error: No old_string was provided" },
+      display_content = { FAILED_TO_EDIT },
+      kind = "failed",
+    })
     return
   end
 
@@ -115,6 +120,7 @@ one specific change with clear, unique context.
     callback({
       content = { "Error: No new_string was provided" },
       display_content = { FAILED_TO_EDIT },
+      kind = "failed",
     })
     return
   end
@@ -124,6 +130,7 @@ one specific change with clear, unique context.
     callback({
       content = { "Error: Cannot load " .. args.target_file },
       display_content = { FAILED_TO_EDIT },
+      kind = "failed",
     })
     return
   end
@@ -245,6 +252,7 @@ one specific change with clear, unique context.
     local match_description = #best_matches.matches == 0 and "no matches" or "multiple matches"
     if failed_matches[buf] >= MAX_FAILED_MATCHES then
       callback({
+        kind = "failed",
         content = {
           string.format(
             "Edit failed because %s were found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
@@ -257,6 +265,7 @@ one specific change with clear, unique context.
       })
     else
       callback({
+        kind = "failed",
         content = {
           string.format(
             "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",

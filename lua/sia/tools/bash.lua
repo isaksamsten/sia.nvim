@@ -34,7 +34,7 @@ Before executing the command, please follow these steps:
 3. Command Execution:
    - After ensuring proper quoting, execute the command.
    - Capture the output of the command.
-
+;
 4. Output Processing:
    - If the output exceeds 8000 characters, output will be truncated before
      being returned to you.
@@ -121,6 +121,7 @@ git commit -m "$(cat <<'EOF'
     callback({
       content = { "Error: No command specified" },
       display_content = { FAILED_TO_EXECUTE },
+      kind = "failed",
     })
     return
   end
@@ -137,6 +138,7 @@ git commit -m "$(cat <<'EOF'
     callback({
       content = { string.format("Error: %s", reason) },
       display_content = { FAILED_TO_EXECUTE },
+      kind = "failed",
     })
     return
   end
