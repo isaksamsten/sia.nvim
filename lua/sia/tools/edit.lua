@@ -202,17 +202,24 @@ one specific change with clear, unique context.
         local new_text = table.concat(new_text_lines, "\n")
         local unified_diff = vim.diff(old_text, new_text, { result_type = "unified", ctxlen = 3 })
 
+        if unified_diff and unified_diff ~= "" then
+          unified_diff = unified_diff:gsub(
+            "@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@",
+            function(old_start, old_count, new_start, new_count)
+              local old_file_start = span[1] + tonumber(old_start) - 1
+              local new_file_start = edit_start + tonumber(new_start) - 1
+              local old_count_str = old_count ~= "" and ("," .. old_count) or ""
+              local new_count_str = new_count ~= "" and ("," .. new_count) or ""
+              return string.format("@@ -%d%s +%d%s @@", old_file_start, old_count_str, new_file_start, new_count_str)
+            end
+          )
+        end
+
         --- @cast unified_diff string?
         local diff_lines = vim.split(unified_diff or "", "\n")
 
-        local success_msg = string.format(
-          "Edited %s%s at line%s %d%s. Here's the unified diff:",
-          args.target_file,
-          best_matches.fuzzy and " (the match was not perfect)" or "",
-          edit_start ~= edit_end and "s" or "",
-          edit_start,
-          edit_start ~= edit_end and ("-" .. edit_end) or ""
-        )
+        local success_msg =
+          string.format("Edited %s%s:", args.target_file, best_matches.fuzzy and " (the match was not perfect)" or "")
         table.insert(diff_lines, 1, success_msg)
         local display_description
         if match.col_span then
