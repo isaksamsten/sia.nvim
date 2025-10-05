@@ -77,7 +77,10 @@ response]],
       }, nil)
       local strategy = HiddenStrategy:new(conversation, {
         callback = function(_, reply)
-          callback({ content = reply, display_content = { "🤖 Agent completed task" } })
+          callback({
+            content = reply,
+            display_content = { "🤖 Agent completed task" },
+          })
         end,
       }, opts.cancellable)
       require("sia.assistant").execute_strategy(strategy)

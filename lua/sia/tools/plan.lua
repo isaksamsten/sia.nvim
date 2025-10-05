@@ -6,7 +6,9 @@ return tool_utils.new_tool({
   read_only = true,
   description = [[Launch a planning agent that analyzes the current situation and creates a concrete actionable plan.
 
-The planning agent has access to exploration tools (glob, grep, read) to understand the codebase structure and requirements. It will return a detailed plan with specific, actionable steps that the main agent can implement.
+The planning agent has access to exploration tools (glob, grep, read) to understand the
+codebase structure and requirements. It will return a detailed plan with specific,
+actionable steps that the main agent can implement.
 
 Usage notes:
 
@@ -36,7 +38,8 @@ Usage notes:
         system = {
           {
             role = "system",
-            content = [[You are a specialized planning agent. Your role is to analyze the current codebase and create detailed, actionable implementation plans.
+            content = [[You are a specialized planning agent. Your role is to analyze
+the current codebase and create detailed, actionable implementation plans.
 
 Your responsibilities:
 1. Use the available tools (glob, grep, read) to explore and understand the current codebase structure
@@ -67,9 +70,15 @@ Make your plan concrete and actionable - each step should be specific enough tha
       local strategy = HiddenStrategy:new(conversation, {
         callback = function(_, reply)
           if reply then
-            callback({ content = reply, display_content = { "📋 Planning agent completed analysis" } })
+            callback({
+              content = reply,
+              display_content = { "📋 Planning agent completed analysis" },
+            })
           else
-            callback({ content = { "Planning failed" }, display_content = { "📋 Planning agent completed analysis" } })
+            callback({
+              content = { "Planning failed" },
+              display_content = { "📋 Planning agent completed analysis" },
+            })
           end
         end,
       }, opts.cancellable)

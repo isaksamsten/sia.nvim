@@ -27,13 +27,19 @@ function HiddenStrategy:on_init()
   if context then
     vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
     vim.api.nvim_buf_set_extmark(context.buf, HIDDEN_NS, context.pos[1] - 1, 0, {
-      virt_lines = { { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } } },
+      virt_lines = {
+        { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } },
+      },
       virt_lines_above = context.pos[1] - 1 > 0,
       hl_group = "SiaInsert",
       end_line = context.pos[2],
     })
   else
-    vim.api.nvim_echo({ { "🤖 Processing in background...", "SiaProgress" } }, false, {})
+    vim.api.nvim_echo(
+      { { "🤖 Processing in background...", "SiaProgress" } },
+      false,
+      {}
+    )
   end
 end
 
@@ -138,7 +144,10 @@ function HiddenStrategy:on_cancelled()
     vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
     self:del_abort_keymap(context.buf)
   end
-  self._options.callback(self.conversation.context, { "Operation was cancelled by user" })
+  self._options.callback(
+    self.conversation.context,
+    { "Operation was cancelled by user" }
+  )
   vim.api.nvim_echo({ { "Sia: Operation cancelled", "DiagnosticWarn" } }, false, {})
 end
 

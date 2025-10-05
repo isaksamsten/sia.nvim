@@ -50,8 +50,9 @@ local function get_permission(name, args)
   local config = require("sia.config")
   local lc = config.get_local_config()
 
+  local permission = lc and lc.permission or {}
   -- If any argument is denied
-  local deny = lc and lc.permission and lc.permission.deny and lc.permission.deny[name] or {}
+  local deny = permission.deny and permission.deny[name] or {}
   if deny.arguments then
     for key, patterns in pairs(deny.arguments) do
       local arg_value = args[key]
@@ -64,7 +65,7 @@ local function get_permission(name, args)
   end
 
   -- If any argument requires user confirmation
-  local ask = lc and lc.permission and lc.permission.ask and lc.permission.ask[name] or {}
+  local ask = permission.ask and permission.ask[name] or {}
   if ask.arguments then
     for key, patterns in pairs(ask.arguments) do
       local arg_value = args[key]
@@ -77,7 +78,7 @@ local function get_permission(name, args)
   end
 
   --- If all arguments allow automatic confirmation
-  local allowed = lc and lc.permission and lc.permission.allow and lc.permission.allow[name] or {}
+  local allowed = permission.allow and permission.allow[name] or {}
   if not allowed.arguments or vim.tbl_isempty(allowed.arguments) then
     return nil
   end
@@ -109,17 +110,20 @@ local function select(items, opts, on_choice)
   end
   local clear_confirmation = require("sia.confirmation").show(choices)
   vim.cmd.redraw()
-  vim.ui.input({ prompt = "Type number and Enter or (Esc or empty cancels): " }, function(resp)
-    if clear_confirmation then
-      clear_confirmation()
-    end
+  vim.ui.input(
+    { prompt = "Type number and Enter or (Esc or empty cancels): " },
+    function(resp)
+      if clear_confirmation then
+        clear_confirmation()
+      end
 
-    local idx = tonumber(resp or "")
-    if resp == nil or idx < 0 or idx > #items then
-      on_choice(nil, nil)
+      local idx = tonumber(resp or "")
+      if resp == nil or idx < 0 or idx > #items then
+        on_choice(nil, nil)
+      end
+      on_choice(items[idx], idx)
     end
-    on_choice(items[idx], idx)
-  end)
+  )
 end
 
 local function input(opts, on_confirm)
@@ -145,7 +149,9 @@ local function input(opts, on_confirm)
 
   local clear_confirmation
   if #prompt > 80 or prompt:find("\n") then
-    clear_confirmation = require("sia.confirmation").show(vim.split(prompt, "\n", { trimempty = true, plain = true }))
+    clear_confirmation = require("sia.confirmation").show(
+      vim.split(prompt, "\n", { trimempty = true, plain = true })
+    )
     vim.cmd.redraw()
   elseif confirmation_text then
     confirmation_text = string.format("%s - %s", prompt, confirmation_text)
@@ -239,7 +245,9 @@ M.new_tool = function(opts, execute)
 
       local permission = resolve_permission(args, conversation)
       user_input = function(prompt, input_args)
-        if conversation.ignore_tool_confirm or (permission and permission.auto_allow) then
+        if
+          conversation.ignore_tool_confirm or (permission and permission.auto_allow)
+        then
           input_args.on_accept()
           return
         end
@@ -260,48 +268,53 @@ M.new_tool = function(opts, execute)
           input_fn = vim.ui.input
         end
 
-        input_fn({ prompt = string.format("%s - %s", prompt, confirmation_text) }, function(resp)
-          if resp == nil then
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_cancelled",
-              cancelled = true,
-            })
-            return
-          end
-          local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
-          if response == "n" or response == "no" then
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_declined",
-              cancelled = true,
-            })
-            return
-          end
+        input_fn(
+          { prompt = string.format("%s - %s", prompt, confirmation_text) },
+          function(resp)
+            if resp == nil then
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_cancelled",
+                cancelled = true,
+              })
+              return
+            end
+            local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
+            if response == "n" or response == "no" then
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_declined",
+                cancelled = true,
+              })
+              return
+            end
 
-          if not input_args.must_confirm and (response == "a" or response == "always") then
-            conversation.auto_confirm_tools[opts.name] = 1
-            input_args.on_accept()
-            return
-          end
+            if
+              not input_args.must_confirm and (response == "a" or response == "always")
+            then
+              conversation.auto_confirm_tools[opts.name] = 1
+              input_args.on_accept()
+              return
+            end
 
-          local should_proceed = false
-          if input_args.must_confirm then
-            should_proceed = response == "y" or response == "yes"
-          else
-            should_proceed = response == "" or response == "y" or response == "yes"
-          end
+            local should_proceed = false
+            if input_args.must_confirm then
+              should_proceed = response == "y" or response == "yes"
+            else
+              should_proceed = response == "" or response == "y" or response == "yes"
+            end
 
-          if should_proceed then
-            input_args.on_accept()
-          else
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_declined",
-              cancelled = true,
-            })
+            if should_proceed then
+              input_args.on_accept()
+            else
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_declined",
+                cancelled = true,
+              })
+            end
           end
-        end)
+        )
       end
       user_choice = function(prompt, choice_args)
         if permission and permission.auto_allow and not choice_args.must_confirm then

@@ -145,7 +145,10 @@ example: // ... existing code ...  ]],
               conversation.auto_confirm_tools["edit"] = 1
             end
           elseif choice == 3 then
-            diff.show_diff_preview(buf, vim.split(initial_code, "\n", { plain = true, trimempty = true }))
+            diff.show_diff_preview(
+              buf,
+              vim.split(initial_code, "\n", { plain = true, trimempty = true })
+            )
           end
 
           local file = vim.fs.basename(args.target_file)
@@ -181,12 +184,16 @@ example: // ... existing code ...  ]],
               local start_context = math.max(1, start_line - context_lines)
               local end_context = math.min(new_content_lines, range_end + context_lines)
 
-              local range_snippet = utils.get_content(buf, start_context - 1, end_context)
+              local range_snippet =
+                utils.get_content(buf, start_context - 1, end_context)
 
               if i > 1 then
                 table.insert(all_snippet_lines, "")
               end
-              table.insert(all_snippet_lines, string.format("Lines %d-%d:", start_context, end_context))
+              table.insert(
+                all_snippet_lines,
+                string.format("Lines %d-%d:", start_context, end_context)
+              )
 
               for _, line in ipairs(range_snippet) do
                 table.insert(all_snippet_lines, line)
@@ -195,10 +202,16 @@ example: // ... existing code ...  ]],
           else
             callback({
               content = {
-                string.format("Agent edit failed for %s - no changes were detected.", args.target_file),
+                string.format(
+                  "Agent edit failed for %s - no changes were detected.",
+                  args.target_file
+                ),
               },
               display_content = {
-                string.format("❌ Failed to edit %s", vim.fn.fnamemodify(args.target_file, ":.")),
+                string.format(
+                  "❌ Failed to edit %s",
+                  vim.fn.fnamemodify(args.target_file, ":.")
+                ),
               },
             })
             return
@@ -233,7 +246,10 @@ example: // ... existing code ...  ]],
       callback({
         content = { string.format("Failed to edit %s", args.target_file) },
         display_content = {
-          string.format("❌ Failed to edit %s", vim.fn.fnamemodify(args.target_file, ":.")),
+          string.format(
+            "❌ Failed to edit %s",
+            vim.fn.fnamemodify(args.target_file, ":.")
+          ),
         },
       })
     end

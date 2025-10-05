@@ -52,7 +52,14 @@ function Writer:append_substring(substring)
       self.canvas:append_text_extmark_at(self.line, self.column, substring)
     end
   elseif self.buf then
-    vim.api.nvim_buf_set_text(self.buf, self.line, self.column, self.line, self.column, { substring })
+    vim.api.nvim_buf_set_text(
+      self.buf,
+      self.line,
+      self.column,
+      self.line,
+      self.column,
+      { substring }
+    )
   end
   self.cache[#self.cache] = self.cache[#self.cache] .. substring
   self.column = self.column + #substring
@@ -150,7 +157,10 @@ function Strategy:on_cancelled() end
 
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil) }
 function Strategy:confirm_continue_after_cancelled_tool(control)
-  if self.auto_continue_after_cancellation or require("sia.config").get_local_config().auto_continue then
+  if
+    self.auto_continue_after_cancellation
+    or require("sia.config").get_local_config().auto_continue
+  then
     control.continue_execution()
   else
     vim.ui.input({
@@ -158,7 +168,9 @@ function Strategy:confirm_continue_after_cancelled_tool(control)
     }, function(response)
       if response ~= nil and (response:lower() == "y" or response:lower() == "yes") then
         control.continue_execution()
-      elseif response ~= nil and (response:lower() == "a" or response:lower() == "always") then
+      elseif
+        response ~= nil and (response:lower() == "a" or response:lower() == "always")
+      then
         self.auto_continue_after_cancellation = true
         control.continue_execution()
       else
@@ -183,13 +195,16 @@ function Strategy:on_tool_call(t)
     end
 
     if not self.tools[v.index] then
-      self.tools[v.index] = { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
+      self.tools[v.index] =
+        { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
     end
     if func.name then
-      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name .. func.name
+      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name
+        .. func.name
     end
     if func.arguments then
-      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments .. func.arguments
+      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments
+        .. func.arguments
     end
   end
   return true
@@ -249,12 +264,18 @@ function Strategy:execute_tools(opts)
                 tool_message = tool_fn.message(args)
               end
             end
-            is_parallel = tool_fn.allow_parallel ~= nil and tool_fn.allow_parallel(self.conversation, tool_args)
+            is_parallel = tool_fn.allow_parallel ~= nil
+              and tool_fn.allow_parallel(self.conversation, tool_args)
           end
         end
       end
-      local parsed_tool =
-        { index = index, message = tool_message, name = tool_name, arguments = tool_args, tool_call = tool }
+      local parsed_tool = {
+        index = index,
+        message = tool_message,
+        name = tool_name,
+        arguments = tool_args,
+        tool_call = tool,
+      }
       all_tools[index] = { tool = parsed_tool, status = "pending" }
       tool_results[index] = nil
       index = index + 1
@@ -321,7 +342,8 @@ function Strategy:execute_tools(opts)
               cancellable = opts.cancellable,
               callback = vim.schedule_wrap(function(tool_result)
                 if not tool_result then
-                  tool_result = { content = { "Could not find tool..." }, kind = "failed" }
+                  tool_result =
+                    { content = { "Could not find tool..." }, kind = "failed" }
                 end
                 on_tool_finished(tool.index, tool.tool_call, tool_result)
               end),
@@ -329,10 +351,18 @@ function Strategy:execute_tools(opts)
           else
             local error_message = { "Could not parse tool arguments" }
             tool.tool_call["function"].arguments = "{}"
-            on_tool_finished(tool.index, tool.tool_call, { content = error_message, kind = "failed" })
+            on_tool_finished(
+              tool.index,
+              tool.tool_call,
+              { content = error_message, kind = "failed" }
+            )
           end
         else
-          on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" }, kind = "failed" })
+          on_tool_finished(
+            tool.index,
+            tool.tool_call,
+            { content = { "Tool is not a function" }, kind = "failed" }
+          )
         end
       end)
     end
@@ -352,7 +382,8 @@ function Strategy:execute_tools(opts)
             cancellable = opts.cancellable,
             callback = vim.schedule_wrap(function(tool_result)
               if not tool_result then
-                tool_result = { content = { "Could not find tool..." }, kind = "failed" }
+                tool_result =
+                  { content = { "Could not find tool..." }, kind = "failed" }
               end
               on_tool_finished(tool.index, tool.tool_call, tool_result)
               process_next_tool()
@@ -361,11 +392,19 @@ function Strategy:execute_tools(opts)
         else
           local error_message = { "Could not parse tool arguments" }
           tool.tool_call["function"].arguments = "{}"
-          on_tool_finished(tool.index, tool.tool_call, { content = error_message, kind = "failed" })
+          on_tool_finished(
+            tool.index,
+            tool.tool_call,
+            { content = error_message, kind = "failed" }
+          )
           process_next_tool()
         end
       else
-        on_tool_finished(tool.index, tool.tool_call, { content = { "Tool is not a function" }, kind = "failed" })
+        on_tool_finished(
+          tool.index,
+          tool.tool_call,
+          { content = { "Tool is not a function" }, kind = "failed" }
+        )
         process_next_tool()
       end
     end

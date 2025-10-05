@@ -27,8 +27,12 @@ local function call_provider(query, opts)
     end
     provider = config.options.providers[model[1]]
   else
-    model =
-      { nil, query.model.name, temperature = query.model.temperature, function_calling = query.model.function_calling }
+    model = {
+      nil,
+      query.model.name,
+      temperature = query.model.temperature,
+      function_calling = query.model.function_calling,
+    }
     provider = query.model.provider
   end
 
@@ -91,7 +95,12 @@ local function call_provider(query, opts)
     table.insert(args, "--header")
     table.insert(
       args,
-      string.format("editor-version: Neovim/%s.%s.%s", vim.version().major, vim.version().minor, vim.version().patch)
+      string.format(
+        "editor-version: Neovim/%s.%s.%s",
+        vim.version().major,
+        vim.version().minor,
+        vim.version().patch
+      )
     )
     table.insert(args, "--header")
     local initiator = "user"
@@ -173,7 +182,9 @@ function M.execute_strategy(strategy)
         if first_on_stdout then
           first_on_stdout = false
           local response = table.concat(responses, " ")
-          local status, json = pcall(vim.json.decode, response, { luanil = { object = true } })
+          local status, json = pcall(vim.json.decode, response, {
+            luanil = { object = true },
+          })
           if status then
             local m_err = extract_error(json)
             if m_err then
@@ -210,7 +221,9 @@ function M.execute_strategy(strategy)
             end
             resp = string.match(resp, "^data: (.+)$")
             if resp and resp ~= "[DONE]" then
-              local status, obj = pcall(vim.json.decode, resp, { luanil = { object = true } })
+              local status, obj = pcall(vim.json.decode, resp, {
+                luanil = { object = true },
+              })
               if not status then
                 incomplete = "data: " .. resp
               else
@@ -330,7 +343,9 @@ function M.execute_query(query, callback)
     end,
     on_exit = function()
       if response ~= "" then
-        local ok, json = pcall(vim.json.decode, response, { luanil = { object = true } })
+        local ok, json = pcall(vim.json.decode, response, {
+          luanil = { object = true },
+        })
         if ok and json and json.choices and #json.choices > 0 then
           callback(json.choices[1].message.content)
         else

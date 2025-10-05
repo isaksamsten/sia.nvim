@@ -90,7 +90,12 @@ function _G.__sia_execute(type)
     require("sia").main(action, { context = context })
   else
     vim.api.nvim_echo(
-      { { "Sia: No available action selected. Please ensure the action is enabled.", "ErrorMsg" } },
+      {
+        {
+          "Sia: No available action selected. Please ensure the action is enabled.",
+          "ErrorMsg",
+        },
+      },
       true,
       {}
     )
@@ -146,7 +151,9 @@ function M.setup()
     vim.api.nvim_set_keymap(
       "x",
       "<Plug>(sia-execute-" .. action .. ")",
-      ":<C-U>lua require('sia.mappings').execute_visual_with_action('/" .. action .. "', vim.fn.visualmode())<CR>",
+      ":<C-U>lua require('sia.mappings').execute_visual_with_action('/"
+        .. action
+        .. "', vim.fn.visualmode())<CR>",
       { noremap = true, silent = true }
     )
   end

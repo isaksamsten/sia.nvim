@@ -66,7 +66,17 @@ return tool_utils.new_tool({
     local col = diagnostic.col + 1
     local source = diagnostic.source and string.format(" [%s]", diagnostic.source) or ""
 
-    table.insert(content, string.format("  Line %d:%d %s%s: %s", line, col, severity, source, diagnostic.message))
+    table.insert(
+      content,
+      string.format(
+        "  Line %d:%d %s%s: %s",
+        line,
+        col,
+        severity,
+        source,
+        diagnostic.message
+      )
+    )
   end
 
   callback({

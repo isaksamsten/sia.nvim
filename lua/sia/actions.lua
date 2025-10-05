@@ -87,7 +87,10 @@ Requirements:
           return {
             "below",
             function(start_line)
-              local capture = require("sia.capture").treesitter({ "@function.inner", "@class.inner" })({ buf = 0 })
+              local capture = require("sia.capture").treesitter({
+                "@function.inner",
+                "@class.inner",
+              })({ buf = 0 })
               if capture then
                 return capture[1] - 1
               end

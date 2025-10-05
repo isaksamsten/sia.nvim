@@ -37,10 +37,16 @@ function InsertStrategy:on_init()
     self._line = line + 1
   end
   local message = self._options.message or { "Generating response...", "SiaProgress" }
-  vim.api.nvim_buf_set_extmark(self.conversation.context.buf, INSERT_NS, math.max(self._line - 1, 0), 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, message } },
-    virt_lines_above = self._line - 1 > 0,
-  })
+  vim.api.nvim_buf_set_extmark(
+    self.conversation.context.buf,
+    INSERT_NS,
+    math.max(self._line - 1, 0),
+    0,
+    {
+      virt_lines = { { { "🤖 ", "Normal" }, message } },
+      virt_lines_above = self._line - 1 > 0,
+    }
+  )
   return true
 end
 
@@ -51,9 +57,16 @@ function InsertStrategy:on_start()
     return false
   end
   if self._padding_direction == "below" or self._padding_direction == "above" then
-    vim.api.nvim_buf_set_lines(context.buf, self._line - 1, self._line - 1, false, { "" })
+    vim.api.nvim_buf_set_lines(
+      context.buf,
+      self._line - 1,
+      self._line - 1,
+      false,
+      { "" }
+    )
   end
-  local content = vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
+  local content =
+    vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
   self._cal = #content
   self:set_abort_keymap(context.buf)
   return true

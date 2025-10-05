@@ -20,7 +20,8 @@ function M.current_buffer(global)
         end
         local filename = utils.get_filename(ctx.buf, ":p")
         local line_count = vim.api.nvim_buf_line_count(ctx.buf)
-        local instruction = string.format("Here is %s (lines 1 to %d)", filename, line_count)
+        local instruction =
+          string.format("Here is %s (lines 1 to %d)", filename, line_count)
 
         if global.show_line_numbers then
           instruction = instruction .. " as shown by cat -n"
@@ -28,7 +29,12 @@ function M.current_buffer(global)
 
         if global.include_cursor and ctx.cursor then
           local cursor_line, cursor_col = ctx.cursor[1], ctx.cursor[2]
-          instruction = instruction .. string.format(" - cursor is at line %d, column %d", cursor_line, cursor_col + 1)
+          instruction = instruction
+            .. string.format(
+              " - cursor is at line %d, column %d",
+              cursor_line,
+              cursor_col + 1
+            )
         end
 
         local code = utils.get_content(
@@ -55,12 +61,20 @@ function M.current_context(global)
       kind = "context",
       description = function(ctx)
         if ctx.mode == "n" then
-          return string.format("Conversation initialized from %s", utils.get_filename(ctx.buf, ":p"))
+          return string.format(
+            "Conversation initialized from %s",
+            utils.get_filename(ctx.buf, ":p")
+          )
         end
         if ctx.pos == nil or ctx.pos[2] == -1 then
           return string.format("%s", utils.get_filename(ctx.buf, ":p"))
         end
-        return string.format("%s lines %d-%d", utils.get_filename(ctx.buf, ":p"), ctx.pos[1], ctx.pos[2])
+        return string.format(
+          "%s lines %d-%d",
+          utils.get_filename(ctx.buf, ":p"),
+          ctx.pos[1],
+          ctx.pos[2]
+        )
       end,
       hide = true,
       content = function(ctx)
@@ -73,11 +87,17 @@ function M.current_context(global)
           if ctx.pos then
             start_line, end_line = ctx.pos[1], ctx.pos[2]
           end
-          local instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
+          local instruction =
+            string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
           if end_line == -1 then
             start_line = 1
             end_line = vim.api.nvim_buf_line_count(ctx.buf)
-            instruction = string.format("Here is %s (lines %d to %d)", filename, start_line, end_line)
+            instruction = string.format(
+              "Here is %s (lines %d to %d)",
+              filename,
+              start_line,
+              end_line
+            )
           end
           local code = utils.get_content(
             ctx.buf,
@@ -112,14 +132,27 @@ function M.verbatim()
       hide = true,
       kind = "context",
       description = function(ctx)
-        return string.format("%s verbatim lines %d-%d", utils.get_filename(ctx.buf, ":."), ctx.pos[1], ctx.pos[2])
+        return string.format(
+          "%s verbatim lines %d-%d",
+          utils.get_filename(ctx.buf, ":."),
+          ctx.pos[1],
+          ctx.pos[2]
+        )
       end,
       content = function(ctx)
-        if vim.api.nvim_buf_is_loaded(ctx.buf) and vim.api.nvim_buf_is_valid(ctx.buf) and ctx and ctx.mode == "v" then
+        if
+          vim.api.nvim_buf_is_loaded(ctx.buf)
+          and vim.api.nvim_buf_is_valid(ctx.buf)
+          and ctx
+          and ctx.mode == "v"
+        then
           return nil
         end
         local start_line, end_line = ctx.pos[1], ctx.pos[2]
-        return table.concat(vim.api.nvim_buf_get_lines(ctx.buf, start_line - 1, end_line, false), "\n")
+        return table.concat(
+          vim.api.nvim_buf_get_lines(ctx.buf, start_line - 1, end_line, false),
+          "\n"
+        )
       end,
     },
   }
@@ -154,7 +187,9 @@ function M.visible_buffers()
 
             buffer_info[buf] = {
               relative_name = relative_name,
-              hide = vim.bo[buf].buflisted or vim.bo[buf].buftype ~= "" or relative_name == "",
+              hide = vim.bo[buf].buflisted
+                or vim.bo[buf].buftype ~= ""
+                or relative_name == "",
               buf = buf,
               cursor_line = cursor[1],
               cursor_col = cursor[2] + 1,
@@ -168,9 +203,16 @@ function M.visible_buffers()
         for _, info in pairs(buffer_info) do
           if not info.hide then
             local status = info.is_current and " (current)" or ""
-            local position_info =
-              string.format("line %d, col %d (of %d lines)", info.cursor_line, info.cursor_col, info.line_count)
-            table.insert(buffers, string.format("- %s: %s%s", info.relative_name, position_info, status))
+            local position_info = string.format(
+              "line %d, col %d (of %d lines)",
+              info.cursor_line,
+              info.cursor_col,
+              info.line_count
+            )
+            table.insert(
+              buffers,
+              string.format("- %s: %s%s", info.relative_name, position_info, status)
+            )
           end
         end
 

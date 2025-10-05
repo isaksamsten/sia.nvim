@@ -52,7 +52,9 @@ return tool_utils.new_tool({
   local root = utils.detect_project_root(target_abs)
   if restrict_root and not utils.path_in_root(target_abs, root) then
     callback({
-      content = { string.format("Error: Operation must stay within project root: %s", root) },
+      content = {
+        string.format("Error: Operation must stay within project root: %s", root),
+      },
       display_content = { FAILED_TO_REMOVE },
       kind = "failed",
     })
@@ -88,13 +90,19 @@ return tool_utils.new_tool({
       if trash then
         local timestamp = os.date("%Y%m%d-%H%M%S")
         local trash_base = vim.fs.joinpath(root, trash_dir_name, timestamp)
-        local relative_from_root = vim.fn.fnamemodify(target_abs, ":p"):gsub("^" .. vim.pesc(root) .. "/?", "")
+        local relative_from_root =
+          vim.fn.fnamemodify(target_abs, ":p"):gsub("^" .. vim.pesc(root) .. "/?", "")
         local trash_dest = vim.fs.joinpath(trash_base, relative_from_root)
         vim.fn.mkdir(vim.fn.fnamemodify(trash_dest, ":h"), "p")
         local ok, err = pcall(vim.uv.fs_rename, target_abs, trash_dest)
         if not ok then
           callback({
-            content = { string.format("Error: Failed to move to trash: %s", err or "unknown error") },
+            content = {
+              string.format(
+                "Error: Failed to move to trash: %s",
+                err or "unknown error"
+              ),
+            },
             display_content = { FAILED_TO_REMOVE },
             kind = "failed",
           })
@@ -103,8 +111,12 @@ return tool_utils.new_tool({
 
         delete_buffers_under(target_abs)
         callback({
-          content = { string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)) },
-          display_content = { string.format("🗑️ Moved %s to trash", rel(target_abs)) },
+          content = {
+            string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)),
+          },
+          display_content = {
+            string.format("🗑️ Moved %s to trash", rel(target_abs)),
+          },
         })
         return
       else

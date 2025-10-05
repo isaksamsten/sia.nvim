@@ -10,8 +10,13 @@ function M.treesitter(query)
       return nil
     end
 
-    local _, pos =
-      shared.textobject_at_point(query, nil, opts.cursor or nil, opts.buf, { lookahead = false, lookbehind = false })
+    local _, pos = shared.textobject_at_point(
+      query,
+      nil,
+      opts.cursor or nil,
+      opts.buf,
+      { lookahead = false, lookbehind = false }
+    )
     if pos then
       return { pos[1] + 1, pos[3] + 1 }
     end

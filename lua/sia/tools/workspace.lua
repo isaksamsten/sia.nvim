@@ -89,12 +89,21 @@ Do not guess which file the user means—always check the workspace first.]],
   else
     table.insert(
       content,
-      string.format("Visible files (%d window%s):", #visible_windows, #visible_windows == 1 and "" or "s")
+      string.format(
+        "Visible files (%d window%s):",
+        #visible_windows,
+        #visible_windows == 1 and "" or "s"
+      )
     )
     table.insert(content, "")
 
     for i, win_info in ipairs(visible_windows) do
-      local line_range = string.format("lines %d-%d of %d", win_info.topline, win_info.botline, win_info.total_lines)
+      local line_range = string.format(
+        "lines %d-%d of %d",
+        win_info.topline,
+        win_info.botline,
+        win_info.total_lines
+      )
       local header = string.format(
         "%s (%s, cursor at line %d) with content as shown by cat -n",
         win_info.relative_path,

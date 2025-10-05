@@ -6,52 +6,16 @@ local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 
 --- @class sia.Canvas
-local Canvas = {}
-
---- @param messages sia.Message[]
-function Canvas:render_messages(messages, model) end
-
---- @param model string?
---- @return integer? extmark_id
-function Canvas:render_assistant_header(model) end
-
---- @param usage sia.Usage
---- @param extmark_id integer
-function Canvas:update_usage(usage, extmark_id) end
-
-function Canvas:scroll_to_bottom() end
-
---- @param content string[][]
-function Canvas:update_progress(content) end
-
---- @param content string[][][]
-function Canvas:update_tool_progress(content) end
-
---- @param content string[][]
-function Canvas:append_tool_result(content) end
-
---- @param content string[]
-function Canvas:append(content) end
-
-function Canvas:clear_reasoning() end
-
-function Canvas:clear_extmarks() end
-
-function Canvas:clear() end
-
-function Canvas:line_count() end
-
---- @class sia.ChatCanvas : sia.Canvas
 --- @field buf integer
 --- @field progress_extmark integer?
 --- @field reasoning_extmark integer?
 --- @field reasoning_content string[]
 --- @field reasoning_line integer?
-local ChatCanvas = {}
-ChatCanvas.__index = ChatCanvas
+local Canvas = {}
+Canvas.__index = Canvas
 
 --- @param buf integer
-function ChatCanvas:new(buf)
+function Canvas:new(buf)
   local obj = {
     buf = buf,
     progress_extmark = nil,
@@ -63,25 +27,27 @@ function ChatCanvas:new(buf)
   return obj
 end
 
-function ChatCanvas:update_tool_progress(content)
+function Canvas:update_tool_progress(content)
   local buf = self.buf
   self:clear_extmarks()
-  self.progress_extmark = vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
-    virt_lines = content,
-    virt_lines_above = false,
-  })
+  self.progress_extmark =
+    vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
+      virt_lines = content,
+      virt_lines_above = false,
+    })
 end
-function ChatCanvas:update_progress(content)
+function Canvas:update_progress(content)
   local buf = self.buf
   self:clear_extmarks()
   table.insert(content, 1, { "🤖 ", "Normal" })
-  self.progress_extmark = vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
-    virt_lines = { content },
-    virt_lines_above = false,
-  })
+  self.progress_extmark =
+    vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
+      virt_lines = { content },
+      virt_lines_above = false,
+    })
 end
 
-function ChatCanvas:append_tool_result(content)
+function Canvas:append_tool_result(content)
   local line = self:line_count()
 
   self:append(content)
@@ -95,23 +61,23 @@ function ChatCanvas:append_tool_result(content)
   })
 end
 
-function ChatCanvas:clear_reasoning()
+function Canvas:clear_reasoning()
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   self.reasoning_extmark = nil
   self.reasoning_content = {}
   self.reasoning_line = nil
 end
 
-function ChatCanvas:clear_extmarks()
+function Canvas:clear_extmarks()
   pcall(vim.api.nvim_buf_del_extmark, self.buf, PROGRESS_NS, self.progress_extmark)
   self.progress_extmark = nil
 end
 
-function ChatCanvas:get_win()
+function Canvas:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
-function ChatCanvas:scroll_to_bottom()
+function Canvas:scroll_to_bottom()
   local win = self:get_win()
   if win ~= -1 then
     vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(self.buf), 0 })
@@ -120,12 +86,17 @@ end
 
 --- @param usage sia.Usage
 --- @param extmark_id integer
-function ChatCanvas:update_usage(usage, extmark_id)
+function Canvas:update_usage(usage, extmark_id)
   if extmark_id == nil then
     return
   end
 
-  local extmark_details = vim.api.nvim_buf_get_extmark_by_id(self.buf, CHAT_NS, extmark_id, { details = true })
+  local extmark_details = vim.api.nvim_buf_get_extmark_by_id(
+    self.buf,
+    CHAT_NS,
+    extmark_id,
+    { details = true }
+  )
   if not extmark_details or #extmark_details < 3 then
     return
   end
@@ -155,7 +126,10 @@ function ChatCanvas:update_usage(usage, extmark_id)
   end
 
   if usage.total_time then
-    table.insert(usage_text, { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" })
+    table.insert(
+      usage_text,
+      { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" }
+    )
   end
 
   if #usage_text > 0 then
@@ -177,7 +151,7 @@ function ChatCanvas:update_usage(usage, extmark_id)
 end
 
 --- @return integer? extmark_id
-function ChatCanvas:_set_assistant_extmark(line, model)
+function Canvas:_set_assistant_extmark(line, model)
   if model == nil then
     return nil
   end
@@ -191,7 +165,7 @@ function ChatCanvas:_set_assistant_extmark(line, model)
   })
 end
 
-function ChatCanvas:_set_user_extmark(line)
+function Canvas:_set_user_extmark(line)
   vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
     end_line = line,
     hl_mode = "combine",
@@ -201,7 +175,7 @@ function ChatCanvas:_set_user_extmark(line)
 end
 --- @param messages sia.Message[]
 --- @param model string?
-function ChatCanvas:render_messages(messages, model)
+function Canvas:render_messages(messages, model)
   for _, message in ipairs(messages) do
     if message:is_shown() then
       local content = message:get_content()
@@ -212,14 +186,26 @@ function ChatCanvas:render_messages(messages, model)
           heading = "/sia"
         end
         if line_count == 1 then
-          vim.api.nvim_buf_set_lines(self.buf, line_count - 1, line_count, false, { heading, "" })
+          vim.api.nvim_buf_set_lines(
+            self.buf,
+            line_count - 1,
+            line_count,
+            false,
+            { heading, "" }
+          )
           if heading == "/sia" then
             self:_set_assistant_extmark(line_count, model)
           else
             self:_set_user_extmark(line_count)
           end
         else
-          vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "", heading, "" })
+          vim.api.nvim_buf_set_lines(
+            self.buf,
+            line_count,
+            line_count,
+            false,
+            { "", heading, "" }
+          )
           if heading == "/sia" then
             self:_set_assistant_extmark(line_count + 2, model)
           else
@@ -227,7 +213,13 @@ function ChatCanvas:render_messages(messages, model)
           end
         end
         line_count = vim.api.nvim_buf_line_count(self.buf)
-        vim.api.nvim_buf_set_lines(self.buf, line_count - 1, line_count, false, vim.split(content, "\n"))
+        vim.api.nvim_buf_set_lines(
+          self.buf,
+          line_count - 1,
+          line_count,
+          false,
+          vim.split(content, "\n")
+        )
       end
     end
   end
@@ -236,7 +228,7 @@ end
 
 --- @param model string?
 --- @return integer? extmark_id
-function ChatCanvas:render_assistant_header(model)
+function Canvas:render_assistant_header(model)
   local buf = self.buf
   local id
   if self:line_count() == 1 then
@@ -250,7 +242,7 @@ function ChatCanvas:render_assistant_header(model)
   return id
 end
 
-function ChatCanvas:clear()
+function Canvas:clear()
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
   vim.api.nvim_buf_clear_namespace(self.buf, TOOL_RESULT_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
@@ -258,11 +250,11 @@ function ChatCanvas:clear()
   vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)
 end
 
-function ChatCanvas:line_count()
+function Canvas:line_count()
   return vim.api.nvim_buf_line_count(self.buf)
 end
 
-function ChatCanvas:append(content)
+function Canvas:append(content)
   local buf = self.buf
   if vim.api.nvim_buf_is_loaded(buf) then
     vim.bo[buf].modifiable = true
@@ -272,18 +264,23 @@ function ChatCanvas:append(content)
   end
 end
 
-function ChatCanvas:update_progress_position()
+function Canvas:update_progress_position()
   if self.progress_extmark then
     local new_line_count = vim.api.nvim_buf_line_count(self.buf)
     pcall(vim.api.nvim_buf_set_extmark, self.buf, PROGRESS_NS, new_line_count - 1, 0, {
       id = self.progress_extmark,
-      virt_lines = vim.api.nvim_buf_get_extmark_by_id(self.buf, PROGRESS_NS, self.progress_extmark, { details = true })[3].virt_lines,
+      virt_lines = vim.api.nvim_buf_get_extmark_by_id(
+        self.buf,
+        PROGRESS_NS,
+        self.progress_extmark,
+        { details = true }
+      )[3].virt_lines,
       virt_lines_above = false,
     })
   end
 end
 
-function ChatCanvas:append_text_at(line, col, text)
+function Canvas:append_text_at(line, col, text)
   local buf = self.buf
   if vim.api.nvim_buf_is_loaded(buf) then
     vim.bo[buf].modifiable = true
@@ -292,7 +289,7 @@ function ChatCanvas:append_text_at(line, col, text)
   end
 end
 
-function ChatCanvas:append_newline_at(line)
+function Canvas:append_newline_at(line)
   local buf = self.buf
   if vim.api.nvim_buf_is_loaded(buf) then
     vim.bo[buf].modifiable = true
@@ -301,7 +298,7 @@ function ChatCanvas:append_newline_at(line)
   end
 end
 
-function ChatCanvas:append_text_extmark_at(line, col, text)
+function Canvas:append_text_extmark_at(line, _, text)
   if self.reasoning_line == nil then
     self.reasoning_line = line
   end
@@ -316,7 +313,7 @@ function ChatCanvas:append_text_extmark_at(line, col, text)
   self:_update_reasoning_extmark()
 end
 
-function ChatCanvas:append_newline_extmark_at(line)
+function Canvas:append_newline_extmark_at(line)
   if self.reasoning_line == nil then
     self.reasoning_line = line
   end
@@ -326,7 +323,7 @@ function ChatCanvas:append_newline_extmark_at(line)
   self:_update_reasoning_extmark()
 end
 
-function ChatCanvas:_update_reasoning_extmark()
+function Canvas:_update_reasoning_extmark()
   local buf = self.buf
   if not vim.api.nvim_buf_is_loaded(buf) or self.reasoning_line == nil then
     return
@@ -342,13 +339,14 @@ function ChatCanvas:_update_reasoning_extmark()
   end
 
   if #virt_lines > 0 then
-    self.reasoning_extmark = vim.api.nvim_buf_set_extmark(buf, REASONING_NS, self.reasoning_line, 0, {
-      virt_lines = virt_lines,
-      virt_lines_above = true,
-    })
+    self.reasoning_extmark =
+      vim.api.nvim_buf_set_extmark(buf, REASONING_NS, self.reasoning_line, 0, {
+        virt_lines = virt_lines,
+        virt_lines_above = true,
+      })
   end
 end
 
-M.ChatCanvas = ChatCanvas
+M.Canvas = Canvas
 
 return M

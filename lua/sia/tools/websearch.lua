@@ -5,7 +5,8 @@ local FAILED_TO_ACCESS = "❌ Failed to access search"
 return tool_utils.new_tool({
   name = "websearch",
   is_available = function()
-    return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil and os.getenv("GOOGLE_SEARCH_CX") ~= nil
+    return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil
+      and os.getenv("GOOGLE_SEARCH_CX") ~= nil
   end,
   message = function(args)
     if args.description then
@@ -44,14 +45,18 @@ Usage notes:
   end
   if not os.getenv("GOOGLE_SEARCH_API_KEY") then
     callback({
-      content = { "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user." },
+      content = {
+        "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
+      },
       display_content = { FAILED_TO_ACCESS },
     })
     return
   end
   if not os.getenv("GOOGLE_SEARCH_CX") then
     callback({
-      content = { "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user." },
+      content = {
+        "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
+      },
       display_content = { FAILED_TO_ACCESS },
     })
     return
@@ -79,7 +84,9 @@ Usage notes:
             local error_msg = result.stderr and result.stderr ~= "" and result.stderr
               or string.format("curl failed with exit code: %d", result.code)
             callback({
-              content = { string.format("Error: Failed to fetch search results - %s", error_msg) },
+              content = {
+                string.format("Error: Failed to fetch search results - %s", error_msg),
+              },
               display_content = { FAILED_FETCH },
             })
             return
@@ -91,7 +98,10 @@ Usage notes:
             local searchCount = json.items and #json.items or 0
 
             if json.searchInformation then
-              table.insert(content, string.format("# Search Results for: %s", args.query))
+              table.insert(
+                content,
+                string.format("# Search Results for: %s", args.query)
+              )
               table.insert(content, "")
               table.insert(
                 content,
@@ -109,14 +119,18 @@ Usage notes:
                 table.insert(content, string.format("## Result %d", i))
                 table.insert(content, string.format("**Title:** %s", item.title))
                 table.insert(content, string.format("**URL:** %s", item.link))
-                table.insert(content, string.format("**Description:** %s", item.snippet))
+                table.insert(
+                  content,
+                  string.format("**Description:** %s", item.snippet)
+                )
                 table.insert(content, "")
               end
             else
               table.insert(content, "No search results found for this query.")
             end
 
-            local display_content = args.description and string.format("🔍 %s", args.description)
+            local display_content = args.description
+                and string.format("🔍 %s", args.description)
               or string.format("🔍 Search results for: %s", args.query)
             callback({
               content = content,

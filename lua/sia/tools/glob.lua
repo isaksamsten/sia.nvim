@@ -57,17 +57,24 @@ return tool_utils.new_tool({
 
         local files = vim.split(obj.stdout or "", "\0", { trimempty = true })
         if #files == 0 then
-          local msg = pattern and ("No files found matching pattern: " .. pattern) or "No files found."
+          local msg = pattern and ("No files found matching pattern: " .. pattern)
+            or "No files found."
           callback({ content = { msg } })
           return
         end
 
-        local limited_files, total_count =
-          utils.limit_files(files, { max_count = MAX_FILES_RESULT, max_sort = MAX_FILES_SORT })
+        local limited_files, total_count = utils.limit_files(
+          files,
+          { max_count = MAX_FILES_RESULT, max_sort = MAX_FILES_SORT }
+        )
 
         local header = pattern
             and ("Files matching pattern `" .. pattern .. "` (max " .. MAX_FILES_RESULT .. ", newest first):")
-          or ("Files in the current project (max " .. MAX_FILES_RESULT .. ", newest first):")
+          or (
+            "Files in the current project (max "
+            .. MAX_FILES_RESULT
+            .. ", newest first):"
+          )
         table.insert(limited_files, 1, header)
 
         if total_count > MAX_FILES_RESULT then
@@ -86,8 +93,11 @@ return tool_utils.new_tool({
         callback({
           content = limited_files,
           display_content = {
-            pattern and string.format("📂 Found %d files matching `%s`", total_count, pattern)
-              or string.format("📂 Found %d files", total_count),
+            pattern and string.format(
+              "📂 Found %d files matching `%s`",
+              total_count,
+              pattern
+            ) or string.format("📂 Found %d files", total_count),
           },
         })
       end)

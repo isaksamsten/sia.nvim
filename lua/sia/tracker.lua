@@ -47,7 +47,13 @@ function M.ensure_tracked(buf)
 
   if not M.tracked_buffers[buf] then
     local group = vim.api.nvim_create_augroup("SiaTracker_" .. buf, { clear = true })
-    M.tracked_buffers[buf] = { tick = 0, editing = false, timer = nil, refcount = 1, group = group }
+    M.tracked_buffers[buf] = {
+      tick = 0,
+      editing = false,
+      timer = nil,
+      refcount = 1,
+      group = group,
+    }
 
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       buffer = buf,

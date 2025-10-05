@@ -10,7 +10,8 @@ Link format:
 URL: [full_url]
 RELEVANCE: [specific value for original question]
 
-Prioritize links that: provide official docs/APIs, fill summary gaps, offer actionable resources, or connect related concepts.]]
+Prioritize links that: provide official docs/APIs, fill summary gaps, offer actionable
+resources, or connect related concepts.]]
 
 local ALLOWED_CONTENT_TYPES = {
   "text/html",
@@ -53,7 +54,11 @@ local function html_to_markdown(html_content, callback)
       { text = true },
       vim.schedule_wrap(function(result)
         vim.fn.delete(temp_html)
-        if result.stdout and result.stdout ~= "" and not result.stdout:match("^%s*$") then
+        if
+          result.stdout
+          and result.stdout ~= ""
+          and not result.stdout:match("^%s*$")
+        then
           callback(result.stdout)
         else
           callback(nil)
@@ -182,7 +187,9 @@ Usage notes:
           if content_type then
             if not content_type then
               callback({
-                content = { "Error: Could not determine content type. Only text-based content is supported." },
+                content = {
+                  "Error: Could not determine content type. Only text-based content is supported.",
+                },
                 display_content = { "❌ Unknown content type" },
               })
               return
@@ -193,7 +200,9 @@ Usage notes:
             for _, allowed in ipairs(ALLOWED_CONTENT_TYPES) do
               if
                 content_type == allowed
-                or content_type:find("^" .. allowed:gsub("([%.%+%-%*%?%[%]%^%$%(%)%%])", "%%%1"))
+                or content_type:find(
+                  "^" .. allowed:gsub("([%.%+%-%*%?%[%]%^%$%(%)%%])", "%%%1")
+                )
               then
                 is_text_based = true
                 break
@@ -227,7 +236,11 @@ Usage notes:
                   },
                   {
                     role = "user",
-                    content = string.format("%s. Here's the webpage:\n%s", args.prompt, final_content),
+                    content = string.format(
+                      "%s. Here's the webpage:\n%s",
+                      args.prompt,
+                      final_content
+                    ),
                   },
                 },
               }, function(response)

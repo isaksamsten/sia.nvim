@@ -79,7 +79,10 @@ local function copilot_api_key()
 end
 
 --- @type sia.config.Provider
-M.copilot = { base_url = "https://api.githubcopilot.com/chat/completions", api_key = copilot_api_key() }
+M.copilot = {
+  base_url = "https://api.githubcopilot.com/chat/completions",
+  api_key = copilot_api_key(),
+}
 
 --- @type sia.config.Provider
 M.openai = {
@@ -161,7 +164,13 @@ M.openrouter = {
       for i, prompt in ipairs(prompts) do
         if i == last_user_idx or i == last_system_idx then
           if type(prompt.content) == "string" then
-            prompt.content = { { type = "text", text = prompt.content, cache_control = { type = "ephemeral" } } }
+            prompt.content = {
+              {
+                type = "text",
+                text = prompt.content,
+                cache_control = { type = "ephemeral" },
+              },
+            }
           else
             prompt.content[#prompt.content].cache_control = { type = "ephemeral" }
           end

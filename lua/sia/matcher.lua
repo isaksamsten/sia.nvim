@@ -36,7 +36,9 @@ function M.longest_common_substring(a, b)
     end
   end
 
-  return match_end_a - longest_match_len + 1, match_end_b - longest_match_len + 1, longest_match_len
+  return match_end_a - longest_match_len + 1,
+    match_end_b - longest_match_len + 1,
+    longest_match_len
 end
 
 --- Calculate the similarity ratio between two strings.
@@ -177,7 +179,7 @@ function M.find_inline_matches(needle_str, haystack_lines, opts)
     if limit and #matches >= limit then
       break
     end
-    
+
     local search_line = ignore_case and line:lower() or line
 
     if threshold then
@@ -216,7 +218,7 @@ function M.find_inline_matches(needle_str, haystack_lines, opts)
         if limit and #matches >= limit then
           break
         end
-        
+
         local start_col = search_line:find(search_needle, start_pos, true)
         if not start_col then
           break
@@ -406,10 +408,16 @@ local function _find_best_match(needle, haystack)
   matches = _find_best_subsequence_span(needle_lines, haystack, { limit = 2 })
   if #matches == 0 then
     fuzzy = true
-    matches = _find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, limit = 2 })
+    matches = _find_best_subsequence_span(needle_lines, haystack, {
+      ignore_indent = true,
+      limit = 2,
+    })
     if #matches == 0 then
-      matches =
-        _find_best_subsequence_span(needle_lines, haystack, { ignore_indent = true, threshold = 0.9, limit = 2 })
+      matches = _find_best_subsequence_span(needle_lines, haystack, {
+        ignore_indent = true,
+        threshold = 0.9,
+        limit = 2,
+      })
     end
   end
 
@@ -418,7 +426,10 @@ local function _find_best_match(needle, haystack)
     matches = M.find_inline_matches(needle_lines[1], haystack, { limit = 2 })
     if #matches == 0 then
       fuzzy = true
-      matches = M.find_inline_matches(needle_lines[1], haystack, { ignore_case = true, limit = 2 })
+      matches = M.find_inline_matches(needle_lines[1], haystack, {
+        ignore_case = true,
+        limit = 2,
+      })
     end
   end
 

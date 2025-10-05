@@ -200,7 +200,8 @@ function Shell:_process_queue()
 
       if not self:_is_within_project() then
         self:_update_cwd()
-        result.stderr = (result.stderr or "") .. "\nWarning: Shell directory was reset to project root"
+        result.stderr = (result.stderr or "")
+          .. "\nWarning: Shell directory was reset to project root"
       end
 
       if cancelled then
@@ -222,7 +223,11 @@ end
 ---@param timeout number
 ---@param callback function
 function Shell:_exec_internal(command, timeout, callback)
-  for _, file in pairs({ self.temp_files.stdout, self.temp_files.stderr, self.temp_files.status }) do
+  for _, file in pairs({
+    self.temp_files.stdout,
+    self.temp_files.stderr,
+    self.temp_files.status,
+  }) do
     vim.fn.writefile({}, file)
   end
 
@@ -292,7 +297,8 @@ echo $EXEC_EXIT_CODE > %s
         else
           self:_kill_children()
           result.code = 143 -- SIGTERM
-          result.stderr = (result.stderr ~= "" and result.stderr .. "\n" or "") .. "Command execution timed out"
+          result.stderr = (result.stderr ~= "" and result.stderr .. "\n" or "")
+            .. "Command execution timed out"
         end
 
         local max_output = 8000
@@ -300,7 +306,8 @@ echo $EXEC_EXIT_CODE > %s
           result.stdout = result.stdout:sub(1, max_output) .. "\n... (output truncated)"
         end
         if #result.stderr > max_output then
-          result.stderr = result.stderr:sub(1, max_output) .. "\n... (error output truncated)"
+          result.stderr = result.stderr:sub(1, max_output)
+            .. "\n... (error output truncated)"
         end
 
         callback(result)

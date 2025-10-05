@@ -28,7 +28,10 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
           lnum = { type = "integer", description = "Line number (1-based)" },
           col = { type = "integer", description = "Column number (1-based, optional)" },
           text = { type = "string", description = "Description text for the item" },
-          type = { type = "string", description = "Item type: E (error), W (warning), I (info), N (note)" },
+          type = {
+            type = "string",
+            description = "Item type: E (error), W (warning), I (info), N (note)",
+          },
         },
         required = { "filename", "lnum", "text" },
       },
@@ -53,7 +56,12 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   for i, item in ipairs(args.items) do
     if not item.filename or not item.lnum or not item.text then
       callback({
-        content = { string.format("Error: Item %d missing required fields (filename, lnum, text)", i) },
+        content = {
+          string.format(
+            "Error: Item %d missing required fields (filename, lnum, text)",
+            i
+          ),
+        },
         display_content = { FAILED_TO_CREATE_QF },
         kind = "failed",
       })
@@ -88,6 +96,8 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
       string.format("Created quickfix list `%s` with %d items", title, #qf_items),
       "Use :cnext/:cprev to navigate, or click items in the quickfix window",
     },
-    display_content = { string.format("📝 Created quickfix list with %d items", #qf_items) },
+    display_content = {
+      string.format("📝 Created quickfix list with %d items", #qf_items),
+    },
   })
 end)

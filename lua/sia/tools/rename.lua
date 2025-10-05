@@ -40,9 +40,13 @@ Notes:
   local root = utils.detect_project_root(src_abs)
 
   if restrict_root then
-    if not utils.path_in_root(src_abs, root) or not utils.path_in_root(dest_abs, root) then
+    if
+      not utils.path_in_root(src_abs, root) or not utils.path_in_root(dest_abs, root)
+    then
       callback({
-        content = { string.format("Error: Operation must stay within project root: %s", root) },
+        content = {
+          string.format("Error: Operation must stay within project root: %s", root),
+        },
         display_content = { FAILED_TO_RENAME },
         kind = "failed",
       })
@@ -71,7 +75,12 @@ Notes:
   local dest_stat = vim.uv.fs_stat(dest_abs)
   if dest_stat then
     callback({
-      content = { string.format("Error: Destination exists and overwriting is not allowed: %s", args.dest) },
+      content = {
+        string.format(
+          "Error: Destination exists and overwriting is not allowed: %s",
+          args.dest
+        ),
+      },
       display_content = { FAILED_TO_RENAME },
       kind = "failed",
     })
@@ -101,7 +110,9 @@ Notes:
 
       if not success then
         callback({
-          content = { string.format("Error: Failed to rename: %s", err_code or "unknown error") },
+          content = {
+            string.format("Error: Failed to rename: %s", err_code or "unknown error"),
+          },
           display_content = { FAILED_TO_RENAME },
           kind = "failed",
         })
@@ -109,7 +120,9 @@ Notes:
       end
 
       for _, buf_id in ipairs(vim.api.nvim_list_bufs()) do
-        if not (vim.api.nvim_buf_is_loaded(buf_id) and vim.bo[buf_id].buftype == "") then
+        if
+          not (vim.api.nvim_buf_is_loaded(buf_id) and vim.bo[buf_id].buftype == "")
+        then
           goto continue
         end
 
@@ -132,8 +145,12 @@ Notes:
         return vim.fn.fnamemodify(path, ":.")
       end
       callback({
-        content = { string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)) },
-        display_content = { string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)) },
+        content = {
+          string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
+        },
+        display_content = {
+          string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
+        },
       })
     end,
   })

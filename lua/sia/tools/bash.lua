@@ -46,7 +46,8 @@ Before executing the command, please follow these steps:
 
 Usage notes:
   - The command argument is required.
-  - You can specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). If not specified, commands will timeout after 30 seconds.
+  - You can specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). If
+    not specified, commands will timeout after 30 seconds.
   - VERY IMPORTANT: You MUST avoid using search commands like `find` and
     `grep`. Instead use grep, glob, or dispatch_agent to search. You MUST avoid
     read tools like `cat`, `head`, `tail`, and `ls`, and use read and
@@ -158,71 +159,88 @@ git commit -m "$(cat <<'EOF'
         conversation.shell = Shell.new(project_root)
       end
 
-      conversation.shell:exec(args.command, timeout, opts and opts.cancellable, function(result)
-        local stdout = result.stdout or ""
-        local stderr = result.stderr or ""
-        local code = result.code or 0
+      conversation.shell:exec(
+        args.command,
+        timeout,
+        opts and opts.cancellable,
+        function(result)
+          local stdout = result.stdout or ""
+          local stderr = result.stderr or ""
+          local code = result.code or 0
 
-        local content = {}
+          local content = {}
 
-        local cwd = conversation.shell:pwd()
-        local relative_cwd = vim.fn.fnamemodify(cwd, ":~:.")
-        if relative_cwd == "" or relative_cwd == "." then
-          relative_cwd = "."
-        end
-        table.insert(content, string.format("Working directory: %s", relative_cwd))
+          local cwd = conversation.shell:pwd()
+          local relative_cwd = vim.fn.fnamemodify(cwd, ":~:.")
+          if relative_cwd == "" or relative_cwd == "." then
+            relative_cwd = "."
+          end
+          table.insert(content, string.format("Working directory: %s", relative_cwd))
 
-        if stdout and stdout ~= "" then
-          table.insert(content, "")
-          table.insert(content, stdout)
-        end
-        if stderr and stderr ~= "" then
           if stdout and stdout ~= "" then
             table.insert(content, "")
-          elseif #content > 1 then
+            table.insert(content, stdout)
+          end
+          if stderr and stderr ~= "" then
+            if stdout and stdout ~= "" then
+              table.insert(content, "")
+            elseif #content > 1 then
+              table.insert(content, "")
+            end
+            table.insert(content, "stderr:")
+            table.insert(content, stderr)
+          end
+          if code ~= 0 then
+            table.insert(content, string.format("Exit code: %d", code))
+          end
+          if result.interrupted then
+            table.insert(content, "Command was interrupted")
+          end
+
+          if #content == 1 then
             table.insert(content, "")
+            table.insert(content, "Command completed successfully (no output)")
           end
-          table.insert(content, "stderr:")
-          table.insert(content, stderr)
-        end
-        if code ~= 0 then
-          table.insert(content, string.format("Exit code: %d", code))
-        end
-        if result.interrupted then
-          table.insert(content, "Command was interrupted")
-        end
 
-        if #content == 1 then
-          table.insert(content, "")
-          table.insert(content, "Command completed successfully (no output)")
-        end
+          local display_msg
+          if code == 0 then
+            if args.description then
+              display_msg =
+                string.format("⚡ %s: `%s`", args.description, args.command)
+            else
+              display_msg = string.format("⚡ Executed `%s`", args.command)
+            end
+          elseif result.interrupted then
+            if args.description then
+              display_msg =
+                string.format("⚡ Stopped %s: `%s`", args.description, args.command)
+            else
+              display_msg = string.format("⚡ Stopped `%s`", args.command)
+            end
+          else
+            if args.description then
+              display_msg = string.format(
+                "⚡ %s: `%s` (exit code %d)",
+                args.description,
+                args.command,
+                code
+              )
+            else
+              display_msg =
+                string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
+            end
+          end
 
-        local display_msg
-        if code == 0 then
-          if args.description then
-            display_msg = string.format("⚡ %s: `%s`", args.description, args.command)
-          else
-            display_msg = string.format("⚡ Executed `%s`", args.command)
-          end
-        elseif result.interrupted then
-          if args.description then
-            display_msg = string.format("⚡ Stopped %s: `%s`", args.description, args.command)
-          else
-            display_msg = string.format("⚡ Stopped `%s`", args.command)
-          end
-        else
-          if args.description then
-            display_msg = string.format("⚡ %s: `%s` (exit code %d)", args.description, args.command, code)
-          else
-            display_msg = string.format("⚡ Executed `%s` (exit code %d)", args.command, code)
-          end
+          callback({
+            content = content,
+            display_content = vim.split(
+              display_msg,
+              "\n",
+              { trimempty = true, plain = true }
+            ),
+          })
         end
-
-        callback({
-          content = content,
-          display_content = vim.split(display_msg, "\n", { trimempty = true, plain = true }),
-        })
-      end)
+      )
     end,
   })
 end)

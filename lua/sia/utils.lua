@@ -99,7 +99,11 @@ function M.create_context(args)
   else
     opts.mode = "v"
   end
-  if args.line1 == 1 and args.line2 == vim.api.nvim_buf_line_count(opts.buf) and args.line1 ~= args.line2 then
+  if
+    args.line1 == 1
+    and args.line2 == vim.api.nvim_buf_line_count(opts.buf)
+    and args.line1 ~= args.line2
+  then
     opts.pos = nil
   end
   return opts
@@ -263,28 +267,37 @@ function M.resolve_action(argument, opts)
   if vim.startswith(argument[1], "/") and vim.bo.ft ~= "sia" then
     action = vim.deepcopy(config.options.actions[argument[1]:sub(2)])
     if action == nil then
-      vim.api.nvim_echo({ { "Sia: The action '" .. argument[1] .. "' does not exist.", "ErrorMsg" } }, false, {})
+      vim.api.nvim_echo({
+        { "Sia: The action '" .. argument[1] .. "' does not exist.", "ErrorMsg" },
+      }, false, {})
       return nil, true
     end
 
     if action.input and action.input == "require" and #argument < 2 then
-      vim.api.nvim_echo(
-        { { "Sia: The action '" .. argument[1] .. "' requires additional input.", "ErrorMsg" } },
-        false,
-        {}
-      )
+      vim.api.nvim_echo({
+        {
+          "Sia: The action '" .. argument[1] .. "' requires additional input.",
+          "ErrorMsg",
+        },
+      }, false, {})
       return nil, true
     end
 
     named = true
     if #argument > 1 and not (action.input and action.input == "ignore") then
-      table.insert(action.instructions, { role = "user", content = table.concat(argument, " ", 2) })
+      table.insert(
+        action.instructions,
+        { role = "user", content = table.concat(argument, " ", 2) }
+      )
     end
   else
     named = false
     local action_mode = M.get_action_mode(opts)
     action = vim.deepcopy(config.options.defaults.actions[action_mode])
-    table.insert(action.instructions, { role = "user", content = table.concat(argument, " ") })
+    table.insert(
+      action.instructions,
+      { role = "user", content = table.concat(argument, " ") }
+    )
   end
 
   if action.modify_instructions then
@@ -296,7 +309,10 @@ end
 
 --- @param action sia.config.Action
 function M.is_action_disabled(action)
-  if action.enabled == false or (type(action.enabled) == "function" and not action.enabled()) then
+  if
+    action.enabled == false
+    or (type(action.enabled) == "function" and not action.enabled())
+  then
     return true
   end
   return false
@@ -322,7 +338,11 @@ end
 --- @return integer? buf
 function M.ensure_file_is_loaded(file)
   local bufnr = vim.fn.bufnr(file)
-  if bufnr == -1 or not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+  if
+    bufnr == -1
+    or not vim.api.nvim_buf_is_valid(bufnr)
+    or not vim.api.nvim_buf_is_loaded(bufnr)
+  then
     local status, _ = pcall(function()
       bufnr = vim.fn.bufadd(file)
       vim.fn.bufload(bufnr)
@@ -505,7 +525,10 @@ function M.select_buffer(args)
           return v.buf == buf
         end, { predicate = true })
     then
-      table.insert(buffers, { buf = buf.buf, win = buf.win, name = vim.api.nvim_buf_get_name(buf.buf) })
+      table.insert(
+        buffers,
+        { buf = buf.buf, win = buf.win, name = vim.api.nvim_buf_get_name(buf.buf) }
+      )
     end
   end
   if #buffers == 0 then
@@ -534,7 +557,9 @@ function M.is_git_repo(has_staged)
   handle:close()
   if result:match("true") then
     if has_staged then
-      result = vim.system({ "git", "diff", "--cached", "--quiet" }, { text = true }):wait()
+      result = vim
+        .system({ "git", "diff", "--cached", "--quiet" }, { text = true })
+        :wait()
       return result.code == 1
     else
       return true
@@ -660,7 +685,8 @@ function M.is_command_banned(command)
 
   for _, banned in ipairs(M.BANNED_COMMANDS) do
     if base_cmd == banned then
-      return true, string.format("Command '%s' is not allowed for security reasons", base_cmd)
+      return true,
+        string.format("Command '%s' is not allowed for security reasons", base_cmd)
     end
   end
 

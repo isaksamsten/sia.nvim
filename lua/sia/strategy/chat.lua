@@ -3,6 +3,18 @@ local common = require("sia.strategy.common")
 local Writer = common.Writer
 local Strategy = common.Strategy
 
+local STATUS_ICONS = {
+  pending = " ",
+  running = " ",
+  done = " ",
+}
+
+local STATUS_HL = {
+  pending = "NonText",
+  running = "DiagnosticWarn",
+  done = "DiagnosticOk",
+}
+
 --- @class sia.ToolCall
 --- @field id string
 --- @field type string
@@ -63,14 +75,14 @@ function ChatStrategy:new(conversation, options)
   end
 
   pcall(vim.api.nvim_buf_set_name, buf, obj.name)
-  obj.canvas = require("sia.canvas").ChatCanvas:new(obj.buf)
+  obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").get_default_model()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
   obj._last_assistant_header_extmark = nil
 
   obj._is_named = false
-  local augroup = vim.api.nvim_create_augroup("SiaChatStrategy" .. buf, { clear = true })
+  local augroup = vim.api.nvim_create_augroup("SiaChat" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup,
     buffer = buf,
@@ -112,7 +124,9 @@ end
 
 function ChatStrategy:on_error()
   if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:update_progress({ { "Something went wrong. Please try again.", "Error" } })
+    self.canvas:update_progress({
+      { "Something went wrong. Please try again.", "Error" },
+    })
   end
 end
 
@@ -168,7 +182,10 @@ end
 function ChatStrategy:on_cancelled()
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self.canvas:update_progress({
-      { "Operation cancelled. Continue the conversation or start a new request", "DiagnosticWarn" },
+      {
+        "Operation cancelled. Waiting for user...",
+        "DiagnosticWarn",
+      },
     })
   end
 end
@@ -186,7 +203,10 @@ function ChatStrategy:on_complete(control)
 
   self.canvas:scroll_to_bottom()
   if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
-    self.conversation:add_instruction({ role = "assistant", content = self._writer.cache }, nil)
+    self.conversation:add_instruction(
+      { role = "assistant", content = self._writer.cache },
+      nil
+    )
   end
   local handle_cleanup = function()
     if not vim.api.nvim_buf_is_loaded(self.buf) then
@@ -213,7 +233,10 @@ spaces. Only output the name, nothing else.]],
           },
           {
             role = "user",
-            content = table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n"),
+            content = table.concat(
+              vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
+              "\n"
+            ),
           },
         },
       }, function(resp)
@@ -232,14 +255,12 @@ spaces. Only output the name, nothing else.]],
   self:execute_tools({
     cancellable = self.cancellable,
     handle_status_updates = function(statuses)
-      local status_icons = { pending = " ", running = " ", done = " " }
-      local status_hl = { pending = "NonText", running = "DiagnosticWarn", done = "DiagnosticOk" }
       local lines = {}
       for _, s in ipairs(statuses) do
-        local icon = status_icons[s.status] or ""
+        local icon = STATUS_ICONS[s.status] or ""
         local friendly_message = s.tool.message
         local label = friendly_message or (s.tool.name or "tool")
-        local hl = status_hl[s.status] or "NonText"
+        local hl = STATUS_HL[s.status] or "NonText"
         table.insert(lines, { { icon, hl }, { label, "NonText" } })
       end
       self.canvas:update_tool_progress(lines)

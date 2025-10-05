@@ -98,7 +98,11 @@ function M.next_edit(opts)
     if hunk_info.line > 0 and hunk_info.line <= line_count then
       vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
       local total_hunks = diff.get_hunk_count(buf)
-      vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+      vim.api.nvim_echo(
+        { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } },
+        false,
+        {}
+      )
     end
   end
 end
@@ -119,7 +123,11 @@ function M.prev_edit(opts)
     if hunk_info.line > 0 and hunk_info.line <= line_count then
       vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
       local total_hunks = diff.get_hunk_count(buf)
-      vim.api.nvim_echo({ { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } }, false, {})
+      vim.api.nvim_echo(
+        { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "Normal" } },
+        false,
+        {}
+      )
     end
   end
 end
@@ -215,7 +223,13 @@ function M.show_messages(opts)
             -- vim.bo[buf].modifiable = false
             vim.api.nvim_buf_set_name(buf, buf_name)
           end
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(content, "\n", { trimempty = true }))
+          vim.api.nvim_buf_set_lines(
+            buf,
+            0,
+            -1,
+            false,
+            vim.split(content, "\n", { trimempty = true })
+          )
           local win
           if opts.peek then
             win = vim.api.nvim_open_win(buf, true, {
@@ -250,7 +264,11 @@ function M.toggle()
   local last = ChatStrategy.last()
   if last and vim.api.nvim_buf_is_valid(last.buf) then
     local win = vim.fn.bufwinid(last.buf)
-    if win ~= -1 and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_list_wins() > 1 then
+    if
+      win ~= -1
+      and vim.api.nvim_win_is_valid(win)
+      and #vim.api.nvim_list_wins() > 1
+    then
       vim.api.nvim_win_close(win, true)
     else
       vim.cmd(last.options.cmd)
@@ -299,10 +317,13 @@ M.compact_conversation = function(conversation, reason, callback)
   local prompt = {
     {
       role = "system",
-      content = [[You are tasked with compacting a conversation by creating a comprehensive summary that preserves all essential information for continuing the conversation.
+      content = [[You are tasked with compacting a conversation by creating a
+comprehensive summary that preserves all essential information for
+continuing the conversation.
 
 CRITICAL REQUIREMENTS:
-1. Preserve ALL technical details: file paths, function names, class names, variable names, configuration settings
+1. Preserve ALL technical details: file paths, function names, class names,
+   variable names, configuration settings
 2. Maintain the chronological order of decisions and changes made
 3. Include specific code snippets or patterns that were discussed or implemented
 4. Preserve any architectural decisions, design patterns, or coding standards established
@@ -311,16 +332,21 @@ CRITICAL REQUIREMENTS:
 
 SUMMARY STRUCTURE:
 - **Project Context**: Brief description of the project and its purpose
-- **Files Modified**: List all files that were created, modified, or discussed with specific changes
-- **Key Decisions**: Important architectural, design, or implementation decisions made
+- **Files Modified**: List all files that were created, modified, or discussed
+  with specific changes
+- **Key Decisions**: Important architectural, design, or implementation
+  decisions made
 - **Code Changes**: Specific functions, classes, or code blocks that were added/modified
 - **Outstanding Issues**: Any unresolved problems, TODOs, or areas needing attention
 - **Technical Details**: Configuration changes, dependencies, or environment setup
 
 OUTPUT FORMAT:
-Write a clear, structured summary using markdown formatting. Be concise but comprehensive - the summary should allow someone to understand the full context and continue working on the project without losing important details.
+Write a clear, structured summary using markdown formatting. Be concise but
+comprehensive - the summary should allow someone to understand the full context
+and continue working on the project without losing important details.
 
-The summary will replace the conversation history, so ensure no critical information is lost.]],
+The summary will replace the conversation history, so ensure no critical
+information is lost.]],
     },
   }
 
@@ -337,12 +363,15 @@ The summary will replace the conversation history, so ensure no critical informa
       local summary_content
       if reason then
         summary_content = string.format(
-          "This is a summary of the previous conversation which has been compacted due to topic change (%s):\n\n%s",
+          "This is a summary of a previous conversation (%s):\n\n%s",
           reason,
           content
         )
       else
-        summary_content = string.format("This is a summary of the conversation which has been removed:\n %s", content)
+        summary_content = string.format(
+          "This is a summary of the conversation which has been removed:\n %s",
+          content
+        )
       end
 
       conversation:add_instruction({
@@ -380,10 +409,12 @@ local add_commands = {
       for _, file in ipairs(files) do
         local buf = utils.ensure_file_is_loaded(file)
         if buf then
-          Conversation.add_pending_instruction(
-            "current_context",
-            { buf = buf, tick = tracker.ensure_tracked(buf), kind = "context", mode = "v" }
-          )
+          Conversation.add_pending_instruction("current_context", {
+            buf = buf,
+            tick = tracker.ensure_tracked(buf),
+            kind = "context",
+            mode = "v",
+          })
         end
       end
     end,
@@ -392,10 +423,12 @@ local add_commands = {
       for _, file in ipairs(files) do
         local buf = utils.ensure_file_is_loaded(file)
         if buf then
-          conversation:add_instruction(
-            "current_context",
-            { buf = buf, tick = tracker.ensure_tracked(buf), kind = "context", mode = "v" }
-          )
+          conversation:add_instruction("current_context", {
+            buf = buf,
+            tick = tracker.ensure_tracked(buf),
+            kind = "context",
+            mode = "v",
+          })
         end
       end
     end,
@@ -444,7 +477,10 @@ local add_commands = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          conversation:add_instruction("current_context", { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" })
+          conversation:add_instruction(
+            "current_context",
+            { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" }
+          )
         end
       end
     end,
@@ -521,8 +557,13 @@ function M.setup(options)
 
       if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
         for command, command_args in pairs(add_commands) do
-          local non_sia_buf = command_args.non_sia_buf == nil or (command_args.non_sia_buf and vim.bo.ft ~= "sia")
-          if non_sia_buf and vim.startswith(command, arg_lead) and command_args.require_range == is_range then
+          local non_sia_buf = command_args.non_sia_buf == nil
+            or (command_args.non_sia_buf and vim.bo.ft ~= "sia")
+          if
+            non_sia_buf
+            and vim.startswith(command, arg_lead)
+            and command_args.require_range == is_range
+          then
             complete[#complete + 1] = command
           end
         end
@@ -607,20 +648,33 @@ function M.main(action, opts)
       end
       local conversation = Conversation:new(action, context)
       if conversation.mode == "diff" then
-        local options = vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
+        local options =
+          vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
         strategy = DiffStrategy:new(conversation, options)
       elseif conversation.mode == "insert" then
-        local options = vim.tbl_deep_extend("force", config.options.defaults.insert, action.insert or {})
+        local options = vim.tbl_deep_extend(
+          "force",
+          config.options.defaults.insert,
+          action.insert or {}
+        )
         strategy = InsertStrategy:new(conversation, options)
       elseif conversation.mode == "hidden" then
-        local options = vim.tbl_deep_extend("force", config.options.defaults.hidden, action.hidden or {})
+        local options = vim.tbl_deep_extend(
+          "force",
+          config.options.defaults.hidden,
+          action.hidden or {}
+        )
         if not options.callback then
-          vim.notify("Sia: Hidden strategy requires a callback function", vim.log.levels.ERROR)
+          vim.notify(
+            "Sia: Hidden strategy requires a callback function",
+            vim.log.levels.ERROR
+          )
           return
         end
         strategy = HiddenStrategy:new(conversation, options)
       else
-        local options = vim.tbl_deep_extend("force", config.options.defaults.chat, action.chat or {})
+        local options =
+          vim.tbl_deep_extend("force", config.options.defaults.chat, action.chat or {})
         strategy = ChatStrategy:new(conversation, options)
       end
     end

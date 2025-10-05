@@ -67,8 +67,9 @@ local function make_content(instruction, context)
   local content
   if type(instruction.content) == "function" then
     content = generate_content(instruction.content, context)
-  -- This is a normal text content
-  elseif type(instruction.content) == "table" and type(instruction.content[1]) == "string" then
+  elseif
+    type(instruction.content) == "table" and type(instruction.content[1]) == "string"
+  then
     local tmp = instruction.content
     --- @cast tmp string[]
     content = table.concat(tmp, "\n")
@@ -176,7 +177,10 @@ end
 function Message:get_content()
   if self.content then
     if self:is_outdated() then
-      return string.format("System Note: History pruned. %s", self.context.outdated_message or "")
+      return string.format(
+        "System Note: History pruned. %s",
+        self.context.outdated_message or ""
+      )
     end
     return self.content
   elseif self.live_content then
@@ -221,7 +225,10 @@ function Message:to_prompt(conversation)
     prompt.tool_calls = {}
     for _, tool_call in ipairs(self.tool_calls) do
       if tool_call.type == "function" then
-        table.insert(prompt.tool_calls, { id = tool_call.id, type = "function", ["function"] = tool_call["function"] })
+        table.insert(
+          prompt.tool_calls,
+          { id = tool_call.id, type = "function", ["function"] = tool_call["function"] }
+        )
       end
     end
   end
@@ -377,8 +384,16 @@ function Conversation:add_tool(tool)
   if type(tool) == "string" then
     tool = require("sia.config").options.defaults.tools.choices[tool]
   end
-  if tool ~= nil and self.tool_fn[tool.name] == nil and (tool.is_available == nil or tool.is_available()) then
-    self.tool_fn[tool.name] = { message = tool.message, action = tool.execute, allow_parallel = tool.allow_parallel }
+  if
+    tool ~= nil
+    and self.tool_fn[tool.name] == nil
+    and (tool.is_available == nil or tool.is_available())
+  then
+    self.tool_fn[tool.name] = {
+      message = tool.message,
+      action = tool.execute,
+      allow_parallel = tool.allow_parallel,
+    }
     table.insert(self.tools, tool)
   end
 end
@@ -426,7 +441,8 @@ local function should_mask_existing(new_interval, existing_interval)
   end
 
   local new_start, new_end = new_interval.pos[1], new_interval.pos[2]
-  local existing_start, existing_end = existing_interval.pos[1], existing_interval.pos[2]
+  local existing_start, existing_end =
+    existing_interval.pos[1], existing_interval.pos[2]
 
   return new_start <= existing_start and existing_end <= new_end
 end
@@ -518,7 +534,8 @@ end
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, opts)
   if self.tool_fn[name] then
-    local ok, err = pcall(self.tool_fn[name].action, arguments, self, opts.callback, opts.cancellable)
+    local action = self.tool_fn[name].action
+    local ok, err = pcall(action, arguments, self, opts.callback, opts.cancellable)
     if not ok then
       print(vim.inspect(err))
       opts.callback({ content = { "Tool execution failed. " }, kind = "failed" })
@@ -564,7 +581,12 @@ function Conversation:to_query(kind)
   end
 
   local last_message = self.messages[#self.messages]
-  if last_message and last_message.kind == "failed" and last_message._tool_call and last_message._tool_call.id then
+  if
+    last_message
+    and last_message.kind == "failed"
+    and last_message._tool_call
+    and last_message._tool_call.id
+  then
     failed_tool_call_ids[last_message._tool_call.id] = false
   end
 

@@ -8,7 +8,7 @@ local tool_utils = require("sia.tools.utils")
 return tool_utils.new_tool({
   name = "write",
   message = "Writing file...",
-  description = "Write complete file contents to a buffer (creates new file or overwrites existing)",
+  description = "Write complete file contents to a buffer",
   system_prompt = [[Write complete file contents to a buffer.
 
 This tool is ideal for:
@@ -59,7 +59,8 @@ For small, targeted changes, prefer the edit tool instead.]],
     return
   end
   local file_exists = vim.fn.filereadable(args.path) == 1
-  local prompt = file_exists and string.format("Overwrite existing file %s with new content", args.path)
+  local prompt = file_exists
+      and string.format("Overwrite existing file %s with new content", args.path)
     or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
     on_accept = function()

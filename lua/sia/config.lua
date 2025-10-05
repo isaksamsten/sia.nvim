@@ -16,16 +16,27 @@ local function validate_permission_patterns(patterns, path)
       pattern = pattern_def
     elseif type(pattern_def) == "table" then
       if type(pattern_def.pattern) ~= "string" then
-        return false, path .. "[" .. i .. "].pattern must be a string, got " .. type(pattern_def.pattern)
+        return false,
+          path .. "[" .. i .. "].pattern must be a string, got " .. type(
+            pattern_def.pattern
+          )
       end
 
       if pattern_def.negate ~= nil and type(pattern_def.negate) ~= "boolean" then
-        return false, path .. "[" .. i .. "].negate must be a boolean, got " .. type(pattern_def.negate)
+        return false,
+          path .. "[" .. i .. "].negate must be a boolean, got " .. type(
+            pattern_def.negate
+          )
       end
 
       pattern = pattern_def.pattern
     else
-      return false, path .. "[" .. i .. "] must be a string or object with 'pattern' field, got " .. type(pattern_def)
+      return false,
+        path
+          .. "["
+          .. i
+          .. "] must be a string or object with 'pattern' field, got "
+          .. type(pattern_def)
     end
 
     local ok, err = pcall(string.match, "test", pattern)
@@ -47,28 +58,47 @@ local function validate_permissions(permission)
 
   for section_name, section in pairs(permission) do
     if type(section) ~= "table" then
-      return false, "permission." .. section_name .. " must be an object, got " .. type(section)
+      return false,
+        "permission." .. section_name .. " must be an object, got " .. type(section)
     end
 
     for tool_name, tool_perms in pairs(section) do
       if type(tool_perms) ~= "table" then
         return false,
-          "permission." .. section_name .. "." .. tool_name .. " must be an object, got " .. type(tool_perms)
+          "permission."
+            .. section_name
+            .. "."
+            .. tool_name
+            .. " must be an object, got "
+            .. type(tool_perms)
       end
 
       if not tool_perms.arguments then
-        return false, "permission." .. section_name .. "." .. tool_name .. " must have an 'arguments' field"
+        return false,
+          "permission."
+            .. section_name
+            .. "."
+            .. tool_name
+            .. " must have an 'arguments' field"
       end
 
       if type(tool_perms.arguments) ~= "table" then
         return false,
-          "permission." .. section_name .. "." .. tool_name .. ".arguments must be an object, got " .. type(
-            tool_perms.arguments
-          )
+          "permission."
+            .. section_name
+            .. "."
+            .. tool_name
+            .. ".arguments must be an object, got "
+            .. type(tool_perms.arguments)
       end
 
       for param_name, patterns in pairs(tool_perms.arguments) do
-        local path = "permission." .. section_name .. "." .. tool_name .. ".arguments." .. param_name
+        local path = "permission."
+          .. section_name
+          .. "."
+          .. tool_name
+          .. ".arguments."
+          .. param_name
         local ok, err = validate_permission_patterns(patterns, path)
         if not ok then
           return false, err
@@ -82,9 +112,12 @@ local function validate_permissions(permission)
           or tool_perms.choice ~= math.floor(tool_perms.choice)
         then
           return false,
-            "permission." .. section_name .. "." .. tool_name .. ".choice must be a positive integer, got " .. type(
-              tool_perms.choice
-            )
+            "permission."
+              .. section_name
+              .. "."
+              .. tool_name
+              .. ".choice must be a positive integer, got "
+              .. type(tool_perms.choice)
         end
       end
     end
@@ -95,9 +128,15 @@ end
 local function validate_model_field(json, field)
   if json[field] ~= nil then
     if type(json[field]) ~= "string" then
-      return false, string.format("'%s' must be a string, got %s", field, type(json[field]))
+      return false,
+        string.format("'%s' must be a string, got %s", field, type(json[field]))
     elseif not M.options.models[json[field]] then
-      return false, string.format("'%s' must be one of the allowed models, got '%s'", field, tostring(json[field]))
+      return false,
+        string.format(
+          "'%s' must be one of the allowed models, got '%s'",
+          field,
+          tostring(json[field])
+        )
     end
   end
   return true
@@ -131,7 +170,11 @@ function M.get_local_config()
   local read_ok, file_content = pcall(vim.fn.readfile, local_config)
   if not read_ok then
     vim.notify(
-      string.format("Sia: Failed to read config file %s: %s", local_config, file_content),
+      string.format(
+        "Sia: Failed to read config file %s: %s",
+        local_config,
+        file_content
+      ),
       vim.log.levels.ERROR
     )
     return nil
@@ -142,7 +185,10 @@ function M.get_local_config()
     if not has_failed then
       local ok, err = fun(...)
       if not ok then
-        vim.notify(string.format("Sia: Config file %s: %s", local_config, err), vim.log.levels.ERROR)
+        vim.notify(
+          string.format("Sia: Config file %s: %s", local_config, err),
+          vim.log.levels.ERROR
+        )
         has_failed = true
       end
     end
@@ -150,13 +196,20 @@ function M.get_local_config()
   local content = table.concat(file_content, " ")
   local decode_ok, json = pcall(vim.json.decode, content)
   if not decode_ok then
-    vim.notify(string.format("Sia: Invalid JSON in config file %s: %s", local_config, json), vim.log.levels.ERROR)
+    vim.notify(
+      string.format("Sia: Invalid JSON in config file %s: %s", local_config, json),
+      vim.log.levels.ERROR
+    )
     has_failed = true
   end
 
   if not has_failed and type(json) ~= "table" then
     vim.notify(
-      string.format("Sia: Config file %s must contain a JSON object, got %s", local_config, type(json)),
+      string.format(
+        "Sia: Config file %s must contain a JSON object, got %s",
+        local_config,
+        type(json)
+      ),
       vim.log.levels.ERROR
     )
     has_failed = true
@@ -168,7 +221,12 @@ function M.get_local_config()
   validate(validate_model_field, json, "plan_model")
   validate(function()
     if json.auto_continue and type(json.auto_continue) ~= "boolean" then
-      return false, string.format("'%s' must be a boolean, got %s", json.auto_continue, type(json.auto_continue))
+      return false,
+        string.format(
+          "'%s' must be a boolean, got %s",
+          json.auto_continue,
+          type(json.auto_continue)
+        )
     end
     return true
   end)
@@ -310,7 +368,6 @@ M.options = {
     ["copilot/claude-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
     ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
     ["copilot/claude-sonnet-4.5"] = { "copilot", "claude-sonnet-4.5" },
-    ["copilot/claude-sonnet-3.7-thought"] = { "copilot", "claude-3.7-sonnet-thought", reasoning_effort = "medium" },
     ["copilot/o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["copilot/grok-code-fast-1"] = { "copilot", "grok-code-fast-1" },
     ["gemini/1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
@@ -388,7 +445,10 @@ M.options = {
         temperature = 0.2,
         system = { "insert_system" },
         instructions = {
-          require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true }),
+          require("sia.instructions").current_buffer({
+            show_line_numbers = true,
+            include_cursor = true,
+          }),
         },
       },
       diff = {
@@ -397,8 +457,14 @@ M.options = {
         temperature = 0.2,
         system = { "diff_system" },
         instructions = {
-          require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true }),
-          require("sia.instructions").current_context({ show_line_numbers = true, fences = false }),
+          require("sia.instructions").current_buffer({
+            show_line_numbers = true,
+            include_cursor = true,
+          }),
+          require("sia.instructions").current_context({
+            show_line_numbers = true,
+            fences = false,
+          }),
         },
       },
       --- @type sia.config.Action

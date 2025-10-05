@@ -205,7 +205,10 @@ function M.show_diff_preview(buf)
   vim.cmd("tabnew")
   local left_buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, diff_state.baseline)
-  vim.api.nvim_buf_set_name(left_buf, string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp))
+  vim.api.nvim_buf_set_name(
+    left_buf,
+    string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp)
+  )
   vim.bo[left_buf].buftype = "nofile"
   vim.bo[left_buf].buflisted = false
   vim.bo[left_buf].swapfile = false
@@ -313,7 +316,10 @@ local function is_reference_hunk(hunk, reference_range, current_lines, reference
   else
     -- Both are changes/deletions - check if it's an exact match
     local current_old_finish = hunk.old_start + hunk.old_count - 1
-    if hunk.old_start == reference_range.start and current_old_finish == reference_range.finish then
+    if
+      hunk.old_start == reference_range.start
+      and current_old_finish == reference_range.finish
+    then
       -- Range matches exactly, now check if content also matches
       return ranges_match(
         current_lines,
@@ -351,7 +357,8 @@ function M.update_diff(buf)
 
   local reference_ranges = {}
   for _, hunk in ipairs(reference_hunk_indices) do
-    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+    local old_start, old_count = hunk[1], hunk[2]
+    local new_start, new_count = hunk[3], hunk[4]
     table.insert(reference_ranges, {
       start = old_start,
       finish = old_start + old_count - 1,
@@ -364,18 +371,28 @@ function M.update_diff(buf)
   local reference_hunks = {}
   local baseline_hunks = {}
   for _, hunk in ipairs(total_hunk_indices) do
-    local old_start, old_count, new_start, new_count = hunk[1], hunk[2], hunk[3], hunk[4]
+    local old_start, old_count = hunk[1], hunk[2]
+    local new_start, new_count = hunk[3], hunk[4]
+
     --- @type sia.diff.Hunk
     local final_hunk = {
       old_start = old_start,
       old_count = old_count,
       new_start = new_start,
       new_count = new_count,
-      type = old_count > 0 and new_count > 0 and "change" or (new_count > 0 and "add" or "delete"),
+      type = old_count > 0 and new_count > 0 and "change"
+        or (new_count > 0 and "add" or "delete"),
     }
     local reference_change = false
     for _, reference_range in ipairs(reference_ranges) do
-      if is_reference_hunk(final_hunk, reference_range, current_lines, diff_state.reference) then
+      if
+        is_reference_hunk(
+          final_hunk,
+          reference_range,
+          current_lines,
+          diff_state.reference
+        )
+      then
         reference_change = true
         break
       end
@@ -613,7 +630,8 @@ function M.get_all_hunks_for_quickfix(buf)
 
       for i, hunk in ipairs(diff_state.reference_hunks) do
         if hunk.new_start > 0 and hunk.new_start <= line_count then
-          local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
+          local hunk_type = hunk.type == "add" and "Added"
+            or (hunk.type == "delete" and "Deleted" or "Changed")
           local text = string.format(
             "Edit %d/%d: %s lines %d-%d",
             i,
@@ -641,7 +659,8 @@ function M.get_all_hunks_for_quickfix(buf)
 
         for i, hunk in ipairs(diff_state.reference_hunks) do
           if hunk.new_start > 0 and hunk.new_start <= line_count then
-            local hunk_type = hunk.type == "add" and "Added" or (hunk.type == "delete" and "Deleted" or "Changed")
+            local hunk_type = hunk.type == "add" and "Added"
+              or (hunk.type == "delete" and "Deleted" or "Changed")
             local text = string.format(
               "Edit %d/%d: %s lines %d-%d",
               i,
@@ -673,7 +692,12 @@ end
 --- @return boolean success True if hunk was successfully accepted
 function M.accept_single_hunk(buf, hunk_index)
   local diff_state = buffer_diff_state[buf]
-  if not diff_state or not diff_state.reference_hunks or hunk_index < 1 or hunk_index > #diff_state.reference_hunks then
+  if
+    not diff_state
+    or not diff_state.reference_hunks
+    or hunk_index < 1
+    or hunk_index > #diff_state.reference_hunks
+  then
     return false
   end
 
@@ -699,13 +723,22 @@ end
 --- @return boolean success True if hunk was successfully rejected
 function M.reject_single_hunk(buf, hunk_index)
   local diff_state = buffer_diff_state[buf]
-  if not diff_state or not diff_state.reference_hunks or hunk_index < 1 or hunk_index > #diff_state.reference_hunks then
+  if
+    not diff_state
+    or not diff_state.reference_hunks
+    or hunk_index < 1
+    or hunk_index > #diff_state.reference_hunks
+  then
     return false
   end
 
   local hunk = diff_state.reference_hunks[hunk_index]
   if hunk_index == #diff_state.reference_hunks then
-    hunk = expand_hunk(hunk, diff_state.baseline, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    hunk = expand_hunk(
+      hunk,
+      diff_state.baseline,
+      vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    )
   end
   local baseline = diff_state.baseline
 
@@ -774,8 +807,9 @@ function M.get_hunk_at_line(buf, line)
   end
 
   for i, hunk in ipairs(diff_state.reference_hunks) do
-    local end_line = hunk.new_count == 0 and line == hunk.new_start or line < (hunk.new_start + hunk.new_count)
-    if end_line and line >= hunk.new_start then
+    local is_end_line = hunk.new_count == 0 and line == hunk.new_start
+      or line < (hunk.new_start + hunk.new_count)
+    if is_end_line and line >= hunk.new_start then
       return i
     end
   end

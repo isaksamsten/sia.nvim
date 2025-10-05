@@ -30,7 +30,11 @@ end
 
 function DiffStrategy:on_init()
   local context = self.conversation.context
-  if not context or not vim.api.nvim_buf_is_loaded(context.buf) or not vim.api.nvim_buf_is_loaded(self.buf) then
+  if
+    not context
+    or not vim.api.nvim_buf_is_loaded(context.buf)
+    or not vim.api.nvim_buf_is_loaded(self.buf)
+  then
     return false
   end
   vim.bo[self.buf].modifiable = true
@@ -45,7 +49,9 @@ function DiffStrategy:on_init()
 
   vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
-    virt_lines = { { { "🤖 ", "Normal" }, { "Analyzing changes...", "SiaProgress" } } },
+    virt_lines = {
+      { { "🤖 ", "Normal" }, { "Analyzing changes...", "SiaProgress" } },
+    },
     virt_lines_above = context.pos[1] - 1 > 0,
     hl_group = "SiaReplace",
     end_line = context.pos[2],
@@ -66,11 +72,17 @@ end
 function DiffStrategy:on_progress(content)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
-    vim.api.nvim_buf_set_extmark(self.buf, DIFF_NS, math.max(0, self._writer.start_line - 1), self._writer.start_col, {
-      end_line = self._writer.line,
-      end_col = self._writer.column,
-      hl_group = "SiaInsert",
-    })
+    vim.api.nvim_buf_set_extmark(
+      self.buf,
+      DIFF_NS,
+      math.max(0, self._writer.start_line - 1),
+      self._writer.start_col,
+      {
+        end_line = self._writer.line,
+        end_col = self._writer.column,
+        hl_group = "SiaInsert",
+      }
+    )
     return true
   end
   return false
@@ -110,7 +122,9 @@ function DiffStrategy:on_complete(control)
         end
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
-        if vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win) then
+        if
+          vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win)
+        then
           vim.api.nvim_set_current_win(self.win)
           vim.cmd("diffthis")
           vim.api.nvim_set_current_win(context.win)

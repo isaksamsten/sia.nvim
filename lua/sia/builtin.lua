@@ -58,8 +58,8 @@ Plan your complete approach before making tool calls, especially for file
 edits. Avoid making multiple edits to the same file by thinking through the
 complete change first.
 
-If there are no tools available to read or add files to the conversation; ask
-the user to add them with `SiaAdd file` or `SiaAdd buffer`.
+If there are no tools available to read files, ask the user to add them with
+`SiaAdd file` or `SiaAdd buffer`.
 </tool_calling>
 
 <tools>
@@ -128,6 +128,37 @@ to add them again.
 </information_gathering>]],
     },
   },
+  prose_system = {
+    {
+      role = "system",
+      content = [[
+<identity>
+You are a powerful AI writing assistant Sia operating in Neovim. You collaborate with the USER to craft, edit, and improve their writing - whether creating new content, revising drafts, or providing feedback.
+</identity>
+
+<communication>
+Be concise and direct. Use markdown formatting when helpful. Never lie or make things up. Be constructive rather than overly critical. Skip flattery and respond directly to requests.
+</communication>
+
+<memory>
+If AGENTS.md exists, it contains your writing style preferences and project information. Use the edit tool to update it with new preferences you learn.
+</memory>
+
+<approach>
+- Explain your thinking before making significant changes
+- Present options when multiple approaches exist
+- Ask for approval on major revisions
+- Collaborate on style, tone, and content decisions
+- Plan complete revisions rather than piecemeal changes
+</approach>
+
+<tools>
+{{tool_instructions}}
+</tools>
+
+Use parallel tool calls when reading multiple files. For text edits, make multiple focused changes in parallel rather than trying to handle everything in one edit.]],
+    },
+  },
   directory_structure = {
     {
       role = "system",
@@ -185,8 +216,12 @@ version.
   },
 
   visible_buffers = require("sia.instructions").visible_buffers(),
-  current_buffer = require("sia.instructions").current_buffer({ show_line_numbers = true }),
-  current_context = require("sia.instructions").current_context({ show_line_numbers = true }),
+  current_buffer = require("sia.instructions").current_buffer({
+    show_line_numbers = true,
+  }),
+  current_context = require("sia.instructions").current_context({
+    show_line_numbers = true,
+  }),
   insert_system = {
     role = "system",
     content = [[The user is invoking you from a text editor. Your entire reply will be inserted verbatim into the current buffer at the cursor line. The filetype is {{filetype}}.
@@ -237,7 +272,12 @@ should replace that range—nothing more.]],
         local cwd = vim.uv.cwd()
 
         -- Get Neovim version
-        local nvim_version = string.format("%d.%d.%d", vim.version().major, vim.version().minor, vim.version().patch)
+        local nvim_version = string.format(
+          "%d.%d.%d",
+          vim.version().major,
+          vim.version().minor,
+          vim.version().patch
+        )
 
         -- Get current date/time
         local datetime = os.date("%Y-%m-%d %H:%M:%S %Z")
@@ -250,10 +290,12 @@ should replace that range—nothing more.]],
         -- Try to get Git info if available
         local git_info = ""
         if vim.fn.isdirectory(".git") == 1 then
-          local branch = vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
-          local commit = vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
+          local branch =
+            vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
+          local commit =
+            vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
           if branch ~= "" and commit ~= "" then
-            git_info = string.format("\n- Git: %s (%s)", branch, commit)
+            git_info = string.format(" Git: %s (%s)", branch, commit)
           end
         end
 
@@ -265,7 +307,8 @@ should replace that range—nothing more.]],
 - Shell: %s
 - Terminal: %s
 - Neovim: v%s
-- Working Directory: %s%s
+- Working Directory: %s
+- %s
 - Timestamp: %s
 
 This information shows the current system environment where the AI assistant is

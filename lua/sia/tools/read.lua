@@ -8,12 +8,22 @@ return tool_utils.new_tool({
   name = "read",
   read_only = true,
   message = "Reading file contents...",
-  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to 2000 lines starting from the beginning of the file. You can optionally specify a line offset and limit (especially handy for long files), but it`s recommended to read the whole file by not providing these parameters. Any lines longer than 2000 characters will be truncated.]],
+  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to
+2000 lines starting from the beginning of the file. You can optionally specify a line
+offset and limit (especially handy for long files), but it`s recommended to read the
+whole file by not providing these parameters. Any lines longer than 2000 characters
+will be truncated.]],
   description = [[Reads a file from the local filesystem.]],
   parameters = {
     path = { type = "string", description = "The file path" },
-    offset = { type = "integer", description = "Line offset to start reading from (1-based, optional)" },
-    limit = { type = "integer", description = "Maximum number of lines to read (default: 2000)" },
+    offset = {
+      type = "integer",
+      description = "Line offset to start reading from (1-based, optional)",
+    },
+    limit = {
+      type = "integer",
+      description = "Maximum number of lines to read (default: 2000)",
+    },
   },
   required = { "path" },
   auto_apply = function(args, _)
@@ -47,7 +57,12 @@ return tool_utils.new_tool({
   local max_line_length = 2000
   local confirm_message
   if args.offset then
-    confirm_message = string.format("Read lines %d-%d from %s", args.offset, args.offset + limit - 1, args.path)
+    confirm_message = string.format(
+      "Read lines %d-%d from %s",
+      args.offset,
+      args.offset + limit - 1,
+      args.path
+    )
   else
     confirm_message = string.format("Read %s (up to %d lines)", args.path, limit)
   end
@@ -60,7 +75,11 @@ return tool_utils.new_tool({
       if offset > total_lines then
         callback({
           content = {
-            string.format("Error: Offset %d is beyond end of file (file has %d lines)", offset, total_lines),
+            string.format(
+              "Error: Offset %d is beyond end of file (file has %d lines)",
+              offset,
+              total_lines
+            ),
           },
           display_content = { FAILED_TO_READ },
           kind = "failed",
@@ -88,18 +107,28 @@ return tool_utils.new_tool({
       if args.offset or args.limit then
         table.insert(
           display_lines,
-          string.format("📖 Read lines %d-%d from %s", start_line, end_line, vim.fn.fnamemodify(args.path, ":."))
+          string.format(
+            "📖 Read lines %d-%d from %s",
+            start_line,
+            end_line,
+            vim.fn.fnamemodify(args.path, ":.")
+          )
         )
       else
         table.insert(
           display_lines,
-          string.format("📖 Read %s (%d lines)", vim.fn.fnamemodify(args.path, ":."), #content)
+          string.format(
+            "📖 Read %s (%d lines)",
+            vim.fn.fnamemodify(args.path, ":."),
+            #content
+          )
         )
       end
 
       local outdated_message
       if args.offset or args.limit then
-        local span = start_line ~= end_line and string.format("lines %d-%d", start_line, end_line)
+        local span = start_line ~= end_line
+            and string.format("lines %d-%d", start_line, end_line)
           or string.format("line %d", start_line)
         outdated_message = string.format(
           "Previously read %s from %s - file was modified, use read tool to get current content",

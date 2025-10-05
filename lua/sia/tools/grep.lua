@@ -36,7 +36,8 @@ return tool_utils.new_tool({
 
   local prompt = string.format("Search for `%s` in all files", args.pattern)
   if args.glob then
-    prompt = string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
+    prompt =
+      string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
   end
 
   opts.user_input(prompt, {
@@ -64,7 +65,15 @@ return tool_utils.new_tool({
               truncated_line = prefix .. truncated_rest .. "...[TRUNCATED]"
             end
 
-            table.insert(matches, { file = file, lnum = tonumber(lnum), col = tonumber(col), text = truncated_line })
+            table.insert(
+              matches,
+              {
+                file = file,
+                lnum = tonumber(lnum),
+                col = tonumber(col),
+                text = truncated_line,
+              }
+            )
             if not file_mtimes[file] then
               local stat = vim.loop.fs_stat(file)
               file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
@@ -72,9 +81,11 @@ return tool_utils.new_tool({
           end
         end
         if #matches == 0 then
-          local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
+          local no_match_msg =
+            string.format("🔍 No matches found for `%s`", args.pattern)
           if args.glob then
-            no_match_msg = no_match_msg .. string.format(" in files matching `%s`", args.glob)
+            no_match_msg = no_match_msg
+              .. string.format(" in files matching `%s`", args.glob)
           end
 
           callback({
