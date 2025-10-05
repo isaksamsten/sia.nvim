@@ -39,6 +39,7 @@ local tracker = require("sia.tracker")
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
+--- @field _outdated_tool_call boolean?
 --- @field description string?
 --- @field superseded boolean? -- Mark message as superseded by a newer overlapping message
 local Message = {}
@@ -173,13 +174,14 @@ function Message:new(instruction, context)
   end
 end
 
+--- @param outdated boolean?
 --- @return (string|sia.InstructionContent[])?
-function Message:get_content()
+function Message:get_content(outdated)
   if self.content then
-    if self:is_outdated() then
+    if outdated or self:is_outdated() then
       return string.format(
         "System Note: History pruned. %s",
-        self.context.outdated_message or ""
+        self.context and self.context.outdated_message or ""
       )
     end
     return self.content
@@ -216,10 +218,11 @@ function Message:is_outdated()
 end
 
 --- @param conversation sia.Conversation?
+--- @param outdated boolean?
 --- @return sia.Prompt
-function Message:to_prompt(conversation)
+function Message:to_prompt(conversation, outdated)
   --- @type sia.Prompt
-  local prompt = { role = self.role, content = self:get_content() }
+  local prompt = { role = self.role, content = self:get_content(outdated) }
 
   if self.tool_calls then
     prompt.tool_calls = {}
@@ -571,12 +574,41 @@ end
 --- @param kind string?
 --- @return sia.Query
 function Conversation:to_query(kind)
-  -- Collect all failed tool call IDs
-  local failed_tool_call_ids = {}
+  local context_config = require("sia.config").get_context_config()
+  local min_keep_tool_calls = context_config.keep or 5
+  local max_tool_calls = context_config.max_tool or 100
+  local exclude_tool = context_config.exclude or {}
 
+  --- @type table<string, "failed"|"outdated">
+  local tool_filter = {}
+
+  --- @type {id:string, index:integer, name:string}[]
+  local tool_calls_info = {}
   for i, m in ipairs(self.messages) do
-    if m.kind == "failed" and m._tool_call and m._tool_call.id then
-      failed_tool_call_ids[m._tool_call.id] = true
+    if m._tool_call and m._tool_call.id then
+      if m.kind == "failed" then
+        tool_filter[m._tool_call.id] = "failed"
+      elseif m._outdated_tool_call then
+        tool_filter[m._tool_call.id] = "outdated"
+      else
+        table.insert(
+          tool_calls_info,
+          { id = m._tool_call.id, index = i, name = m._tool_call["function"].name }
+        )
+      end
+    end
+  end
+
+  if min_keep_tool_calls < #tool_calls_info and #tool_calls_info > max_tool_calls then
+    table.sort(tool_calls_info, function(a, b)
+      return a.index > b.index
+    end)
+
+    for i, info in ipairs(tool_calls_info) do
+      if i > min_keep_tool_calls and not vim.tbl_contains(exclude_tool, info.name) then
+        tool_filter[info.id] = "outdated"
+        self.messages[info.index]._outdated_tool_call = true
+      end
     end
   end
 
@@ -587,7 +619,7 @@ function Conversation:to_query(kind)
     and last_message._tool_call
     and last_message._tool_call.id
   then
-    failed_tool_call_ids[last_message._tool_call.id] = false
+    tool_filter[last_message._tool_call.id] = nil
   end
 
   local prompt = vim
@@ -604,7 +636,7 @@ function Conversation:to_query(kind)
         tool_call_id = m.tool_calls[1].id
       end
 
-      if tool_call_id and failed_tool_call_ids[tool_call_id] == true then
+      if tool_call_id and tool_filter[tool_call_id] == "failed" then
         return false
       end
 
@@ -613,7 +645,11 @@ function Conversation:to_query(kind)
     --- @param m sia.Message
     --- @return sia.Prompt
     :map(function(m)
-      return m:to_prompt(self)
+      local tool_call_id = m._tool_call and m._tool_call.id
+      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
+        tool_call_id = m.tool_calls[1].id
+      end
+      return m:to_prompt(self, tool_call_id and tool_filter[tool_call_id] == "outdated")
     end)
     --- @param p sia.Prompt
     --- @return boolean?

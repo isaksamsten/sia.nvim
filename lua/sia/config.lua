@@ -125,6 +125,62 @@ local function validate_permissions(permission)
   return true
 end
 
+local function validate_context(context)
+  if not context then
+    return true
+  end
+
+  if type(context) ~= "table" then
+    return false, "'context' must be an object, got " .. type(context)
+  end
+
+  if context.max_tool ~= nil then
+    if
+      type(context.max_tool) ~= "number"
+      or context.max_tool < 0
+      or context.max_tool ~= math.floor(context.max_tool)
+    then
+      return false,
+        "context.max_tool must be a non-negative integer, got " .. type(
+          context.max_tool
+        )
+    end
+  end
+
+  if context.exclude ~= nil then
+    if type(context.exclude) ~= "table" then
+      return false, "context.exclude must be an array, got " .. type(context.exclude)
+    end
+
+    for i, item in ipairs(context.exclude) do
+      if type(item) ~= "string" then
+        return false,
+          "context.exclude[" .. i .. "] must be a string, got " .. type(item)
+      end
+    end
+  end
+
+  if context.clear_input ~= nil then
+    if type(context.clear_input) ~= "boolean" then
+      return false,
+        "context.clear_input must be a boolean, got " .. type(context.clear_input)
+    end
+  end
+
+  if context.keep ~= nil then
+    if
+      type(context.keep) ~= "number"
+      or context.keep < 0
+      or context.keep ~= math.floor(context.keep)
+    then
+      return false,
+        "context.keep must be a non-negative integer, got " .. type(context.keep)
+    end
+  end
+
+  return true
+end
+
 local function validate_model_field(json, field)
   if json[field] ~= nil then
     if type(json[field]) ~= "string" then
@@ -148,6 +204,7 @@ end
 --- @field fast_model string?
 --- @field plan_model string?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
+--- @field context sia.config.Context?
 
 --- @return sia.LocalConfig?
 function M.get_local_config()
@@ -216,6 +273,7 @@ function M.get_local_config()
   end
 
   validate(validate_permissions, json.permission)
+  validate(validate_context, json.context)
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
   validate(validate_model_field, json, "plan_model")
@@ -241,6 +299,19 @@ function M.get_default_model(type)
   local lc = M.get_local_config() or {}
   type = type or "model"
   return lc[type] or M.options.defaults[type]
+end
+
+--- @return sia.config.Context
+function M.get_context_config()
+  local local_config = M.get_local_config()
+  if local_config and local_config.context then
+    return vim.tbl_deep_extend(
+      "keep",
+      local_config.context or {},
+      M.options.defaults.context or {}
+    )
+  end
+  return M.options.defaults.context or {}
 end
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
@@ -305,11 +376,18 @@ end
 --- @field chat sia.config.Chat?
 --- @field hidden sia.config.Hidden?
 
+--- @class sia.config.Context
+--- @field max_tool integer?
+--- @field exclude string[]?
+--- @field clear_input boolean?
+--- @field keep integer?
+
 --- @class sia.config.Defaults
 --- @field model string
 --- @field fast_model string
 --- @field plan_model string
 --- @field temperature number
+--- @field context sia.config.Context?
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
 --- @field diff sia.config.Diff
@@ -394,6 +472,7 @@ M.options = {
     fast_model = "openai/gpt-4.1-mini",
     plan_model = "openai/o3-mini",
     temperature = 0.3, -- default temperature
+    context = nil,
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },
