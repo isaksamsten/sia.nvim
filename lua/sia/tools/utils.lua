@@ -269,7 +269,10 @@ M.new_tool = function(opts, execute)
       local permission = resolve_permission(args, conversation)
       user_input = function(prompt, input_args)
         if
-          conversation.ignore_tool_confirm or (permission and permission.auto_allow)
+          not input_args.must_confirm
+          and (
+            conversation.ignore_tool_confirm or (permission and permission.auto_allow)
+          )
         then
           input_args.on_accept()
           return
