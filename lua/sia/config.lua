@@ -567,6 +567,7 @@ M.options = {
           "locations",
           "edit",
           "write",
+          "insert",
           "read",
           "glob",
           "diagnostics",
