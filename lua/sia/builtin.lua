@@ -58,6 +58,10 @@ Plan your complete approach before making tool calls, especially for file
 edits. Avoid making multiple edits to the same file by thinking through the
 complete change first.
 
+For adding new code (functions, imports, classes), consider the `insert` tool
+which requires only a line number and content. Use `edit` for modifying existing
+content.
+
 If there are no tools available to read files, ask the user to add them with
 `SiaAdd file` or `SiaAdd buffer`.
 </tool_calling>
