@@ -5,6 +5,8 @@ local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 
+local clear_tool_input = tool_utils.gen_clear_outdated_tool_input({ "content" })
+
 return tool_utils.new_tool({
   name = "write",
   message = "Writing file...",
@@ -100,7 +102,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         context = {
           buf = buf,
           kind = "edit",
-          tick = tracker.ensure_tracked(buf),
+          clear_outdated_tool_input = clear_tool_input,
         },
         display_content = { "💾 " .. display_text },
       })

@@ -127,7 +127,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     return
   end
 
-  -- Allow inserting beyond file end (will append)
   if insert_line > line_count + 1 then
     insert_line = line_count + 1
   end
@@ -145,7 +144,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     on_accept = function()
       diff.init_change_tracking(buf)
       tracker.non_tracked_edit(buf, function()
-        -- Insert before the specified line (line - 1 in 0-indexed API)
         vim.api.nvim_buf_set_lines(
           buf,
           insert_line - 1,
@@ -163,15 +161,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
       local edit_start = insert_line
       local edit_end = insert_line + #text_lines - 1
 
-      local old_text = ""
-      local new_text = table.concat(text_lines, "\n")
-      local unified_diff = utils.create_unified_diff(old_text, new_text, {
-        old_start = insert_line,
-        new_start = edit_start,
-        ctxlen = 1,
-      })
-
-      local diff_lines = vim.split(unified_diff or "", "\n")
       local success_msg = string.format(
         "Inserted %d line%s at line %d in %s",
         #text_lines,
@@ -179,7 +168,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
         insert_line,
         args.target_file
       )
-      table.insert(diff_lines, 1, success_msg)
 
       local display_description = string.format(
         "📝 Inserted %d line%s at line %d in %s",
@@ -190,11 +178,10 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
       )
 
       callback({
-        content = diff_lines,
+        content = { success_msg },
         context = {
           buf = buf,
           pos = { edit_start, edit_end },
-          tick = tracker.ensure_tracked(buf),
           clear_outdated_tool_input = clear_outdated_tool_input,
           outdated_message = create_outdated_message(
             args.target_file,
