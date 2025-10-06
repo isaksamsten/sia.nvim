@@ -14,7 +14,7 @@ local function create_tool_call_message(id, name)
         type = "function",
         ["function"] = {
           name = name,
-          arguments = "{}",
+          arguments = '{"test": "hello"}',
         },
       },
     },
@@ -28,7 +28,7 @@ local function create_tool_response_message(id, name, content)
       id = id,
       ["function"] = {
         name = name,
-        arguments = "{}",
+        arguments = '{"test": "hello"}',
       },
     },
     content = content or "success",
@@ -83,18 +83,35 @@ T["tool call filtering"]["exceeding max should filter to keep most recent"] = fu
       keep = 3,
       max_tool = 5,
       exclude = {},
+      clear_input = true,
     }
   end
 
   local conv = Conversation:new({ instructions = {} }, nil)
 
+  local context = {
+    clear_outdated_tool_input = function(tool)
+      local new_tool = vim.deepcopy(tool)
+      new_tool["function"].arguments = "pruned"
+
+      return new_tool
+    end,
+  }
   for i = 1, 7 do
-    conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"))
-    conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
+    conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"), context)
+    conv:add_instruction(
+      create_tool_response_message("call_" .. i, "test_tool"),
+      context
+    )
   end
 
   local query = conv:to_query()
   eq(4, count_pruned(query))
+  eq("pruned", query.prompt[1].tool_calls[1]["function"].arguments)
+  eq("pruned", query.prompt[3].tool_calls[1]["function"].arguments)
+  eq("pruned", query.prompt[5].tool_calls[1]["function"].arguments)
+  eq("pruned", query.prompt[7].tool_calls[1]["function"].arguments)
+  eq('{"test": "hello"}', query.prompt[9].tool_calls[1]["function"].arguments)
 end
 
 T["tool call filtering"]["should permanently mark outdated tool calls"] = function()

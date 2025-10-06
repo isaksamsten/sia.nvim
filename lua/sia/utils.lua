@@ -742,4 +742,40 @@ function M.detect_dangerous_command_patterns(command)
   return false
 end
 
+--- Create a unified diff with adjusted line numbers for file context
+--- @param old_text string The original text
+--- @param new_text string The new text
+--- @param opts { old_start: integer, new_start: integer, ctxlen: integer? }
+--- @return string? unified_diff The adjusted unified diff or nil
+function M.create_unified_diff(old_text, new_text, opts)
+  local ctxlen = opts.ctxlen or 3
+  local unified_diff = vim.diff(old_text, new_text, {
+    result_type = "unified",
+    ctxlen = ctxlen,
+  })
+
+  if not unified_diff or unified_diff == "" then
+    return nil
+  end
+
+  unified_diff = unified_diff:gsub(
+    "@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@",
+    function(old_start, old_count, new_start, new_count)
+      local old_file_start = opts.old_start + tonumber(old_start) - 1
+      local new_file_start = opts.new_start + tonumber(new_start) - 1
+      local old_count_str = old_count ~= "" and ("," .. old_count) or ""
+      local new_count_str = new_count ~= "" and ("," .. new_count) or ""
+      return string.format(
+        "@@ -%d%s +%d%s @@",
+        old_file_start,
+        old_count_str,
+        new_file_start,
+        new_count_str
+      )
+    end
+  )
+
+  return unified_diff
+end
+
 return M

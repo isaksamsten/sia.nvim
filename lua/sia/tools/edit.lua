@@ -13,6 +13,24 @@ local MAX_FAILED_MATCHES = 3
 local FAILED_TO_EDIT = "❌ Failed to edit"
 local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
 
+local clear_outdated_tool_input =
+  tool_utils.gen_clear_outdated_tool_input({ "old_string", "new_string" })
+
+--- @param filename string
+--- @param start_edit integer
+--- @param end_edit integer
+--- @return string
+local function create_outdated_message(filename, start_edit, end_edit)
+  local same_line = start_edit ~= end_edit
+  return string.format(
+    "Previously edited %s, changing line%s %s",
+    vim.fn.fnamemodify(filename, ":."),
+    same_line and "s" or "",
+    same_line and tostring(start_edit) .. " to " .. tostring(end_edit)
+      or tostring(start_edit)
+  )
+end
+
 return tool_utils.new_tool({
   name = "edit",
   message = function(args)
@@ -200,31 +218,12 @@ one specific change with clear, unique context.
 
         local old_text = table.concat(old_span_lines, "\n")
         local new_text = table.concat(new_text_lines, "\n")
-        local unified_diff = vim.diff(old_text, new_text, {
-          result_type = "unified",
+        local unified_diff = utils.create_unified_diff(old_text, new_text, {
+          old_start = span[1],
+          new_start = edit_start,
           ctxlen = 3,
         })
 
-        if unified_diff and unified_diff ~= "" then
-          unified_diff = unified_diff:gsub(
-            "@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@",
-            function(old_start, old_count, new_start, new_count)
-              local old_file_start = span[1] + tonumber(old_start) - 1
-              local new_file_start = edit_start + tonumber(new_start) - 1
-              local old_count_str = old_count ~= "" and ("," .. old_count) or ""
-              local new_count_str = new_count ~= "" and ("," .. new_count) or ""
-              return string.format(
-                "@@ -%d%s +%d%s @@",
-                old_file_start,
-                old_count_str,
-                new_file_start,
-                new_count_str
-              )
-            end
-          )
-        end
-
-        --- @cast unified_diff string?
         local diff_lines = vim.split(unified_diff or "", "\n")
 
         local success_msg = string.format(
@@ -261,6 +260,12 @@ one specific change with clear, unique context.
             buf = buf,
             pos = { edit_start, edit_end },
             tick = tracker.ensure_tracked(buf),
+            outdated_message = create_outdated_message(
+              args.target_file,
+              edit_start,
+              edit_end
+            ),
+            clear_outdated_tool_input = clear_outdated_tool_input,
           },
           kind = "edit",
           display_content = { display_description },

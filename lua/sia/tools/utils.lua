@@ -1,5 +1,28 @@
 local M = {}
 
+--- @param clear_args string[]
+--- @return fun(t:sia.ToolCall):sia.ToolCall
+function M.gen_clear_outdated_tool_input(clear_args)
+  local function clear_outdated_tool_input(tool)
+    local f = tool["function"]
+    if f then
+      local new_func = { name = f.name, arguments = f.arguments }
+      local ok, arguments = pcall(vim.json.decode, f.arguments)
+      if ok then
+        for key, _ in pairs(arguments) do
+          if vim.tbl_contains(clear_args, key) then
+            arguments[key] = "text has been pruned"
+          end
+        end
+        new_func.arguments = vim.json.encode(arguments)
+      end
+      return { id = tool.id, type = tool.type, ["function"] = new_func }
+    end
+    return tool
+  end
+  return clear_outdated_tool_input
+end
+
 local function cancellation_message(name)
   return {
     "OPERATION DECLINED BY USER",

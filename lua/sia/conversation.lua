@@ -24,6 +24,7 @@ local tracker = require("sia.tracker")
 --- @field cursor integer[]?
 --- @field tick integer?
 --- @field outdated_message string?
+--- @field clear_outdated_tool_input (fun(t: sia.ToolCall):sia.ToolCall)?
 
 --- @class sia.ActionContext : sia.Context
 --- @field start_line integer?
@@ -81,7 +82,7 @@ local function make_content(instruction, context)
   elseif instruction.content ~= nil and type(instruction.content) == "string" then
     local tmp = instruction.content
     --- @cast tmp string
-    if context and vim.api.nvim_buf_is_loaded(context.buf) then
+    if context and context.buf and vim.api.nvim_buf_is_loaded(context.buf) then
       tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
         filetype = vim.bo[context.buf].ft,
         today = os.date("%Y-%m-%d"),
@@ -198,15 +199,12 @@ function Message:is_outdated()
     return false
   end
 
-  if self.context and not self.context.outdated_message then
-    return false
-  end
-
   if
     self.context
+    and self.context.buf
     and self.context.tick
     and self.kind ~= nil
-    and (self.role == "tool" or (self.content and self.role ~= "assistant"))
+    and (self.role == "tool" or self.role ~= "assistant")
   then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
       return self.context.tick ~= tracker.user_tick(self.context.buf)
@@ -221,6 +219,7 @@ end
 --- @param outdated boolean?
 --- @return sia.Prompt
 function Message:to_prompt(conversation, outdated)
+  local context_conf = require("sia.config").get_context_config()
   --- @type sia.Prompt
   local prompt = { role = self.role, content = self:get_content(outdated) }
 
@@ -228,10 +227,15 @@ function Message:to_prompt(conversation, outdated)
     prompt.tool_calls = {}
     for _, tool_call in ipairs(self.tool_calls) do
       if tool_call.type == "function" then
-        table.insert(
-          prompt.tool_calls,
-          { id = tool_call.id, type = "function", ["function"] = tool_call["function"] }
-        )
+        if
+          context_conf.clear_input
+          and self.context
+          and self.context.clear_outdated_tool_input
+          and (self:is_outdated() or outdated)
+        then
+          tool_call = self.context.clear_outdated_tool_input(tool_call)
+        end
+        table.insert(prompt.tool_calls, tool_call)
       end
     end
   end
