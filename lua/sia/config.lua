@@ -502,6 +502,7 @@ M.options = {
         locations = require("sia.tools").locations,
         read = require("sia.tools").read,
         edit = require("sia.tools").edit,
+        insert = require("sia.tools").insert,
         write = require("sia.tools").write,
         glob = require("sia.tools").glob,
         diagnostics = require("sia.tools").diagnostics,

@@ -3,6 +3,7 @@ return {
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),
   edit = require("sia.tools.edit"),
+  insert = require("sia.tools.insert"),
   write = require("sia.tools.write"),
   rename = require("sia.tools.rename"),
   remove = require("sia.tools.remove"),
