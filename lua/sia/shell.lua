@@ -324,9 +324,14 @@ function Shell:_kill_children()
 
   local pid = self.process.pid
   if pid then
-    vim.system({ "pkill", "-TERM", "-P", tostring(pid) }, { text = true }, function()
-      -- killed
-    end)
+    vim.system({
+      "sh",
+      "-c",
+      string.format(
+        "ps -A -o pid= -o ppid= | awk '$2 == %d {print $1}' | xargs kill -TERM 2>/dev/null || true",
+        pid
+      ),
+    }, { text = true }, function() end)
   end
 end
 
