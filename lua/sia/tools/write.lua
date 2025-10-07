@@ -31,19 +31,19 @@ Use this tool when:
 
 For small, targeted changes, prefer the edit tool instead.]],
   parameters = {
-    path = { type = "string", description = "The file path to write to" },
+    target_file = { type = "string", description = "The file path to write to" },
     content = { type = "string", description = "The complete file content to write" },
   },
-  required = { "path", "content" },
+  required = { "target_file", "content" },
   auto_apply = function(args, conversation)
-    local file = vim.fs.basename(args.path)
+    local file = vim.fs.basename(args.target_file)
     if file == "AGENTS.md" then
       return 1
     end
     return conversation.auto_confirm_tools["write"]
   end,
 }, function(args, _, callback, opts)
-  if not args.path then
+  if not args.target_file then
     callback({
       content = { "Error: No file path provided" },
       display_content = { FAILED_TO_WRITE },
@@ -60,16 +60,16 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-  local file_exists = vim.fn.filereadable(args.path) == 1
+  local file_exists = vim.fn.filereadable(args.target_file) == 1
   local prompt = file_exists
-      and string.format("Overwrite existing file %s with new content", args.path)
-    or string.format("Create new file %s", args.path)
+      and string.format("Overwrite existing file %s with new content", args.target_file)
+    or string.format("Create new file %s", args.target_file)
   opts.user_input(prompt, {
     on_accept = function()
-      local buf = utils.ensure_file_is_loaded(args.path)
+      local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
       if not buf then
         callback({
-          content = { "Error: Cannot create buffer for " .. args.path },
+          content = { "Error: Cannot create buffer for " .. args.target_file },
           display_content = { FAILED_TO_WRITE },
           kind = "failed",
         })
@@ -94,11 +94,13 @@ For small, targeted changes, prefer the edit tool instead.]],
       local display_text = string.format(
         "%s %s (%d lines)",
         file_exists and "Overwrote" or "Created",
-        vim.fn.fnamemodify(args.path, ":."),
+        vim.fn.fnamemodify(args.target_file, ":."),
         #lines
       )
       callback({
-        content = { string.format("Successfully %s buffer for %s", action, args.path) },
+        content = {
+          string.format("Successfully %s buffer for %s", action, args.target_file),
+        },
         context = {
           buf = buf,
           kind = "edit",

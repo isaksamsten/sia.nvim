@@ -100,7 +100,10 @@ example: // ... existing code ...  ]],
     return
   end
 
-  local buf = utils.ensure_file_is_loaded(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file, {
+    listed = false,
+    read_only = true,
+  })
   if not buf then
     callback({ content = { "Cannot load " .. args.target_file } })
     return

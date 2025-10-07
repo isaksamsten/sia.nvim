@@ -335,22 +335,43 @@ function M.get_action_mode(opts)
 end
 
 --- @param file string
+--- @param opts {read_only: boolean?, listed:boolean?}?
 --- @return integer? buf
-function M.ensure_file_is_loaded(file)
+function M.ensure_file_is_loaded(file, opts)
+  opts = opts or {}
   local bufnr = vim.fn.bufnr(file)
   if
-    bufnr == -1
-    or not vim.api.nvim_buf_is_valid(bufnr)
-    or not vim.api.nvim_buf_is_loaded(bufnr)
+    bufnr ~= -1
+    and vim.api.nvim_buf_is_valid(bufnr)
+    and vim.api.nvim_buf_is_loaded(bufnr)
   then
-    local status, _ = pcall(function()
-      bufnr = vim.fn.bufadd(file)
-      vim.fn.bufload(bufnr)
-      vim.api.nvim_set_option_value("buflisted", true, { buf = bufnr })
-    end)
-    if not status then
-      return nil
+    if opts.listed then
+      vim.bo[bufnr].buflisted = opts.listed
     end
+    return bufnr
+  end
+
+  local file_exists = vim.uv.fs_stat(file) ~= nil
+  bufnr = (bufnr ~= -1 and vim.api.nvim_buf_is_valid(bufnr)) and bufnr
+    or vim.fn.bufadd(file)
+  local swap_id = vim.api.nvim_create_autocmd("SwapExists", {
+    once = true,
+    callback = function()
+      if opts.read_only then
+        vim.v.swapchoice = "o"
+      end
+    end,
+  })
+
+  pcall(vim.api.nvim_buf_call, bufnr, vim.cmd.edit)
+  pcall(vim.api.nvim_del_autocmd, swap_id)
+  if file_exists and not vim.api.nvim_buf_is_loaded(bufnr) then
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+    return nil
+  end
+
+  if opts.listed ~= nil then
+    vim.bo[bufnr].buflisted = opts.listed
   end
 
   return bufnr

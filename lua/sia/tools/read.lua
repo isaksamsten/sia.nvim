@@ -69,7 +69,18 @@ will be truncated.]],
 
   opts.user_input(confirm_message, {
     on_accept = function()
-      local buf = utils.ensure_file_is_loaded(args.path)
+      local buf = utils.ensure_file_is_loaded(args.path, {
+        read_only = true,
+        listed = false,
+      })
+      if not buf then
+        callback({
+          content = { "Error: Cannot load " .. args.path },
+          display_content = { FAILED_TO_READ },
+          kind = "failed",
+        })
+        return
+      end
       local total_lines = vim.api.nvim_buf_line_count(buf)
 
       if offset > total_lines then

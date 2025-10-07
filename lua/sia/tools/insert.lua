@@ -102,7 +102,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     return
   end
 
-  local buf = utils.ensure_file_is_loaded(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },

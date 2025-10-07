@@ -143,7 +143,7 @@ one specific change with clear, unique context.
     return
   end
 
-  local buf = utils.ensure_file_is_loaded(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },

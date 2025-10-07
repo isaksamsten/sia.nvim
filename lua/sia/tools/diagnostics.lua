@@ -30,7 +30,10 @@ return tool_utils.new_tool({
     })
     return
   end
-  local buf = utils.ensure_file_is_loaded(args.file)
+  local buf = utils.ensure_file_is_loaded(args.file, {
+    read_only = true,
+    listed = false,
+  })
   if not buf then
     callback({
       content = { "Error: Cannot load file into buffer" },

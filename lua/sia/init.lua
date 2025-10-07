@@ -407,7 +407,10 @@ local add_commands = {
     execute_global = function(args)
       local files = utils.glob_pattern_to_files(args.fargs)
       for _, file in ipairs(files) do
-        local buf = utils.ensure_file_is_loaded(file)
+        local buf = utils.ensure_file_is_loaded(file, {
+          listed = false,
+          read_only = true,
+        })
         if buf then
           Conversation.add_pending_instruction("current_context", {
             buf = buf,
@@ -421,7 +424,10 @@ local add_commands = {
     execute_local = function(args, conversation)
       local files = utils.glob_pattern_to_files(args.fargs)
       for _, file in ipairs(files) do
-        local buf = utils.ensure_file_is_loaded(file)
+        local buf = utils.ensure_file_is_loaded(file, {
+          listed = false,
+          read_only = true,
+        })
         if buf then
           conversation:add_instruction("current_context", {
             buf = buf,
