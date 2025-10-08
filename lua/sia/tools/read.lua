@@ -27,8 +27,7 @@ will be truncated.]],
   },
   required = { "path" },
   auto_apply = function(args, _)
-    local file = vim.fs.basename(args.path)
-    if file == "AGENTS.md" then
+    if utils.is_memory_file(args.path) then
       return 1
     end
     return nil
@@ -52,6 +51,7 @@ will be truncated.]],
     return
   end
 
+  local is_memory = utils.is_memory_file(args.path)
   local offset = args.offset or 1
   local limit = args.limit or 2000
   local max_line_length = 2000
@@ -114,26 +114,24 @@ will be truncated.]],
         pos = { offset, offset + #content - 1 }
       end
 
-      local display_lines = {}
-      if args.offset or args.limit then
-        table.insert(
-          display_lines,
-          string.format(
+      local display_content
+      if not is_memory then
+        if args.offset or args.limit then
+          display_content = string.format(
             "📖 Read lines %d-%d from %s",
             start_line,
             end_line,
             vim.fn.fnamemodify(args.path, ":.")
           )
-        )
-      else
-        table.insert(
-          display_lines,
-          string.format(
+        else
+          display_content = string.format(
             "📖 Read %s (%d lines)",
             vim.fn.fnamemodify(args.path, ":."),
             #content
           )
-        )
+        end
+      else
+        display_content = "🧠 Remembering..."
       end
 
       local outdated_message
@@ -165,7 +163,7 @@ will be truncated.]],
           outdated_message = outdated_message,
         },
         kind = "context",
-        display_content = display_lines,
+        display_content = { display_content },
       })
     end,
   })

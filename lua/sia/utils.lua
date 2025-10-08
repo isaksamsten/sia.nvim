@@ -602,6 +602,7 @@ end
 
 -- Root detection helpers
 local default_markers = {
+  ".sia",
   ".git",
   ".hg",
   ".svn",
@@ -631,15 +632,14 @@ function M.detect_project_root(path_or_buf, opts)
   opts = opts or {}
   local markers = opts.markers or default_markers
 
-  local path_abs
+  local marker_root
   if type(path_or_buf) == "number" then
-    local name = vim.api.nvim_buf_get_name(path_or_buf)
-    path_abs = normalize(name ~= "" and name or vim.fn.getcwd())
+    marker_root = vim.fs.root(path_or_buf, markers)
   else
-    path_abs = normalize(path_or_buf or vim.fn.getcwd())
+    local path_abs = normalize(path_or_buf or vim.fn.getcwd())
+    marker_root = vim.fs.root(path_abs, markers)
   end
 
-  local marker_root = vim.fs.root(path_abs, markers)
   if marker_root then
     return normalize(marker_root)
   end
@@ -657,6 +657,31 @@ function M.path_in_root(path, root)
   path = normalize(path)
   root = normalize(root)
   return vim.startswith(path, root)
+end
+
+--- @param filename string
+--- @return boolean is_memory_file
+function M.is_memory_file(filename)
+  local root = M.detect_project_root(filename)
+  if not M.path_in_root(filename, root) then
+    return false
+  end
+
+  local norm_filename = normalize(filename)
+  local norm_root = normalize(root)
+  local dirname = normalize(vim.fs.dirname(norm_filename))
+  local basename = vim.fs.basename(norm_filename)
+
+  if dirname == norm_root and basename == "AGENTS.md" then
+    return true
+  end
+
+  local memory_dir = normalize(vim.fs.joinpath(root, ".sia", "memory"))
+  if vim.startswith(dirname, memory_dir) and vim.endswith(basename, ".md") then
+    return true
+  end
+
+  return false
 end
 
 M.BANNED_COMMANDS = {

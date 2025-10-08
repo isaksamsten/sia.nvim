@@ -109,8 +109,7 @@ one specific change with clear, unique context.
   },
   required = { "target_file", "old_string", "new_string" },
   auto_apply = function(args, conversation)
-    local file = vim.fs.basename(args.target_file)
-    if file == "AGENTS.md" then
+    if utils.is_memory_file(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["edit"]
@@ -143,7 +142,9 @@ one specific change with clear, unique context.
     return
   end
 
-  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
+  local is_memory = utils.is_memory_file(args.target_file)
+
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
@@ -185,7 +186,9 @@ one specific change with clear, unique context.
           new_text_lines = vim.split(args.new_string, "\n")
         end
 
-        diff.init_change_tracking(buf)
+        if not is_memory then
+          diff.init_change_tracking(buf)
+        end
         tracker.non_tracked_edit(buf, function()
           if match.col_span then
             vim.api.nvim_buf_set_text(
@@ -203,9 +206,13 @@ one specific change with clear, unique context.
             pcall(vim.cmd, "noa silent write!")
           end)
         end)
-        diff.update_reference_content(buf)
+        if not is_memory then
+          diff.update_reference_content(buf)
+        end
         if choice == 1 or choice == 2 then
-          diff.update_and_highlight_diff(buf)
+          if not is_memory then
+            diff.update_and_highlight_diff(buf)
+          end
           if choice == 2 then
             conversation.auto_confirm_tools["edit"] = 1
           end
@@ -233,25 +240,29 @@ one specific change with clear, unique context.
         )
         table.insert(diff_lines, 1, success_msg)
         local display_description
-        if match.col_span then
-          display_description = string.format(
-            "✏️ Edited line %d (columns %d-%d) in %s%s",
-            edit_start,
-            match.col_span[1],
-            match.col_span[2],
-            vim.fn.fnamemodify(args.target_file, ":."),
-            best_matches.fuzzy and " - please double-check the changes" or ""
-          )
+        if not is_memory then
+          if match.col_span then
+            display_description = string.format(
+              "✏️ Edited line %d (columns %d-%d) in %s%s",
+              edit_start,
+              match.col_span[1],
+              match.col_span[2],
+              vim.fn.fnamemodify(args.target_file, ":."),
+              best_matches.fuzzy and " - please double-check the changes" or ""
+            )
+          else
+            local edit_span = edit_start ~= edit_end
+                and string.format("lines %d-%d", edit_start, edit_end)
+              or string.format("line %d", edit_start)
+            display_description = string.format(
+              "✏️ Edited %s in %s%s",
+              edit_span,
+              vim.fn.fnamemodify(args.target_file, ":."),
+              best_matches.fuzzy and " - please double-check the changes" or ""
+            )
+          end
         else
-          local edit_span = edit_start ~= edit_end
-              and string.format("lines %d-%d", edit_start, edit_end)
-            or string.format("line %d", edit_start)
-          display_description = string.format(
-            "✏️ Edited %s in %s%s",
-            edit_span,
-            vim.fn.fnamemodify(args.target_file, ":."),
-            best_matches.fuzzy and " - please double-check the changes" or ""
-          )
+          display_description = "Updated memories..."
         end
 
         callback({

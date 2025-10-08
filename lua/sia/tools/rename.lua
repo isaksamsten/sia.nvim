@@ -18,6 +18,13 @@ Notes:
     dest = { type = "string", description = "Destination file path" },
   },
   required = { "src", "dest" },
+  auto_apply = function(args, conversation)
+    local is_memory = utils.is_memory_file(args.src) and utils.is_memory_file(args.dest)
+    if is_memory then
+      return 1
+    end
+    return conversation.auto_confirm_tools["rename_file"]
+  end,
   confirm = function(args)
     return string.format("Rename %s → %s", args.src, args.dest)
   end,
@@ -34,6 +41,8 @@ Notes:
     })
     return
   end
+
+  local is_memory = utils.is_memory_file(args.src) and utils.is_memory_file(args.dest)
 
   local src_abs = vim.fn.fnamemodify(args.src, ":p")
   local dest_abs = vim.fn.fnamemodify(args.dest, ":p")
@@ -73,7 +82,7 @@ Notes:
   end
 
   local dest_stat = vim.uv.fs_stat(dest_abs)
-  if dest_stat then
+  if dest_stat and not is_memory then
     callback({
       content = {
         string.format(
@@ -149,7 +158,8 @@ Notes:
           string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
         display_content = {
-          string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
+          is_memory and "🧠 Restructure memories..."
+            or string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
       })
     end,

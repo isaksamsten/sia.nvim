@@ -46,7 +46,8 @@ local function create_mock_conversation(auto_confirm_edit)
 end
 
 T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
-  local buf = create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
+  local buf =
+    create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
   local restore_file_loader = mock_file_loader(buf)
   local restore_tracker = mock_tracker()
 
@@ -77,7 +78,8 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
 end
 
 T["sia.tools.edit"]["successful exact match edit"] = function()
-  local buf = create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
+  local buf =
+    create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
   local restore_file_loader = mock_file_loader(buf)
   local restore_tracker = mock_tracker()
 
@@ -102,7 +104,11 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
 
   eq("edit", result.kind)
   eq(result.content[1], "Edited test.lua:")
-  eq(true, string.find(result.display_content[1], "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "✏️ Edited lines 1%-3 in test%.lua")
+      ~= nil
+  )
 
   restore_file_loader()
   restore_tracker()
@@ -130,7 +136,13 @@ T["sia.tools.edit"]["successful inline edit"] = function()
   eq("hello world lisa", new_content[1])
 
   eq("edit", result.kind)
-  eq(true, string.find(result.display_content[1], "✏️ Edited line 1 %(columns 13%-16%) in test%.txt") ~= nil)
+  eq(
+    true,
+    string.find(
+      result.display_content[1],
+      "✏️ Edited line 1 %(columns 13%-16%) in test%.txt"
+    ) ~= nil
+  )
 
   restore_file_loader()
   restore_tracker()
@@ -161,7 +173,10 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
 
   eq("edit", result.kind)
   eq(true, string.find(result.content[1], "the match was not perfect") ~= nil)
-  eq(true, string.find(result.display_content[1], "please double%-check the changes") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "please double%-check the changes") ~= nil
+  )
 
   restore_file_loader()
   restore_tracker()
@@ -202,6 +217,27 @@ T["sia.tools.edit"]["auto confirm for AGENTS.md"] = function()
 
   local args = {
     target_file = "AGENTS.md",
+    old_string = "Some content",
+    new_string = "Updated content",
+  }
+
+  local result
+  edit_tool.execute(args, create_mock_conversation(nil), function(res)
+    result = res
+  end)
+  eq("edit", result.kind)
+
+  restore_file_loader()
+  restore_tracker()
+end
+
+T["sia.tools.edit"]["auto confirm for .sia/memory/file.md"] = function()
+  local buf = create_test_buffer({ "# Agents", "Some content" })
+  local restore_file_loader = mock_file_loader(buf)
+  local restore_tracker = mock_tracker()
+
+  local args = {
+    target_file = ".sia/memory/test.md",
     old_string = "Some content",
     new_string = "Updated content",
   }
@@ -334,9 +370,16 @@ T["sia.tools.edit"]["multiple matches found"] = function()
 
   eq(
     true,
-    string.find(result.content[1], "Failed to edit test%.txt since I couldn't find the exact text to replace") ~= nil
+    string.find(
+      result.content[1],
+      "Failed to edit test%.txt since I couldn't find the exact text to replace"
+    ) ~= nil
   )
-  eq(true, string.find(result.content[1], "found multiple matches instead of exactly one") ~= nil)
+  eq(
+    true,
+    string.find(result.content[1], "found multiple matches instead of exactly one")
+      ~= nil
+  )
   eq("❌ Failed to edit test.txt", result.display_content[1])
 
   restore_file_loader()
@@ -364,8 +407,15 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   edit_tool.execute(args, create_mock_conversation(1), callback, nil)
 
   local final_result = results[3]
-  eq(true, string.find(final_result.content[1], "Edit failed because no matches were found") ~= nil)
-  eq(true, string.find(final_result.content[1], "let the user manually make the change") ~= nil)
+  eq(
+    true,
+    string.find(final_result.content[1], "Edit failed because no matches were found")
+      ~= nil
+  )
+  eq(
+    true,
+    string.find(final_result.content[1], "let the user manually make the change") ~= nil
+  )
 
   restore_file_loader()
   restore_tracker()

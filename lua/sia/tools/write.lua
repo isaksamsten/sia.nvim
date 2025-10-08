@@ -36,8 +36,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   },
   required = { "target_file", "content" },
   auto_apply = function(args, conversation)
-    local file = vim.fs.basename(args.target_file)
-    if file == "AGENTS.md" then
+    if utils.is_memory_file(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["write"]
@@ -60,13 +59,15 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
+  local is_memory = utils.is_memory_file(args.target_file)
   local file_exists = vim.fn.filereadable(args.target_file) == 1
   local prompt = file_exists
       and string.format("Overwrite existing file %s with new content", args.target_file)
     or string.format("Create new file %s", args.target_file)
   opts.user_input(prompt, {
     on_accept = function()
-      local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
+      local buf =
+        utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
       if not buf then
         callback({
           content = { "Error: Cannot create buffer for " .. args.target_file },
@@ -76,7 +77,9 @@ For small, targeted changes, prefer the edit tool instead.]],
         return
       end
 
-      diff.init_change_tracking(buf)
+      if not is_memory then
+        diff.init_change_tracking(buf)
+      end
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -84,19 +87,27 @@ For small, targeted changes, prefer the edit tool instead.]],
           pcall(vim.cmd, "noa silent write!")
         end)
       end)
-      diff.update_reference_content(buf)
+      if not is_memory then
+        diff.update_reference_content(buf)
+      end
 
-      if file_exists then
+      if file_exists and not is_memory then
         diff.update_and_highlight_diff(buf)
       end
 
+      local display_text
       local action = file_exists and "overwritten" or "created"
-      local display_text = string.format(
-        "%s %s (%d lines)",
-        file_exists and "Overwrote" or "Created",
-        vim.fn.fnamemodify(args.target_file, ":."),
-        #lines
-      )
+      if not is_memory then
+        display_text = string.format(
+          "💾 %s %s (%d lines)",
+          file_exists and "Overwrote" or "Created",
+          vim.fn.fnamemodify(args.target_file, ":."),
+          #lines
+        )
+      else
+        display_text = file_exists and "🧠 Updating memories..."
+          or "🧠 Creating memories..."
+      end
       callback({
         content = {
           string.format("Successfully %s buffer for %s", action, args.target_file),
@@ -106,7 +117,7 @@ For small, targeted changes, prefer the edit tool instead.]],
           kind = "edit",
           clear_outdated_tool_input = clear_tool_input,
         },
-        display_content = { "💾 " .. display_text },
+        display_content = { display_text },
       })
     end,
   })

@@ -68,8 +68,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   },
   required = { "target_file", "line", "text" },
   auto_apply = function(args, conversation)
-    local file = vim.fs.basename(args.target_file)
-    if file == "AGENTS.md" then
+    if utils.is_memory_file(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["insert"]
@@ -102,7 +101,8 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     return
   end
 
-  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
+  local is_memory = utils.is_memory_file(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
@@ -115,7 +115,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   local line_count = vim.api.nvim_buf_line_count(buf)
   local insert_line = args.line
 
-  -- Validate line number
   if insert_line < 1 then
     callback({
       content = {
@@ -142,7 +141,9 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
 
   opts.user_input(insert_description, {
     on_accept = function()
-      diff.init_change_tracking(buf)
+      if not is_memory then
+        diff.init_change_tracking(buf)
+      end
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(
           buf,
@@ -155,8 +156,10 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
           pcall(vim.cmd, "noa silent write!")
         end)
       end)
-      diff.update_reference_content(buf)
-      diff.update_and_highlight_diff(buf)
+      if not is_memory then
+        diff.update_reference_content(buf)
+        diff.update_and_highlight_diff(buf)
+      end
 
       local edit_start = insert_line
       local edit_end = insert_line + #text_lines - 1
@@ -168,15 +171,18 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
         insert_line,
         args.target_file
       )
-
-      local display_description = string.format(
-        "📝 Inserted %d line%s at line %d in %s",
-        #text_lines,
-        #text_lines == 1 and "" or "s",
-        insert_line,
-        vim.fn.fnamemodify(args.target_file, ":.")
-      )
-
+      local display_description
+      if not is_memory then
+        display_description = string.format(
+          "📝 Inserted %d line%s at line %d in %s",
+          #text_lines,
+          #text_lines == 1 and "" or "s",
+          insert_line,
+          vim.fn.fnamemodify(args.target_file, ":.")
+        )
+      else
+        display_description = "Updating memories..."
+      end
       callback({
         content = { success_msg },
         context = {

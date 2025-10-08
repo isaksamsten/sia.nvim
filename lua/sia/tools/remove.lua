@@ -29,6 +29,13 @@ return tool_utils.new_tool({
   end,
   description = "Remove a file.",
   system_prompt = [[Remove a file from the project.]],
+  auto_apply = function(args, conversation)
+    if utils.is_memory_file(args.path) then
+      return 1
+    end
+
+    return conversation.auto_confirm_tools["remove_file"]
+  end,
   parameters = {
     path = { type = "string", description = "Path to remove" },
   },
@@ -85,9 +92,10 @@ return tool_utils.new_tool({
   else
     prompt = string.format("Permanently delete: %s", args.path)
   end
+  local is_memory = utils.is_memory_file(args.path)
   opts.user_input(prompt, {
     on_accept = function()
-      if trash then
+      if trash and not is_memory then
         local timestamp = os.date("%Y%m%d-%H%M%S")
         local trash_base = vim.fs.joinpath(root, trash_dir_name, timestamp)
         local relative_from_root =
@@ -120,7 +128,7 @@ return tool_utils.new_tool({
         })
         return
       else
-        local ok = vim.fn.delete(target_abs, "f")
+        local ok = vim.fn.delete(target_abs)
         if ok ~= 0 then
           callback({
             content = { string.format("Error: Failed to delete %s", args.path) },
@@ -132,7 +140,10 @@ return tool_utils.new_tool({
         delete_buffers_under(target_abs)
         callback({
           content = { string.format("Deleted %s", rel(target_abs)) },
-          display_content = { string.format("🗑️ Deleted %s", rel(target_abs)) },
+          display_content = {
+            is_memory and "🧠 Forgetting..."
+              or string.format("🗑️ Deleted %s", rel(target_abs)),
+          },
         })
         return
       end
