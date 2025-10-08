@@ -187,9 +187,7 @@ function M.visible_buffers()
 
             buffer_info[buf] = {
               relative_name = relative_name,
-              hide = vim.bo[buf].buflisted
-                or vim.bo[buf].buftype ~= ""
-                or relative_name == "",
+              hide = vim.bo[buf].buftype ~= "" or relative_name == "",
               buf = buf,
               cursor_line = cursor[1],
               cursor_col = cursor[2] + 1,
