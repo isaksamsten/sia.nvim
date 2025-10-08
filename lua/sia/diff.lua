@@ -32,6 +32,7 @@ local REGION_GAP = 5
 --- @field reference_hunks sia.diff.ReferenceHunk[]?
 --- @field baseline_hunks sia.diff.Hunk[]?
 --- @field autocommand_group integer?
+--- @field reference_ranges sia.diff.RefRange[]? Cached ranges from baseline to reference
 
 --- @type table<integer, sia.diff.DiffState>
 local buffer_diff_state = {}
@@ -92,8 +93,10 @@ local function setup_auto_diff_updates(buf)
       update_timers[buf] = vim.defer_fn(function()
         update_timers[buf] = nil
         if buffer_diff_state[buf] then
-          M.update_diff(buf)
-          M.highlight_hunks(buf)
+          local hunks_changed = M.update_diff(buf)
+          if hunks_changed then
+            M.highlight_hunks(buf)
+          end
           if not buffer_diff_state[buf].reference_hunks then
             cleanup(buf)
           end
@@ -209,77 +212,6 @@ local function apply_hunks_to_baseline(baseline_lines, hunks, current_content)
       end
     end
   end
-end
-
----@param buf integer
-function M.show_diff_preview(buf)
-  local diff_state = buffer_diff_state[buf]
-  if not diff_state then
-    return
-  end
-  local timestamp = os.date("%H:%M:%S")
-  vim.cmd("tabnew")
-  local left_buf = vim.api.nvim_get_current_buf()
-  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, diff_state.baseline)
-  vim.api.nvim_buf_set_name(
-    left_buf,
-    string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp)
-  )
-  vim.bo[left_buf].buftype = "nofile"
-  vim.bo[left_buf].buflisted = false
-  vim.bo[left_buf].swapfile = false
-  vim.bo[left_buf].ft = vim.bo[buf].ft
-
-  vim.cmd("vsplit")
-  local right_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(right_win, buf)
-  vim.api.nvim_set_current_win(right_win)
-  vim.cmd("diffthis")
-  vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
-  vim.cmd("diffthis")
-  vim.bo[left_buf].modifiable = false
-  vim.api.nvim_set_current_win(right_win)
-end
-
-function M.init_change_tracking(buf)
-  local diff_state = buffer_diff_state[buf]
-  if not diff_state then
-    local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    buffer_diff_state[buf] = {
-      baseline = vim.deepcopy(current_lines),
-      reference = current_lines,
-      reference_hunks = {},
-      autocommand_group = nil,
-    }
-    setup_auto_diff_updates(buf)
-  else
-    M.update_diff(buf)
-    local baseline_hunks = diff_state.baseline_hunks
-    if not baseline_hunks then
-      return
-    end
-
-    local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    apply_hunks_to_baseline(diff_state.baseline, baseline_hunks, current_content)
-    diff_state.baseline_hunks = nil
-  end
-end
-
---- Get the diff state for a buffer
----@param buf number Buffer handle
----@return sia.diff.DiffState?
-function M.get_diff_state(buf)
-  return buffer_diff_state[buf]
-end
-
---- Update the reference baseline to current buffer state
----@param buf number Buffer handle
-function M.update_reference_content(buf)
-  local diff_state = buffer_diff_state[buf]
-  if not diff_state then
-    return
-  end
-  diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 end
 
 --- Denoise  diffs by merging close hunks
@@ -424,27 +356,20 @@ local function is_reference_hunk(hunk, reference_range, current_lines, reference
   return false
 end
 
---- Create diff hunks between baseline and current, categorized by AI vs user changes
----@param buf number Buffer handle
----@return boolean should_update_highlights
-function M.update_diff(buf)
-  if not buffer_diff_state[buf] then
-    return false
-  end
-
-  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
-
-  local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local current_content = table.concat(current_lines, "\n")
-  local diff_state = buffer_diff_state[buf]
-  local baseline = table.concat(diff_state.baseline, "\n")
-  local reference = table.concat(diff_state.reference, "\n")
-
-  local total_hunk_indices = vim.diff(baseline, current_content, DIFF_OPTS) or {}
-  local reference_hunk_indices = vim.diff(baseline, reference, DIFF_OPTS) or {}
-
+--- Compute reference ranges from baseline to reference
+--- This is cached to avoid recomputing on every text change
+---@param baseline string[]
+---@param reference string[]
+---@return sia.diff.RefRange[]
+local function compute_reference_ranges(baseline, reference)
+  local baseline_content = table.concat(baseline, "\n")
+  local reference_content = table.concat(reference, "\n")
+  local reference_hunk_indices = vim.diff(
+    baseline_content,
+    reference_content,
+    DIFF_OPTS
+  ) or {}
   --- @cast reference_hunk_indices integer[][]
-  --- @cast total_hunk_indices integer[][]
 
   --- @type sia.diff.RefRange[]
   local reference_ranges = {}
@@ -459,6 +384,61 @@ function M.update_diff(buf)
       new_count = new_count,
     })
   end
+  return reference_ranges
+end
+
+--- Compare two hunk arrays for equality (ignoring char_diffs for performance)
+--- This is used to detect if hunks changed and highlights need updating
+---@param hunks1 sia.diff.ReferenceHunk[]?
+---@param hunks2 sia.diff.ReferenceHunk[]?
+---@return boolean equal True if hunks are equivalent
+local function hunks_equal(hunks1, hunks2)
+  if hunks1 == hunks2 then
+    return true
+  end
+  if not hunks1 or not hunks2 then
+    return true
+  end
+  if #hunks1 ~= #hunks2 then
+    return false
+  end
+
+  for i, h1 in ipairs(hunks1) do
+    local h2 = hunks2[i]
+    if
+      h1.old_start ~= h2.old_start
+      or h1.old_count ~= h2.old_count
+      or h1.new_start ~= h2.new_start
+      or h1.new_count ~= h2.new_count
+      or h1.type ~= h2.type
+    then
+      return false
+    end
+  end
+
+  return true
+end
+
+--- Create diff hunks between baseline and current, categorized by AI vs user changes
+---@param buf number Buffer handle
+---@return boolean should_update_highlights
+function M.update_diff(buf)
+  if not buffer_diff_state[buf] then
+    return false
+  end
+
+  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
+
+  local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local current_content = table.concat(current_lines, "\n")
+  local diff_state = buffer_diff_state[buf]
+  local baseline = table.concat(diff_state.baseline, "\n")
+
+  local total_hunk_indices = vim.diff(baseline, current_content, DIFF_OPTS) or {}
+
+  --- @cast total_hunk_indices integer[][]
+
+  local reference_ranges = diff_state.reference_ranges or {}
 
   local reference_hunks = {}
   local baseline_hunks = {}
@@ -524,9 +504,86 @@ function M.update_diff(buf)
     end
   end
 
+  local prev_reference_hunks = diff_state.reference_hunks
   diff_state.reference_hunks = #reference_hunks > 0 and reference_hunks or nil
   diff_state.baseline_hunks = #baseline_hunks > 0 and baseline_hunks or nil
-  return diff_state.reference_hunks ~= nil
+  return not hunks_equal(prev_reference_hunks, diff_state.reference_hunks)
+end
+
+---@param buf integer
+function M.show_diff_preview(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return
+  end
+  local timestamp = os.date("%H:%M:%S")
+  vim.cmd("tabnew")
+  local left_buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(left_buf, 0, -1, false, diff_state.baseline)
+  vim.api.nvim_buf_set_name(
+    left_buf,
+    string.format("%s [ORIGINAL @ %s]", vim.api.nvim_buf_get_name(buf), timestamp)
+  )
+  vim.bo[left_buf].buftype = "nofile"
+  vim.bo[left_buf].buflisted = false
+  vim.bo[left_buf].swapfile = false
+  vim.bo[left_buf].ft = vim.bo[buf].ft
+
+  vim.cmd("vsplit")
+  local right_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(right_win, buf)
+  vim.api.nvim_set_current_win(right_win)
+  vim.cmd("diffthis")
+  vim.api.nvim_set_current_win(vim.fn.win_getid(vim.fn.winnr("#")))
+  vim.cmd("diffthis")
+  vim.bo[left_buf].modifiable = false
+  vim.api.nvim_set_current_win(right_win)
+end
+
+function M.init_change_tracking(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    buffer_diff_state[buf] = {
+      baseline = vim.deepcopy(current_lines),
+      reference = current_lines,
+      reference_hunks = {},
+      autocommand_group = nil,
+      reference_ranges = {},
+    }
+    setup_auto_diff_updates(buf)
+  else
+    M.update_diff(buf)
+    local baseline_hunks = diff_state.baseline_hunks
+    if not baseline_hunks then
+      return
+    end
+
+    local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    apply_hunks_to_baseline(diff_state.baseline, baseline_hunks, current_content)
+    diff_state.baseline_hunks = nil
+    diff_state.reference_ranges =
+      compute_reference_ranges(diff_state.baseline, diff_state.reference)
+  end
+end
+
+--- Get the diff state for a buffer
+---@param buf number Buffer handle
+---@return sia.diff.DiffState?
+function M.get_diff_state(buf)
+  return buffer_diff_state[buf]
+end
+
+--- Update the reference baseline to current buffer state
+---@param buf number Buffer handle
+function M.update_reference_content(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return
+  end
+  diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  diff_state.reference_ranges =
+    compute_reference_ranges(diff_state.baseline, diff_state.reference)
 end
 
 --- @return sia.diff.Hunk[]?
@@ -649,8 +706,10 @@ end
 
 ---@param buf number
 function M.update_and_highlight_diff(buf)
-  M.update_diff(buf)
-  M.highlight_hunks(buf)
+  local hunks_changed = M.update_diff(buf)
+  if hunks_changed then
+    M.highlight_hunks(buf)
+  end
 end
 
 function M.accept_diff(buf)
@@ -854,8 +913,10 @@ function M.accept_single_hunk(buf, hunk_index)
   end
   apply_hunks_to_baseline(diff_state.baseline, { hunk }, current_content)
 
-  M.update_diff(buf)
-  M.highlight_hunks(buf)
+  local hunks_changed = M.update_diff(buf)
+  if hunks_changed then
+    M.highlight_hunks(buf)
+  end
   if not diff_state.reference_hunks then
     cleanup(buf)
   end
@@ -933,8 +994,10 @@ function M.reject_single_hunk(buf, hunk_index)
 
   vim.api.nvim_buf_set_lines(buf, start_line, end_line, false, replacement_lines)
 
-  M.update_diff(buf)
-  M.highlight_hunks(buf)
+  local hunks_changed = M.update_diff(buf)
+  if hunks_changed then
+    M.highlight_hunks(buf)
+  end
   if not diff_state.reference_hunks then
     cleanup(buf)
   end
