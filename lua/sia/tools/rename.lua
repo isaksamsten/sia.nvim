@@ -19,7 +19,7 @@ Notes:
   },
   required = { "src", "dest" },
   auto_apply = function(args, conversation)
-    local is_memory = utils.is_memory_file(args.src) and utils.is_memory_file(args.dest)
+    local is_memory = utils.is_memory(args.src) and utils.is_memory(args.dest)
     if is_memory then
       return 1
     end
@@ -42,7 +42,7 @@ Notes:
     return
   end
 
-  local is_memory = utils.is_memory_file(args.src) and utils.is_memory_file(args.dest)
+  local is_memory = utils.is_memory(args.src) and utils.is_memory(args.dest)
 
   local src_abs = vim.fn.fnamemodify(args.src, ":p")
   local dest_abs = vim.fn.fnamemodify(args.dest, ":p")
@@ -153,12 +153,19 @@ Notes:
       local function rel(path)
         return vim.fn.fnamemodify(path, ":.")
       end
+      local src_memory_name = utils.format_memory_name(args.src)
+      local dest_memory_name = utils.format_memory_name(args.dest)
       callback({
         content = {
           string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
         display_content = {
-          is_memory and "🧠 Restructure memories..."
+          is_memory
+              and string.format(
+                "🧠 Renamed %s → %s",
+                src_memory_name,
+                dest_memory_name
+              )
             or string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
       })

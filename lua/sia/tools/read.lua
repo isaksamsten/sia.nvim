@@ -27,7 +27,7 @@ will be truncated.]],
   },
   required = { "path" },
   auto_apply = function(args, _)
-    if utils.is_memory_file(args.path) then
+    if utils.is_memory(args.path) then
       return 1
     end
     return nil
@@ -51,7 +51,7 @@ will be truncated.]],
     return
   end
 
-  local is_memory = utils.is_memory_file(args.path)
+  local is_memory = utils.is_memory(args.path)
   local offset = args.offset or 1
   local limit = args.limit or 2000
   local max_line_length = 2000
@@ -131,7 +131,9 @@ will be truncated.]],
           )
         end
       else
-        display_content = "🧠 Remembering..."
+        local memory_name = utils.format_memory_name(args.path)
+        display_content =
+          string.format("🧠 Remembered %s (%d lines)", memory_name, #content)
       end
 
       local outdated_message

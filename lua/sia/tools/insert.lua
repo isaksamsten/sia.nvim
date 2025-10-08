@@ -68,7 +68,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   },
   required = { "target_file", "line", "text" },
   auto_apply = function(args, conversation)
-    if utils.is_memory_file(args.target_file) then
+    if utils.is_memory(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["insert"]
@@ -101,7 +101,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     return
   end
 
-  local is_memory = utils.is_memory_file(args.target_file)
+  local is_memory = utils.is_memory(args.target_file)
   local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
   if not buf then
     callback({
@@ -181,7 +181,8 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
           vim.fn.fnamemodify(args.target_file, ":.")
         )
       else
-        display_description = "Updating memories..."
+        local memory_name = utils.format_memory_name(args.target_file)
+        display_description = string.format("🧠 Updated %s", memory_name)
       end
       callback({
         content = { success_msg },

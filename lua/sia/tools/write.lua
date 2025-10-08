@@ -36,7 +36,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   },
   required = { "target_file", "content" },
   auto_apply = function(args, conversation)
-    if utils.is_memory_file(args.target_file) then
+    if utils.is_memory(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["write"]
@@ -59,7 +59,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-  local is_memory = utils.is_memory_file(args.target_file)
+  local is_memory = utils.is_memory(args.target_file)
   local file_exists = vim.fn.filereadable(args.target_file) == 1
   local prompt = file_exists
       and string.format("Overwrite existing file %s with new content", args.target_file)
@@ -105,8 +105,9 @@ For small, targeted changes, prefer the edit tool instead.]],
           #lines
         )
       else
-        display_text = file_exists and "🧠 Updating memories..."
-          or "🧠 Creating memories..."
+        local memory_name = utils.format_memory_name(args.target_file)
+        display_text = file_exists and string.format("🧠 Updated %s", memory_name)
+          or string.format("🧠 Created %s", memory_name)
       end
       callback({
         content = {

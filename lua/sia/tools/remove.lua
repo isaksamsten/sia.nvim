@@ -30,7 +30,7 @@ return tool_utils.new_tool({
   description = "Remove a file.",
   system_prompt = [[Remove a file from the project.]],
   auto_apply = function(args, conversation)
-    if utils.is_memory_file(args.path) then
+    if utils.is_memory(args.path) then
       return 1
     end
 
@@ -55,6 +55,7 @@ return tool_utils.new_tool({
     return
   end
 
+  local is_memory = utils.is_memory(args.path)
   local target_abs = vim.fn.fnamemodify(args.path, ":p")
   local root = utils.detect_project_root(target_abs)
   if restrict_root and not utils.path_in_root(target_abs, root) then
@@ -77,7 +78,7 @@ return tool_utils.new_tool({
     })
     return
   end
-  if st.type == "directory" then
+  if st.type == "directory" and not is_memory then
     callback({
       content = { "Error: Directory removal is disabled by config" },
       display_content = { FAILED_TO_REMOVE },
@@ -92,7 +93,7 @@ return tool_utils.new_tool({
   else
     prompt = string.format("Permanently delete: %s", args.path)
   end
-  local is_memory = utils.is_memory_file(args.path)
+
   opts.user_input(prompt, {
     on_accept = function()
       if trash and not is_memory then
@@ -128,7 +129,12 @@ return tool_utils.new_tool({
         })
         return
       else
-        local ok = vim.fn.delete(target_abs)
+        local ok
+        if is_memory and st.type == "directory" then
+          ok = vim.fn.delete(target_abs, "rf")
+        else
+          ok = vim.fn.delete(target_abs)
+        end
         if ok ~= 0 then
           callback({
             content = { string.format("Error: Failed to delete %s", args.path) },
@@ -138,10 +144,11 @@ return tool_utils.new_tool({
           return
         end
         delete_buffers_under(target_abs)
+        local memory_name = utils.format_memory_name(args.path)
         callback({
           content = { string.format("Deleted %s", rel(target_abs)) },
           display_content = {
-            is_memory and "🧠 Forgetting..."
+            is_memory and string.format("🧠 Forgot %s", memory_name)
               or string.format("🗑️ Deleted %s", rel(target_abs)),
           },
         })

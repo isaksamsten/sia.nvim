@@ -54,9 +54,10 @@ return tool_utils.new_tool({
   end
   opts.user_input(prompt, {
     on_accept = function()
-      local cmd = { "fd", "--type", "f", "--print0" }
       local pattern = args.pattern
       local path = args.path
+      local is_memory = path and string.match(path, "%.sia/memory")
+      local cmd = { "fd", "--print0" }
 
       if pattern and pattern ~= "" then
         table.insert(cmd, "--glob")
@@ -65,8 +66,6 @@ return tool_utils.new_tool({
         -- When path is provided without pattern, use match-all pattern
         table.insert(cmd, ".")
       end
-
-      local is_memory = path and string.match(path, "%.sia/memory")
 
       if args.hidden or is_memory then
         table.insert(cmd, "--hidden")
@@ -176,7 +175,7 @@ return tool_utils.new_tool({
             display_content = string.format("📂 Found %d files", total_count)
           end
         else
-          display_content = "🧠 Listing memories..."
+          display_content = string.format("🧠 Found %d memories", total_count)
         end
 
         callback({

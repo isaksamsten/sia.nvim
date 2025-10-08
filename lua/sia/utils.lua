@@ -661,7 +661,7 @@ end
 
 --- @param filename string
 --- @return boolean is_memory_file
-function M.is_memory_file(filename)
+function M.is_memory(filename)
   local root = M.detect_project_root(filename)
   if not M.path_in_root(filename, root) then
     return false
@@ -677,11 +677,24 @@ function M.is_memory_file(filename)
   end
 
   local memory_dir = normalize(vim.fs.joinpath(root, ".sia", "memory"))
-  if vim.startswith(dirname, memory_dir) and vim.endswith(basename, ".md") then
+  if vim.startswith(dirname, memory_dir) then
     return true
   end
 
   return false
+end
+
+--- Format memory file name in a human-friendly way
+--- @param filename string The full path to the memory file
+--- @return string friendly_name Human-readable name
+function M.format_memory_name(filename)
+  local basename = vim.fs.basename(filename)
+  local name = basename:match("^(.+)%.md$") or basename
+  name = name:gsub("[_%-%.%+]+", " ")
+  name = name:gsub("(%a)([%w_']*)", function(first, rest)
+    return first:upper() .. rest:lower()
+  end)
+  return name
 end
 
 M.BANNED_COMMANDS = {

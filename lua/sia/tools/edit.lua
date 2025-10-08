@@ -109,7 +109,7 @@ one specific change with clear, unique context.
   },
   required = { "target_file", "old_string", "new_string" },
   auto_apply = function(args, conversation)
-    if utils.is_memory_file(args.target_file) then
+    if utils.is_memory(args.target_file) then
       return 1
     end
     return conversation.auto_confirm_tools["edit"]
@@ -142,7 +142,7 @@ one specific change with clear, unique context.
     return
   end
 
-  local is_memory = utils.is_memory_file(args.target_file)
+  local is_memory = utils.is_memory(args.target_file)
 
   local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
   if not buf then
@@ -262,7 +262,8 @@ one specific change with clear, unique context.
             )
           end
         else
-          display_description = "Updated memories..."
+          local memory_name = utils.format_memory_name(args.target_file)
+          display_description = string.format("🧠 Updated %s", memory_name)
         end
 
         callback({
