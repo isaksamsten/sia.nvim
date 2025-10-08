@@ -5,12 +5,30 @@ local DIFF_OPTS = {
   result_type = "indices",
 }
 
+local MIN_LINE_LENGTH = 3
+local MAX_LINE_LENGTH = 200
+local REGION_GAP = 5
+
+--- @class sia.diff.RefRange
+--- @field old_start number
+--- @field finish number
+--- @field old_count number
+--- @field new_start number
+--- @field new_count number
+
+--- @class sia.diff.CharChange
+--- @field old_start integer
+--- @field old_count integer
+--- @field new_start integer
+--- @field new_count integer
+
 --- @class sia.diff.Hunk
 --- @field old_start integer
 --- @field old_count integer
 --- @field new_start integer
 --- @field new_count integer
 --- @field type "change"|"add"|"delete"
+--- @field char_diffs table<integer, sia.diff.CharChange[]>? Map from line offset (1-based) to character-level changes for that line pair
 
 --- @class sia.diff.DiffState
 --- @field baseline string[]
@@ -84,7 +102,7 @@ local function setup_auto_diff_updates(buf)
             cleanup(buf)
           end
         end
-      end, 300)
+      end, 500)
     end,
   })
 
@@ -266,6 +284,73 @@ function M.update_reference_content(buf)
   diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 end
 
+--- Denoise  diffs by merging close hunks
+--- @param char_changes sia.diff.CharChange[]
+--- @return sia.diff.CharChange[]
+local function denoise_char_diffs(char_changes)
+  if #char_changes == 0 then
+    return char_changes
+  end
+
+  --- @type sia.diff.CharChange[]
+  local ret = { char_changes[1] }
+
+  for j = 2, #char_changes do
+    local h, n = ret[#ret], char_changes[j]
+    if not h or not n then
+      break
+    end
+
+    if n.new_start - h.new_start - h.new_count < REGION_GAP then
+      h.new_count = n.new_start + n.new_count - h.new_start
+      h.old_count = n.old_start + n.old_count - h.old_start
+    else
+      ret[#ret + 1] = n
+    end
+  end
+
+  return ret
+end
+
+--- Compute character-level diffs for a pair of lines
+--- @param old_line string
+--- @param new_line string
+--- @return sia.diff.CharChange[]? char_changes
+local function compute_char_diff(old_line, new_line)
+  if #old_line < MIN_LINE_LENGTH or #new_line < MIN_LINE_LENGTH then
+    return nil
+  end
+
+  if #old_line > MAX_LINE_LENGTH or #new_line > MAX_LINE_LENGTH then
+    return nil
+  end
+
+  local old_chars = table.concat(vim.split(old_line, ""), "\n")
+  local new_chars = table.concat(vim.split(new_line, ""), "\n")
+
+  local char_indices = vim.diff(old_chars, new_chars, DIFF_OPTS) or {}
+  --- @cast char_indices integer[][]
+
+  if #char_indices == 0 then
+    return nil
+  end
+
+  --- @type sia.diff.CharChange[]
+  local char_changes = {}
+
+  for _, char_hunk in ipairs(char_indices) do
+    local rs, rc, as, ac = char_hunk[1], char_hunk[2], char_hunk[3], char_hunk[4]
+    table.insert(char_changes, {
+      old_start = rs,
+      old_count = rc,
+      new_start = as,
+      new_count = ac,
+    })
+  end
+
+  return denoise_char_diffs(char_changes)
+end
+
 --- Check if content matches between two line ranges
 ---@param lines1 string[] First array of lines
 ---@param start1 number Start line in first array (1-based)
@@ -296,14 +381,14 @@ end
 
 --- Check if a hunk matches a reference range
 ---@param hunk sia.diff.Hunk
----@param reference_range { start: number, finish: number, count: number, new_start: number, new_count: number }
+---@param reference_range sia.diff.RefRange
 ---@param current_lines string[] Current buffer content
 ---@param reference_lines string[] Reference content
 ---@return boolean is_reference_change True if this hunk matches the reference change
 local function is_reference_hunk(hunk, reference_range, current_lines, reference_lines)
-  if hunk.old_count == 0 and reference_range.count == 0 then
+  if hunk.old_count == 0 and reference_range.old_count == 0 then
     -- Both are insertions - check if they're at the same position
-    if hunk.old_start == reference_range.start then
+    if hunk.old_start == reference_range.old_start then
       return ranges_match(
         current_lines,
         hunk.new_start,
@@ -317,7 +402,7 @@ local function is_reference_hunk(hunk, reference_range, current_lines, reference
     -- Both are changes/deletions - check if it's an exact match
     local current_old_finish = hunk.old_start + hunk.old_count - 1
     if
-      hunk.old_start == reference_range.start
+      hunk.old_start == reference_range.old_start
       and current_old_finish == reference_range.finish
     then
       -- Range matches exactly, now check if content also matches
@@ -343,6 +428,8 @@ function M.update_diff(buf)
     return false
   end
 
+  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
+
   local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local current_content = table.concat(current_lines, "\n")
   local diff_state = buffer_diff_state[buf]
@@ -355,14 +442,15 @@ function M.update_diff(buf)
   --- @cast reference_hunk_indices integer[][]
   --- @cast total_hunk_indices integer[][]
 
+  --- @type sia.diff.RefRange[]
   local reference_ranges = {}
   for _, hunk in ipairs(reference_hunk_indices) do
     local old_start, old_count = hunk[1], hunk[2]
     local new_start, new_count = hunk[3], hunk[4]
     table.insert(reference_ranges, {
-      start = old_start,
+      old_start = old_start,
       finish = old_start + old_count - 1,
-      count = old_count,
+      old_count = old_count,
       new_start = new_start,
       new_count = new_count,
     })
@@ -398,7 +486,34 @@ function M.update_diff(buf)
       end
     end
 
-    if reference_change then
+    if reference_change and show_char_diff then
+      if final_hunk.old_count == final_hunk.new_count and final_hunk.old_count > 0 then
+        local char_diffs = {}
+        local has_char_diffs = false
+
+        for i = 1, final_hunk.old_count do
+          local old_line_idx = final_hunk.old_start + i - 1
+          local new_line_idx = final_hunk.new_start + i - 1
+
+          if
+            old_line_idx <= #diff_state.baseline and new_line_idx <= #current_lines
+          then
+            local old_line = diff_state.baseline[old_line_idx]
+            local new_line = current_lines[new_line_idx]
+
+            local char_changes = compute_char_diff(old_line, new_line)
+            if char_changes then
+              char_diffs[i] = char_changes
+              has_char_diffs = true
+            end
+          end
+        end
+
+        if has_char_diffs then
+          final_hunk.char_diffs = char_diffs
+        end
+      end
+
       table.insert(reference_hunks, final_hunk)
     else
       table.insert(baseline_hunks, final_hunk)
@@ -443,6 +558,8 @@ function M.highlight_hunks(buf)
     return
   end
 
+  local show_signs = require("sia.config").options.defaults.ui.show_signs
+
   local old_lines = diff_state.baseline
   for _, hunk in ipairs(hunks) do
     local buf_line_count = vim.api.nvim_buf_line_count(buf)
@@ -460,7 +577,7 @@ function M.highlight_hunks(buf)
         local virt_lines = {}
         for _, old_line in ipairs(old_text_lines) do
           local pad = string.rep(" ", vim.o.columns - #old_line)
-          table.insert(virt_lines, { { old_line .. pad, "DiffDelete" } })
+          table.insert(virt_lines, { { old_line .. pad, "SiaDiffDelete" } })
         end
 
         vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
@@ -480,21 +597,43 @@ function M.highlight_hunks(buf)
           end_row = buf_line_count
         end
         local is_change = hunk.old_count > 0
-        local hl_group = is_change and "DiffChange" or "DiffAdd"
-        local sign_hl = is_change and "GitSignsChange" or "GitSignsAdd"
+        local hl_group = is_change and "SiaDiffChange" or "SiaDiffAdd"
+        local sign_hl = is_change and "SiaDiffChangeSign" or "SiaDiffAddSign"
         --- @type string?
         local sign = is_change and "▎" or "▎"
-        if not require("sia.config").options.defaults.ui.show_signs then
+        if not show_signs then
           sign = nil
         end
         for i = start_row, end_row - 1, 1 do
           vim.api.nvim_buf_set_extmark(buf, diff_ns, i, 0, {
+            end_line = i + 1,
             sign_text = sign,
             sign_hl_group = sign_hl,
-            line_hl_group = hl_group,
+            hl_group = hl_group,
             hl_eol = true,
             priority = 100,
           })
+        end
+
+        if hunk.char_diffs then
+          for line_offset, char_changes in pairs(hunk.char_diffs) do
+            local row = start_row + line_offset - 1
+            if row < buf_line_count then
+              for _, char_change in ipairs(char_changes) do
+                if char_change.new_count > 0 then
+                  local start_col = char_change.new_start - 1
+                  local end_col = start_col + char_change.new_count
+                  vim.api.nvim_buf_set_extmark(buf, diff_ns, row, start_col, {
+                    end_col = end_col,
+                    hl_group = "SiaDiffInline",
+                    hl_mode = "replace",
+                    priority = 101,
+                    hl_eol = false,
+                  })
+                end
+              end
+            end
+          end
         end
       end
     end

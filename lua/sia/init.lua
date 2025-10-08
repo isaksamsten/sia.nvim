@@ -18,6 +18,12 @@ local highlight_groups = {
   SiaAssistant = { link = "DiffAdd" },
   SiaUser = { link = "DiffChange" },
   SiaToolResult = { link = "DiffChange" },
+  SiaDiffDelete = { link = "DiffDelete" },
+  SiaDiffChange = { link = "DiffChange" },
+  SiaDiffAdd = { link = "DiffAdd" },
+  SiaDiffInline = { link = "GitSignsChangeInline" },
+  SiaDiffAddSign = { link = "GitSignsAdd" },
+  SiaDiffChangeSign = { link = "GitSignsChange" },
 }
 
 local function set_highlight_groups()
