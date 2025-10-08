@@ -21,7 +21,8 @@ local highlight_groups = {
   SiaDiffDelete = { link = "DiffDelete" },
   SiaDiffChange = { link = "DiffChange" },
   SiaDiffAdd = { link = "DiffAdd" },
-  SiaDiffInline = { link = "GitSignsChangeInline" },
+  SiaDiffInlineChange = { link = "GitSignsChangeInline" },
+  SiaDiffInlineAdd = { link = "GitSignsAddInline" },
   SiaDiffAddSign = { link = "GitSignsAdd" },
   SiaDiffChangeSign = { link = "GitSignsChange" },
 }

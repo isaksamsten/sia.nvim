@@ -16,24 +16,20 @@ local REGION_GAP = 5
 --- @field new_start number
 --- @field new_count number
 
---- @class sia.diff.CharChange
---- @field old_start integer
---- @field old_count integer
---- @field new_start integer
---- @field new_count integer
-
 --- @class sia.diff.Hunk
 --- @field old_start integer
 --- @field old_count integer
 --- @field new_start integer
 --- @field new_count integer
 --- @field type "change"|"add"|"delete"
---- @field char_diffs table<integer, sia.diff.CharChange[]>? Map from line offset (1-based) to character-level changes for that line pair
+
+--- @class sia.diff.ReferenceHunk : sia.diff.Hunk
+--- @field char_diffs table<integer, sia.diff.Hunk[]>? Map from line offset (1-based) to character-level changes for that line pair
 
 --- @class sia.diff.DiffState
 --- @field baseline string[]
 --- @field reference string[]
---- @field reference_hunks sia.diff.Hunk[]?
+--- @field reference_hunks sia.diff.ReferenceHunk[]?
 --- @field baseline_hunks sia.diff.Hunk[]?
 --- @field autocommand_group integer?
 
@@ -125,10 +121,11 @@ local function has_trailing_nl(content)
 end
 
 --- Expand the last hunk to include newline differences
---- @param hunk sia.diff.Hunk
+--- @generic T : sia.diff.Hunk
+--- @param hunk T
 --- @param baseline string[]
 --- @param current string[]
---- @return sia.diff.Hunk
+--- @return T new_hunk
 local function expand_hunk(hunk, baseline, current)
   local baseline_has_nl = has_trailing_nl(baseline)
   local current_has_nl = has_trailing_nl(current)
@@ -153,6 +150,7 @@ local function expand_hunk(hunk, baseline, current)
     old_start = hunk.old_start,
     old_count = old_count,
     type = hunk.type,
+    char_diffs = hunk.char_diffs,
   }
 end
 
@@ -285,14 +283,14 @@ function M.update_reference_content(buf)
 end
 
 --- Denoise  diffs by merging close hunks
---- @param char_changes sia.diff.CharChange[]
---- @return sia.diff.CharChange[]
+--- @param char_changes sia.diff.Hunk[]
+--- @return sia.diff.Hunk[]
 local function denoise_char_diffs(char_changes)
   if #char_changes == 0 then
     return char_changes
   end
 
-  --- @type sia.diff.CharChange[]
+  --- @type sia.diff.Hunk[]
   local ret = { char_changes[1] }
 
   for j = 2, #char_changes do
@@ -304,6 +302,8 @@ local function denoise_char_diffs(char_changes)
     if n.new_start - h.new_start - h.new_count < REGION_GAP then
       h.new_count = n.new_start + n.new_count - h.new_start
       h.old_count = n.old_start + n.old_count - h.old_start
+      h.type = h.old_count > 0 and h.new_count > 0 and "change"
+        or (h.new_count > 0 and "add" or "delete")
     else
       ret[#ret + 1] = n
     end
@@ -315,7 +315,7 @@ end
 --- Compute character-level diffs for a pair of lines
 --- @param old_line string
 --- @param new_line string
---- @return sia.diff.CharChange[]? char_changes
+--- @return sia.diff.Hunk[]? char_changes
 local function compute_char_diff(old_line, new_line)
   if #old_line < MIN_LINE_LENGTH or #new_line < MIN_LINE_LENGTH then
     return nil
@@ -335,17 +335,21 @@ local function compute_char_diff(old_line, new_line)
     return nil
   end
 
-  --- @type sia.diff.CharChange[]
+  --- @type sia.diff.Hunk[]
   local char_changes = {}
 
   for _, char_hunk in ipairs(char_indices) do
-    local rs, rc, as, ac = char_hunk[1], char_hunk[2], char_hunk[3], char_hunk[4]
-    table.insert(char_changes, {
-      old_start = rs,
-      old_count = rc,
-      new_start = as,
-      new_count = ac,
-    })
+    local old_start, old_count, new_start, new_count =
+      char_hunk[1], char_hunk[2], char_hunk[3], char_hunk[4]
+    local hunk = {
+      old_start = old_start,
+      old_count = old_count,
+      new_start = new_start,
+      new_count = new_count,
+      type = old_count > 0 and new_count > 0 and "change"
+        or (new_count > 0 and "add" or "delete"),
+    }
+    table.insert(char_changes, hunk)
   end
 
   return denoise_char_diffs(char_changes)
@@ -462,7 +466,7 @@ function M.update_diff(buf)
     local old_start, old_count = hunk[1], hunk[2]
     local new_start, new_count = hunk[3], hunk[4]
 
-    --- @type sia.diff.Hunk
+    --- @type sia.diff.Hunk|sia.diff.ReferenceHunk
     local final_hunk = {
       old_start = old_start,
       old_count = old_count,
@@ -621,11 +625,14 @@ function M.highlight_hunks(buf)
             if row < buf_line_count then
               for _, char_change in ipairs(char_changes) do
                 if char_change.new_count > 0 then
+                  local inline_hl_group = char_change.type == "change"
+                      and "SiaDiffInlineChange"
+                    or "SiaDiffInlineAdd"
                   local start_col = char_change.new_start - 1
                   local end_col = start_col + char_change.new_count
                   vim.api.nvim_buf_set_extmark(buf, diff_ns, row, start_col, {
                     end_col = end_col,
-                    hl_group = "SiaDiffInline",
+                    hl_group = inline_hl_group,
                     hl_mode = "replace",
                     priority = 101,
                     hl_eol = false,
