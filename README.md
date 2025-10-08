@@ -9,6 +9,8 @@ Supports: OpenAI, Copilot, OpenRouter and Gemini (and any other OpenAI API compl
 
 ## ✨ Features
 
+https://github.com/user-attachments/assets/ac11de80-9979-4f30-803f-7ad79991dd13
+
 https://github.com/user-attachments/assets/48cb1bb6-633b-412c-b33c-ae0b6792a485
 
 https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
