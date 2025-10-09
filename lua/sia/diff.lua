@@ -10,11 +10,8 @@ local MAX_LINE_LENGTH = 200
 local REGION_GAP = 5
 
 --- @class sia.diff.RefRange
---- @field old_start number
---- @field finish number
---- @field old_count number
---- @field new_start number
---- @field new_count number
+--- @field old_lines string[] Lines removed from baseline (empty table for pure additions)
+--- @field new_lines string[] Lines added in reference (empty table for pure deletions)
 
 --- @class sia.diff.Hunk
 --- @field old_start integer
@@ -287,73 +284,38 @@ local function compute_char_diff(old_line, new_line)
   return denoise_char_diffs(char_changes)
 end
 
---- Check if content matches between two line ranges
----@param lines1 string[] First array of lines
----@param start1 number Start line in first array (1-based)
----@param count1 number Number of lines in first array
----@param lines2 string[] Second array of lines
----@param start2 number Start line in second array (1-based)
----@param count2 number Number of lines in second array
----@return boolean matches True if the content in both ranges is identical
-local function ranges_match(lines1, start1, count1, lines2, start2, count2)
-  if count1 ~= count2 then
+--- Check if a hunk matches a reference range by comparing content line-by-line
+--- Returns false immediately if any line doesn't match (early abort)
+---@param hunk sia.diff.Hunk
+---@param reference_range sia.diff.RefRange
+---@param current_lines string[] Current buffer content
+---@param baseline_lines string[] Baseline content
+---@return boolean is_reference_change True if this hunk matches the reference change
+local function is_reference_hunk(hunk, reference_range, current_lines, baseline_lines)
+  if hunk.old_count ~= #reference_range.old_lines then
+    return false
+  end
+  if hunk.new_count ~= #reference_range.new_lines then
     return false
   end
 
-  if count1 == 0 then
-    return true
+  for i = 0, hunk.old_count - 1 do
+    local baseline_line = baseline_lines[hunk.old_start + i] or ""
+    local ref_line = reference_range.old_lines[i + 1]
+    if baseline_line ~= ref_line then
+      return false
+    end
   end
 
-  for i = 0, count1 - 1 do
-    local line1 = (start1 + i <= #lines1) and lines1[start1 + i] or ""
-    local line2 = (start2 + i <= #lines2) and lines2[start2 + i] or ""
-    if line1 ~= line2 then
+  for i = 0, hunk.new_count - 1 do
+    local current_line = current_lines[hunk.new_start + i] or ""
+    local ref_line = reference_range.new_lines[i + 1]
+    if current_line ~= ref_line then
       return false
     end
   end
 
   return true
-end
-
---- Check if a hunk matches a reference range
----@param hunk sia.diff.Hunk
----@param reference_range sia.diff.RefRange
----@param current_lines string[] Current buffer content
----@param reference_lines string[] Reference content
----@return boolean is_reference_change True if this hunk matches the reference change
-local function is_reference_hunk(hunk, reference_range, current_lines, reference_lines)
-  if hunk.old_count == 0 and reference_range.old_count == 0 then
-    -- Both are insertions - check if they're at the same position
-    if hunk.old_start == reference_range.old_start then
-      return ranges_match(
-        current_lines,
-        hunk.new_start,
-        hunk.new_count,
-        reference_lines,
-        reference_range.new_start,
-        reference_range.new_count
-      )
-    end
-  else
-    -- Both are changes/deletions - check if it's an exact match
-    local current_old_finish = hunk.old_start + hunk.old_count - 1
-    if
-      hunk.old_start == reference_range.old_start
-      and current_old_finish == reference_range.finish
-    then
-      -- Range matches exactly, now check if content also matches
-      return ranges_match(
-        current_lines,
-        hunk.new_start,
-        hunk.new_count,
-        reference_lines,
-        reference_range.new_start,
-        reference_range.new_count
-      )
-    end
-  end
-
-  return false
 end
 
 --- Compute reference ranges from baseline to reference
@@ -376,12 +338,20 @@ local function compute_reference_ranges(baseline, reference)
   for _, hunk in ipairs(reference_hunk_indices) do
     local old_start, old_count = hunk[1], hunk[2]
     local new_start, new_count = hunk[3], hunk[4]
+
+    local old_lines = {}
+    for i = old_start, old_start + old_count - 1 do
+      table.insert(old_lines, baseline[i] or "")
+    end
+
+    local new_lines = {}
+    for i = new_start, new_start + new_count - 1 do
+      table.insert(new_lines, reference[i] or "")
+    end
+
     table.insert(reference_ranges, {
-      old_start = old_start,
-      finish = old_start + old_count - 1,
-      old_count = old_count,
-      new_start = new_start,
-      new_count = new_count,
+      old_lines = old_lines,
+      new_lines = new_lines,
     })
   end
   return reference_ranges
@@ -462,7 +432,7 @@ function M.update_diff(buf)
           final_hunk,
           reference_range,
           current_lines,
-          diff_state.reference
+          diff_state.baseline
         )
       then
         reference_change = true
