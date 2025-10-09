@@ -475,7 +475,7 @@ baseline automatically.
 
 ### Live Example
 
-[SCREENCAST HERE]
+https://github.com/user-attachments/assets/4d115f32-1abb-4cf8-9797-c84d918b65ac
 
 In the following screencast, we see a complete workflow example:
 
