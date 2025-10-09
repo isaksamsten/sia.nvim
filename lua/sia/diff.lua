@@ -10,8 +10,10 @@ local MAX_LINE_LENGTH = 200
 local REGION_GAP = 5
 
 --- @class sia.diff.RefRange
---- @field old_lines string[] Lines removed from baseline (empty table for pure additions)
---- @field new_lines string[] Lines added in reference (empty table for pure deletions)
+--- @field old_lines string[] Lines removed from baseline (empty for additions)
+--- @field new_lines string[] Lines added in reference (empty for deletions)
+--- @field old_start number Original line number in baseline where change was applied
+--- @field new_start number Original line number in reference where change was applied
 
 --- @class sia.diff.Hunk
 --- @field old_start integer
@@ -352,6 +354,8 @@ local function compute_reference_ranges(baseline, reference)
     table.insert(reference_ranges, {
       old_lines = old_lines,
       new_lines = new_lines,
+      old_start = old_start,
+      new_start = new_start,
     })
   end
   return reference_ranges
@@ -410,6 +414,11 @@ function M.update_diff(buf)
 
   local reference_ranges = diff_state.reference_ranges or {}
 
+  local available_indices = {}
+  for i = 1, #reference_ranges do
+    available_indices[i] = true
+  end
+
   local reference_hunks = {}
   local baseline_hunks = {}
   for _, hunk in ipairs(total_hunk_indices) do
@@ -425,19 +434,46 @@ function M.update_diff(buf)
       type = old_count > 0 and new_count > 0 and "change"
         or (new_count > 0 and "add" or "delete"),
     }
-    local reference_change = false
-    for _, reference_range in ipairs(reference_ranges) do
+
+    local matching_indices = {}
+    for i, reference_range in ipairs(reference_ranges) do
       if
-        is_reference_hunk(
+        available_indices[i]
+        and is_reference_hunk(
           final_hunk,
           reference_range,
           current_lines,
           diff_state.baseline
         )
       then
-        reference_change = true
-        break
+        table.insert(matching_indices, i)
       end
+    end
+
+    local reference_change = false
+    if #matching_indices > 0 then
+      local best_index = matching_indices[1]
+
+      if #matching_indices > 1 then
+        local min_distance = math.huge
+        for _, idx in ipairs(matching_indices) do
+          local reference_range = reference_ranges[idx]
+          -- Compare hunk position to original reference position
+          -- Use new_start for additions/changes, old_start for deletions
+          local ref_pos = reference_range.new_start > 0 and reference_range.new_start
+            or reference_range.old_start
+          local hunk_pos = final_hunk.new_start > 0 and final_hunk.new_start
+            or final_hunk.old_start
+          local distance = math.abs(ref_pos - hunk_pos)
+          if distance < min_distance then
+            min_distance = distance
+            best_index = idx
+          end
+        end
+      end
+
+      available_indices[best_index] = false
+      reference_change = true
     end
 
     if reference_change and show_char_diff then
