@@ -47,9 +47,53 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
 2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`, enable Copilot (use the vim plugin to set it up) or add Gemini API key to your environment as `GEMINI_API_KEY`.
 
-## 📦 Customize
+## ⚙️ Configuration
 
-TODO
+Sia can be customized both globally (in your Neovim config) and per-project
+(using `.sia/config.json`).
+
+### Global Configuration
+
+Configure Sia in your `init.lua`:
+
+```lua
+require("sia").setup({
+  -- Model defaults
+  defaults = {
+    model = "openai/gpt-4.1",           -- Main model for conversations
+    fast_model = "openai/gpt-4.1-mini", -- Fast model for quick tasks
+    plan_model = "openai/o3-mini",       -- Model for planning and reasoning
+    temperature = 0.3,                   -- Creativity level (0-1)
+
+    -- UI behavior
+    ui = {
+      use_vim_ui = false,    -- Use Vim's built-in input/select
+      show_signs = true,     -- Show signs in the gutter for changes
+      char_diff = true,      -- Show character-level diffs
+    },
+
+    -- File operations
+    file_ops = {
+      trash = true,                      -- Move deleted files to trash
+      create_dirs_on_rename = true,      -- Create directories when renaming
+      restrict_to_project_root = true,   -- Restrict file operations to project
+    },
+
+    -- Default context settings
+    context = {
+      max_tool = 30,         -- Maximum tool calls before pruning occurs
+      exclude = {},          -- Tool names to exclude from pruning
+      clear_input = false,   -- Whether to clear tool input parameters during pruning
+      keep = 20,             -- Number of recent tool calls to keep after pruning
+    },
+  },
+
+  -- Add custom actions (see Customizing Actions below)
+  actions = {
+    -- Your custom actions here
+  }
+})
+```
 
 ### Autocommands
 
@@ -132,20 +176,23 @@ The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
 project analysis.
 
-## Local Configuration
+### Local Configuration (Per Project)
 
-Sia supports project-specific configuration through `.sia/config.json` files.
-This allows you to customize tool behavior and permissions on a per-project
-basis.
-
-### Setting Up Local Configuration
-
-Create a `.sia/config.json` file in your project root:
+Create `.sia/config.json` in your project root to customize Sia for that
+specific project:
 
 ```json
 {
   "model": "copilot/gpt-5-mini",
+  "fast_model": "openai/gpt-4.1-mini",
+  "plan_model": "openai/o3-mini",
   "auto_continue": true,
+  "context": {
+    "max_tool": 50,
+    "exclude": ["grep", "glob"],
+    "clear_input": false,
+    "keep": 10
+  },
   "permission": {
     "allow": {
       "bash": {
@@ -182,23 +229,57 @@ Create a `.sia/config.json` file in your project root:
 }
 ```
 
-Use the local option `model` to override the local default model. The local
-configuration can also override both `plan_model` and `fast_model`.
+#### Available Local Configuration Options
 
-### Configuration Options
-
-Available configuration options in `.sia/config.json`:
-
-- **`model`**: Override the default model for this project
-- **`fast_model`**: Override the fast model used for quick operations
-- **`plan_model`**: Override the model used for planning operations
-- **`auto_continue`**: Automatically continue execution after a tool is cancelled by the user (boolean, default: false)
-
-  When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true`
-  bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want
-  the AI to keep working even if individual operations are cancelled.
-
+- **Model Selection**: Override default models (`model`, `fast_model`,
+  `plan_model`) for this project
+- **`auto_continue`**: Automatically continue execution when tools are
+  cancelled (default: false)
+- **`context`**: Project-specific context management (tool pruning behavior)
 - **`permission`**: Fine-grained tool access control (see Permission System below)
+
+### Key Configuration Concepts
+
+#### Context Management
+
+Control how Sia manages conversation history and tool call pruning:
+
+- **Tool pruning**: Use `context.max_tool` to set when pruning occurs and
+  `context.keep` to control how many recent tool calls are retained
+- **Pruning exclusions**: Use `context.exclude` to specify tool names that
+  should never be pruned (e.g., `["grep", "glob"]`)
+- **Input parameter clearing**: Use `context.clear_input` to also remove tool
+  input parameters during pruning
+
+#### Auto-Continue Behavior
+
+When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true` bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want the AI to keep working even if individual operations are cancelled.
+
+#### Memory System
+
+Sia maintains persistent memory across conversations using the `.sia/memory/` directory in your project root. This allows the AI assistant to:
+
+- **Track progress on complex tasks**: Remember what it has tried, what worked,
+  and what didn't
+- **Learn from iterations**: Build on previous attempts and avoid repeating
+  mistakes
+- **Resume after interruption**: Continue work seamlessly even if the
+  conversation or Neovim session ends
+- **Document decisions**: Keep a record of architectural choices, bug fixes,
+  and implementation details
+
+**How it works:**
+
+1. The assistant checks `.sia/memory/` at the start of each conversation
+2. It reads relevant memory files to understand previous progress
+3. As work progresses, it updates memory files with new findings and status
+4. Memory files use markdown format for human readability
+
+You can safely view, edit, or delete files in `.sia/memory/` - they're meant to be human-readable and editable. The assistant will adapt to any changes you make.
+
+**Permission behavior:** Tool operations on `.sia/memory/` files never require user confirmation - they are automatically accepted. This ensures the assistant can maintain its memory efficiently without interrupting your workflow.
+
+**Note:** Add `.sia/` to your `.gitignore` if you don't want to commit memory files to version control, or commit them if you want to share context with your team.
 
 ### Permission System
 
@@ -224,7 +305,6 @@ Patterns can be either:
 
 **Pattern Matching**:
 
-- Uses Lua's `string.match()` function directly (not anchored)
 - Multiple patterns in an array are OR'd together
 - All configured argument patterns must match for the rule to apply
 - `nil` arguments are treated as empty strings (`""`)
@@ -287,6 +367,35 @@ You can bind visual and operator mode selections to enhance your workflow with `
 keys = {
   { "Za", mode = { "n", "x" }, "<Plug>(sia-append)" },
   { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
+  { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
+  { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
+  { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
+  { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
+  { "<Leader>aq", mode = "n", function() require("sia").show_edits_qf() end, desc = "Show changes", },
+  {
+    "[c",
+    mode = "n",
+    function()
+      if vim.wo.diff then
+        return "[c"
+      end
+      require("sia").prev_edit()
+    end,
+    desc = "Previous edit",
+  },
+  {
+    "]c",
+    mode = "n",
+    function()
+      if vim.wo.diff then
+        return "]c"
+      end
+      require("sia").next_edit()
+    end,
+    desc = "Next edit",
+  },
+  { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
+  { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
 }
 ```
 
@@ -312,17 +421,95 @@ keys = {
 }
 ```
 
-## Customize configuration
+### Commands
 
-- **commit**: Insert a commit message (enabled only if inside a Git repository and the current file type is `gitcommit`).
+For the most part, Sia will read and add files, diagnostics, and search results
+autonomously. The available commands are:
+
+**Context Management:**
+
+- `SiaAdd file <filename>` - Add a file to the currently visible conversation
+- `SiaAdd buffer <buffer>` - Add a buffer to the currently visible conversation
+- `SiaAdd context` - Add the current visual mode selection to the currently visible conversation
+
+If there are no visible conversations, Sia will add the context to the next new
+conversation that is started.
+
+**Change Management:**
+
+- `SiaAccept` - Accept the change under the cursor
+- `SiaReject` - Reject the change under the cursor
+- `SiaAccept!` - Accept **all** changes in the current buffer
+- `SiaReject!` - Reject **all** changes in the current buffer
+
+**Navigation:**
+With the example keybindings configured, you can navigate between changes using `]c` (next change) and `[c` (previous change).
+
+## Change management
+
+If Sia uses the edit tools (insert, write, or edit), it will maintain a diff
+state for the buffer in which the changes are inserted. The diff state
+maintains two states: the **baseline** (your edits) and the **reference** (Sia's changes). Once you accept a
+change, it will be incorporated into baseline and if the change is rejected
+it will be removed from reference. This means that you and Sia can make
+concurrent changes while you can always opt to reject changes made by Sia.
+
+**NOTE**: If you edit text that overlaps with a pending Sia change, the diff
+system considers the entire change as **accepted** and incorporates it into
+baseline automatically.
+
+### Example Workflow
+
+1. **Sia makes changes**: After asking Sia to refactor a function, you'll see
+   highlighted changes in your buffer
+2. **Navigate changes**: Use `]c` and `[c` to jump between individual changes
+3. **Review each change**: Position your cursor on a change and decide whether
+   to keep it
+4. **Accept or reject**:
+   - `SiaAccept` to accept the change under cursor
+   - `SiaReject` to reject the change under cursor
+   - `SiaAccept!` to accept all changes at once
+   - `SiaReject!` to reject all changes at once
+5. **Continue editing**: You can make your own edits while Sia's changes are
+   still pending
+
+### Live Example
+
+[SCREENCAST HERE]
+
+In the following screencast, we see a complete workflow example:
+
+1. **Initial file creation**: We ask Sia to write a small script, and Sia uses
+   the `write` tool to create `test.py`
+2. **External formatting**: When the file is saved, `ruff format` automatically
+   formats it, which modifies the file and moves most changes from **reference**
+   into **baseline** (accepting them)
+3. **Targeted edits**: We ask Sia to change the dataset from iris to another
+   dataset, and Sia uses the `edit` tool to make several targeted changes
+4. **Change visualization**: Each change is inserted into **reference** and
+   highlighted with both line-level and word-level highlights
+5. **Manual review**: We start reviewing changes using `[c` and `]c]` to move
+   between changes and `ga` (accept) and make our own edits (removing comments)
+6. **Concurrent editing behavior**:
+   - When removing comments that don't affect Sia's changes, they remain
+     highlighted in **reference**
+   - When removing a comment that overlaps with a **reference** change, it's
+     automatically accepted and moved to **baseline**
+7. **Bulk operations**: Finally, we show all remaining changes in a quickfix
+   window and use `cdo norm ga` to accept all changes at once
+
+## Built-in Actions
+
+Sia includes these built-in actions:
+
+- **commit**: Insert a commit message (Git repositories only, `gitcommit` filetype)
 
   - Example: `Sia /commit`
 
-- **doc**: Insert documentation for the function or class under the cursor.
-
+- **doc**: Insert documentation for the function or class under cursor
   - Example: `Sia /doc`
 
-### Customizing actions
+### Customizing Actions
 
 See `lua/sia/actions.lua` for example actions. Here is a short snippet with a
 simple action.
