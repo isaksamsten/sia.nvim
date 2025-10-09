@@ -7,7 +7,7 @@ An LLM assistant for Neovim.
 
 Supports: OpenAI, Copilot, OpenRouter and Gemini (and any other OpenAI API compliant LLM).
 
-## ✨ Features
+## Features
 
 https://github.com/user-attachments/assets/ac11de80-9979-4f30-803f-7ad79991dd13
 
@@ -17,13 +17,13 @@ https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
 https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
-## ⚡️ Requirements
+## Requirements
 
 - Neovim >= **0.11**
 - curl
 - Access to OpenAI API, Copilot or Gemini
 
-## 📦 Installation
+## Installation
 
 1. Install using a Lazy:
 
@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
 2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`, enable Copilot (use the vim plugin to set it up) or add Gemini API key to your environment as `GEMINI_API_KEY`.
 
-## ⚙️ Configuration
+## Configuration
 
 Sia can be customized both globally (in your Neovim config) and per-project
 (using `.sia/config.json`).
@@ -104,7 +104,7 @@ require("sia").setup({
 - `SiaComplete`: the query is completed
 - `SiaError`: on errors in the LLM
 
-## 🚀 Usage
+## Usage
 
 **Normal Mode**
 
