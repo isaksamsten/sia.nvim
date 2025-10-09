@@ -882,6 +882,8 @@ function M.accept_single_hunk(buf, hunk_index)
     hunk = expand_hunk(hunk, diff_state.baseline, current_content)
   end
   apply_hunks_to_baseline(diff_state.baseline, { hunk }, current_content)
+  diff_state.reference_ranges =
+    compute_reference_ranges(diff_state.baseline, diff_state.reference)
 
   local hunks_changed = M.update_diff(buf)
   if hunks_changed then
