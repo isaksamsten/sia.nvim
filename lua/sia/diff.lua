@@ -28,6 +28,8 @@ local REGION_GAP = 5
 --- @field reference string[]
 --- @field reference_hunks sia.diff.Hunk[]?
 --- @field baseline_hunks sia.diff.Hunk[]?
+--- @field markers table<integer,{col:integer?, args: vim.api.keyset.set_extmark}[]?>?
+--- @field needs_clear boolean?
 --- @field autocommand_group integer?
 --- @field reference_cache sia.diff.Reference[]? Cached ranges from baseline to reference
 
@@ -35,9 +37,63 @@ local REGION_GAP = 5
 local buffer_diff_state = {}
 local diff_ns = vim.api.nvim_create_namespace("sia_diff")
 
--- Debounce timer for auto-updates
---- @type table<number, uv_timer_t>
-local update_timers = {}
+local update_timer = vim.uv.new_timer()
+
+local bufs_to_update = {}
+
+vim.api.nvim_set_decoration_provider(diff_ns, {
+  on_win = function(_, _, buf, toprow, botrow)
+    local state = buffer_diff_state[buf]
+    if not state then
+      return
+    end
+    if state.needs_clear then
+      state.needs_clear = nil
+      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+    end
+    if vim.wo.diff then
+      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+      return
+    end
+
+    local markers = state.markers
+    if not markers then
+      return
+    end
+
+    if vim.tbl_isempty(markers) then
+      return
+    end
+
+    for i = toprow + 1, botrow + 1 do
+      local line_markers = markers[i]
+      if line_markers then
+        for _, line_marker in ipairs(line_markers) do
+          vim.api.nvim_buf_set_extmark(
+            buf,
+            diff_ns,
+            i - 1,
+            line_marker.col or 0,
+            line_marker.args
+          )
+        end
+      end
+      markers[i] = nil
+    end
+  end,
+})
+
+--- @param buf integer
+local redraw_buffer = function(buf)
+  vim.api.nvim__buf_redraw_range(buf, 0, -1)
+  vim.cmd("redrawstatus")
+end
+
+if vim.api.nvim__redraw ~= nil then
+  redraw_buffer = function(buf)
+    vim.api.nvim__redraw({ buf = buf, valid = true, statusline = true })
+  end
+end
 
 --- Clean up automatic diff updates for a buffer
 --- @param buf integer Buffer handle
@@ -46,11 +102,6 @@ local function cleanup_auto_diff_updates(buf)
   if diff_state and diff_state.autocommand_group then
     vim.api.nvim_del_augroup_by_id(diff_state.autocommand_group)
     diff_state.autocommand_group = nil
-  end
-
-  if update_timers[buf] then
-    update_timers[buf]:stop()
-    update_timers[buf] = nil
   end
 end
 
@@ -63,56 +114,67 @@ local function cleanup_diff_state(buf)
   buffer_diff_state[buf] = nil
 end
 
+local function process_scheduled_buffers()
+  for buf, _ in pairs(bufs_to_update) do
+    local diff_state = buffer_diff_state[buf]
+    if diff_state then
+      M.update_diff(buf)
+      if not diff_state.reference_hunks then
+        cleanup_diff_state(buf)
+      end
+    end
+  end
+  bufs_to_update = {}
+end
+
+local function schedule_diff_update(buf, delay)
+  bufs_to_update[buf] = true
+  update_timer:stop()
+  update_timer:start(delay or 0, 0, process_scheduled_buffers)
+end
+
 --- Set up automatic diff updates for a buffer with diff state
 --- @param buf integer Buffer handle
 local function setup_auto_diff_updates(buf)
-  local diff_state = buffer_diff_state[buf]
-  if not diff_state or diff_state.autocommand_group then
-    return
-  end
-
-  local group = vim.api.nvim_create_augroup("SiaDiffUpdates_" .. buf, { clear = true })
-  diff_state.autocommand_group = group
-
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-    buffer = buf,
-    group = group,
-    callback = function()
-      if not buffer_diff_state[buf] then
-        return
-      end
-
-      if update_timers[buf] then
-        update_timers[buf]:stop()
-        update_timers[buf] = nil
-      end
-
-      update_timers[buf] = vim.defer_fn(function()
-        update_timers[buf] = nil
-        if buffer_diff_state[buf] then
-          local hunks_changed = M.update_diff(buf)
-          if hunks_changed then
-            M.highlight_hunks(buf)
-          end
-          if not buffer_diff_state[buf].reference_hunks then
-            cleanup_diff_state(buf)
-          end
+  if vim.api.nvim_buf_is_loaded(buf) then
+    vim.api.nvim_buf_attach(buf, false, {
+      on_lines = function(_, _, _, _, _, _, _, _, _)
+        local diff_state = buffer_diff_state[buf]
+        if diff_state == nil then
+          return true
         end
-      end, 500)
-    end,
-  })
+        schedule_diff_update(buf, 500)
+      end,
+      on_reload = function()
+        schedule_diff_update(buf)
+      end,
+      on_detach = function()
+        cleanup_diff_state(buf)
+      end,
+    })
+    local diff_state = buffer_diff_state[buf]
+    local group =
+      vim.api.nvim_create_augroup("SiaDiffUpdates_" .. buf, { clear = true })
+    diff_state.autocommand_group = group
 
-  vim.api.nvim_create_autocmd("BufDelete", {
-    buffer = buf,
-    group = group,
-    once = true,
-    callback = function()
-      if update_timers[buf] then
-        update_timers[buf]:stop()
-        update_timers[buf] = nil
-      end
-    end,
-  })
+    vim.api.nvim_create_autocmd("BufWinEnter", {
+      buffer = buf,
+      group = group,
+      callback = function()
+        schedule_diff_update(buf)
+      end,
+    })
+
+    vim.api.nvim_create_autocmd("BufDelete", {
+      buffer = buf,
+      group = group,
+      once = true,
+      callback = function()
+        cleanup_diff_state(buf)
+      end,
+    })
+    schedule_diff_update(buf, 500)
+  end
 end
 
 --- @param content string[]
@@ -150,7 +212,7 @@ local function expand_hunk(hunk, baseline, current)
     old_start = hunk.old_start,
     old_count = old_count,
     type = hunk.type,
-    char_diffs = hunk.char_diffs,
+    char_hunks = hunk.char_hunks,
   }
 end
 
@@ -421,13 +483,121 @@ local function create_reference_matcher(references, current_lines, baseline)
   end
 end
 
+--- Highlight the diff hunks in the buffer
+--- @param baseline string[]
+--- @param max_lines integer
+--- @param hunks sia.diff.Hunk[]?
+---@return table<integer, {col: integer?, args:vim.api.keyset.set_extmark}[]?>?
+local function get_hunk_highlights(baseline, max_lines, hunks)
+  if not hunks or #hunks == 0 then
+    return nil
+  end
+
+  local show_signs = require("sia.config").options.defaults.ui.show_signs
+  ---@type table<integer, {col: integer?, args:vim.api.keyset.set_extmark}[]?>?
+  local extmarks = {}
+
+  for _, hunk in ipairs(hunks) do
+    if hunk.old_count > 0 then
+      local old_text_lines = {}
+      for i = 0, hunk.old_count - 1 do
+        local old_line_idx = hunk.old_start + i
+        if old_line_idx <= #baseline then
+          table.insert(old_text_lines, baseline[old_line_idx])
+        end
+      end
+
+      local line_idx = math.max(1, hunk.new_start)
+      if line_idx <= max_lines then
+        local virt_lines = {}
+        for _, old_line in ipairs(old_text_lines) do
+          local pad = string.rep(" ", vim.o.columns - #old_line)
+          table.insert(virt_lines, { { old_line .. pad, "SiaDiffDelete" } })
+        end
+
+        extmarks[line_idx] = {
+          {
+            args = {
+              virt_lines = virt_lines,
+              virt_lines_above = true,
+              priority = 300,
+              undo_restore = false,
+            },
+          },
+        }
+      end
+    end
+
+    if hunk.new_count > 0 then
+      local start_row = hunk.new_start
+      local end_row = start_row + hunk.new_count
+      if start_row <= max_lines then
+        if end_row > max_lines then
+          end_row = max_lines
+        end
+        local is_change = hunk.old_count > 0
+        local hl_group = is_change and "SiaDiffChange" or "SiaDiffAdd"
+        local sign_hl = is_change and "SiaDiffChangeSign" or "SiaDiffAddSign"
+        --- @type string?
+        local sign = is_change and "▎" or "▎"
+        if not show_signs then
+          sign = nil
+        end
+        for i = start_row, end_row - 1, 1 do
+          local extmark = {
+            args = {
+              end_line = i,
+              sign_text = sign,
+              sign_hl_group = sign_hl,
+              hl_group = hl_group,
+              hl_eol = true,
+              priority = 100,
+            },
+          }
+          if extmarks[i] then
+            table.insert(extmarks[i], extmark)
+          else
+            extmarks[i] = { extmark }
+          end
+
+          -- Add char-level highlighting if available for this line
+          if hunk.char_hunks then
+            local line_offset = i - start_row + 1
+            local char_changes = hunk.char_hunks[line_offset]
+            if char_changes then
+              for _, char_hunk in ipairs(char_changes) do
+                if char_hunk.new_count > 0 then
+                  local inline_hl_group = char_hunk.type == "change"
+                      and "SiaDiffInlineChange"
+                    or "SiaDiffInlineAdd"
+                  local start_col = char_hunk.new_start - 1
+                  local end_col = start_col + char_hunk.new_count
+                  table.insert(extmarks[i], {
+                    col = start_col,
+                    args = {
+                      end_col = end_col,
+                      hl_group = inline_hl_group,
+                      priority = 101,
+                      hl_eol = false,
+                    },
+                  })
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return extmarks
+end
+
 --- Create diff hunks between baseline and current, categorized by AI vs user changes
 ---@param buf number Buffer handle
----@return boolean should_update_highlights
 function M.update_diff(buf)
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
-    return false
+    return
   end
 
   local show_char_diff = require("sia.config").options.defaults.ui.char_diff
@@ -496,7 +666,16 @@ function M.update_diff(buf)
   local prev_reference_hunks = diff_state.reference_hunks
   diff_state.reference_hunks = #reference_hunks > 0 and reference_hunks or nil
   diff_state.baseline_hunks = #baseline_hunks > 0 and baseline_hunks or nil
-  return not hunks_equal(prev_reference_hunks, diff_state.reference_hunks)
+  diff_state.markers = get_hunk_highlights(
+    diff_state.baseline,
+    vim.api.nvim_buf_line_count(buf),
+    diff_state.reference_hunks
+  )
+
+  if not hunks_equal(prev_reference_hunks, diff_state.reference_hunks) then
+    diff_state.needs_clear = true
+    redraw_buffer(buf)
+  end
 end
 
 ---@param buf integer
@@ -529,7 +708,7 @@ function M.show_diff_preview(buf)
   vim.api.nvim_set_current_win(right_win)
 end
 
-function M.update_baseline_content(buf)
+function M.update_baseline(buf)
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
     local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -553,6 +732,7 @@ function M.update_baseline_content(buf)
     diff_state.baseline_hunks = nil
     diff_state.reference_cache =
       extract_references(diff_state.baseline, diff_state.reference)
+    schedule_diff_update(buf, 500)
   end
 end
 
@@ -564,7 +744,7 @@ function M.get_diff_state(buf)
 end
 
 ---@param buf number Buffer handle
-function M.update_reference_content(buf)
+function M.update_reference(buf)
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
     return
@@ -572,6 +752,7 @@ function M.update_reference_content(buf)
   diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   diff_state.reference_cache =
     extract_references(diff_state.baseline, diff_state.reference)
+  schedule_diff_update(buf, 500)
 end
 
 --- @return sia.diff.Hunk[]?
@@ -590,113 +771,6 @@ function M.get_baseline(buf)
     return nil
   end
   return diff_state.baseline
-end
-
---- Highlight the diff hunks in the buffer
----@param buf number Buffer handle
-function M.highlight_hunks(buf)
-  vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-  if not buffer_diff_state[buf] then
-    return
-  end
-
-  local diff_state = buffer_diff_state[buf]
-  local hunks = diff_state.reference_hunks
-
-  if not hunks or #hunks == 0 then
-    return
-  end
-
-  local show_signs = require("sia.config").options.defaults.ui.show_signs
-
-  local old_lines = diff_state.baseline
-  for _, hunk in ipairs(hunks) do
-    local buf_line_count = vim.api.nvim_buf_line_count(buf)
-    if hunk.old_count > 0 then
-      local old_text_lines = {}
-      for i = 0, hunk.old_count - 1 do
-        local old_line_idx = hunk.old_start + i
-        if old_line_idx <= #old_lines then
-          table.insert(old_text_lines, old_lines[old_line_idx])
-        end
-      end
-
-      local line_idx = math.max(0, hunk.new_start - 1)
-      if line_idx <= buf_line_count then
-        local virt_lines = {}
-        for _, old_line in ipairs(old_text_lines) do
-          local pad = string.rep(" ", vim.o.columns - #old_line)
-          table.insert(virt_lines, { { old_line .. pad, "SiaDiffDelete" } })
-        end
-
-        vim.api.nvim_buf_set_extmark(buf, diff_ns, line_idx, 0, {
-          virt_lines = virt_lines,
-          virt_lines_above = true,
-          priority = 300,
-          undo_restore = false,
-        })
-      end
-    end
-
-    if hunk.new_count > 0 then
-      local start_row = hunk.new_start - 1
-      local end_row = start_row + hunk.new_count
-      if start_row < buf_line_count then
-        if end_row > buf_line_count then
-          end_row = buf_line_count
-        end
-        local is_change = hunk.old_count > 0
-        local hl_group = is_change and "SiaDiffChange" or "SiaDiffAdd"
-        local sign_hl = is_change and "SiaDiffChangeSign" or "SiaDiffAddSign"
-        --- @type string?
-        local sign = is_change and "▎" or "▎"
-        if not show_signs then
-          sign = nil
-        end
-        for i = start_row, end_row - 1, 1 do
-          vim.api.nvim_buf_set_extmark(buf, diff_ns, i, 0, {
-            end_line = i + 1,
-            sign_text = sign,
-            sign_hl_group = sign_hl,
-            hl_group = hl_group,
-            hl_eol = true,
-            priority = 100,
-          })
-        end
-
-        if hunk.char_hunks then
-          for line_offset, char_changes in pairs(hunk.char_hunks) do
-            local row = start_row + line_offset - 1
-            if row < buf_line_count then
-              for _, char_hunk in ipairs(char_changes) do
-                if char_hunk.new_count > 0 then
-                  local inline_hl_group = char_hunk.type == "change"
-                      and "SiaDiffInlineChange"
-                    or "SiaDiffInlineAdd"
-                  local start_col = char_hunk.new_start - 1
-                  local end_col = start_col + char_hunk.new_count
-                  vim.api.nvim_buf_set_extmark(buf, diff_ns, row, start_col, {
-                    end_col = end_col,
-                    hl_group = inline_hl_group,
-                    priority = 101,
-                    hl_eol = false,
-                  })
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-end
-
----@param buf number
-function M.update_and_highlight_diff(buf)
-  local hunks_changed = M.update_diff(buf)
-  if hunks_changed then
-    M.highlight_hunks(buf)
-  end
 end
 
 function M.accept_diff(buf)
@@ -902,14 +976,10 @@ function M.accept_single_hunk(buf, hunk_index)
   diff_state.reference_cache =
     extract_references(diff_state.baseline, diff_state.reference)
 
-  local hunks_changed = M.update_diff(buf)
-  if hunks_changed then
-    M.highlight_hunks(buf)
-  end
+  M.update_diff(buf)
   if not diff_state.reference_hunks then
     cleanup_diff_state(buf)
   end
-
   return true
 end
 
@@ -983,14 +1053,10 @@ function M.reject_single_hunk(buf, hunk_index)
 
   vim.api.nvim_buf_set_lines(buf, start_line, end_line, false, replacement_lines)
 
-  local hunks_changed = M.update_diff(buf)
-  if hunks_changed then
-    M.highlight_hunks(buf)
-  end
+  M.update_diff(buf)
   if not diff_state.reference_hunks then
     cleanup_diff_state(buf)
   end
-
   return true
 end
 

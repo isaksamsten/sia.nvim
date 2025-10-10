@@ -11,9 +11,9 @@ end
 
 local function setup_diff_state(buf, original_lines, current_lines)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, original_lines)
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
   diff.update_diff(buf)
 end
 
@@ -384,12 +384,12 @@ local MODIFIED_JAVA_NL_EOF = {
 T["sia.diff"]["reject last hunk eof newline difference"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
   -- This is a reference change
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
 
   diff.update_diff(buf)
   local hunk_idx = diff.get_hunk_at_line(buf, 39)
@@ -411,12 +411,12 @@ end
 T["sia.diff"]["accept last hunk eof newline difference"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
   -- This is a reference change
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
 
   diff.update_diff(buf)
   local hunk_idx = diff.get_hunk_at_line(buf, 39)
@@ -530,11 +530,11 @@ end
 T["sia.diff"]["reject_diff"]["with different trailing nl"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
   diff.update_diff(buf)
 
   local hunks = diff.get_hunks(buf)
@@ -645,11 +645,11 @@ end
 T["sia.diff"]["accept_diff"]["with different trailing nl"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
   diff.update_diff(buf)
 
   local hunks = diff.get_hunks(buf)
@@ -681,9 +681,9 @@ T["sia.diff"]["accept_diff"]["sequential accept and reject operations"] = functi
   local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   eq(buffer_content, modified)
 
-  diff.update_baseline_content(buf)
+  diff.update_baseline(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_change)
-  diff.update_reference_content(buf)
+  diff.update_reference(buf)
   diff.update_diff(buf)
 
   local hunks = diff.get_hunks(buf)

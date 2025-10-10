@@ -197,7 +197,7 @@ one specific change with clear, unique context.
         end
 
         if not is_memory then
-          diff.update_baseline_content(buf)
+          diff.update_baseline(buf)
         end
         tracker.non_tracked_edit(buf, function()
           if match.col_span then
@@ -217,8 +217,7 @@ one specific change with clear, unique context.
           end)
         end)
         if not is_memory then
-          diff.update_reference_content(buf)
-          diff.update_and_highlight_diff(buf)
+          diff.update_reference(buf)
         end
 
         local edit_start = span[1]
