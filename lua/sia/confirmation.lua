@@ -10,7 +10,7 @@ local confirmation_buf = nil
 function M.show(content, opts)
   M.clear()
   opts = opts or {}
-  local reflow = opts.reflow ~= false
+  local reflow = opts.reflow
 
   if not content or #content == 0 then
     return function() end
@@ -31,7 +31,7 @@ function M.show(content, opts)
   vim.api.nvim_buf_set_lines(confirmation_buf, 0, -1, false, content)
   vim.bo[confirmation_buf].textwidth = effective_width
 
-  local initial_height = math.min(#content, math.floor(screen_height * 0.3))
+  local initial_height = math.min(#content, math.floor(screen_height * 0.7))
 
   confirmation_win = vim.api.nvim_open_win(confirmation_buf, true, {
     relative = "editor",
