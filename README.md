@@ -377,7 +377,8 @@ keys = {
     mode = "n",
     function()
       if vim.wo.diff then
-        return "[c"
+        vim.api.nvim_feedkeys("[c", "n", true)
+        return
       end
       require("sia").prev_edit()
     end,
@@ -388,7 +389,8 @@ keys = {
     mode = "n",
     function()
       if vim.wo.diff then
-        return "]c"
+        vim.api.nvim_feedkeys("]c", "n", true)
+        return
       end
       require("sia").next_edit()
     end,
@@ -396,6 +398,32 @@ keys = {
   },
   { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
   { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
+  -- Or, to be consistent with vim.wo.diff
+  --
+  -- {
+  --   "dp",
+  --   mode = "n",
+  --   function()
+  --     if vim.wo.diff then
+  --       vim.api.nvim_feedkeys("dp", "n", true)
+  --       return
+  --     end
+  --     require("sia").accept_edit()
+  --   end,
+  --   desc = "Accept edit",
+  -- },
+  -- {
+  --   "do",
+  --   mode = "n",
+  --   function()
+  --     if vim.wo.diff then
+  --       vim.api.nvim_feedkeys("do", "n", true)
+  --       return
+  --     end
+  --     require("sia").reject_edit()
+  --   end,
+  --   desc = "Reject edit",
+  -- },
 }
 ```
 
