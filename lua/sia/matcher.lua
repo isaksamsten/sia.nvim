@@ -386,8 +386,22 @@ end
 
 --- @param needle string|string[] The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
---- @return sia.matcher.Match[], boolean fuzzy_used
-local function _find_best_match(needle, haystack)
+--- @param timeout_ms number Maximum time to spend matching in milliseconds (default: 5000ms)
+--- @param start_time number? Start time in nanoseconds (for internal use)
+--- @return sia.matcher.Match[] matches
+--- @return boolean fuzzy_used
+--- @return number remaining_ms Remaining time budget in milliseconds
+local function _find_best_match(needle, haystack, timeout_ms, start_time)
+  local function is_timeout()
+    local elapsed_ms = (vim.uv.hrtime() - start_time) / 1e6
+    return elapsed_ms > timeout_ms
+  end
+
+  local function get_remaining_ms()
+    local elapsed_ms = (vim.uv.hrtime() - start_time) / 1e6
+    return math.max(0, timeout_ms - elapsed_ms)
+  end
+
   local needle_lines
   if type(needle) == "string" then
     needle_lines = vim.split(needle, "\n")
@@ -399,41 +413,59 @@ local function _find_best_match(needle, haystack)
 
   if needle == "" then
     if #haystack == 0 or (#haystack == 1 and haystack[1] == "") then
-      return { { span = { 1, -1 }, score = 1.0 } }, false
+      return { { span = { 1, -1 }, score = 1.0 } }, false, get_remaining_ms()
     else
-      return {}, false
+      return {}, false, get_remaining_ms()
     end
   end
 
   matches = _find_best_subsequence_span(needle_lines, haystack, { limit = 2 })
+  if is_timeout() then
+    return {}, false, get_remaining_ms()
+  end
+
   if #matches == 0 then
     fuzzy = true
     matches = _find_best_subsequence_span(needle_lines, haystack, {
       ignore_indent = true,
       limit = 2,
     })
+    if is_timeout() then
+      return {}, false, get_remaining_ms()
+    end
+
     if #matches == 0 then
       matches = _find_best_subsequence_span(needle_lines, haystack, {
         ignore_indent = true,
         threshold = 0.9,
         limit = 2,
       })
+      if is_timeout() then
+        return {}, false, get_remaining_ms()
+      end
     end
   end
 
   if #matches == 0 and #needle_lines == 1 then
     fuzzy = false
     matches = M.find_inline_matches(needle_lines[1], haystack, { limit = 2 })
+    if is_timeout() then
+      return {}, false, get_remaining_ms()
+    end
+
     if #matches == 0 then
       fuzzy = true
       matches = M.find_inline_matches(needle_lines[1], haystack, {
         ignore_case = true,
         limit = 2,
       })
+      if is_timeout() then
+        return {}, false, get_remaining_ms()
+      end
     end
   end
 
-  return matches, fuzzy
+  return matches, fuzzy, get_remaining_ms()
 end
 
 --- @param text string The text that may contain line numbers
@@ -474,14 +506,20 @@ end
 --- Find best match with automatic line number stripping fallback
 --- @param needle string The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
+--- @param timeout_ms number? Maximum time to spend matching in milliseconds (default: 5000ms)
 --- @return {matches: sia.matcher.Match[],  fuzzy: boolean, strip_line_number: boolean}
-function M.find_best_match(needle, haystack)
-  local matches, fuzzy = _find_best_match(needle, haystack)
+function M.find_best_match(needle, haystack, timeout_ms)
+  timeout_ms = timeout_ms or 5000
+  local start_time = vim.uv.hrtime()
 
-  if #matches == 0 then
+  local matches, fuzzy, remaining_ms =
+    _find_best_match(needle, haystack, timeout_ms, start_time)
+
+  if #matches == 0 and remaining_ms > 0 then
     local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
     if had_line_numbers then
-      matches, fuzzy = _find_best_match(stripped_needle, haystack)
+      matches, fuzzy, remaining_ms =
+        _find_best_match(stripped_needle, haystack, remaining_ms, start_time)
       return { matches = matches, fuzzy = true, strip_line_number = true }
     end
   end
