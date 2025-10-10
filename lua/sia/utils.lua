@@ -808,6 +808,14 @@ end
 --- @return string? unified_diff The adjusted unified diff or nil
 function M.create_unified_diff(old_text, new_text, opts)
   local ctxlen = opts.ctxlen or 3
+
+  if not old_text:match("\n$") then
+    old_text = old_text .. "\n"
+  end
+  if not new_text:match("\n$") then
+    new_text = new_text .. "\n"
+  end
+
   local unified_diff = vim.diff(old_text, new_text, {
     result_type = "unified",
     ctxlen = ctxlen,

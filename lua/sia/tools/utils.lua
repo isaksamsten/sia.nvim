@@ -182,6 +182,12 @@ local function input(opts, on_confirm)
     confirmation_text = prompt
   end
 
+  local show_preview = require("sia.config").options.defaults.ui.show_preview
+  if show_preview and opts.preview and not clear_confirmation then
+    clear_confirmation = require("sia.confirmation").show(opts.preview)
+    vim.cmd.redraw()
+  end
+
   vim.ui.input({ prompt = confirmation_text }, function(resp)
     if clear_confirmation then
       clear_confirmation()
@@ -209,6 +215,7 @@ end
 --- @class sia.NewToolExecuteUserInputOpts
 --- @field on_accept fun():nil
 --- @field must_confirm boolean?
+--- @field preview fun(buf:integer, win:integer)?
 
 --- @alias sia.NewToolExecuteUserInput fun(prompt: string, opts: sia.NewToolExecuteUserInputOpts):nil
 --- @alias sia.NewToolExecuteUserChoice fun(prompt: string, opts: sia.NewToolExecuteUserChoiceOpts):nil
@@ -294,53 +301,53 @@ M.new_tool = function(opts, execute)
           input_fn = vim.ui.input
         end
 
-        input_fn(
-          { prompt = string.format("%s - %s", prompt, confirmation_text) },
-          function(resp)
-            if resp == nil then
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_cancelled",
-                cancelled = true,
-              })
-              return
-            end
-            local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
-            if response == "n" or response == "no" then
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_declined",
-                cancelled = true,
-              })
-              return
-            end
-
-            if
-              not input_args.must_confirm and (response == "a" or response == "always")
-            then
-              conversation.auto_confirm_tools[opts.name] = 1
-              input_args.on_accept()
-              return
-            end
-
-            local should_proceed = false
-            if input_args.must_confirm then
-              should_proceed = response == "y" or response == "yes"
-            else
-              should_proceed = response == "" or response == "y" or response == "yes"
-            end
-
-            if should_proceed then
-              input_args.on_accept()
-            else
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_declined",
-                cancelled = true,
-              })
-            end
+        input_fn({
+          prompt = string.format("%s - %s", prompt, confirmation_text),
+          preview = input_args.preview,
+        }, function(resp)
+          if resp == nil then
+            callback({
+              content = cancellation_message(opts.name),
+              kind = "user_cancelled",
+              cancelled = true,
+            })
+            return
           end
-        )
+          local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
+          if response == "n" or response == "no" then
+            callback({
+              content = cancellation_message(opts.name),
+              kind = "user_declined",
+              cancelled = true,
+            })
+            return
+          end
+
+          if
+            not input_args.must_confirm and (response == "a" or response == "always")
+          then
+            conversation.auto_confirm_tools[opts.name] = 1
+            input_args.on_accept()
+            return
+          end
+
+          local should_proceed = false
+          if input_args.must_confirm then
+            should_proceed = response == "y" or response == "yes"
+          else
+            should_proceed = response == "" or response == "y" or response == "yes"
+          end
+
+          if should_proceed then
+            input_args.on_accept()
+          else
+            callback({
+              content = cancellation_message(opts.name),
+              kind = "user_declined",
+              cancelled = true,
+            })
+          end
+        end)
       end
       user_choice = function(prompt, choice_args)
         if permission and permission.auto_allow and not choice_args.must_confirm then
