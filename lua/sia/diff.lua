@@ -69,7 +69,8 @@ vim.api.nvim_set_decoration_provider(diff_ns, {
       local line_markers = markers[i]
       if line_markers then
         for _, line_marker in ipairs(line_markers) do
-          vim.api.nvim_buf_set_extmark(
+          pcall(
+            vim.api.nvim_buf_set_extmark,
             buf,
             diff_ns,
             i - 1,
@@ -122,6 +123,7 @@ local process_scheduled_buffers = vim.schedule_wrap(function()
       if not diff_state.reference_hunks then
         cleanup_diff_state(buf)
       end
+      redraw_buffer(buf)
     end
   end
   bufs_to_update = {}
@@ -173,7 +175,6 @@ local function setup_auto_diff_updates(buf)
         cleanup_diff_state(buf)
       end,
     })
-    schedule_diff_update(buf, 500)
   end
 end
 
@@ -410,33 +411,6 @@ local function extract_references(baseline, reference)
   return reference_ranges
 end
 
----@param hunks1 sia.diff.Hunk[]?
----@param hunks2 sia.diff.Hunk[]?
----@return boolean equal True if hunks are equivalent
-local function hunks_equal(hunks1, hunks2)
-  if not hunks1 or not hunks2 then
-    return false
-  end
-
-  if #hunks1 ~= #hunks2 then
-    return false
-  end
-
-  for i, h1 in ipairs(hunks1) do
-    local h2 = hunks2[i]
-    if
-      h1.old_start ~= h2.old_start
-      or h1.old_count ~= h2.old_count
-      or h1.new_start ~= h2.new_start
-      or h1.new_count ~= h2.new_count
-    then
-      return false
-    end
-  end
-
-  return true
-end
-
 --- @param references sia.diff.Reference[]
 --- @param current_lines string[][]
 --- @param baseline string[][]
@@ -494,7 +468,7 @@ local function get_hunk_highlights(baseline, max_lines, hunks)
   end
 
   local show_signs = require("sia.config").options.defaults.ui.show_signs
-  ---@type table<integer, {col: integer?, args:vim.api.keyset.set_extmark}[]?>?
+  ---@type table<integer, {col: integer?, args:vim.api.keyset.set_extmark}[]?>
   local extmarks = {}
 
   for _, hunk in ipairs(hunks) do
@@ -520,8 +494,7 @@ local function get_hunk_highlights(baseline, max_lines, hunks)
             args = {
               virt_lines = virt_lines,
               virt_lines_above = true,
-              priority = 300,
-              undo_restore = false,
+              priority = 100,
             },
           },
         }
@@ -663,7 +636,6 @@ function M.update_diff(buf)
     end
   end
 
-  local prev_reference_hunks = diff_state.reference_hunks
   diff_state.reference_hunks = #reference_hunks > 0 and reference_hunks or nil
   diff_state.baseline_hunks = #baseline_hunks > 0 and baseline_hunks or nil
   diff_state.markers = get_hunk_highlights(
@@ -672,10 +644,7 @@ function M.update_diff(buf)
     diff_state.reference_hunks
   )
 
-  if not hunks_equal(prev_reference_hunks, diff_state.reference_hunks) then
-    diff_state.needs_clear = true
-    redraw_buffer(buf)
-  end
+  diff_state.needs_clear = true
 end
 
 ---@param buf integer
@@ -732,7 +701,7 @@ function M.update_baseline(buf)
     diff_state.baseline_hunks = nil
     diff_state.reference_cache =
       extract_references(diff_state.baseline, diff_state.reference)
-    schedule_diff_update(buf, 500)
+    schedule_diff_update(buf)
   end
 end
 
@@ -752,7 +721,7 @@ function M.update_reference(buf)
   diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   diff_state.reference_cache =
     extract_references(diff_state.baseline, diff_state.reference)
-  schedule_diff_update(buf, 500)
+  schedule_diff_update(buf)
 end
 
 --- @return sia.diff.Hunk[]?
@@ -977,6 +946,7 @@ function M.accept_single_hunk(buf, hunk_index)
     extract_references(diff_state.baseline, diff_state.reference)
 
   M.update_diff(buf)
+  redraw_buffer(buf)
   if not diff_state.reference_hunks then
     cleanup_diff_state(buf)
   end
@@ -1057,6 +1027,7 @@ function M.reject_single_hunk(buf, hunk_index)
   if not diff_state.reference_hunks then
     cleanup_diff_state(buf)
   end
+  redraw_buffer(buf)
   return true
 end
 
