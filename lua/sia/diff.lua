@@ -4,7 +4,7 @@ local M = {}
 local DIFF_OPTS = {
   result_type = "indices",
 }
-
+local MAX_DISTANCE = 2 ^ 31 - 1
 local MIN_LINE_LENGTH = 3
 local MAX_LINE_LENGTH = 200
 local REGION_GAP = 5
@@ -460,7 +460,7 @@ local function create_reference_matcher(references, current_lines, baseline)
       local best_index = matching_indices[1]
 
       if #matching_indices > 1 then
-        local min_distance = math.huge
+        local min_distance = MAX_DISTANCE
         for _, idx in ipairs(matching_indices) do
           local reference = references[idx]
           -- Compare hunk position to original reference position
