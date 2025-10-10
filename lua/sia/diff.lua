@@ -114,7 +114,7 @@ local function cleanup_diff_state(buf)
   buffer_diff_state[buf] = nil
 end
 
-local function process_scheduled_buffers()
+local process_scheduled_buffers = vim.schedule_wrap(function()
   for buf, _ in pairs(bufs_to_update) do
     local diff_state = buffer_diff_state[buf]
     if diff_state then
@@ -125,7 +125,7 @@ local function process_scheduled_buffers()
     end
   end
   bufs_to_update = {}
-end
+end)
 
 local function schedule_diff_update(buf, delay)
   bufs_to_update[buf] = true
