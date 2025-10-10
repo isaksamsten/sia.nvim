@@ -75,6 +75,7 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   eq(result.content[1], "Edited test.lua:")
   eq("+  print(test)", result.content[7])
   restore_tracker()
+  restore_file_loader()
 end
 
 T["sia.tools.edit"]["successful exact match edit"] = function()
