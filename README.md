@@ -187,6 +187,11 @@ specific project:
   "fast_model": "openai/gpt-4.1-mini",
   "plan_model": "openai/o3-mini",
   "auto_continue": true,
+  "action": {
+    "insert": "custom_insert_action",
+    "diff": "custom_diff_action",
+    "chat": "custom_chat_action"
+  },
   "context": {
     "max_tool": 50,
     "exclude": ["grep", "glob"],
@@ -235,6 +240,7 @@ specific project:
   `plan_model`) for this project
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)
+- **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)
 - **`context`**: Project-specific context management (tool pruning behavior)
 - **`permission`**: Fine-grained tool access control (see Permission System below)
 
@@ -254,6 +260,26 @@ Control how Sia manages conversation history and tool call pruning:
 #### Auto-Continue Behavior
 
 When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true` bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want the AI to keep working even if individual operations are cancelled.
+
+#### Custom Default Actions
+
+The `action` configuration allows you to override the default actions for different interaction modes:
+
+- **`insert`**: Action used when calling `:Sia!` (insert mode)
+- **`diff`**: Action used when calling `:Sia!` with a range (diff mode)
+- **`chat`**: Action used when calling `:Sia` (chat mode)
+
+Each field should reference an action name defined in your global configuration. This allows you to customize the behavior, system prompts, tools, and models used for different types of interactions on a per-project basis.
+
+**Example**: Use a specialized action for writing in a specific project:
+
+```json
+{
+  "action": {
+    "chat": "prose"
+  }
+}
+```
 
 #### Memory System
 

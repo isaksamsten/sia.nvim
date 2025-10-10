@@ -181,6 +181,30 @@ local function validate_context(context)
   return true
 end
 
+local function validate_action(action)
+  if not action then
+    return true
+  end
+
+  if type(action) ~= "table" then
+    return false, "'action' must be an object, got " .. type(action)
+  end
+
+  local allowed_fields = { insert = true, diff = true, chat = true }
+  for field, value in pairs(action) do
+    if allowed_fields[field] and type(value) ~= "string" then
+      return false,
+        string.format("action.%s must be a string, got %s", field, type(value))
+    end
+
+    if not M.options.actions[value] then
+      return false, string.format("action.%s, %s is no a defined action", field, value)
+    end
+  end
+
+  return true
+end
+
 local function validate_model_field(json, field)
   if json[field] ~= nil then
     if type(json[field]) ~= "string" then
@@ -199,6 +223,7 @@ local function validate_model_field(json, field)
 end
 
 --- @class sia.LocalConfig
+--- @field action { insert: string?, diff: string?, chat: string?}?
 --- @field auto_continue boolean?
 --- @field model string?
 --- @field fast_model string?
@@ -274,6 +299,7 @@ function M.get_local_config()
 
   validate(validate_permissions, json.permission)
   validate(validate_context, json.context)
+  validate(validate_action, json.action)
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
   validate(validate_model_field, json, "plan_model")
@@ -312,6 +338,14 @@ function M.get_context_config()
     )
   end
   return M.options.defaults.context or {}
+end
+
+--- @param mode "insert"|"diff"|"chat"|"hidden"
+--- @return sia.config.Action
+function M.get_default_action(mode)
+  local lc = M.get_local_config()
+  return lc and lc.action and M.options.actions[lc.action[mode]]
+    or M.options.defaults.actions[mode]
 end
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
@@ -462,6 +496,7 @@ M.options = {
     ["openrouter/qwen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
     ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
     ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
+    ["openrouter/gpt-5-codex"] = { "openrouter", "openai/gpt-5-codex" },
     ["openrouter/gpt-5-mini"] = { "openrouter", "openai/gpt-5-mini" },
     ["openrouter/grok-code-fast-1"] = { "openrouter", "x-ai/grok-code-fast-1" },
     ["openrouter/qwen3-next"] = { "openrouter", "qwen/qwen3-next-80b-a3b-instruct" },

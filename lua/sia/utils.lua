@@ -293,7 +293,7 @@ function M.resolve_action(argument, opts)
   else
     named = false
     local action_mode = M.get_action_mode(opts)
-    action = vim.deepcopy(config.options.defaults.actions[action_mode])
+    action = vim.deepcopy(config.get_default_action(action_mode))
     table.insert(
       action.instructions,
       { role = "user", content = table.concat(argument, " ") }
