@@ -395,7 +395,7 @@ end
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
---- @field ui {use_vim_ui: boolean?, show_signs: boolean?}?
+--- @field ui {use_vim_ui: boolean?, show_signs: boolean?, char_diff: boolean?}?
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -496,6 +496,7 @@ M.options = {
     ui = {
       use_vim_ui = false,
       show_signs = true,
+      char_diff = true,
     },
     tools = {
       enable = true,

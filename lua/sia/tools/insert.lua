@@ -142,7 +142,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   opts.user_input(insert_description, {
     on_accept = function()
       if not is_memory then
-        diff.init_change_tracking(buf)
+        diff.update_baseline_content(buf)
       end
       tracker.non_tracked_edit(buf, function()
         vim.api.nvim_buf_set_lines(

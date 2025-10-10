@@ -197,7 +197,7 @@ one specific change with clear, unique context.
         end
 
         if not is_memory then
-          diff.init_change_tracking(buf)
+          diff.update_baseline_content(buf)
         end
         tracker.non_tracked_edit(buf, function()
           if match.col_span then

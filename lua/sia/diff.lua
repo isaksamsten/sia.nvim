@@ -9,7 +9,7 @@ local MIN_LINE_LENGTH = 3
 local MAX_LINE_LENGTH = 200
 local REGION_GAP = 5
 
---- @class sia.diff.RefRange
+--- @class sia.diff.Reference
 --- @field old_lines string[] Lines removed from baseline (empty for additions)
 --- @field new_lines string[] Lines added in reference (empty for deletions)
 --- @field old_start number Original line number in baseline where change was applied
@@ -21,17 +21,15 @@ local REGION_GAP = 5
 --- @field new_start integer
 --- @field new_count integer
 --- @field type "change"|"add"|"delete"
-
---- @class sia.diff.ReferenceHunk : sia.diff.Hunk
---- @field char_diffs table<integer, sia.diff.Hunk[]>? Map from line offset (1-based) to character-level changes for that line pair
+--- @field char_hunks table<integer, sia.diff.Hunk[]>? Map from line offset (1-based) to character-level changes for that line pair
 
 --- @class sia.diff.DiffState
 --- @field baseline string[]
 --- @field reference string[]
---- @field reference_hunks sia.diff.ReferenceHunk[]?
+--- @field reference_hunks sia.diff.Hunk[]?
 --- @field baseline_hunks sia.diff.Hunk[]?
 --- @field autocommand_group integer?
---- @field reference_ranges sia.diff.RefRange[]? Cached ranges from baseline to reference
+--- @field reference_cache sia.diff.Reference[]? Cached ranges from baseline to reference
 
 --- @type table<integer, sia.diff.DiffState>
 local buffer_diff_state = {}
@@ -56,7 +54,7 @@ local function cleanup_auto_diff_updates(buf)
   end
 end
 
-local function cleanup(buf)
+local function cleanup_diff_state(buf)
   if not buffer_diff_state[buf] then
     return
   end
@@ -97,7 +95,7 @@ local function setup_auto_diff_updates(buf)
             M.highlight_hunks(buf)
           end
           if not buffer_diff_state[buf].reference_hunks then
-            cleanup(buf)
+            cleanup_diff_state(buf)
           end
         end
       end, 500)
@@ -118,7 +116,7 @@ local function setup_auto_diff_updates(buf)
 end
 
 --- @param content string[]
-local function has_trailing_nl(content)
+local function has_trailing_newline(content)
   return #content > 0 and content[#content]:sub(-1) == ""
 end
 
@@ -129,8 +127,8 @@ end
 --- @param current string[]
 --- @return T new_hunk
 local function expand_hunk(hunk, baseline, current)
-  local baseline_has_nl = has_trailing_nl(baseline)
-  local current_has_nl = has_trailing_nl(current)
+  local baseline_has_nl = has_trailing_newline(baseline)
+  local current_has_nl = has_trailing_newline(current)
   if baseline_has_nl == current_has_nl then
     return hunk
   end
@@ -213,10 +211,9 @@ local function apply_hunks_to_baseline(baseline_lines, hunks, current_content)
   end
 end
 
---- Denoise  diffs by merging close hunks
 --- @param char_changes sia.diff.Hunk[]
 --- @return sia.diff.Hunk[]
-local function denoise_char_diffs(char_changes)
+local function merge_nearby_char_hunks(char_changes)
   if #char_changes == 0 then
     return char_changes
   end
@@ -247,7 +244,7 @@ end
 --- @param old_line string
 --- @param new_line string
 --- @return sia.diff.Hunk[]? char_changes
-local function compute_char_diff(old_line, new_line)
+local function get_intraline_char_hunks(old_line, new_line)
   if #old_line < MIN_LINE_LENGTH or #new_line < MIN_LINE_LENGTH then
     return nil
   end
@@ -259,15 +256,14 @@ local function compute_char_diff(old_line, new_line)
   local old_chars = table.concat(vim.split(old_line, ""), "\n")
   local new_chars = table.concat(vim.split(new_line, ""), "\n")
 
-  local char_indices = vim.diff(old_chars, new_chars, DIFF_OPTS) or {}
-  --- @cast char_indices integer[][]
+  local char_indices = vim.diff(old_chars, new_chars, DIFF_OPTS) or {} --[[@as integer[][]]
 
   if #char_indices == 0 then
     return nil
   end
 
   --- @type sia.diff.Hunk[]
-  local char_changes = {}
+  local char_hunks = {}
 
   for _, char_hunk in ipairs(char_indices) do
     local old_start, old_count, new_start, new_count =
@@ -280,20 +276,18 @@ local function compute_char_diff(old_line, new_line)
       type = old_count > 0 and new_count > 0 and "change"
         or (new_count > 0 and "add" or "delete"),
     }
-    table.insert(char_changes, hunk)
+    table.insert(char_hunks, hunk)
   end
 
-  return denoise_char_diffs(char_changes)
+  return merge_nearby_char_hunks(char_hunks)
 end
 
---- Check if a hunk matches a reference range by comparing content line-by-line
---- Returns false immediately if any line doesn't match (early abort)
 ---@param hunk sia.diff.Hunk
----@param reference_range sia.diff.RefRange
+---@param reference_range sia.diff.Reference
 ---@param current_lines string[] Current buffer content
 ---@param baseline_lines string[] Baseline content
 ---@return boolean is_reference_change True if this hunk matches the reference change
-local function is_reference_hunk(hunk, reference_range, current_lines, baseline_lines)
+local function hunk_content_match(hunk, reference_range, current_lines, baseline_lines)
   if hunk.old_count ~= #reference_range.old_lines then
     return false
   end
@@ -320,24 +314,17 @@ local function is_reference_hunk(hunk, reference_range, current_lines, baseline_
   return true
 end
 
---- Compute reference ranges from baseline to reference
---- This is cached to avoid recomputing on every text change
 ---@param baseline string[]
 ---@param reference string[]
----@return sia.diff.RefRange[]
-local function compute_reference_ranges(baseline, reference)
+---@return sia.diff.Reference[]
+local function extract_references(baseline, reference)
   local baseline_content = table.concat(baseline, "\n")
   local reference_content = table.concat(reference, "\n")
-  local reference_hunk_indices = vim.diff(
-    baseline_content,
-    reference_content,
-    DIFF_OPTS
-  ) or {}
-  --- @cast reference_hunk_indices integer[][]
+  local hunk_indices = vim.diff(baseline_content, reference_content, DIFF_OPTS) or {} --[[@as integer[][]]
 
-  --- @type sia.diff.RefRange[]
+  --- @type sia.diff.Reference[]
   local reference_ranges = {}
-  for _, hunk in ipairs(reference_hunk_indices) do
+  for _, hunk in ipairs(hunk_indices) do
     local old_start, old_count = hunk[1], hunk[2]
     local new_start, new_count = hunk[3], hunk[4]
 
@@ -361,18 +348,14 @@ local function compute_reference_ranges(baseline, reference)
   return reference_ranges
 end
 
---- Compare two hunk arrays for equality (ignoring char_diffs for performance)
---- This is used to detect if hunks changed and highlights need updating
----@param hunks1 sia.diff.ReferenceHunk[]?
----@param hunks2 sia.diff.ReferenceHunk[]?
+---@param hunks1 sia.diff.Hunk[]?
+---@param hunks2 sia.diff.Hunk[]?
 ---@return boolean equal True if hunks are equivalent
 local function hunks_equal(hunks1, hunks2)
-  if hunks1 == hunks2 then
-    return true
-  end
   if not hunks1 or not hunks2 then
-    return true
+    return false
   end
+
   if #hunks1 ~= #hunks2 then
     return false
   end
@@ -384,7 +367,6 @@ local function hunks_equal(hunks1, hunks2)
       or h1.old_count ~= h2.old_count
       or h1.new_start ~= h2.new_start
       or h1.new_count ~= h2.new_count
-      or h1.type ~= h2.type
     then
       return false
     end
@@ -393,77 +375,37 @@ local function hunks_equal(hunks1, hunks2)
   return true
 end
 
---- Create diff hunks between baseline and current, categorized by AI vs user changes
----@param buf number Buffer handle
----@return boolean should_update_highlights
-function M.update_diff(buf)
-  if not buffer_diff_state[buf] then
-    return false
-  end
-
-  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
-
-  local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local current_content = table.concat(current_lines, "\n")
-  local diff_state = buffer_diff_state[buf]
-  local baseline = table.concat(diff_state.baseline, "\n")
-
-  local total_hunk_indices = vim.diff(baseline, current_content, DIFF_OPTS) or {}
-
-  --- @cast total_hunk_indices integer[][]
-
-  local reference_ranges = diff_state.reference_ranges or {}
-
+--- @param references sia.diff.Reference[]
+--- @param current_lines string[][]
+--- @param baseline string[][]
+--- @return fun(hunk: sia.diff.Hunk):boolean
+local function create_reference_matcher(references, current_lines, baseline)
   local available_indices = {}
-  for i = 1, #reference_ranges do
+  for i = 1, #references do
     available_indices[i] = true
   end
 
-  local reference_hunks = {}
-  local baseline_hunks = {}
-  for _, hunk in ipairs(total_hunk_indices) do
-    local old_start, old_count = hunk[1], hunk[2]
-    local new_start, new_count = hunk[3], hunk[4]
-
-    --- @type sia.diff.Hunk|sia.diff.ReferenceHunk
-    local final_hunk = {
-      old_start = old_start,
-      old_count = old_count,
-      new_start = new_start,
-      new_count = new_count,
-      type = old_count > 0 and new_count > 0 and "change"
-        or (new_count > 0 and "add" or "delete"),
-    }
-
+  return function(hunk)
     local matching_indices = {}
-    for i, reference_range in ipairs(reference_ranges) do
-      if
-        available_indices[i]
-        and is_reference_hunk(
-          final_hunk,
-          reference_range,
-          current_lines,
-          diff_state.baseline
-        )
-      then
+    for i, reference in ipairs(references) do
+      local content_match = hunk_content_match(hunk, reference, current_lines, baseline)
+      if available_indices[i] and content_match then
         table.insert(matching_indices, i)
       end
     end
 
-    local reference_change = false
     if #matching_indices > 0 then
       local best_index = matching_indices[1]
 
       if #matching_indices > 1 then
         local min_distance = math.huge
         for _, idx in ipairs(matching_indices) do
-          local reference_range = reference_ranges[idx]
+          local reference = references[idx]
           -- Compare hunk position to original reference position
           -- Use new_start for additions/changes, old_start for deletions
-          local ref_pos = reference_range.new_start > 0 and reference_range.new_start
-            or reference_range.old_start
-          local hunk_pos = final_hunk.new_start > 0 and final_hunk.new_start
-            or final_hunk.old_start
+          local ref_pos = reference.new_start > 0 and reference.new_start
+            or reference.old_start
+          local hunk_pos = hunk.new_start > 0 and hunk.new_start or hunk.old_start
           local distance = math.abs(ref_pos - hunk_pos)
           if distance < min_distance then
             min_distance = distance
@@ -473,40 +415,81 @@ function M.update_diff(buf)
       end
 
       available_indices[best_index] = false
-      reference_change = true
+      return true
     end
+    return false
+  end
+end
 
-    if reference_change and show_char_diff then
-      if final_hunk.old_count == final_hunk.new_count and final_hunk.old_count > 0 then
+--- Create diff hunks between baseline and current, categorized by AI vs user changes
+---@param buf number Buffer handle
+---@return boolean should_update_highlights
+function M.update_diff(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return false
+  end
+
+  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
+
+  local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local current_content = table.concat(current_lines, "\n")
+
+  local baseline_lines = diff_state.baseline
+  local baseline_content = table.concat(diff_state.baseline, "\n")
+
+  local hunk_indices = vim.diff(baseline_content, current_content, DIFF_OPTS) or {} --[[@as integer[][]]
+
+  local reference_cache = diff_state.reference_cache or {}
+
+  local is_reference_hunk =
+    create_reference_matcher(reference_cache, current_lines, baseline_lines)
+
+  local reference_hunks = {}
+  local baseline_hunks = {}
+  for _, hunk_idx in ipairs(hunk_indices) do
+    local old_start, old_count = hunk_idx[1], hunk_idx[2]
+    local new_start, new_count = hunk_idx[3], hunk_idx[4]
+
+    --- @type sia.diff.Hunk
+    local hunk = {
+      old_start = old_start,
+      old_count = old_count,
+      new_start = new_start,
+      new_count = new_count,
+      type = old_count > 0 and new_count > 0 and "change"
+        or (new_count > 0 and "add" or "delete"),
+    }
+
+    if is_reference_hunk(hunk) then
+      if show_char_diff and hunk.old_count == hunk.new_count and hunk.old_count > 0 then
         local char_diffs = {}
         local has_char_diffs = false
 
-        for i = 1, final_hunk.old_count do
-          local old_line_idx = final_hunk.old_start + i - 1
-          local new_line_idx = final_hunk.new_start + i - 1
+        for i = 1, hunk.old_count do
+          local old_line_idx = hunk.old_start + i - 1
+          local new_line_idx = hunk.new_start + i - 1
 
-          if
-            old_line_idx <= #diff_state.baseline and new_line_idx <= #current_lines
-          then
-            local old_line = diff_state.baseline[old_line_idx]
+          if old_line_idx <= #baseline_lines and new_line_idx <= #current_lines then
+            local old_line = baseline_lines[old_line_idx]
             local new_line = current_lines[new_line_idx]
 
-            local char_changes = compute_char_diff(old_line, new_line)
-            if char_changes then
-              char_diffs[i] = char_changes
+            local char_hunks = get_intraline_char_hunks(old_line, new_line)
+            if char_hunks then
+              char_diffs[i] = char_hunks
               has_char_diffs = true
             end
           end
         end
 
         if has_char_diffs then
-          final_hunk.char_diffs = char_diffs
+          hunk.char_hunks = char_diffs
         end
       end
 
-      table.insert(reference_hunks, final_hunk)
+      table.insert(reference_hunks, hunk)
     else
-      table.insert(baseline_hunks, final_hunk)
+      table.insert(baseline_hunks, hunk)
     end
   end
 
@@ -546,7 +529,7 @@ function M.show_diff_preview(buf)
   vim.api.nvim_set_current_win(right_win)
 end
 
-function M.init_change_tracking(buf)
+function M.update_baseline_content(buf)
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
     local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -555,7 +538,7 @@ function M.init_change_tracking(buf)
       reference = current_lines,
       reference_hunks = {},
       autocommand_group = nil,
-      reference_ranges = {},
+      reference_cache = {},
     }
     setup_auto_diff_updates(buf)
   else
@@ -568,8 +551,8 @@ function M.init_change_tracking(buf)
     local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     apply_hunks_to_baseline(diff_state.baseline, baseline_hunks, current_content)
     diff_state.baseline_hunks = nil
-    diff_state.reference_ranges =
-      compute_reference_ranges(diff_state.baseline, diff_state.reference)
+    diff_state.reference_cache =
+      extract_references(diff_state.baseline, diff_state.reference)
   end
 end
 
@@ -580,7 +563,6 @@ function M.get_diff_state(buf)
   return buffer_diff_state[buf]
 end
 
---- Update the reference baseline to current buffer state
 ---@param buf number Buffer handle
 function M.update_reference_content(buf)
   local diff_state = buffer_diff_state[buf]
@@ -588,8 +570,8 @@ function M.update_reference_content(buf)
     return
   end
   diff_state.reference = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  diff_state.reference_ranges =
-    compute_reference_ranges(diff_state.baseline, diff_state.reference)
+  diff_state.reference_cache =
+    extract_references(diff_state.baseline, diff_state.reference)
 end
 
 --- @return sia.diff.Hunk[]?
@@ -682,21 +664,20 @@ function M.highlight_hunks(buf)
           })
         end
 
-        if hunk.char_diffs then
-          for line_offset, char_changes in pairs(hunk.char_diffs) do
+        if hunk.char_hunks then
+          for line_offset, char_changes in pairs(hunk.char_hunks) do
             local row = start_row + line_offset - 1
             if row < buf_line_count then
-              for _, char_change in ipairs(char_changes) do
-                if char_change.new_count > 0 then
-                  local inline_hl_group = char_change.type == "change"
+              for _, char_hunk in ipairs(char_changes) do
+                if char_hunk.new_count > 0 then
+                  local inline_hl_group = char_hunk.type == "change"
                       and "SiaDiffInlineChange"
                     or "SiaDiffInlineAdd"
-                  local start_col = char_change.new_start - 1
-                  local end_col = start_col + char_change.new_count
+                  local start_col = char_hunk.new_start - 1
+                  local end_col = start_col + char_hunk.new_count
                   vim.api.nvim_buf_set_extmark(buf, diff_ns, row, start_col, {
                     end_col = end_col,
                     hl_group = inline_hl_group,
-                    hl_mode = "replace",
                     priority = 101,
                     hl_eol = false,
                   })
@@ -720,7 +701,7 @@ end
 
 function M.accept_diff(buf)
   if buffer_diff_state[buf] then
-    cleanup(buf)
+    cleanup_diff_state(buf)
     return true
   else
     return false
@@ -741,14 +722,14 @@ function M.reject_diff(buf)
     M.reject_single_hunk(buf, 1)
   end
 
-  cleanup(buf)
+  cleanup_diff_state(buf)
   return true
 end
 
 function M.show_diff_for_buffer(buf)
   if buffer_diff_state[buf] then
     M.show_diff_preview(buf)
-    cleanup(buf)
+    -- cleanup_diff_state(buf)
     return true
   else
     return false
@@ -918,15 +899,15 @@ function M.accept_single_hunk(buf, hunk_index)
     hunk = expand_hunk(hunk, diff_state.baseline, current_content)
   end
   apply_hunks_to_baseline(diff_state.baseline, { hunk }, current_content)
-  diff_state.reference_ranges =
-    compute_reference_ranges(diff_state.baseline, diff_state.reference)
+  diff_state.reference_cache =
+    extract_references(diff_state.baseline, diff_state.reference)
 
   local hunks_changed = M.update_diff(buf)
   if hunks_changed then
     M.highlight_hunks(buf)
   end
   if not diff_state.reference_hunks then
-    cleanup(buf)
+    cleanup_diff_state(buf)
   end
 
   return true
@@ -1007,7 +988,7 @@ function M.reject_single_hunk(buf, hunk_index)
     M.highlight_hunks(buf)
   end
   if not diff_state.reference_hunks then
-    cleanup(buf)
+    cleanup_diff_state(buf)
   end
 
   return true

@@ -11,7 +11,7 @@ end
 
 local function setup_diff_state(buf, original_lines, current_lines)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, original_lines)
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
   diff.update_reference_content(buf)
   diff.update_diff(buf)
@@ -384,7 +384,7 @@ local MODIFIED_JAVA_NL_EOF = {
 T["sia.diff"]["reject last hunk eof newline difference"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
@@ -411,7 +411,7 @@ end
 T["sia.diff"]["accept last hunk eof newline difference"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
@@ -460,7 +460,8 @@ end
 T["sia.diff"]["reject_diff"]["rejects all hunks with multiple changes"] = function()
   local buf = create_test_buffer()
   local original = { "line 1", "line 2", "line 3", "line 4", "line 5" }
-  local current = { "line 1", "modified 2", "added line", "line 3", "modified 4", "line 5" }
+  local current =
+    { "line 1", "modified 2", "added line", "line 3", "modified 4", "line 5" }
 
   setup_diff_state(buf, original, current)
 
@@ -529,7 +530,7 @@ end
 T["sia.diff"]["reject_diff"]["with different trailing nl"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
@@ -574,7 +575,8 @@ end
 T["sia.diff"]["accept_diff"]["accepts all hunks with multiple changes"] = function()
   local buf = create_test_buffer()
   local original = { "line 1", "line 2", "line 3", "line 4", "line 5" }
-  local current = { "line 1", "modified 2", "added line", "line 3", "modified 4", "line 5" }
+  local current =
+    { "line 1", "modified 2", "added line", "line 3", "modified 4", "line 5" }
 
   setup_diff_state(buf, original, current)
 
@@ -643,7 +645,7 @@ end
 T["sia.diff"]["accept_diff"]["with different trailing nl"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, BASELINE_JAVA_NO_NL_EOF)
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   diff.update_diff(buf)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, MODIFIED_JAVA_NL_EOF)
@@ -666,7 +668,8 @@ T["sia.diff"]["accept_diff"]["sequential accept and reject operations"] = functi
   local buf = create_test_buffer()
   local original = { "line 1", "line 2", "line 3" }
   local modified = { "line 1", "modified line 2", "added line", "line 3" }
-  local final_change = { "line 1", "modified line 2", "added line", "line 3", "final addition" }
+  local final_change =
+    { "line 1", "modified line 2", "added line", "line 3", "final addition" }
 
   -- Setup initial diff
   setup_diff_state(buf, original, modified)
@@ -678,7 +681,7 @@ T["sia.diff"]["accept_diff"]["sequential accept and reject operations"] = functi
   local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   eq(buffer_content, modified)
 
-  diff.init_change_tracking(buf)
+  diff.update_baseline_content(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_change)
   diff.update_reference_content(buf)
   diff.update_diff(buf)

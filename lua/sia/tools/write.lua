@@ -78,7 +78,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       end
 
       if not is_memory then
-        diff.init_change_tracking(buf)
+        diff.update_baseline_content(buf)
       end
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.non_tracked_edit(buf, function()
