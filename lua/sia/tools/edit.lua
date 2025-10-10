@@ -4,11 +4,6 @@ local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 
 local failed_matches = {}
-local CHOICES = {
-  "Apply changes immediately",
-  "Apply changes immediately and remember this choice",
-  "Apply changes and preview them in diff view",
-}
 local MAX_FAILED_MATCHES = 3
 local FAILED_TO_EDIT = "❌ Failed to edit"
 local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
@@ -167,9 +162,24 @@ one specific change with clear, unique context.
     local match = best_matches.matches[1]
     local span = match.span
 
-    opts.user_choice(string.format("Edit %s", args.target_file), {
-      choices = CHOICES,
-      on_accept = function(choice)
+    local edit_description
+    if match.col_span then
+      edit_description = string.format(
+        "Edit line %d (columns %d-%d) in %s",
+        span[1],
+        match.col_span[1],
+        match.col_span[2],
+        args.target_file
+      )
+    else
+      local line_description = span[1] == span[2] and string.format("line %d", span[1])
+        or string.format("lines %d-%d", span[1], span[2])
+      edit_description =
+        string.format("Edit %s in %s", line_description, args.target_file)
+    end
+
+    opts.user_input(edit_description, {
+      on_accept = function()
         local old_span_lines
         if match.col_span then
           old_span_lines = { old_content[span[1]] }
@@ -208,16 +218,7 @@ one specific change with clear, unique context.
         end)
         if not is_memory then
           diff.update_reference_content(buf)
-        end
-        if choice == 1 or choice == 2 then
-          if not is_memory then
-            diff.update_and_highlight_diff(buf)
-          end
-          if choice == 2 then
-            conversation.auto_confirm_tools["edit"] = 1
-          end
-        elseif choice == 3 then
-          diff.show_diff_preview(buf)
+          diff.update_and_highlight_diff(buf)
         end
 
         local edit_start = span[1]
