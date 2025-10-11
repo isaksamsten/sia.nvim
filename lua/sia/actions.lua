@@ -1,5 +1,7 @@
 local M = {}
 
+local MAX_INDENT = 2 ^ 31 - 1
+
 function M.commit()
   return {
     system = {
@@ -47,19 +49,31 @@ end
 function M.doc()
   return {
     system = {
-      "insert_system",
-    },
-    instructions = {
       {
         role = "system",
-        content = [[You are tasked with writing documentation for functions,
-methods, and classes. Your documentation must adhere to the language
-conventions (e.g., JSDoc for JavaScript, docstrings for Python,
-Javadoc for Java), including appropriate tags and formatting.
+        content = [[CRITICAL: You must ONLY output documentation comments.
+DO NOT include any function declarations, signatures, or code.
+
+You are tasked with writing documentation for functions, methods, and classes.
+Your documentation must adhere to the language conventions (e.g., JSDoc for
+JavaScript, docstrings for Python, Javadoc for Java), including appropriate
+tags and formatting.
+
+WHAT TO OUTPUT:
+- Documentation comments ONLY (/** */ for Java/JS, """ """ for Python, etc.)
+- Parameter descriptions, return values, examples as appropriate
+- Nothing else
+
+WHAT NOT TO OUTPUT:
+- Markdown fences around the output
+- Function signatures or declarations (e.g., "function foo()" or "def bar():")
+- Implementation code
+- Class declarations (e.g., "class MyClass:")
+- Any executable code whatsoever
 
 Requirements:
 
-1. Never output the function declaration or implementation. ONLY documentation.
+1. NEVER output the function declaration or implementation. ONLY documentation.
 2. Follow the language-specific documentation style strictly. Ensure all tags
    are accurate and appropriate for the language.
 3. Never explain your changes. Only output the documentation.
@@ -75,7 +89,11 @@ Requirements:
    documentation style, contains only the requested documentation text, and
    maintains proper indentation for easy insertion into code.]],
       },
-      "current_context",
+    },
+    instructions = {
+      require("sia.instructions").current_context({
+        show_line_numbers = false,
+      }),
       { role = "user", content = "Please document the provided context" },
     },
     capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
@@ -102,6 +120,84 @@ Requirements:
         end
       end,
       message = { "Generating documentation...", "Comment" },
+      post_process = function(args)
+        local lines = args.lines
+        if #lines == 0 then
+          return lines
+        end
+
+        local start_idx, end_idx = 1, #lines
+
+        local first = lines[start_idx]:match("^%s*```")
+        if first then
+          start_idx = start_idx + 1
+        end
+
+        local last = lines[end_idx]:match("^%s*```%s*$")
+        if last then
+          end_idx = end_idx - 1
+        end
+
+        if not (first and last) then
+          start_idx, end_idx = 1, #lines
+        end
+
+        while start_idx <= end_idx and lines[start_idx]:match("^%s*$") do
+          start_idx = start_idx + 1
+        end
+        while end_idx >= start_idx and lines[end_idx]:match("^%s*$") do
+          end_idx = end_idx - 1
+        end
+
+        if start_idx > end_idx then
+          return {}
+        end
+
+        local target_indent
+        local target_line = args.end_line + 1
+        if target_line < vim.api.nvim_buf_line_count(args.buf) then
+          local target_text =
+            vim.api.nvim_buf_get_lines(args.buf, target_line, target_line + 1, false)[1]
+          if target_text then
+            target_indent = target_text:match("^%s*") or ""
+          end
+        end
+
+        if target_indent then
+          local min_indent = MAX_INDENT
+          for i = start_idx, end_idx do
+            local line = lines[i]
+            if line:match("%S") then
+              local indent = #(line:match("^%s*") or "")
+              min_indent = math.min(min_indent, indent)
+            end
+          end
+
+          if min_indent == MAX_INDENT then
+            min_indent = 0
+          end
+
+          local result = {}
+          for i = start_idx, end_idx do
+            local line = lines[i]
+            if line:match("^%s*$") then
+              table.insert(result, "")
+            else
+              local current_indent = line:match("^%s*") or ""
+              local relative_indent = current_indent:sub(min_indent + 1)
+              local content = line:match("^%s*(.*)$")
+              table.insert(result, target_indent .. relative_indent .. content)
+            end
+          end
+          return result
+        end
+
+        local result = {}
+        for i = start_idx, end_idx do
+          table.insert(result, lines[i])
+        end
+        return result
+      end,
     },
     cursor = "end", -- start or end
   }

@@ -141,13 +141,78 @@ function InsertStrategy:on_complete(control)
     end,
     handle_empty_toolset = function()
       if self._writer then
+        self:post_process()
         self._writer = nil
       end
-      vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
+      vim.defer_fn(function()
+        vim.api.nvim_buf_clear_namespace(
+          self.conversation.context.buf,
+          INSERT_NS,
+          0,
+          -1
+        )
+      end, 500)
       self.conversation:untrack_messages()
       control.finish()
     end,
   })
+end
+
+--- @private
+function InsertStrategy:post_process()
+  local post_process = self._options and self._options.post_process
+  local ctx = self.conversation.context
+  if post_process and ctx and vim.api.nvim_buf_is_loaded(ctx.buf) then
+    local srow, scol = self._writer.start_line, self._writer.start_col
+    local erow, ecol = self._writer.line, self._writer.column
+    local lines = vim.api.nvim_buf_get_text(ctx.buf, srow, scol, erow, ecol, {})
+    local ok, new_lines = pcall(post_process, {
+      lines = lines,
+      buf = ctx.buf,
+      start_line = srow,
+      start_col = scol,
+      end_line = erow,
+      end_col = ecol,
+      filetype = vim.bo[ctx.buf].filetype,
+    })
+
+    local changed = false
+    if ok and type(new_lines) == "table" and #new_lines ~= #lines then
+      vim.api.nvim_buf_set_text(ctx.buf, srow, scol, erow, ecol, new_lines)
+      changed = true
+    elseif ok and type(new_lines) == "table" then
+      for i = 1, #lines do
+        if lines[i] ~= new_lines[i] then
+          vim.api.nvim_buf_set_text(ctx.buf, srow, scol, erow, ecol, new_lines)
+          changed = true
+          break
+        end
+      end
+    end
+    if changed then
+      local new_erow, new_ecol
+      if #new_lines == 1 then
+        new_erow = srow
+        new_ecol = scol + #new_lines[1]
+      else
+        new_erow = srow + #new_lines - 1
+        new_ecol = #new_lines[#new_lines]
+      end
+
+      vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
+      vim.api.nvim_buf_set_extmark(
+        self.conversation.context.buf,
+        INSERT_NS,
+        math.max(0, srow - 1),
+        scol,
+        {
+          end_line = new_erow,
+          end_col = new_ecol,
+          hl_group = "SiaInsertPostProcess",
+        }
+      )
+    end
+  end
 end
 
 --- @return number start_line

@@ -11,6 +11,7 @@ local M = {}
 
 local highlight_groups = {
   SiaInsert = { link = "DiffAdd" },
+  SiaInsertPostProcess = { link = "DiffChange" },
   SiaReplace = { link = "DiffChange" },
   SiaProgress = { link = "NonText" },
   SiaModel = {},
