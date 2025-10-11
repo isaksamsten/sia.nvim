@@ -64,8 +64,12 @@ function DiffStrategy:on_error()
 end
 
 function DiffStrategy:on_start()
+  if not vim.api.nvim_buf_is_loaded(self.buf) then
+    return false
+  end
   self:set_abort_keymap(self.buf)
   self._writer = Writer:new(nil, self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
+  return true
 end
 
 --- @param content string
