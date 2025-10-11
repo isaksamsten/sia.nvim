@@ -167,8 +167,7 @@ requests.
 IMPORTANT: ALWAYS VIEW YOUR MEMORY DIRECTORY BEFORE DOING ANYTHING ELSE.
 MEMORY PROTOCOL:
 1. Use the `glob` tool with path `.sia/memory/` to check for earlier progress.
-2. Read relevant memories using the read tool
-3. ... (work on the task) ...
+2. ... (work on the task) ...
   - As you make progress, record status / progress / thoughts etc in your memory.
   - Use the edit, write and insert tools to update your memories.
 
