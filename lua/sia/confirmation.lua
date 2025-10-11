@@ -4,7 +4,7 @@ local win = nil
 local buf = nil
 
 --- Create or update the confirmation floating window
---- @param content string[]|fun(buf:integer, win:integer) Lines to display
+--- @param content string[]|fun(buf:integer):integer? Lines to display
 --- @param opts table?
 --- @return function clear_function Function to call to clear the confirmation
 function M.show(content, opts)
@@ -65,7 +65,12 @@ function M.show(content, opts)
       })
     end
   else
-    content(buf, win)
+    local height = content(buf)
+    if height then
+      vim.api.nvim_win_set_config(win, {
+        height = math.min(height, max_height),
+      })
+    end
   end
   vim.api.nvim_win_set_config(win, { focusable = false })
   vim.cmd("wincmd p")

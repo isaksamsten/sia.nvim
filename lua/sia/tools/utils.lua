@@ -215,7 +215,7 @@ end
 --- @class sia.NewToolExecuteUserInputOpts
 --- @field on_accept fun():nil
 --- @field must_confirm boolean?
---- @field preview fun(buf:integer, win:integer)?
+--- @field preview (fun(buf:integer):integer?)?
 
 --- @alias sia.NewToolExecuteUserInput fun(prompt: string, opts: sia.NewToolExecuteUserInputOpts):nil
 --- @alias sia.NewToolExecuteUserChoice fun(prompt: string, opts: sia.NewToolExecuteUserChoiceOpts):nil

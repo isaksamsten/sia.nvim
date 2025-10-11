@@ -179,20 +179,18 @@ one specific change with clear, unique context.
     end
 
     opts.user_input(edit_description, {
-      preview = function(preview_buf, preview_win)
+      preview = function(preview_buf)
         local unified_diff =
           vim.split(utils.create_unified_diff(args.old_string, args.new_string, {
             old_start = span[1],
             new_start = span[1],
           }) or "", "\n")
         if #unified_diff == 0 then
-          return
+          return nil
         end
         vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, unified_diff)
-        vim.api.nvim_win_set_config(preview_win, {
-          height = #unified_diff,
-        })
         vim.bo[preview_buf].ft = "diff"
+        return #unified_diff
       end,
       on_accept = function()
         local old_span_lines
