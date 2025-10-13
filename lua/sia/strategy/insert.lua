@@ -173,7 +173,6 @@ function InsertStrategy:post_process()
       start_col = scol,
       end_line = erow,
       end_col = ecol,
-      filetype = vim.bo[ctx.buf].filetype,
     })
 
     local changed = false
