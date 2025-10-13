@@ -158,6 +158,7 @@ return tool_utils.new_tool({
 
         local display_content
         if not is_memory then
+          local display_line
           if pattern and path then
             display_content = string.format(
               "📂 Found %d files matching `%s` in `%s`",
@@ -174,15 +175,14 @@ return tool_utils.new_tool({
           else
             display_content = string.format("📂 Found %d files", total_count)
           end
+          display_content = { display_line }
         else
-          display_content = string.format("🧠 Found %d memories", total_count)
+          display_content = nil
         end
 
         callback({
           content = limited_files,
-          display_content = {
-            display_content,
-          },
+          display_content = display_content,
         })
       end)
     end,
