@@ -357,7 +357,7 @@ end
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
 --- @field cursor ("start"|"end")?
 --- @field message [string, string]?
---- @field post_process (fun(args: { lines: string[], buf: integer, start_line: integer, start_col: integer, end_line: integer, end_col: integer, filetype: string }): string[])?
+--- @field post_process (fun(args: { lines: string[], buf: integer, start_line: integer, start_col: integer, end_line: integer, end_col: integer }): string[])?
 
 --- @class sia.config.Diff
 --- @field wo [string]?
