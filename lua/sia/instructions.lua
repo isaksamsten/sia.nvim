@@ -9,7 +9,6 @@ function M.current_buffer(global)
   return {
     {
       role = "user",
-      persistent = true,
       kind = "buffer",
       description = function(ctx)
         return string.format("%s", utils.get_filename(ctx.buf, ":."))
@@ -164,7 +163,6 @@ function M.visible_buffers()
   return {
     {
       role = "user",
-      persistent = true,
       hide = true,
       description = "Visible buffers in current tab with cursor positions",
       content = function(ctx)
