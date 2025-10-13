@@ -92,6 +92,11 @@ function InsertStrategy:on_progress(content)
   else
     vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
     self._writer = Writer:new(nil, context.buf, self._line - 1, self._col)
+    if self._padding_direction == "below" or self._padding_direction == "above" then
+      vim.api.nvim_buf_call(context.buf, function()
+        pcall(vim.cmd.undojoin)
+      end)
+    end
   end
   self._writer:append(content)
   vim.api.nvim_buf_set_extmark(
@@ -177,11 +182,17 @@ function InsertStrategy:post_process()
 
     local changed = false
     if ok and type(new_lines) == "table" and #new_lines ~= #lines then
+      vim.api.nvim_buf_call(self.conversation.context.buf, function()
+        pcall(vim.cmd.undojoin)
+      end)
       vim.api.nvim_buf_set_text(ctx.buf, srow, scol, erow, ecol, new_lines)
       changed = true
     elseif ok and type(new_lines) == "table" then
       for i = 1, #lines do
         if lines[i] ~= new_lines[i] then
+          vim.api.nvim_buf_call(self.conversation.context.buf, function()
+            pcall(vim.cmd.undojoin)
+          end)
           vim.api.nvim_buf_set_text(ctx.buf, srow, scol, erow, ecol, new_lines)
           changed = true
           break
