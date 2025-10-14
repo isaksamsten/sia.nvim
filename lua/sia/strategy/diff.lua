@@ -2,6 +2,7 @@ local common = require("sia.strategy.common")
 
 local Writer = common.Writer
 local Strategy = common.Strategy
+local Canvas = require("sia.canvas").Canvas
 
 local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 
@@ -56,20 +57,28 @@ function DiffStrategy:on_init()
     hl_group = "SiaReplace",
     end_line = context.pos[2],
   })
+  self._writer = Writer:new({
+    canvas = Canvas:new(self.buf, { temporary_text_hl = "SiaInsert" }),
+    line = vim.api.nvim_buf_line_count(self.buf) - 1,
+  })
+  self:set_abort_keymap(self.buf)
   return true
 end
 
 function DiffStrategy:on_error()
   vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
+  self._writer.canvas:clear_temporary_text()
+end
+
+function DiffStrategy:on_cancelled()
+  self:on_error()
 end
 
 function DiffStrategy:on_start()
   if not vim.api.nvim_buf_is_loaded(self.buf) then
     return false
   end
-  self:set_abort_keymap(self.buf)
-  self._writer =
-    Writer:new({ buf = self.buf, line = vim.api.nvim_buf_line_count(self.buf) - 1 })
   return true
 end
 
@@ -77,26 +86,18 @@ end
 function DiffStrategy:on_progress(content)
   if vim.api.nvim_buf_is_loaded(self.buf) then
     self._writer:append(content)
-    vim.api.nvim_buf_set_extmark(
-      self.buf,
-      DIFF_NS,
-      math.max(0, self._writer.start_line - 1),
-      self._writer.start_col,
-      {
-        end_line = self._writer.line,
-        end_col = self._writer.column,
-        hl_group = "SiaInsert",
-      }
-    )
     return true
   end
   return false
 end
 
 function DiffStrategy:on_complete(control)
-  self:del_abort_keymap(self.buf)
   self:execute_tools({
     handle_tools_completion = function(opts)
+      self.conversation:add_instruction({
+        role = "assistant",
+        content = self._writer.cache,
+      })
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -108,8 +109,21 @@ function DiffStrategy:on_complete(control)
               kind = tool_result.result.kind,
             },
           }, tool_result.result.context)
+
+          if
+            tool_result.result.display_content and tool_result.result.display_content[1]
+          then
+            self._writer:append(tool_result.result.display_content[1])
+          end
         end
+        -- Add reminder after tool calls to prevent explanatory text
+        self.conversation:add_instruction({
+          role = "user",
+          content = "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement.",
+        })
       end
+      self._writer:append_newline()
+      self._writer:reset_cache()
 
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool(control)
@@ -119,12 +133,15 @@ function DiffStrategy:on_complete(control)
     end,
     handle_empty_toolset = function()
       if vim.api.nvim_buf_is_loaded(self.buf) then
+        self:del_abort_keymap(self.buf)
         local context = self.conversation.context
         if not context then
           control.finish()
           self.conversation:untrack_messages()
           return
         end
+        self._writer.canvas:clear_temporary_text()
+        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, self._writer.cache)
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
         vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
         if

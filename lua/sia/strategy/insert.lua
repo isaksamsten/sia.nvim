@@ -114,13 +114,17 @@ function InsertStrategy:on_complete(control)
     return false
   end
 
-  self:del_abort_keymap(context.buf)
   self:execute_tools({
     handle_tools_completion = function(opts)
       if opts.results then
+        if self._writer then
+          self.conversation:add_instruction({
+            role = "assistant",
+            content = self._writer.cache,
+          })
+        end
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
-            { role = "assistant", content = self._writer.cache },
             { role = "assistant", tool_calls = { tool_result.tool } },
             {
               role = "tool",
@@ -130,10 +134,15 @@ function InsertStrategy:on_complete(control)
             },
           }, tool_result.result.context)
         end
+        self.conversation:add_instruction({
+          role = "user",
+          content = "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file.",
+        })
       end
-      self._writer:append_newline()
-
-      self._writer.cache = { "" } -- TODO: :reset()
+      if self._writer then
+        self._writer:append_newline()
+        self._writer:reset_cache()
+      end
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool(control)
       else
@@ -141,6 +150,7 @@ function InsertStrategy:on_complete(control)
       end
     end,
     handle_empty_toolset = function()
+      self:del_abort_keymap(context.buf)
       if self._writer then
         self._writer.canvas:clear_temporary_text()
         vim.api.nvim_buf_clear_namespace(

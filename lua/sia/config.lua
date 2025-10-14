@@ -569,6 +569,7 @@ M.options = {
             include_cursor = true,
           }),
         },
+        tools = { "grep", "read", "glob" },
       },
       diff = {
         mode = "diff",
@@ -585,6 +586,7 @@ M.options = {
             fences = false,
           }),
         },
+        tools = { "grep", "read", "glob" },
       },
       --- @type sia.config.Action
       chat = {

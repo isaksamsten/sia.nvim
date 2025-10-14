@@ -84,6 +84,10 @@ function Writer:append_newline()
   self.cache[#self.cache + 1] = ""
 end
 
+function Writer:reset_cache()
+  self.cache = { "" }
+end
+
 --- @param content string The string content to append to the buffer.
 function Writer:append(content)
   local index = 1
