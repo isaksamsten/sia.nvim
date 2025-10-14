@@ -22,7 +22,7 @@ function HiddenStrategy:new(conversation, options, cancellable)
   return obj
 end
 
-function HiddenStrategy:on_init()
+function HiddenStrategy:on_request_start()
   local context = self.conversation.context
   if context then
     vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
@@ -43,7 +43,7 @@ function HiddenStrategy:on_init()
   end
 end
 
-function HiddenStrategy:on_start()
+function HiddenStrategy:on_stream_started()
   local context = self.conversation.context
   if context then
     self:set_abort_keymap(context.buf)
@@ -61,11 +61,11 @@ function HiddenStrategy:on_error()
   self._options.callback(context, { "The operation failed" })
 end
 
-function HiddenStrategy:on_progress(content)
+function HiddenStrategy:on_content_received(content)
   self._writer:append(content)
 end
 
-function HiddenStrategy:on_complete(control)
+function HiddenStrategy:on_completed(control)
   local context = self.conversation.context
   if #self._writer.cache > 0 then
     self.conversation:add_instruction({

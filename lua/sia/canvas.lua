@@ -351,6 +351,7 @@ function Canvas:update_temporary_text()
     self.reasoning_extmark =
       vim.api.nvim_buf_set_extmark(buf, REASONING_NS, self.reasoning_line, 0, {
         virt_lines = virt_lines,
+        hl_eol = true,
         virt_lines_above = true,
       })
   end

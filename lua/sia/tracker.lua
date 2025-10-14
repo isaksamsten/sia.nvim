@@ -103,6 +103,28 @@ end
 --- Get the current user tick count for a buffer
 --- @param buf integer The buffer number to get the tick count for
 --- @return integer The current tick count, or 0 if the buffer is not tracked
+---
+--- Example usage:
+--- ```lua
+--- local tracker = require("sia.tracker")
+---
+--- -- Ensure buffer is tracked and get initial tick
+--- local buf = vim.api.nvim_get_current_buf()
+--- local initial_tick = tracker.ensure_tracked(buf)
+---
+--- -- Later, check if buffer has been modified by user
+--- local current_tick = tracker.user_tick(buf)
+--- if current_tick > initial_tick then
+---   print("Buffer has been modified by user")
+--- end
+---
+--- -- Use with non_tracked_edit to make programmatic changes
+--- tracker.non_tracked_edit(buf, function()
+---   vim.api.nvim_buf_set_lines(buf, 0, 1, false, {"-- Added comment"})
+--- end)
+--- -- Tick count remains unchanged after non_tracked_edit
+--- assert(tracker.user_tick(buf) == current_tick)
+--- ```
 function M.user_tick(buf)
   local tracker = M.tracked_buffers[buf]
   return tracker and tracker.tick or 0

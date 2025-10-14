@@ -17,10 +17,11 @@ config.options.defaults.model = "mock/model"
 local Conversation = {}
 Conversation.__index = Conversation
 function Conversation:new()
-  return setmetatable(
-    { _messages = { { role = "user", content = { "hi" } } }, model = "mock/model", tool_fn = {} },
-    self
-  )
+  return setmetatable({
+    _messages = { { role = "user", content = { "hi" } } },
+    model = "mock/model",
+    tool_fn = {},
+  }, self)
 end
 function Conversation:get_messages()
   return self._messages
@@ -48,27 +49,27 @@ function TestStrategy:new()
   return obj
 end
 
-function TestStrategy:on_init()
+function TestStrategy:on_request_start()
   return true
 end
-function TestStrategy:on_start()
+function TestStrategy:on_stream_started()
   return true
 end
 function TestStrategy:on_error()
   self.error = true
 end
-function TestStrategy:on_reasoning(s)
+function TestStrategy:on_reasoning_received(s)
   table.insert(self.reasoning, s)
   return true
 end
-function TestStrategy:on_progress(s)
+function TestStrategy:on_content_received(s)
   table.insert(self.contents, s)
   return true
 end
-function TestStrategy:on_tool_call(calls)
-  return common.Strategy.on_tool_call(self, calls)
+function TestStrategy:on_tool_call_received(calls)
+  return common.Strategy.on_tool_call_received(self, calls)
 end
-function TestStrategy:on_complete()
+function TestStrategy:on_completed()
   self.completed = true
 end
 

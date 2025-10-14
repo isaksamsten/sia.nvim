@@ -30,10 +30,9 @@ local STATUS_HL = {
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
 --- @field name string
---- @field _last_assistant_header_extmark integer?
---- @field _is_named boolean
---- @field _writer sia.Writer? the writer
---- @field _reasoning_writer sia.Writer? reasoning writer
+--- @field private assistant_extmark integer?
+--- @field private has_generated_name boolean
+--- @field private writer sia.Writer?
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -61,7 +60,7 @@ function ChatStrategy:new(conversation, options)
   vim.bo[buf].buftype = "nowrite"
   local obj = setmetatable(Strategy:new(conversation), self)
   obj.buf = buf
-  obj._writer = nil
+  obj.writer = nil
   obj.options = options
 
   --- @cast obj sia.ChatStrategy
@@ -79,9 +78,9 @@ function ChatStrategy:new(conversation, options)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").get_default_model()
   obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
-  obj._last_assistant_header_extmark = nil
+  obj.assistant_extmark = nil
 
-  obj._is_named = false
+  obj.has_generated_name = false
   local augroup = vim.api.nvim_create_augroup("SiaChat" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup,
@@ -94,7 +93,14 @@ function ChatStrategy:new(conversation, options)
   return obj
 end
 
+function ChatStrategy:buf_is_loaded()
+  return vim.api.nvim_buf_is_loaded(self.buf)
+end
+
 function ChatStrategy:redraw()
+  if not self:buf_is_loaded() then
+    return
+  end
   vim.bo[self.buf].modifiable = true
   self.canvas:clear()
   local model = self.conversation.model or require("sia.config").get_default_model()
@@ -102,87 +108,78 @@ function ChatStrategy:redraw()
   vim.bo[self.buf].modifiable = false
 end
 
-function ChatStrategy:on_init()
+function ChatStrategy:on_request_start()
   self.cancellable.is_cancelled = false
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    vim.bo[self.buf].modifiable = true
-    local model = self.conversation.model or require("sia.config").get_default_model()
-    self.canvas:render_messages({ self.conversation:last_message() }, model)
-    self._last_assistant_header_extmark = self.canvas:render_assistant_header(model)
-    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
-    return true
-  else
+  if not self:buf_is_loaded() then
     return false
   end
+  vim.bo[self.buf].modifiable = true
+  local model = self.conversation.model or require("sia.config").get_default_model()
+  self.canvas:render_messages({ self.conversation:last_message() }, model)
+  self.assistant_extmark = self.canvas:render_assistant_header(model)
+  return true
 end
 
-function ChatStrategy:on_continue()
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+function ChatStrategy:on_round_started()
+  if not self:buf_is_loaded() then
+    return false
   end
+  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+  return true
 end
 
 function ChatStrategy:on_error()
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:update_progress({
-      { "Something went wrong. Please try again.", "Error" },
-    })
+  if not self:buf_is_loaded() then
+    return
   end
+  self.canvas:update_progress({
+    { "Something went wrong. Please try again.", "Error" },
+  })
 end
 
-function ChatStrategy:on_start()
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:clear_temporary_text()
-    self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
-    self:set_abort_keymap(self.buf)
-    local line_count = vim.api.nvim_buf_line_count(self.buf)
-    if line_count > 0 then
-      local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
-      if last_line[1]:match("%S") then
-        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
-        line_count = line_count + 1
-      end
+function ChatStrategy:on_stream_started()
+  if not self:buf_is_loaded() then
+    return false
+  end
+  self.canvas:clear_temporary_text()
+  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+  self:set_abort_keymap(self.buf)
+  local line_count = vim.api.nvim_buf_line_count(self.buf)
+  if line_count > 0 then
+    local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
+    if last_line[1]:match("%S") then
+      vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+      line_count = line_count + 1
     end
-
-    self._writer = Writer:new({
-      canvas = self.canvas,
-      buf = self.buf,
-      line = line_count - 1,
-      column = 0,
-    })
-    self._reasoning_writer = Writer:new({
-      canvas = self.canvas,
-      line = line_count - 1,
-      column = 0,
-      persistent = false,
-    })
-    return true
   end
-  return false
-end
 
-function ChatStrategy:on_reasoning(_)
-  if not vim.api.nvim_buf_is_loaded(self.buf) then
-    return false
-  end
+  self.writer = Writer:new({
+    canvas = self.canvas,
+    buf = self.buf,
+    line = line_count - 1,
+    column = 0,
+  })
   return true
 end
 
-function ChatStrategy:on_progress(content)
-  if not vim.api.nvim_buf_is_loaded(self.buf) then
+function ChatStrategy:on_reasoning_received(_)
+  return self:buf_is_loaded()
+end
+
+function ChatStrategy:on_content_received(content)
+  if not self:buf_is_loaded() then
     return false
   end
-  self._writer:append(content)
+  self.writer:append(content)
   return true
 end
 
-function ChatStrategy:on_tool_call(tool)
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
-    return Strategy.on_tool_call(self, tool)
-  else
+function ChatStrategy:on_tool_call_received(tool)
+  if not self:buf_is_loaded() then
     return false
   end
+  self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
+  return Strategy.on_tool_call_received(self, tool)
 end
 
 function ChatStrategy:get_win()
@@ -190,36 +187,37 @@ function ChatStrategy:get_win()
 end
 
 function ChatStrategy:on_cancelled()
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:update_progress({
-      {
-        "Operation cancelled. Waiting for user...",
-        "DiagnosticWarn",
-      },
-    })
+  if not self:buf_is_loaded() then
+    return false
   end
+  self.canvas:update_progress({
+    {
+      "Operation cancelled. Waiting for user...",
+      "DiagnosticWarn",
+    },
+  })
 end
 
-function ChatStrategy:on_complete(control)
-  if not self._writer then
+function ChatStrategy:on_completed(control)
+  if not self.writer then
     control.finish()
     return
   end
 
-  if not vim.api.nvim_buf_is_loaded(self.buf) then
+  if not self:buf_is_loaded() then
     control.finish()
     return
   end
 
   self.canvas:scroll_to_bottom()
-  if #self._writer.cache > 0 and #self._writer.cache[1] > 0 then
-    self.conversation:add_instruction(
-      { role = "assistant", content = self._writer.cache },
-      nil
-    )
+  if not self.writer:is_empty() then
+    self.conversation:add_instruction({
+      role = "assistant",
+      content = self.writer.cache,
+    })
   end
   local handle_cleanup = function()
-    if not vim.api.nvim_buf_is_loaded(self.buf) then
+    if not self:buf_is_loaded() then
       control.finish()
       return
     end
@@ -227,10 +225,10 @@ function ChatStrategy:on_complete(control)
     self:del_abort_keymap(self.buf)
     self.canvas:clear_extmarks()
     if control.usage then
-      self.canvas:update_usage(control.usage, self._last_assistant_header_extmark)
+      self.canvas:update_usage(control.usage, self.assistant_extmark)
     end
     vim.bo[self.buf].modifiable = false
-    if not self._is_named then
+    if not self.has_generated_name then
       local config = require("sia.config")
       require("sia.assistant").execute_query({
         model = config.get_default_model("fast_model"),
@@ -254,7 +252,7 @@ spaces. Only output the name, nothing else.]],
           self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
           pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
         end
-        self._is_named = true
+        self.has_generated_name = true
         control.finish()
       end)
     else
@@ -309,7 +307,7 @@ spaces. Only output the name, nothing else.]],
       handle_cleanup()
     end,
   })
-  self._writer = nil
+  self.writer = nil
 end
 
 --- Get the ChatStrategy associated with buf

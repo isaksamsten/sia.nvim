@@ -88,6 +88,10 @@ function Writer:reset_cache()
   self.cache = { "" }
 end
 
+function Writer:is_empty()
+  return #self.cache == 0 or (#self.cache == 1 and self.cache[1] == "")
+end
+
 --- @param content string The string content to append to the buffer.
 function Writer:append(content)
   local index = 1
@@ -129,35 +133,35 @@ function Strategy:new(conversation, cancellable)
   return obj
 end
 
-function Strategy:on_init()
+function Strategy:on_request_start()
   return true
 end
 
-function Strategy:on_continue() end
+function Strategy:on_round_started() end
 
 --- Callback triggered when the strategy starts.
 --- @return boolean success
-function Strategy:on_start()
+function Strategy:on_stream_started()
   return true
 end
 
 --- Callback triggered on each streaming content.
 --- @param content string
 --- @return boolean success
-function Strategy:on_progress(content)
+function Strategy:on_content_received(content)
   return true
 end
 
 --- Callback triggered when the model is reasoning
 --- @param content string
 --- @return boolean success
-function Strategy:on_reasoning(content)
+function Strategy:on_reasoning_received(content)
   return true
 end
 
 --- Callback triggered when the strategy is completed.
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage? }
-function Strategy:on_complete(control) end
+function Strategy:on_completed(control) end
 
 function Strategy:on_error() end
 
@@ -193,7 +197,7 @@ end
 --- Collects a streaming function call response
 --- @param t table
 --- @return boolean success
-function Strategy:on_tool_call(t)
+function Strategy:on_tool_call_received(t)
   for i, v in ipairs(t) do
     local func = v["function"]
     --- Patch for gemini models

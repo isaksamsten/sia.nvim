@@ -72,7 +72,10 @@ T["strategy.chat"]["simple message"]["test correct output"] = function()
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
   eq("Hello World", strategy.conversation.messages[2]:get_content())
-  eq({ "/sia", "", "Hello World" }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq(
+    { "/sia", "", "Hello World" },
+    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  )
 end
 
 T["strategy.chat"]["simple message"]["test tracking context"] = function()
@@ -143,12 +146,10 @@ T["strategy.chat"]["is_busy flag management"]["is reset on init failure"] = func
   }, nil)
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
-  -- Close the buffer to force on_init to fail
   vim.api.nvim_buf_delete(strategy.buf, { force = true })
 
   assistant.execute_strategy(strategy)
 
-  -- Should be reset after on_init fails
   eq(strategy.is_busy, false)
 end
 
@@ -161,9 +162,8 @@ T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = fun
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   local buf = strategy.buf
 
-  -- Mock on_start to return false
-  local original_on_start = strategy.on_start
-  strategy.on_start = function(self)
+  local original_on_start = strategy.on_stream_started
+  strategy.on_stream_started = function(self)
     -- Delete buffer during on_start to simulate failure
     vim.api.nvim_buf_delete(buf, { force = true })
     return false
@@ -175,7 +175,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = fun
   eq(strategy.is_busy, false)
 
   -- Restore original method
-  strategy.on_start = original_on_start
+  strategy.on_stream_started = original_on_start
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = function()

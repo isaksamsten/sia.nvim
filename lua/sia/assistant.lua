@@ -156,7 +156,7 @@ function M.execute_strategy(strategy)
   local function execute_round(is_initial)
     local timer
     if is_initial then
-      if not strategy:on_init() then
+      if not strategy:on_request_start() then
         strategy.is_busy = false
         strategy:on_error()
         return
@@ -166,9 +166,8 @@ function M.execute_strategy(strategy)
         --- @diagnostic disable-next-line: undefined-field
         data = { buf = strategy.buf },
       })
-    else
-      strategy:on_continue()
     end
+    strategy:on_round_started()
 
     local query = strategy:get_query()
     local first_on_stdout = true
@@ -199,7 +198,7 @@ function M.execute_strategy(strategy)
             end
           end
           if not error_initialize then
-            if not strategy:on_start() then
+            if not strategy:on_stream_started() then
               strategy.is_busy = false
               strategy:on_error()
               vim.fn.jobstop(job_id)
@@ -239,17 +238,17 @@ function M.execute_strategy(strategy)
                   local delta = obj.choices[1].delta
                   if delta then
                     if delta.reasoning and delta.reasoning ~= "" then
-                      if not strategy:on_reasoning(delta.reasoning) then
+                      if not strategy:on_reasoning_received(delta.reasoning) then
                         vim.fn.jobstop(job_id)
                       end
                     end
                     if delta.content and delta.content ~= "" then
-                      if not strategy:on_progress(delta.content) then
+                      if not strategy:on_content_received(delta.content) then
                         vim.fn.jobstop(job_id)
                       end
                     end
                     if delta.tool_calls and delta.tool_calls ~= "" then
-                      if not strategy:on_tool_call(delta.tool_calls) then
+                      if not strategy:on_tool_call_received(delta.tool_calls) then
                         vim.fn.jobstop(job_id)
                       end
                     end
@@ -306,7 +305,7 @@ function M.execute_strategy(strategy)
           end
         end
 
-        strategy:on_complete({
+        strategy:on_completed({
           continue_execution = continue_execution,
           finish = finish,
           usage = usage,

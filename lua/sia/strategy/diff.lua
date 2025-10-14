@@ -7,10 +7,11 @@ local Canvas = require("sia.canvas").Canvas
 local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 
 --- @class sia.DiffStrategy : sia.Strategy
---- @field buf number
---- @field win number
+--- @field target_buf number
+--- @field target_win number
 --- @field options sia.config.Diff
---- @field private _writer sia.Writer?
+--- @field private context sia.Context
+--- @field private writer sia.Writer?
 local DiffStrategy = setmetatable({}, { __index = Strategy })
 DiffStrategy.__index = DiffStrategy
 
@@ -23,32 +24,38 @@ function DiffStrategy:new(conversation, options)
   local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_win_set_buf(win, buf)
 
-  obj.buf = buf
-  obj.win = win
+  if not conversation.context then
+    error("Can't initialize DiffStrategy")
+  end
+  obj.context = conversation.context
+  obj.target_buf = buf
+  obj.target_win = win
   obj.options = options
   return obj
 end
 
-function DiffStrategy:on_init()
-  local context = self.conversation.context
-  if
-    not context
-    or not vim.api.nvim_buf_is_loaded(context.buf)
-    or not vim.api.nvim_buf_is_loaded(self.buf)
-  then
+--- @private
+function DiffStrategy:buf_is_loaded()
+  return vim.api.nvim_buf_is_loaded(self.context.buf)
+    and vim.api.nvim_buf_is_loaded(self.target_buf)
+end
+
+function DiffStrategy:on_request_start()
+  if not self:buf_is_loaded() then
     return false
   end
-  vim.bo[self.buf].modifiable = true
-  vim.bo[self.buf].buftype = "nofile"
-  vim.bo[self.buf].ft = vim.bo[self.conversation.context.buf].ft
+  local context = self.context
+  vim.bo[context.buf].modifiable = false
+  vim.bo[self.target_buf].modifiable = true
+  vim.bo[self.target_buf].buftype = "nofile"
+  vim.bo[self.target_buf].ft = vim.bo[context.buf].ft
   for _, wo in ipairs(self.options.wo) do
-    vim.wo[self.win][wo] = vim.wo[self.conversation.context.win][wo]
+    vim.wo[self.target_win][wo] = vim.wo[context.win][wo]
   end
 
   local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
-  vim.api.nvim_buf_set_lines(self.buf, 0, 0, false, before)
+  vim.api.nvim_buf_set_lines(self.target_buf, 0, 0, false, before)
 
-  vim.api.nvim_buf_clear_namespace(context.buf, DIFF_NS, 0, -1)
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
     virt_lines = {
       { { "🤖 ", "Normal" }, { "Analyzing changes...", "SiaProgress" } },
@@ -57,46 +64,45 @@ function DiffStrategy:on_init()
     hl_group = "SiaReplace",
     end_line = context.pos[2],
   })
-  self._writer = Writer:new({
-    canvas = Canvas:new(self.buf, { temporary_text_hl = "SiaInsert" }),
-    line = vim.api.nvim_buf_line_count(self.buf) - 1,
+  self.writer = Writer:new({
+    canvas = Canvas:new(self.target_buf, { temporary_text_hl = "SiaInsert" }),
+    line = vim.api.nvim_buf_line_count(self.target_buf) - 1,
   })
-  self:set_abort_keymap(self.buf)
+  self:set_abort_keymap(self.target_buf)
   return true
 end
 
 function DiffStrategy:on_error()
-  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
-  vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
-  self._writer.canvas:clear_temporary_text()
+  if self:buf_is_loaded() then
+    vim.api.nvim_buf_clear_namespace(self.target_buf, DIFF_NS, 0, -1)
+    vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
+    self.writer.canvas:clear_temporary_text()
+  end
 end
 
 function DiffStrategy:on_cancelled()
   self:on_error()
 end
 
-function DiffStrategy:on_start()
-  if not vim.api.nvim_buf_is_loaded(self.buf) then
-    return false
-  end
-  return true
+function DiffStrategy:on_stream_started()
+  return self:buf_is_loaded()
 end
 
 --- @param content string
-function DiffStrategy:on_progress(content)
-  if vim.api.nvim_buf_is_loaded(self.buf) then
-    self._writer:append(content)
+function DiffStrategy:on_content_received(content)
+  if self:buf_is_loaded() then
+    self.writer:append(content)
     return true
   end
   return false
 end
 
-function DiffStrategy:on_complete(control)
+function DiffStrategy:on_completed(control)
   self:execute_tools({
     handle_tools_completion = function(opts)
       self.conversation:add_instruction({
         role = "assistant",
-        content = self._writer.cache,
+        content = self.writer.cache,
       })
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -110,20 +116,20 @@ function DiffStrategy:on_complete(control)
             },
           }, tool_result.result.context)
 
-          if
-            tool_result.result.display_content and tool_result.result.display_content[1]
-          then
-            self._writer:append(tool_result.result.display_content[1])
+          if tool_result.result.display_content then
+            for _, display in ipairs(tool_result.result.display_content) do
+              self.writer:append(display)
+            end
           end
         end
-        -- Add reminder after tool calls to prevent explanatory text
+
         self.conversation:add_instruction({
           role = "user",
           content = "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement.",
         })
       end
-      self._writer:append_newline()
-      self._writer:reset_cache()
+      self.writer:append_newline()
+      self.writer:reset_cache()
 
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool(control)
@@ -132,29 +138,28 @@ function DiffStrategy:on_complete(control)
       end
     end,
     handle_empty_toolset = function()
-      if vim.api.nvim_buf_is_loaded(self.buf) then
-        self:del_abort_keymap(self.buf)
-        local context = self.conversation.context
-        if not context then
-          control.finish()
-          self.conversation:untrack_messages()
-          return
-        end
-        self._writer.canvas:clear_temporary_text()
-        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, self._writer.cache)
-        local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
-        vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, after)
-        if
-          vim.api.nvim_win_is_valid(self.win) and vim.api.nvim_win_is_valid(context.win)
-        then
-          vim.api.nvim_set_current_win(self.win)
-          vim.cmd("diffthis")
-          vim.api.nvim_set_current_win(context.win)
-          vim.cmd("diffthis")
-        end
-        vim.bo[self.buf].modifiable = false
+      local context = self.context
+      local buf_loaded = vim.api.nvim_buf_is_loaded(self.target_buf)
+      local diff_win_valid = vim.api.nvim_win_is_valid(self.target_win)
+      local curr_win_valid = context and vim.api.nvim_win_is_valid(context.win)
+      if not (buf_loaded and diff_win_valid and curr_win_valid) then
+        control.finish()
+        self.conversation:untrack_messages()
+        return
       end
-      vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, DIFF_NS, 0, -1)
+
+      self:del_abort_keymap(self.target_buf)
+      self.writer.canvas:clear_temporary_text()
+      vim.api.nvim_buf_set_lines(self.target_buf, -1, -1, false, self.writer.cache)
+      local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
+      vim.api.nvim_buf_set_lines(self.target_buf, -1, -1, false, after)
+      vim.api.nvim_set_current_win(self.target_win)
+      vim.cmd("diffthis")
+      vim.api.nvim_set_current_win(context.win)
+      vim.cmd("diffthis")
+      vim.bo[self.target_buf].modifiable = false
+      vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
+      vim.bo[context.buf].modifiable = true
       self.conversation:untrack_messages()
       control.finish()
     end,
