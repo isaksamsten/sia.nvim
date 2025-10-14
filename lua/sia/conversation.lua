@@ -16,12 +16,12 @@ local tracker = require("sia.tracker")
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
 --- @class sia.Context
---- @field buf integer?
---- @field win integer?
---- @field pos [integer,integer]?
---- @field mode "n"|"v"?
+--- @field buf integer? buffer
+--- @field win integer? window
+--- @field pos [integer,integer]? 1-indexed
+--- @field mode "n"|"v"? normal or visual mode
 --- @field bang boolean?
---- @field cursor integer[]?
+--- @field cursor integer[]? 1-indexed
 --- @field tick integer?
 --- @field outdated_message string?
 --- @field clear_outdated_tool_input (fun(t: sia.ToolCall):sia.ToolCall)?
