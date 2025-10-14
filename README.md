@@ -127,6 +127,63 @@ Any range is supported. For example:
 - `:Sia write snake in pygame` - Opens a chat with the generated answer for the query.
 - `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
 
+## Interaction Modes
+
+Sia supports three primary interaction modes that determine how the AI
+assistant responds to your queries. Each mode is optimized for different
+workflows:
+
+### Chat Mode
+
+**Usage:** `:Sia [query]` or `:Sia /prompt [query]`
+
+Chat mode opens a conversational interface where you can interact with the AI assistant. The assistant can use tools (read files, search code, execute commands) and provide explanations, suggestions, and guidance. This mode is ideal for:
+
+- Exploratory conversations about your codebase
+- Getting explanations and suggestions
+- Multi-step problem solving where the AI needs to gather information
+- Code reviews and architectural discussions
+
+The chat window persists across queries, maintaining conversation history and
+allowing you to build on previous exchanges.
+
+After the AI makes suggestions, you can navigate through changes with
+`]c`/`[c]` and accept/reject them individually with `ga`/`gx` or in bulk with
+`:SiaAccept!`/`:SiaReject!`. See the [Change Management](#change-management)
+section for more details.
+
+### Insert Mode
+
+**Usage:** `:Sia! [query]` (without a range)
+
+Insert mode generates text and inserts it directly at the cursor position. The AI's response is inserted as-is without any conversational wrapper. This mode is ideal for:
+
+- Code generation at the current cursor position
+- Writing boilerplate code
+- Generating documentation or comments
+- Quick text generation tasks
+
+The AI is instructed to output only the content to be inserted, without explanations or markdown formatting.
+
+### Diff Mode
+
+**Usage:** `:'<,'>Sia! [query]` (with a range or visual selection)
+
+Diff mode shows AI-suggested changes in a side-by-side diff view. The assistant analyzes your selected code and proposes modifications, which you can then accept or reject selectively. This mode is ideal for:
+
+- Refactoring existing code
+- Fixing bugs with suggested patches
+- Applying style or formatting changes
+- Making targeted improvements to selected code
+
+### Choosing the Right Mode
+
+- Use **chat mode** when you need to explore, discuss, or get guidance
+- Use **insert mode** when you want generated code at your cursor
+- Use **diff mode** when you want to modify existing code with AI suggestions
+
+You can customize the default behavior and create custom actions that use any of these modes. See [Customizing Actions](#customizing-actions) for details.
+
 ## Tools
 
 Sia comes with a comprehensive set of tools that enable the AI assistant to
