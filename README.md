@@ -165,6 +165,8 @@ Insert mode generates text and inserts it directly at the cursor position. The A
 
 The AI is instructed to output only the content to be inserted, without explanations or markdown formatting.
 
+https://github.com/user-attachments/assets/84a412d4-ff42-437a-86cc-bdb8e9eb85e9
+
 ### Diff Mode
 
 **Usage:** `:'<,'>Sia! [query]` (with a range or visual selection)
@@ -175,6 +177,8 @@ Diff mode shows AI-suggested changes in a side-by-side diff view. The assistant 
 - Fixing bugs with suggested patches
 - Applying style or formatting changes
 - Making targeted improvements to selected code
+
+https://github.com/user-attachments/assets/c8a5f031-b032-4a04-96c5-a6407fe43545
 
 ### Choosing the Right Mode
 
