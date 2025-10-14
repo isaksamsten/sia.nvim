@@ -72,8 +72,7 @@ WHAT NOT TO OUTPUT:
 - Any executable code whatsoever
 
 <tool_calling>
-Use tool calls if required to document the function or class. NEVER OUTPUT ANYTHING
-OTHER WHILE CALLING TOOLS.
+Use tool calls if required to document the function or class.
 </tool_calling>
 
 <tools>
