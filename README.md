@@ -563,6 +563,8 @@ Sia includes these built-in actions:
 - **doc**: Insert documentation for the function or class under cursor
   - Example: `Sia /doc`
 
+https://github.com/user-attachments/assets/99cc381d-13bc-4729-9b8b-7d1bc719e143
+
 ### Customizing Actions
 
 See `lua/sia/actions.lua` for example actions. Here is a short snippet with a
