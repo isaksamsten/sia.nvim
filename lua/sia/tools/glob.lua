@@ -6,6 +6,13 @@ local MAX_FILES_SORT = 1000
 
 return tool_utils.new_tool({
   name = "glob",
+  read_only = true,
+  system_prompt = [[- Find files matching glob patterns in the current project
+- Supports standard glob patterns like `*.lua`, `**/*.py`, `src/**`
+- Can search within specific directories using the path parameter
+- Returns up to 100 files, sorted by modification time (newest first)
+- Use this for file discovery, not for reading file contents
+- For reading files, use the read tool after finding them with glob]],
   description = "Find files matching a glob pattern in the current project",
   message = "Searching for files...",
   parameters = {
