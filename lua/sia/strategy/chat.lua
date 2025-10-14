@@ -132,7 +132,7 @@ end
 
 function ChatStrategy:on_start()
   if vim.api.nvim_buf_is_loaded(self.buf) then
-    self.canvas:clear_reasoning()
+    self.canvas:clear_temporary_text()
     self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
     self:set_abort_keymap(self.buf)
     local line_count = vim.api.nvim_buf_line_count(self.buf)
@@ -144,8 +144,18 @@ function ChatStrategy:on_start()
       end
     end
 
-    self._writer = Writer:new(self.canvas, self.buf, line_count - 1, 0)
-    self._reasoning_writer = Writer:new(self.canvas, nil, line_count - 1, 0, false)
+    self._writer = Writer:new({
+      canvas = self.canvas,
+      buf = self.buf,
+      line = line_count - 1,
+      column = 0,
+    })
+    self._reasoning_writer = Writer:new({
+      canvas = self.canvas,
+      line = line_count - 1,
+      column = 0,
+      persistent = false,
+    })
     return true
   end
   return false

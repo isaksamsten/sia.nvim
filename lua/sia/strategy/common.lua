@@ -19,23 +19,27 @@ local M = {}
 local Writer = {}
 Writer.__index = Writer
 
---- @param canvas sia.Canvas?
---- @param buf integer?
---- @param line integer?
---- @param column integer?
---- @param persistent boolean?
-function Writer:new(canvas, buf, line, column, persistent)
-  if persistent == nil then
-    persistent = true
+--- @class sia.WriterOpts
+--- @field canvas sia.Canvas?
+--- @field buf integer?
+--- @field line integer? 0-indexed
+--- @field column integer? 0-indexed
+--- @field persistent boolean?
+
+--- @param opts sia.WriterOpts?
+function Writer:new(opts)
+  opts = opts or {}
+  if opts.persistent == nil then
+    opts.persistent = opts.buf ~= nil
   end
   local obj = {
-    canvas = canvas,
-    buf = buf,
-    start_line = line or 0,
-    start_col = column or 0,
-    line = line or 0,
-    column = column or 0,
-    persistent = persistent,
+    canvas = opts.canvas,
+    buf = opts.buf,
+    start_line = opts.line or 0,
+    start_col = opts.column or 0,
+    line = opts.line or 0,
+    column = opts.column or 0,
+    persistent = opts.persistent,
     cache = {},
   }
   obj.cache[1] = ""
@@ -49,7 +53,7 @@ function Writer:append_substring(substring)
     if self.persistent then
       self.canvas:append_text_at(self.line, self.column, substring)
     else
-      self.canvas:append_text_extmark_at(self.line, self.column, substring)
+      self.canvas:append_temporary_text_at(self.line, self.column, substring)
     end
   elseif self.buf then
     vim.api.nvim_buf_set_text(
@@ -70,7 +74,7 @@ function Writer:append_newline()
     if self.persistent then
       self.canvas:append_newline_at(self.line)
     else
-      self.canvas:append_newline_extmark_at(self.line)
+      self.canvas:append_temporary_newline_at(self.line)
     end
   elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })

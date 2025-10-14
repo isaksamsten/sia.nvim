@@ -318,6 +318,7 @@ end
 --- @class sia.Conversation
 --- @field context sia.Context?
 --- @field messages sia.Message[]
+--- @field no_supersede boolean?
 --- @field tools sia.config.Tool[]?
 --- @field model string?
 --- @field temperature number?
@@ -631,7 +632,7 @@ function Conversation:to_query(kind)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
-      if m.superseded then
+      if not self.no_supersede and m.superseded then
         return false
       end
 

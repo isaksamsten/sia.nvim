@@ -71,6 +71,15 @@ WHAT NOT TO OUTPUT:
 - Class declarations (e.g., "class MyClass:")
 - Any executable code whatsoever
 
+<tool_calling>
+Use tool calls if required to document the function or class. NEVER OUTPUT ANYTHING
+OTHER WHILE CALLING TOOLS.
+</tool_calling>
+
+<tools>
+{{tool_instructions}}
+</tools>
+
 Requirements:
 
 1. NEVER output the function declaration or implementation. ONLY documentation.
@@ -98,6 +107,10 @@ Requirements:
     },
     capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
     mode = "insert",
+    tools = {
+      "grep",
+      "read",
+    },
     insert = {
       placement = function()
         local ft = vim.bo.ft

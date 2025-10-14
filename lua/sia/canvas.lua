@@ -5,23 +5,29 @@ local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
 local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 
+--- @class sia.CanvasOpts
+--- @field temporary_text_hl string?
+
 --- @class sia.Canvas
 --- @field buf integer
 --- @field progress_extmark integer?
 --- @field reasoning_extmark integer?
 --- @field reasoning_content string[]
 --- @field reasoning_line integer?
+--- @field opts sia.CanvasOpts
 local Canvas = {}
 Canvas.__index = Canvas
 
 --- @param buf integer
-function Canvas:new(buf)
+--- @param opts sia.CanvasOpts?
+function Canvas:new(buf, opts)
   local obj = {
     buf = buf,
     progress_extmark = nil,
     reasoning_extmark = nil,
     reasoning_content = {},
     reasoning_line = nil,
+    opts = opts or {},
   }
   setmetatable(obj, self)
   return obj
@@ -61,7 +67,7 @@ function Canvas:append_tool_result(content)
   })
 end
 
-function Canvas:clear_reasoning()
+function Canvas:clear_temporary_text()
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   self.reasoning_extmark = nil
   self.reasoning_content = {}
@@ -298,7 +304,7 @@ function Canvas:append_newline_at(line)
   end
 end
 
-function Canvas:append_text_extmark_at(line, _, text)
+function Canvas:append_temporary_text_at(line, _, text)
   if self.reasoning_line == nil then
     self.reasoning_line = line
   end
@@ -310,20 +316,20 @@ function Canvas:append_text_extmark_at(line, _, text)
   local current_line = #self.reasoning_content
   self.reasoning_content[current_line] = self.reasoning_content[current_line] .. text
 
-  self:_update_reasoning_extmark()
+  self:update_temporary_text()
 end
 
-function Canvas:append_newline_extmark_at(line)
+function Canvas:append_temporary_newline_at(line)
   if self.reasoning_line == nil then
     self.reasoning_line = line
   end
 
   table.insert(self.reasoning_content, "")
 
-  self:_update_reasoning_extmark()
+  self:update_temporary_text()
 end
 
-function Canvas:_update_reasoning_extmark()
+function Canvas:update_temporary_text()
   local buf = self.buf
   if not vim.api.nvim_buf_is_loaded(buf) or self.reasoning_line == nil then
     return
@@ -335,7 +341,10 @@ function Canvas:_update_reasoning_extmark()
 
   local virt_lines = {}
   for _, content_line in ipairs(self.reasoning_content) do
-    table.insert(virt_lines, { { content_line, "NonText" } })
+    table.insert(
+      virt_lines,
+      { { content_line, self.opts.temporary_text_hl or "NonText" } }
+    )
   end
 
   if #virt_lines > 0 then

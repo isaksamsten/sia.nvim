@@ -68,7 +68,8 @@ function DiffStrategy:on_start()
     return false
   end
   self:set_abort_keymap(self.buf)
-  self._writer = Writer:new(nil, self.buf, vim.api.nvim_buf_line_count(self.buf) - 1, 0)
+  self._writer =
+    Writer:new({ buf = self.buf, line = vim.api.nvim_buf_line_count(self.buf) - 1 })
   return true
 end
 

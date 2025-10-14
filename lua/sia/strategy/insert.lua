@@ -2,6 +2,7 @@ local common = require("sia.strategy.common")
 
 local Writer = common.Writer
 local Strategy = common.Strategy
+local Canvas = require("sia.canvas").Canvas
 
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 
@@ -18,9 +19,9 @@ InsertStrategy.__index = InsertStrategy
 --- @param options sia.config.Insert
 function InsertStrategy:new(conversation, options)
   local obj = setmetatable(Strategy:new(conversation), self)
+  obj.conversation.no_supersede = true
   obj._options = options
   obj._writer = nil
-
   return obj
 end
 
@@ -30,11 +31,17 @@ function InsertStrategy:on_init()
     return false
   end
 
-  local line, padding_direction = self:_get_insert_placement()
+  local line, padding_direction = self:compute_placement()
   self._line = line
   self._padding_direction = padding_direction
   if padding_direction == "below" then
     self._line = line + 1
+  end
+  if self._padding_direction == "below" or self._padding_direction == "above" then
+    self._col = 0
+  else
+    -- TODO: account for cursor column if "cursor"
+    self._col = #vim.api.nvim_buf_get_lines(context.buf, line - 1, line, false)[1]
   end
   local message = self._options.message or { "Generating response...", "SiaProgress" }
   vim.api.nvim_buf_set_extmark(
@@ -47,6 +54,7 @@ function InsertStrategy:on_init()
       virt_lines_above = self._line - 1 > 0,
     }
   )
+  self:set_abort_keymap(context.buf)
   return true
 end
 
@@ -56,19 +64,6 @@ function InsertStrategy:on_start()
   if not context or not vim.api.nvim_buf_is_loaded(context.buf) then
     return false
   end
-  if self._padding_direction == "below" or self._padding_direction == "above" then
-    vim.api.nvim_buf_set_lines(
-      context.buf,
-      self._line - 1,
-      self._line - 1,
-      false,
-      { "" }
-    )
-  end
-  local content =
-    vim.api.nvim_buf_get_lines(context.buf, self._line - 1, self._line, false)
-  self._cal = #content
-  self:set_abort_keymap(context.buf)
   return true
 end
 
@@ -78,6 +73,11 @@ function InsertStrategy:on_error()
     return false
   end
   vim.api.nvim_buf_clear_namespace(context.buf, INSERT_NS, 0, -1)
+  self._writer.canvas:clear_temporary_text()
+end
+
+function InsertStrategy:on_cancelled()
+  self:on_error()
 end
 
 function InsertStrategy:on_progress(content)
@@ -91,7 +91,11 @@ function InsertStrategy:on_progress(content)
     end)
   else
     vim.api.nvim_buf_clear_namespace(self.conversation.context.buf, INSERT_NS, 0, -1)
-    self._writer = Writer:new(nil, context.buf, self._line - 1, self._col)
+    self._writer = Writer:new({
+      line = self._line - 1,
+      col = self._col,
+      canvas = Canvas:new(context.buf, { temporary_text_hl = "SiaInsert" }),
+    })
     if self._padding_direction == "below" or self._padding_direction == "above" then
       vim.api.nvim_buf_call(context.buf, function()
         pcall(vim.cmd.undojoin)
@@ -99,17 +103,6 @@ function InsertStrategy:on_progress(content)
     end
   end
   self._writer:append(content)
-  vim.api.nvim_buf_set_extmark(
-    context.buf,
-    INSERT_NS,
-    math.max(0, self._writer.start_line - 1),
-    self._writer.start_col,
-    {
-      end_line = self._writer.line,
-      end_col = self._writer.column,
-      hl_group = "SiaInsert",
-    }
-  )
   return true
 end
 
@@ -127,6 +120,7 @@ function InsertStrategy:on_complete(control)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
+            { role = "assistant", content = self._writer.cache },
             { role = "assistant", tool_calls = { tool_result.tool } },
             {
               role = "tool",
@@ -137,7 +131,9 @@ function InsertStrategy:on_complete(control)
           }, tool_result.result.context)
         end
       end
+      self._writer:append_newline()
 
+      self._writer.cache = { "" } -- TODO: :reset()
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool(control)
       else
@@ -146,7 +142,51 @@ function InsertStrategy:on_complete(control)
     end,
     handle_empty_toolset = function()
       if self._writer then
-        self:post_process()
+        self._writer.canvas:clear_temporary_text()
+        vim.api.nvim_buf_clear_namespace(
+          self.conversation.context.buf,
+          INSERT_NS,
+          0,
+          -1
+        )
+        if self._padding_direction == "below" or self._padding_direction == "above" then
+          vim.api.nvim_buf_set_lines(
+            context.buf,
+            self._line - 1,
+            self._line - 1,
+            false,
+            { "" }
+          )
+        end
+        local content = self._writer.cache
+        vim.api.nvim_buf_set_text(
+          context.buf,
+          self._line - 1,
+          self._col,
+          self._line - 1,
+          self._col,
+          content
+        )
+        local end_row = self._line + #content - 1
+        local end_col = #content[#content]
+        vim.api.nvim_buf_set_extmark(
+          context.buf,
+          INSERT_NS,
+          self._line - 1,
+          self._col,
+          {
+            end_line = end_row - 1,
+            end_col = end_col,
+            hl_group = "SiaInsert",
+          }
+        )
+        self:post_process(
+          self._writer.cache,
+          self._line - 1,
+          self._col,
+          end_row - 1,
+          end_col
+        )
         self._writer = nil
       end
       vim.defer_fn(function()
@@ -164,13 +204,10 @@ function InsertStrategy:on_complete(control)
 end
 
 --- @private
-function InsertStrategy:post_process()
+function InsertStrategy:post_process(lines, srow, scol, erow, ecol)
   local post_process = self._options and self._options.post_process
   local ctx = self.conversation.context
   if post_process and ctx and vim.api.nvim_buf_is_loaded(ctx.buf) then
-    local srow, scol = self._writer.start_line, self._writer.start_col
-    local erow, ecol = self._writer.line, self._writer.column
-    local lines = vim.api.nvim_buf_get_text(ctx.buf, srow, scol, erow, ecol, {})
     local ok, new_lines = pcall(post_process, {
       lines = lines,
       buf = ctx.buf,
@@ -225,9 +262,10 @@ function InsertStrategy:post_process()
   end
 end
 
+--- @private
 --- @return number start_line
 --- @return string padding_direction
-function InsertStrategy:_get_insert_placement()
+function InsertStrategy:compute_placement()
   local context = self.conversation.context
   local start_line, end_line = context.pos[1], context.pos[2]
   local padding_direction
