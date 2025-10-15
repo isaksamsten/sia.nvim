@@ -45,6 +45,9 @@ function InsertStrategy:on_request_start()
   end
   if self.padding_direction == "below" or self.padding_direction == "above" then
     self.start_col = 0
+    vim.api.nvim_buf_call(self.context.buf, function()
+      pcall(vim.cmd.undojoin)
+    end)
   else
     -- TODO: account for cursor column if "cursor"
     self.start_col =
@@ -61,27 +64,18 @@ function InsertStrategy:on_request_start()
       virt_lines_above = self.start_row - 1 > 0,
     }
   )
-  self:set_abort_keymap(self.context.buf)
-  return true
-end
-
-function InsertStrategy:on_stream_started()
-  if not self:is_buf_loaded() then
-    return false
-  end
-
   self.writer = Writer:new({
     line = self.start_row - 1,
     col = self.start_col,
     canvas = Canvas:new(self.context.buf, { temporary_text_hl = "SiaInsert" }),
   })
-  if self.padding_direction == "below" or self.padding_direction == "above" then
-    vim.api.nvim_buf_call(self.context.buf, function()
-      pcall(vim.cmd.undojoin)
-    end)
-  end
 
+  self:set_abort_keymap(self.context.buf)
   return true
+end
+
+function InsertStrategy:on_stream_started()
+  return self:is_buf_loaded()
 end
 
 function InsertStrategy:on_error()
@@ -121,8 +115,6 @@ function InsertStrategy:on_completed(control)
           role = "assistant",
           content = self.writer.cache,
         })
-        self.writer:append_newline()
-        self.writer:reset_cache()
       end
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -135,6 +127,7 @@ function InsertStrategy:on_completed(control)
               kind = tool_result.result.kind,
             },
           }, tool_result.result.context)
+          self.writer:append_newline()
           if tool_result.result.display_content then
             for _, display in ipairs(tool_result.result.display_content) do
               self.writer:append(display)
@@ -145,6 +138,11 @@ function InsertStrategy:on_completed(control)
           role = "user",
           content = "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file.",
         })
+      end
+
+      if not self.writer:is_empty() then
+        self.writer:append_newline()
+        self.writer:reset_cache()
       end
 
       if opts.cancelled then
