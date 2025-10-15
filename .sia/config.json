@@ -1,11 +1,40 @@
 {
   "model": "copilot/gpt-4.1",
   "auto_continue": true,
+  "context": {
+    "max_tool": 40,
+    "keep": 5,
+    "clear_input": true
+  },
   "permission": {
     "deny": {
       "bash": {
         "arguments": {
           "command": ["^rm", "&&%s*rm"]
+        }
+      }
+    },
+    "ask": {
+      "bash": {
+        "arguments": {
+          "command": [
+            "&&",
+            "||",
+            ";",
+            "%$",
+            "%(",
+            "%)",
+            "`",
+            "%$%(",
+            "%|",
+            "%>",
+            "%>>",
+            "%<",
+            "2>",
+            "2>>",
+            "&>",
+            "&>>"
+          ]
         }
       }
     },
