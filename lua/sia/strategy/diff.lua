@@ -75,7 +75,6 @@ end
 function DiffStrategy:on_error()
   if self:buf_is_loaded() then
     vim.api.nvim_buf_clear_namespace(self.target_buf, DIFF_NS, 0, -1)
-    vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
     self.writer.canvas:clear_temporary_text()
   end
 end
@@ -158,7 +157,6 @@ function DiffStrategy:on_completed(control)
       vim.api.nvim_set_current_win(context.win)
       vim.cmd("diffthis")
       vim.bo[self.target_buf].modifiable = false
-      vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
       vim.bo[context.buf].modifiable = true
       self.conversation:untrack_messages()
       control.finish()
