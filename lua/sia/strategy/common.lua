@@ -7,7 +7,7 @@ local M = {}
 --- @field cancelled boolean?
 
 --- Write text to a buffer via a canvas.
---- @class sia.Writer
+--- @class sia.StreamRenderer
 --- @field canvas sia.Canvas?
 --- @field buf integer?
 --- @field start_line integer
@@ -16,18 +16,18 @@ local M = {}
 --- @field column integer
 --- @field persistent boolean
 --- @field cache string[]
-local Writer = {}
-Writer.__index = Writer
+local StreamRenderer = {}
+StreamRenderer.__index = StreamRenderer
 
---- @class sia.WriterOpts
+--- @class sia.StreamRendererOpts
 --- @field canvas sia.Canvas?
 --- @field buf integer?
 --- @field line integer? 0-indexed
 --- @field column integer? 0-indexed
 --- @field persistent boolean?
 
---- @param opts sia.WriterOpts?
-function Writer:new(opts)
+--- @param opts sia.StreamRendererOpts?
+function StreamRenderer:new(opts)
   opts = opts or {}
   if opts.persistent == nil then
     opts.persistent = opts.buf ~= nil
@@ -48,7 +48,7 @@ function Writer:new(opts)
 end
 
 --- @param substring string
-function Writer:append_substring(substring)
+function StreamRenderer:append_substring(substring)
   if self.canvas then
     if self.persistent then
       self.canvas:append_text_at(self.line, self.column, substring)
@@ -69,7 +69,7 @@ function Writer:append_substring(substring)
   self.column = self.column + #substring
 end
 
-function Writer:append_newline()
+function StreamRenderer:append_newline()
   if self.canvas then
     if self.persistent then
       self.canvas:append_newline_at(self.line)
@@ -84,16 +84,16 @@ function Writer:append_newline()
   self.cache[#self.cache + 1] = ""
 end
 
-function Writer:reset_cache()
+function StreamRenderer:reset_cache()
   self.cache = { "" }
 end
 
-function Writer:is_empty()
+function StreamRenderer:is_empty()
   return #self.cache == 0 or (#self.cache == 1 and self.cache[1] == "")
 end
 
 --- @param content string The string content to append to the buffer.
-function Writer:append(content)
+function StreamRenderer:append(content)
   local index = 1
   while index <= #content do
     local newline = content:find("\n", index) or (#content + 1)
@@ -370,11 +370,10 @@ function Strategy:execute_tools(opts)
             )
           end
         else
-          on_tool_finished(
-            tool.index,
-            tool.tool_call,
-            { content = { "Tool is not a function" }, kind = "failed" }
-          )
+          on_tool_finished(tool.index, tool.tool_call, {
+            content = { "Tool is not a function. Try without parallel tool calls." },
+            kind = "failed",
+          })
         end
       end)
     end
@@ -453,4 +452,4 @@ function Strategy:del_abort_keymap(buf)
     pcall(vim.api.nvim_buf_del_keymap, buf, "n", "x")
   end
 end
-return { Strategy = Strategy, Writer = Writer }
+return { Strategy = Strategy, StreamRenderer = StreamRenderer }

@@ -1,6 +1,6 @@
 local common = require("sia.strategy.common")
 
-local Writer = common.Writer
+local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 local Canvas = require("sia.canvas").Canvas
 
@@ -10,7 +10,7 @@ local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 --- @field conversation sia.Conversation
 --- @field private context sia.Context
 --- @field private options sia.config.Insert
---- @field private writer sia.Writer?
+--- @field private writer sia.StreamRenderer?
 local InsertStrategy = setmetatable({}, { __index = Strategy })
 InsertStrategy.__index = InsertStrategy
 
@@ -64,7 +64,7 @@ function InsertStrategy:on_request_start()
       virt_lines_above = self.start_row - 1 > 0,
     }
   )
-  self.writer = Writer:new({
+  self.writer = StreamRenderer:new({
     line = self.start_row - 1,
     col = self.start_col,
     canvas = Canvas:new(self.context.buf, { temporary_text_hl = "SiaInsert" }),

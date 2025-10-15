@@ -1,6 +1,6 @@
 local common = require("sia.strategy.common")
 
-local Writer = common.Writer
+local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 
 local HIDDEN_NS = vim.api.nvim_create_namespace("SiaHiddenStrategy")
@@ -8,7 +8,7 @@ local HIDDEN_NS = vim.api.nvim_create_namespace("SiaHiddenStrategy")
 --- @class sia.HiddenStrategy : sia.Strategy
 --- @field conversation sia.Conversation
 --- @field private _options sia.config.Hidden
---- @field private _writer sia.Writer?
+--- @field private _writer sia.StreamRenderer?
 local HiddenStrategy = setmetatable({}, { __index = Strategy })
 HiddenStrategy.__index = HiddenStrategy
 
@@ -48,7 +48,7 @@ function HiddenStrategy:on_stream_started()
   if context then
     self:set_abort_keymap(context.buf)
   end
-  self._writer = Writer:new()
+  self._writer = StreamRenderer:new()
   return true
 end
 

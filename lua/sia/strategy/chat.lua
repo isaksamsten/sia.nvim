@@ -1,6 +1,6 @@
 local common = require("sia.strategy.common")
 
-local Writer = common.Writer
+local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 
 local STATUS_ICONS = {
@@ -32,7 +32,7 @@ local STATUS_HL = {
 --- @field name string
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
---- @field private writer sia.Writer?
+--- @field private writer sia.StreamRenderer?
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -153,7 +153,7 @@ function ChatStrategy:on_stream_started()
     end
   end
 
-  self.writer = Writer:new({
+  self.writer = StreamRenderer:new({
     canvas = self.canvas,
     buf = self.buf,
     line = line_count - 1,

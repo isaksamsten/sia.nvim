@@ -517,6 +517,7 @@ local add_commands = {
 function M.setup(options)
   config.setup(options)
   require("sia.mappings").setup()
+  require("sia.diff").setup()
   set_highlight_groups()
 
   vim.api.nvim_create_user_command("SiaAccept", function(args)

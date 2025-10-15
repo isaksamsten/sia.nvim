@@ -1,6 +1,6 @@
 local common = require("sia.strategy.common")
 
-local Writer = common.Writer
+local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 local Canvas = require("sia.canvas").Canvas
 
@@ -11,7 +11,7 @@ local DIFF_NS = vim.api.nvim_create_namespace("SiaDiffStrategy")
 --- @field target_win number
 --- @field options sia.config.Diff
 --- @field private context sia.Context
---- @field private writer sia.Writer?
+--- @field private writer sia.StreamRenderer?
 local DiffStrategy = setmetatable({}, { __index = Strategy })
 DiffStrategy.__index = DiffStrategy
 
@@ -64,7 +64,7 @@ function DiffStrategy:on_request_start()
     hl_group = "SiaReplace",
     end_line = context.pos[2],
   })
-  self.writer = Writer:new({
+  self.writer = StreamRenderer:new({
     canvas = Canvas:new(self.target_buf, { temporary_text_hl = "SiaInsert" }),
     line = vim.api.nvim_buf_line_count(self.target_buf) - 1,
   })
