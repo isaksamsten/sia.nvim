@@ -504,57 +504,52 @@ local function get_hunk_highlights(baseline, max_lines, hunks)
     if hunk.new_count > 0 then
       local start_row = hunk.new_start
       local end_row = start_row + hunk.new_count
-      if start_row <= max_lines then
-        if end_row > max_lines then
-          end_row = max_lines
+      local is_change = hunk.old_count > 0
+      local hl_group = is_change and "SiaDiffChange" or "SiaDiffAdd"
+      local sign_hl = is_change and "SiaDiffChangeSign" or "SiaDiffAddSign"
+      --- @type string?
+      local sign = is_change and "▎" or "▎"
+      if not show_signs then
+        sign = nil
+      end
+      for i = start_row, end_row - 1, 1 do
+        local extmark = {
+          args = {
+            end_line = i,
+            sign_text = sign,
+            sign_hl_group = sign_hl,
+            hl_group = hl_group,
+            hl_eol = true,
+            priority = 100,
+          },
+        }
+        if extmarks[i] then
+          table.insert(extmarks[i], extmark)
+        else
+          extmarks[i] = { extmark }
         end
-        local is_change = hunk.old_count > 0
-        local hl_group = is_change and "SiaDiffChange" or "SiaDiffAdd"
-        local sign_hl = is_change and "SiaDiffChangeSign" or "SiaDiffAddSign"
-        --- @type string?
-        local sign = is_change and "▎" or "▎"
-        if not show_signs then
-          sign = nil
-        end
-        for i = start_row, end_row - 1, 1 do
-          local extmark = {
-            args = {
-              end_line = i,
-              sign_text = sign,
-              sign_hl_group = sign_hl,
-              hl_group = hl_group,
-              hl_eol = true,
-              priority = 100,
-            },
-          }
-          if extmarks[i] then
-            table.insert(extmarks[i], extmark)
-          else
-            extmarks[i] = { extmark }
-          end
 
-          -- Add char-level highlighting if available for this line
-          if hunk.char_hunks then
-            local line_offset = i - start_row + 1
-            local char_changes = hunk.char_hunks[line_offset]
-            if char_changes then
-              for _, char_hunk in ipairs(char_changes) do
-                if char_hunk.new_count > 0 then
-                  local inline_hl_group = char_hunk.type == "change"
-                      and "SiaDiffInlineChange"
-                    or "SiaDiffInlineAdd"
-                  local start_col = char_hunk.new_start - 1
-                  local end_col = start_col + char_hunk.new_count
-                  table.insert(extmarks[i], {
-                    col = start_col,
-                    args = {
-                      end_col = end_col,
-                      hl_group = inline_hl_group,
-                      priority = 101,
-                      hl_eol = false,
-                    },
-                  })
-                end
+        -- Add char-level highlighting if available for this line
+        if hunk.char_hunks then
+          local line_offset = i - start_row + 1
+          local char_changes = hunk.char_hunks[line_offset]
+          if char_changes then
+            for _, char_hunk in ipairs(char_changes) do
+              if char_hunk.new_count > 0 then
+                local inline_hl_group = char_hunk.type == "change"
+                    and "SiaDiffInlineChange"
+                  or "SiaDiffInlineAdd"
+                local start_col = char_hunk.new_start - 1
+                local end_col = start_col + char_hunk.new_count
+                table.insert(extmarks[i], {
+                  col = start_col,
+                  args = {
+                    end_col = end_col,
+                    hl_group = inline_hl_group,
+                    priority = 101,
+                    hl_eol = false,
+                  },
+                })
               end
             end
           end
