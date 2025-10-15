@@ -1,4 +1,3 @@
-local config = require("sia.config")
 local utils = require("sia.utils")
 local Conversation = require("sia.conversation").Conversation
 local ChatStrategy = require("sia.strategy").ChatStrategy
@@ -515,9 +514,14 @@ local add_commands = {
 }
 
 function M.setup(options)
+  local config = require("sia.config")
   config.setup(options)
   require("sia.mappings").setup()
-  require("sia.diff").setup()
+
+  if config.options.defaults.ui.diff.enable then
+    require("sia.diff").setup()
+  end
+
   set_highlight_groups()
 
   vim.api.nvim_create_user_command("SiaAccept", function(args)
@@ -642,6 +646,7 @@ end
 --- @param action sia.config.Action
 --- @param opts {context: sia.ActionContext, model: string?, named_prompt: boolean?}
 function M.main(action, opts)
+  local config = require("sia.config")
   local context = opts.context
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy

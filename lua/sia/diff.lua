@@ -36,53 +36,56 @@ local REGION_GAP = 5
 --- @type table<integer, sia.diff.DiffState>
 local buffer_diff_state = {}
 local diff_ns = vim.api.nvim_create_namespace("sia_diff")
+local DIFF_ENABLED = false
 
 local update_timer = vim.uv.new_timer()
 
 local bufs_to_update = {}
 
-vim.api.nvim_set_decoration_provider(diff_ns, {
-  on_win = function(_, _, buf, toprow, botrow)
-    local state = buffer_diff_state[buf]
-    if not state then
-      return
-    end
-    if state.needs_clear then
-      state.needs_clear = nil
-      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-    end
-    if vim.wo.diff then
-      vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
-      return
-    end
-
-    local markers = state.markers
-    if not markers then
-      return
-    end
-
-    if vim.tbl_isempty(markers) then
-      return
-    end
-
-    for i = toprow + 1, botrow + 1 do
-      local line_markers = markers[i]
-      if line_markers then
-        for _, line_marker in ipairs(line_markers) do
-          pcall(
-            vim.api.nvim_buf_set_extmark,
-            buf,
-            diff_ns,
-            i - 1,
-            line_marker.col or 0,
-            line_marker.args
-          )
-        end
+local function setup_decoration_provider()
+  vim.api.nvim_set_decoration_provider(diff_ns, {
+    on_win = function(_, _, buf, toprow, botrow)
+      local state = buffer_diff_state[buf]
+      if not state then
+        return
       end
-      markers[i] = nil
-    end
-  end,
-})
+      if state.needs_clear then
+        state.needs_clear = nil
+        vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+      end
+      if vim.wo.diff then
+        vim.api.nvim_buf_clear_namespace(buf, diff_ns, 0, -1)
+        return
+      end
+
+      local markers = state.markers
+      if not markers then
+        return
+      end
+
+      if vim.tbl_isempty(markers) then
+        return
+      end
+
+      for i = toprow + 1, botrow + 1 do
+        local line_markers = markers[i]
+        if line_markers then
+          for _, line_marker in ipairs(line_markers) do
+            pcall(
+              vim.api.nvim_buf_set_extmark,
+              buf,
+              diff_ns,
+              i - 1,
+              line_marker.col or 0,
+              line_marker.args
+            )
+          end
+        end
+        markers[i] = nil
+      end
+    end,
+  })
+end
 
 --- @param buf integer
 local redraw_buffer = function(buf)
@@ -673,6 +676,10 @@ function M.show_diff_preview(buf)
 end
 
 function M.update_baseline(buf)
+  if not DIFF_ENABLED then
+    return
+  end
+
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
     local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -1045,6 +1052,11 @@ function M.get_hunk_at_line(buf, line)
   end
 
   return nil
+end
+
+function M.setup()
+  setup_decoration_provider()
+  DIFF_ENABLED = true
 end
 
 return M

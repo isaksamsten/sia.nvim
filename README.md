@@ -68,8 +68,12 @@ require("sia").setup({
     -- UI behavior
     ui = {
       use_vim_ui = false,    -- Use Vim's built-in input/select
-      show_signs = true,     -- Show signs in the gutter for changes
-      char_diff = true,      -- Show character-level diffs
+      diff = {
+        enable = true,       -- Enable diff system for change tracking
+        show_signs = true,   -- Show signs in the gutter for changes
+        char_diff = true,    -- Show character-level diffs
+      },
+      show_preview = true,   -- Show preview when use_vim_ui is false
     },
 
     -- File operations

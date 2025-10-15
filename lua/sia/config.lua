@@ -347,6 +347,15 @@ function M.get_default_action(mode)
   return lc and lc.action and M.options.actions[lc.action[mode]]
     or M.options.defaults.actions[mode]
 end
+--- @class sia.config.Defaults.Ui
+--- @field use_vim_ui boolean?
+--- @field diff sia.config.Defaults.Ui.Diff
+--- @field show_preview boolean?
+---
+--- @class sia.config.Defaults.Ui.Diff
+--- @field enable boolean?
+--- @field show_signs boolean?
+--- @field char_diff boolean?
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -430,7 +439,7 @@ end
 --- @field hidden sia.config.Hidden
 --- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
---- @field ui {use_vim_ui: boolean?, show_signs: boolean?, char_diff: boolean?, show_preview:boolean?}?
+--- @field ui sia.config.Defaults.Ui?
 
 --- @alias sia.config.Models table<string, [string, string]>
 
@@ -531,8 +540,11 @@ M.options = {
     },
     ui = {
       use_vim_ui = false,
-      show_signs = true,
-      char_diff = true,
+      diff = {
+        enable = true,
+        show_signs = true,
+        char_diff = true,
+      },
       show_preview = true, -- only if use_vim_ui is false
     },
     tools = {
