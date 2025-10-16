@@ -173,7 +173,8 @@ local function input(opts, on_confirm)
   local clear_confirmation
   if #prompt > 80 or prompt:find("\n") then
     clear_confirmation = require("sia.confirmation").show(
-      vim.split(prompt, "\n", { trimempty = true, plain = true })
+      vim.split(prompt, "\n", { trimempty = true, plain = true }),
+      { wrap = opts.wrap }
     )
     vim.cmd.redraw()
   elseif confirmation_text then
@@ -184,7 +185,8 @@ local function input(opts, on_confirm)
 
   local show_preview = require("sia.config").options.defaults.ui.show_preview
   if show_preview and opts.preview and not clear_confirmation then
-    clear_confirmation = require("sia.confirmation").show(opts.preview)
+    clear_confirmation =
+      require("sia.confirmation").show(opts.preview, { wrap = opts.wrap })
     vim.cmd.redraw()
   end
 
@@ -216,6 +218,7 @@ end
 --- @field on_accept fun():nil
 --- @field must_confirm boolean?
 --- @field preview (fun(buf:integer):integer?)?
+--- @field wrap boolean?
 
 --- @alias sia.NewToolExecuteUserInput fun(prompt: string, opts: sia.NewToolExecuteUserInputOpts):nil
 --- @alias sia.NewToolExecuteUserChoice fun(prompt: string, opts: sia.NewToolExecuteUserChoiceOpts):nil
@@ -304,6 +307,7 @@ M.new_tool = function(opts, execute)
         input_fn({
           prompt = string.format("%s - %s", prompt, confirmation_text),
           preview = input_args.preview,
+          wrap = input_args.wrap,
         }, function(resp)
           if resp == nil then
             callback({

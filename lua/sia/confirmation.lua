@@ -10,7 +10,7 @@ local buf = nil
 function M.show(content, opts)
   M.clear()
   opts = opts or {}
-  local reflow = opts.reflow
+  local wrap = opts.wrap
 
   if not content then
     return function() end
@@ -48,7 +48,7 @@ function M.show(content, opts)
     vim.bo[buf].textwidth = effective_width
     local initial_height = math.min(#content, max_height)
 
-    if reflow then
+    if wrap then
       vim.cmd("normal! ggVGgwgg")
 
       local wrapped_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
