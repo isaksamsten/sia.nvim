@@ -76,7 +76,7 @@ end
 
 function DiffStrategy:on_error()
   if self:buf_is_loaded() then
-    vim.api.nvim_buf_clear_namespace(self.target_buf, DIFF_NS, 0, -1)
+    vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
     self.writer.canvas:clear_temporary_text()
   end
 end
@@ -139,6 +139,7 @@ function DiffStrategy:on_completed(control)
       end
     end,
     handle_empty_toolset = function()
+      vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
       local context = self.context
       local buf_loaded = vim.api.nvim_buf_is_loaded(self.target_buf)
       local diff_win_valid = vim.api.nvim_win_is_valid(self.target_win)
