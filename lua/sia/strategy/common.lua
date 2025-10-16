@@ -171,7 +171,7 @@ function Strategy:on_cancelled() end
 function Strategy:confirm_continue_after_cancelled_tool(control)
   if
     self.auto_continue_after_cancellation
-    or require("sia.config").get_local_config().auto_continue
+    or require("sia.config").get_auto_continue()
   then
     control.continue_execution()
   else

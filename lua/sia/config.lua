@@ -327,6 +327,12 @@ function M.get_default_model(type)
   return lc[type] or M.options.defaults[type]
 end
 
+--- @return boolean
+function M.get_auto_continue()
+  local lc = M.get_local_config() or {}
+  return lc and lc.auto_continue or false
+end
+
 --- @return sia.config.Context
 function M.get_context_config()
   local local_config = M.get_local_config()
