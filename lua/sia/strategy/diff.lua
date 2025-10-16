@@ -67,6 +67,8 @@ function DiffStrategy:on_request_start()
   self.writer = StreamRenderer:new({
     canvas = Canvas:new(self.target_buf, { temporary_text_hl = "SiaInsert" }),
     line = vim.api.nvim_buf_line_count(self.target_buf) - 1,
+    temporary = true,
+    use_cache = true,
   })
   self:set_abort_keymap(self.target_buf)
   return true

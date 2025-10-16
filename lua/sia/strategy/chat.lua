@@ -3,6 +3,10 @@ local common = require("sia.strategy.common")
 local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 
+local SUMMARIZE_PROMPT = [[Summarize the interaction. Make it suitable for a
+buffer name in neovim using three to five words separated by
+spaces. Only output the name, nothing else.]]
+
 local STATUS_ICONS = {
   pending = " ",
   running = " ",
@@ -121,11 +125,7 @@ function ChatStrategy:on_request_start()
 end
 
 function ChatStrategy:on_round_started()
-  if not self:buf_is_loaded() then
-    return false
-  end
-  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
-  return true
+  return self:buf_is_loaded()
 end
 
 function ChatStrategy:on_error()
@@ -144,26 +144,21 @@ function ChatStrategy:on_stream_started()
   self.canvas:clear_temporary_text()
   self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   self:set_abort_keymap(self.buf)
-  local line_count = vim.api.nvim_buf_line_count(self.buf)
-  if line_count > 0 then
-    local last_line = vim.api.nvim_buf_get_lines(self.buf, -2, -1, false)
-    if last_line[1]:match("%S") then
-      vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
-      line_count = line_count + 1
-    end
-  end
-
   self.writer = StreamRenderer:new({
     canvas = self.canvas,
-    buf = self.buf,
-    line = line_count - 1,
+    line = vim.api.nvim_buf_line_count(self.buf) - 1,
     column = 0,
+    temporary = false,
   })
   return true
 end
 
-function ChatStrategy:on_reasoning_received(_)
-  return self:buf_is_loaded()
+function ChatStrategy:on_reasoning_received(content)
+  if not self:buf_is_loaded() then
+    return false
+  end
+  self.writer:append(content, true)
+  return true
 end
 
 function ChatStrategy:on_content_received(content)
@@ -217,6 +212,7 @@ function ChatStrategy:on_completed(control)
     })
   end
   local handle_cleanup = function()
+    self.writer = nil
     if not self:buf_is_loaded() then
       control.finish()
       return
@@ -229,16 +225,10 @@ function ChatStrategy:on_completed(control)
     end
     vim.bo[self.buf].modifiable = false
     if not self.has_generated_name then
-      local config = require("sia.config")
       require("sia.assistant").execute_query({
-        model = config.get_default_model("fast_model"),
+        model = require("sia.config").get_default_model("fast_model"),
         prompt = {
-          {
-            role = "system",
-            content = [[Summarize the interaction. Make it suitable for a
-buffer name in neovim using three to five words separated by
-spaces. Only output the name, nothing else.]],
-          },
+          { role = "system", content = SUMMARIZE_PROMPT },
           {
             role = "user",
             content = table.concat(
@@ -277,7 +267,13 @@ spaces. Only output the name, nothing else.]],
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           if tool_result.result.display_content then
-            self.canvas:append_tool_result(tool_result.result.display_content)
+            self.writer:append_newline()
+            local line = self.writer.line
+            for _, display in ipairs(tool_result.result.display_content) do
+              self.writer:append(display)
+            end
+            self.writer:append_newline()
+            self.canvas:highlight_tool(line, self.writer.line)
           end
           self.conversation:add_instruction({
             { role = "assistant", tool_calls = { tool_result.tool } },
@@ -288,6 +284,7 @@ spaces. Only output the name, nothing else.]],
               kind = tool_result.result.kind,
             },
           }, tool_result.result.context)
+          self.writer:append_newline()
         end
       end
 
@@ -307,7 +304,6 @@ spaces. Only output the name, nothing else.]],
       handle_cleanup()
     end,
   })
-  self.writer = nil
 end
 
 --- Get the ChatStrategy associated with buf

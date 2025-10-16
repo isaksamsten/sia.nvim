@@ -53,12 +53,9 @@ function Canvas:update_progress(content)
     })
 end
 
-function Canvas:append_tool_result(content)
-  local line = self:line_count()
-
-  self:append(content)
-  local end_line = self:line_count()
-
+--- @param line integer
+--- @param end_line integer
+function Canvas:highlight_tool(line, end_line)
   vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
     end_line = end_line,
     hl_mode = "combine",
@@ -260,6 +257,7 @@ function Canvas:line_count()
   return vim.api.nvim_buf_line_count(self.buf)
 end
 
+---
 function Canvas:append(content)
   local buf = self.buf
   if vim.api.nvim_buf_is_loaded(buf) then

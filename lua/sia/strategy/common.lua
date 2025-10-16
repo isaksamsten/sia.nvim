@@ -14,8 +14,9 @@ local M = {}
 --- @field start_col integer
 --- @field line integer
 --- @field column integer
---- @field persistent boolean
+--- @field temporary boolean
 --- @field cache string[]
+--- @field use_cache boolean
 local StreamRenderer = {}
 StreamRenderer.__index = StreamRenderer
 
@@ -24,14 +25,12 @@ StreamRenderer.__index = StreamRenderer
 --- @field buf integer?
 --- @field line integer? 0-indexed
 --- @field column integer? 0-indexed
---- @field persistent boolean?
+--- @field temporary boolean?
+--- @field use_cache boolean?
 
 --- @param opts sia.StreamRendererOpts?
 function StreamRenderer:new(opts)
   opts = opts or {}
-  if opts.persistent == nil then
-    opts.persistent = opts.buf ~= nil
-  end
   local obj = {
     canvas = opts.canvas,
     buf = opts.buf,
@@ -39,7 +38,8 @@ function StreamRenderer:new(opts)
     start_col = opts.column or 0,
     line = opts.line or 0,
     column = opts.column or 0,
-    persistent = opts.persistent,
+    temporary = opts.temporary,
+    use_cache = opts.use_cache or opts.temporary == false,
     cache = {},
   }
   obj.cache[1] = ""
@@ -48,9 +48,11 @@ function StreamRenderer:new(opts)
 end
 
 --- @param substring string
-function StreamRenderer:append_substring(substring)
+--- @param temporary boolean?
+function StreamRenderer:append_substring(substring, temporary)
+  temporary = temporary or self.temporary
   if self.canvas then
-    if self.persistent then
+    if not temporary then
       self.canvas:append_text_at(self.line, self.column, substring)
     else
       self.canvas:append_temporary_text_at(self.line, self.column, substring)
@@ -65,13 +67,17 @@ function StreamRenderer:append_substring(substring)
       { substring }
     )
   end
-  self.cache[#self.cache] = self.cache[#self.cache] .. substring
-  self.column = self.column + #substring
+  if self.use_cache then
+    self.cache[#self.cache] = self.cache[#self.cache] .. substring
+    self.column = self.column + #substring
+  end
 end
 
-function StreamRenderer:append_newline()
+--- @param temporary boolean?
+function StreamRenderer:append_newline(temporary)
+  temporary = temporary or self.temporary
   if self.canvas then
-    if self.persistent then
+    if not temporary then
       self.canvas:append_newline_at(self.line)
     else
       self.canvas:append_temporary_newline_at(self.line)
@@ -79,9 +85,11 @@ function StreamRenderer:append_newline()
   elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   end
-  self.line = self.line + 1
-  self.column = 0
-  self.cache[#self.cache + 1] = ""
+  if self.use_cache then
+    self.line = self.line + 1
+    self.column = 0
+    self.cache[#self.cache + 1] = ""
+  end
 end
 
 function StreamRenderer:reset_cache()
@@ -93,17 +101,18 @@ function StreamRenderer:is_empty()
 end
 
 --- @param content string The string content to append to the buffer.
-function StreamRenderer:append(content)
+--- @param temporary boolean?
+function StreamRenderer:append(content, temporary)
   local index = 1
   while index <= #content do
     local newline = content:find("\n", index) or (#content + 1)
     local substring = content:sub(index, newline - 1)
     if #substring > 0 then
-      self:append_substring(substring)
+      self:append_substring(substring, temporary)
     end
 
     if newline <= #content then
-      self:append_newline()
+      self:append_newline(temporary)
     end
 
     index = newline + 1

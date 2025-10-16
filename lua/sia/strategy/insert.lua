@@ -68,6 +68,8 @@ function InsertStrategy:on_request_start()
     line = self.start_row - 1,
     col = self.start_col,
     canvas = Canvas:new(self.context.buf, { temporary_text_hl = "SiaInsert" }),
+    temporary = true,
+    use_cache = true,
   })
 
   self:set_abort_keymap(self.context.buf)
@@ -220,7 +222,7 @@ function InsertStrategy:post_process(lines, srow, scol, erow, ecol)
   end
   local ok, new_lines = pcall(post_process, {
     lines = lines,
-    buf = ctx.buf,
+    buf = self.context.buf,
     start_line = srow,
     start_col = scol,
     end_line = erow,
