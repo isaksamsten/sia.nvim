@@ -235,21 +235,24 @@ function M.execute_strategy(strategy)
                   }
                 end
                 if obj.choices and #obj.choices > 0 then
-                  local delta = obj.choices[1].delta
-                  if delta then
-                    if delta.reasoning and delta.reasoning ~= "" then
-                      if not strategy:on_reasoning_received(delta.reasoning) then
-                        vim.fn.jobstop(job_id)
+                  for _, choice in ipairs(obj.choices) do
+                    local delta = choice.delta
+                    if delta then
+                      local reasoning = delta.reasoning or delta.reasoning_content
+                      if reasoning and reasoning ~= "" then
+                        if not strategy:on_reasoning_received(reasoning) then
+                          vim.fn.jobstop(job_id)
+                        end
                       end
-                    end
-                    if delta.content and delta.content ~= "" then
-                      if not strategy:on_content_received(delta.content) then
-                        vim.fn.jobstop(job_id)
+                      if delta.content and delta.content ~= "" then
+                        if not strategy:on_content_received(delta.content) then
+                          vim.fn.jobstop(job_id)
+                        end
                       end
-                    end
-                    if delta.tool_calls and delta.tool_calls ~= "" then
-                      if not strategy:on_tool_call_received(delta.tool_calls) then
-                        vim.fn.jobstop(job_id)
+                      if delta.tool_calls and delta.tool_calls ~= "" then
+                        if not strategy:on_tool_call_received(delta.tool_calls) then
+                          vim.fn.jobstop(job_id)
+                        end
                       end
                     end
                   end
