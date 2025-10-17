@@ -31,18 +31,18 @@ Use this tool when:
 
 For small, targeted changes, prefer the edit tool instead.]],
   parameters = {
-    target_file = { type = "string", description = "The file path to write to" },
+    path = { type = "string", description = "The file path to write to" },
     content = { type = "string", description = "The complete file content to write" },
   },
-  required = { "target_file", "content" },
+  required = { "path", "content" },
   auto_apply = function(args, conversation)
-    if utils.is_memory(args.target_file) then
+    if utils.is_memory(args.path) then
       return 1
     end
     return conversation.auto_confirm_tools["write"]
   end,
 }, function(args, _, callback, opts)
-  if not args.target_file then
+  if not args.path then
     callback({
       content = { "Error: No file path provided" },
       display_content = { FAILED_TO_WRITE },
@@ -59,18 +59,17 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-  local is_memory = utils.is_memory(args.target_file)
-  local file_exists = vim.fn.filereadable(args.target_file) == 1
+  local is_memory = utils.is_memory(args.path)
+  local file_exists = vim.fn.filereadable(args.path) == 1
   local prompt = file_exists
-      and string.format("Overwrite existing file %s with new content", args.target_file)
-    or string.format("Create new file %s", args.target_file)
+      and string.format("Overwrite existing file %s with new content", args.path)
+    or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
     on_accept = function()
-      local buf =
-        utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
+      local buf = utils.ensure_file_is_loaded(args.path, { listed = not is_memory })
       if not buf then
         callback({
-          content = { "Error: Cannot create buffer for " .. args.target_file },
+          content = { "Error: Cannot create buffer for " .. args.path },
           display_content = { FAILED_TO_WRITE },
           kind = "failed",
         })
@@ -97,17 +96,17 @@ For small, targeted changes, prefer the edit tool instead.]],
         display_text = string.format(
           "💾 %s %s (%d lines)",
           file_exists and "Overwrote" or "Created",
-          vim.fn.fnamemodify(args.target_file, ":."),
+          vim.fn.fnamemodify(args.path, ":."),
           #lines
         )
       else
-        local memory_name = utils.format_memory_name(args.target_file)
+        local memory_name = utils.format_memory_name(args.path)
         display_text = file_exists and string.format("🧠 Updated %s", memory_name)
           or string.format("🧠 Created %s", memory_name)
       end
       callback({
         content = {
-          string.format("Successfully %s buffer for %s", action, args.target_file),
+          string.format("Successfully %s buffer for %s", action, args.path),
         },
         context = {
           buf = buf,
