@@ -31,6 +31,8 @@ function DiffStrategy:new(conversation, options)
   obj.target_buf = buf
   obj.target_win = win
   obj.options = options
+  obj.context.pos = obj.context.pos
+    or { 1, vim.api.nvim_buf_line_count(obj.context.buf) }
   return obj
 end
 
@@ -53,8 +55,10 @@ function DiffStrategy:on_request_start()
     vim.wo[self.target_win][wo] = vim.wo[context.win][wo]
   end
 
-  local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
-  vim.api.nvim_buf_set_lines(self.target_buf, 0, 0, false, before)
+  if context.pos[1] > 1 then
+    local before = vim.api.nvim_buf_get_lines(context.buf, 0, context.pos[1] - 1, true)
+    vim.api.nvim_buf_set_lines(self.target_buf, 0, 0, false, before)
+  end
 
   vim.api.nvim_buf_set_extmark(context.buf, DIFF_NS, context.pos[1] - 1, 0, {
     virt_lines = {
@@ -152,9 +156,23 @@ function DiffStrategy:on_completed(control)
 
       self:del_abort_keymap(self.target_buf)
       self.writer.canvas:clear_temporary_text()
-      vim.api.nvim_buf_set_lines(self.target_buf, -1, -1, false, self.writer.cache)
-      local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
-      vim.api.nvim_buf_set_lines(self.target_buf, -1, -1, false, after)
+      vim.api.nvim_buf_set_lines(
+        self.target_buf,
+        self.context.pos[1] - 1,
+        self.context.pos[2] - 1,
+        false,
+        self.writer.cache
+      )
+      if context.pos[2] < vim.api.nvim_buf_line_count(context.buf) then
+        local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
+        vim.api.nvim_buf_set_lines(
+          self.target_buf,
+          #self.writer.cache + context.pos[2] - 1,
+          -1,
+          false,
+          after
+        )
+      end
       vim.api.nvim_set_current_win(self.target_win)
       vim.cmd("diffthis")
       vim.api.nvim_set_current_win(context.win)
