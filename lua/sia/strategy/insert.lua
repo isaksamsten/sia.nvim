@@ -65,7 +65,7 @@ function InsertStrategy:on_request_start()
     }
   )
   self.writer = StreamRenderer:new({
-    line = self.start_row - 1,
+    line = math.max(0, self.start_row - 2),
     col = self.start_col,
     canvas = Canvas:new(self.context.buf, { temporary_text_hl = "SiaInsert" }),
     temporary = true,
@@ -77,7 +77,11 @@ function InsertStrategy:on_request_start()
 end
 
 function InsertStrategy:on_stream_started()
-  return self:is_buf_loaded()
+  if not self:is_buf_loaded() then
+    return false
+  end
+  vim.api.nvim_buf_clear_namespace(self.context.buf, INSERT_NS, 0, -1)
+  return true
 end
 
 function InsertStrategy:on_error()
