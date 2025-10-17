@@ -131,23 +131,30 @@ function M.verbatim()
       hide = true,
       kind = "context",
       description = function(ctx)
+        if ctx.mode == "n" then
+          return string.format(
+            "Conversation initialized from %s",
+            utils.get_filename(ctx.buf, ":p")
+          )
+        end
+        if ctx.pos == nil or ctx.pos[2] == -1 then
+          return string.format("%s", utils.get_filename(ctx.buf, ":p"))
+        end
         return string.format(
-          "%s verbatim lines %d-%d",
-          utils.get_filename(ctx.buf, ":."),
+          "%s lines %d-%d",
+          utils.get_filename(ctx.buf, ":p"),
           ctx.pos[1],
           ctx.pos[2]
         )
       end,
       content = function(ctx)
-        if
-          vim.api.nvim_buf_is_loaded(ctx.buf)
-          and vim.api.nvim_buf_is_valid(ctx.buf)
-          and ctx
-          and ctx.mode == "v"
-        then
+        if not vim.api.nvim_buf_is_loaded(ctx.buf) then
           return nil
         end
-        local start_line, end_line = ctx.pos[1], ctx.pos[2]
+        local start_line, end_line = 1, -1
+        if ctx.pos then
+          start_line, end_line = ctx.pos[1], ctx.pos[2]
+        end
         return table.concat(
           vim.api.nvim_buf_get_lines(ctx.buf, start_line - 1, end_line, false),
           "\n"
