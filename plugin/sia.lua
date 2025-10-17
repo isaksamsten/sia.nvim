@@ -41,7 +41,11 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if action.capture and context.mode ~= "v" then
     local capture = action.capture(context)
     if not capture then
-      vim.api.nvim_echo({ { "Sia: Unable to capture current context.", "ErrorMsg" } }, false, {})
+      vim.api.nvim_echo(
+        { { "Sia: Unable to capture current context.", "ErrorMsg" } },
+        false,
+        {}
+      )
       return
     end
     context.start_line, context.end_line = capture[1], capture[2]
@@ -50,26 +54,34 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   if action.range == true and context.mode ~= "v" then
-    vim.api.nvim_echo(
-      { { "Sia: The action " .. args.fargs[1] .. " must be used with a range", "ErrorMsg" } },
-      false,
-      {}
-    )
+    vim.api.nvim_echo({
+      {
+        "Sia: The action " .. args.fargs[1] .. " must be used with a range",
+        "ErrorMsg",
+      },
+    }, false, {})
     return
   end
 
   local is_range = context.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
-    vim.api.nvim_echo(
-      { { "Sia: The action " .. args.fargs[1] .. " is not enabled in the current context.", "ErrorMsg" } },
-      false,
-      {}
-    )
+    vim.api.nvim_echo({
+      {
+        "Sia: The action "
+          .. args.fargs[1]
+          .. " is not enabled in the current context.",
+        "ErrorMsg",
+      },
+    }, false, {})
     return
   end
 
-  require("sia").main(action, { context = context, model = model, named_prompt = named })
+  require("sia").execute_action(action, {
+    context = context,
+    model = model,
+    named_prompt = named,
+  })
 end, {
   range = true,
   bang = true,
@@ -127,7 +139,10 @@ vim.api.nvim_create_user_command("SiaDebug", function()
   end
   local ok, result = pcall(chat.conversation.to_query, chat.conversation)
   if not ok then
-    vim.notify("SiaDebug: Error generating conversation query: " .. tostring(result), vim.log.levels.ERROR)
+    vim.notify(
+      "SiaDebug: Error generating conversation query: " .. tostring(result),
+      vim.log.levels.ERROR
+    )
     return
   end
   local json_str = vim.json.encode(result)
@@ -147,4 +162,217 @@ vim.api.nvim_create_user_command("SiaDebug", function()
   local lines = vim.split(pretty, "\n", true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_name(buf, "*SiaDebug*")
+end, {})
+
+--- @class sia.AddCommand
+--- @field completion (fun(s:string):string[])?
+--- @field execute_local fun(args: vim.api.keyset.create_user_command.command_args, c: sia.Conversation):nil
+--- @field execute_global (fun(args: vim.api.keyset.create_user_command.command_args):nil)?
+--- @field require_range boolean
+--- @field only_visible boolean?
+--- @field non_sia_buf boolean?
+
+--- @type table<string, sia.AddCommand>
+local SIA_ADD_CMD = {
+  file = {
+    only_visible = true,
+    require_range = false,
+    completion = function(lead)
+      return vim.fn.getcompletion(lead, "file")
+    end,
+    execute_global = function(args)
+      local utils = require("sia.utils")
+      local files = utils.glob_pattern_to_files(args.fargs)
+      for _, file in ipairs(files) do
+        local buf = utils.ensure_file_is_loaded(file, {
+          listed = false,
+          read_only = true,
+        })
+        if buf then
+          require("sia.conversation").Conversation.add_pending_instruction(
+            "current_context",
+            {
+              buf = buf,
+              tick = require("sia.tracker").ensure_tracked(buf),
+              kind = "context",
+              mode = "v",
+            }
+          )
+        end
+      end
+    end,
+    execute_local = function(args, conversation)
+      local utils = require("sia.utils")
+      local files = utils.glob_pattern_to_files(args.fargs)
+      for _, file in ipairs(files) do
+        local buf = utils.ensure_file_is_loaded(file, {
+          listed = false,
+          read_only = true,
+        })
+        if buf then
+          conversation:add_instruction("current_context", {
+            buf = buf,
+            tick = require("sia.tracker").ensure_tracked(buf),
+            kind = "context",
+            mode = "v",
+          })
+        end
+      end
+    end,
+  },
+  context = {
+    require_range = true,
+    only_visible = true,
+    execute_global = function(args)
+      local context = require("sia.utils").create_context(args)
+      require("sia.conversation").Conversation.add_pending_instruction(
+        "current_context",
+        context
+      )
+    end,
+    execute_local = function(args, conversation)
+      local context = require("sia.utils").create_context(args)
+      conversation:add_instruction("current_context", context)
+    end,
+  },
+  tool = {
+    require_range = false,
+    completion = function(lead)
+      local tools = require("sia.config").options.defaults.tools.choices or {}
+      local completion = {}
+      for name, _ in pairs(tools) do
+        if vim.startswith(name, lead) then
+          table.insert(completion, name)
+        end
+      end
+      return completion
+    end,
+    execute_global = function(args)
+      for _, tool in ipairs(args.fargs) do
+        require("sia.conversation").Conversation.add_pending_tool(tool)
+      end
+    end,
+    execute_local = function(args, conversation)
+      for _, tool in ipairs(args.fargs) do
+        conversation:add_tool(tool)
+      end
+    end,
+  },
+  buffer = {
+    require_range = false,
+    completion = function(lead)
+      return vim.fn.getcompletion(lead, "buffer")
+    end,
+    execute_local = function(args, conversation)
+      for _, bufname in ipairs(args.fargs) do
+        local buf = vim.fn.bufnr(bufname)
+        if buf ~= -1 then
+          conversation:add_instruction(
+            "current_context",
+            { buf = buf, tick = require("sia.tracker").ensure_tracked(buf), mode = "v" }
+          )
+        end
+      end
+    end,
+    execute_global = function(args)
+      for _, bufname in ipairs(args.fargs) do
+        local buf = vim.fn.bufnr(bufname)
+        if buf ~= -1 then
+          require("sia.conversation").Conversation.add_pending_instruction(
+            "current_context",
+            { buf = buf, tick = require("sia.tracker").ensure_tracked(buf), mode = "v" }
+          )
+        end
+      end
+    end,
+  },
+}
+
+vim.api.nvim_create_user_command("SiaAccept", function(args)
+  if args.bang then
+    require("sia").accept_edits()
+  else
+    require("sia").accept_edit()
+  end
+end, { bang = true })
+
+vim.api.nvim_create_user_command("SiaReject", function(args)
+  if args.bang then
+    require("sia").reject_edits()
+  else
+    require("sia").reject_edit()
+  end
+end, { bang = true })
+
+vim.api.nvim_create_user_command("SiaDiff", function()
+  require("sia").show_edits_diff()
+end, {})
+
+vim.api.nvim_create_user_command("SiaAdd", function(args)
+  local cmd_name = table.remove(args.fargs, 1)
+  local command = SIA_ADD_CMD[cmd_name]
+  if command then
+    if command.non_sia_buf and vim.bo.ft == "sia" then
+      vim.notify("Sia: Not a valid context")
+      return
+    end
+
+    require("sia.utils").with_chat_strategy({
+      on_select = function(chat)
+        command.execute_local(args, chat.conversation)
+      end,
+      on_none = function()
+        if command.execute_global then
+          command.execute_global(args)
+        else
+          vim.notify("No *sia* buffer")
+        end
+      end,
+      only_visible = true,
+    })
+  end
+end, {
+  nargs = "*",
+  bang = true,
+  bar = true,
+  range = true,
+  complete = function(arg_lead, line, pos)
+    local is_range = require("sia.utils").is_range_commend(line)
+    local complete = {}
+
+    if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
+      for command, command_args in pairs(SIA_ADD_CMD) do
+        local non_sia_buf = command_args.non_sia_buf == nil
+          or (command_args.non_sia_buf and vim.bo.ft ~= "sia")
+        if
+          non_sia_buf
+          and vim.startswith(command, arg_lead)
+          and command_args.require_range == is_range
+        then
+          complete[#complete + 1] = command
+        end
+      end
+    else
+      local command = SIA_ADD_CMD[string.sub(line, 1, pos):match("SiaAdd%s+(%w*)")]
+      if command and command.completion then
+        for _, subcmd in ipairs(command.completion(arg_lead)) do
+          complete[#complete + 1] = subcmd
+        end
+      end
+    end
+    return complete
+  end,
+})
+
+vim.api.nvim_create_user_command("SiaCompact", function()
+  local chat = require("sia.strategy").ChatStrategy.by_buf()
+
+  if chat then
+    chat.is_busy = true
+    chat.canvas:update_progress({ { "Compacting conversation...", "WarningMsg" } })
+    M.compact_conversation(chat.conversation, "Requested by user", function(_)
+      chat.is_busy = false
+      chat:redraw()
+    end)
+  end
 end, {})

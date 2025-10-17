@@ -1,11 +1,3 @@
-local utils = require("sia.utils")
-local Conversation = require("sia.conversation").Conversation
-local ChatStrategy = require("sia.strategy").ChatStrategy
-local DiffStrategy = require("sia.strategy").DiffStrategy
-local InsertStrategy = require("sia.strategy").InsertStrategy
-local HiddenStrategy = require("sia.strategy").HiddenStrategy
-local tracker = require("sia.tracker")
-
 local M = {}
 
 local highlight_groups = {
@@ -163,7 +155,7 @@ function M.show_edits_qf(opts)
 end
 
 function M.remove_message()
-  local chat = ChatStrategy.by_buf()
+  local chat = require("sia.strategy").ChatStrategy.by_buf()
   if chat then
     local messages, mappings = chat.conversation:get_messages({ mapping = true })
     if #messages == 0 then
@@ -188,7 +180,7 @@ end
 --- @param opts table?
 function M.show_messages(opts)
   opts = opts or {}
-  local chat = ChatStrategy.by_buf()
+  local chat = require("sia.strategy").ChatStrategy.by_buf()
   if chat then
     local contexts, mappings = chat.conversation:get_messages({ mapping = true })
     if #contexts == 0 then
@@ -270,7 +262,7 @@ function M.show_messages(opts)
 end
 
 function M.toggle()
-  local last = ChatStrategy.last()
+  local last = require("sia.strategy").ChatStrategy.last()
   if last and vim.api.nvim_buf_is_valid(last.buf) then
     local win = vim.fn.bufwinid(last.buf)
     if
@@ -289,7 +281,7 @@ end
 
 function M.open_reply()
   local buf = vim.api.nvim_get_current_buf()
-  local current = ChatStrategy.by_buf(buf)
+  local current = require("sia.strategy").ChatStrategy.by_buf(buf)
   if current then
     vim.cmd("new")
     buf = vim.api.nvim_get_current_buf()
@@ -397,122 +389,6 @@ information is lost.]],
   end)
 end
 
---- @class sia.AddCommand
---- @field completion (fun(s:string):string[])?
---- @field execute_local fun(args: vim.api.keyset.create_user_command.command_args, c: sia.Conversation):nil
---- @field execute_global (fun(args: vim.api.keyset.create_user_command.command_args):nil)?
---- @field require_range boolean
---- @field only_visible boolean?
---- @field non_sia_buf boolean?
-
---- @type table<string, sia.AddCommand>
-local add_commands = {
-  file = {
-    only_visible = true,
-    require_range = false,
-    completion = function(lead)
-      return vim.fn.getcompletion(lead, "file")
-    end,
-    execute_global = function(args)
-      local files = utils.glob_pattern_to_files(args.fargs)
-      for _, file in ipairs(files) do
-        local buf = utils.ensure_file_is_loaded(file, {
-          listed = false,
-          read_only = true,
-        })
-        if buf then
-          Conversation.add_pending_instruction("current_context", {
-            buf = buf,
-            tick = tracker.ensure_tracked(buf),
-            kind = "context",
-            mode = "v",
-          })
-        end
-      end
-    end,
-    execute_local = function(args, conversation)
-      local files = utils.glob_pattern_to_files(args.fargs)
-      for _, file in ipairs(files) do
-        local buf = utils.ensure_file_is_loaded(file, {
-          listed = false,
-          read_only = true,
-        })
-        if buf then
-          conversation:add_instruction("current_context", {
-            buf = buf,
-            tick = tracker.ensure_tracked(buf),
-            kind = "context",
-            mode = "v",
-          })
-        end
-      end
-    end,
-  },
-  context = {
-    require_range = true,
-    only_visible = true,
-    execute_global = function(args)
-      local context = utils.create_context(args)
-      Conversation.add_pending_instruction("current_context", context)
-    end,
-    execute_local = function(args, conversation)
-      local context = utils.create_context(args)
-      conversation:add_instruction("current_context", context)
-    end,
-  },
-  tool = {
-    require_range = false,
-    completion = function(lead)
-      local tools = require("sia.config").options.defaults.tools.choices or {}
-      local completion = {}
-      for name, _ in pairs(tools) do
-        if vim.startswith(name, lead) then
-          table.insert(completion, name)
-        end
-      end
-      return completion
-    end,
-    execute_global = function(args)
-      for _, tool in ipairs(args.fargs) do
-        Conversation.add_pending_tool(tool)
-      end
-    end,
-    execute_local = function(args, conversation)
-      for _, tool in ipairs(args.fargs) do
-        conversation:add_tool(tool)
-      end
-    end,
-  },
-  buffer = {
-    require_range = false,
-    completion = function(lead)
-      return vim.fn.getcompletion(lead, "buffer")
-    end,
-    execute_local = function(args, conversation)
-      for _, bufname in ipairs(args.fargs) do
-        local buf = vim.fn.bufnr(bufname)
-        if buf ~= -1 then
-          conversation:add_instruction(
-            "current_context",
-            { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" }
-          )
-        end
-      end
-    end,
-    execute_global = function(args)
-      for _, bufname in ipairs(args.fargs) do
-        local buf = vim.fn.bufnr(bufname)
-        if buf ~= -1 then
-          Conversation.add_pending_instruction(
-            "current_context",
-            { buf = buf, tick = tracker.ensure_tracked(buf), mode = "v" }
-          )
-        end
-      end
-    end,
-  },
-}
-
 function M.setup(options)
   local config = require("sia.config")
   config.setup(options)
@@ -523,95 +399,6 @@ function M.setup(options)
   end
 
   set_highlight_groups()
-
-  vim.api.nvim_create_user_command("SiaAccept", function(args)
-    if args.bang then
-      M.accept_edits()
-    else
-      M.accept_edit()
-    end
-  end, { bang = true })
-
-  vim.api.nvim_create_user_command("SiaReject", function(args)
-    if args.bang then
-      M.reject_edits()
-    else
-      M.reject_edit()
-    end
-  end, { bang = true })
-
-  vim.api.nvim_create_user_command("SiaDiff", function()
-    M.show_edits_diff()
-  end, {})
-
-  vim.api.nvim_create_user_command("SiaAdd", function(args)
-    local cmd_name = table.remove(args.fargs, 1)
-    local command = add_commands[cmd_name]
-    if command then
-      if command.non_sia_buf and vim.bo.ft == "sia" then
-        vim.notify("Sia: Not a valid context")
-        return
-      end
-
-      utils.with_chat_strategy({
-        on_select = function(chat)
-          command.execute_local(args, chat.conversation)
-        end,
-        on_none = function()
-          if command.execute_global then
-            command.execute_global(args)
-          else
-            vim.notify("No *sia* buffer")
-          end
-        end,
-        only_visible = true,
-      })
-    end
-  end, {
-    nargs = "*",
-    bang = true,
-    bar = true,
-    range = true,
-    complete = function(arg_lead, line, pos)
-      local is_range = utils.is_range_commend(line)
-      local complete = {}
-
-      if string.sub(line, 1, pos):match("SiaAdd%s%w*$") then
-        for command, command_args in pairs(add_commands) do
-          local non_sia_buf = command_args.non_sia_buf == nil
-            or (command_args.non_sia_buf and vim.bo.ft ~= "sia")
-          if
-            non_sia_buf
-            and vim.startswith(command, arg_lead)
-            and command_args.require_range == is_range
-          then
-            complete[#complete + 1] = command
-          end
-        end
-      else
-        local command = add_commands[string.sub(line, 1, pos):match("SiaAdd%s+(%w*)")]
-        if command and command.completion then
-          for _, subcmd in ipairs(command.completion(arg_lead)) do
-            complete[#complete + 1] = subcmd
-          end
-        end
-      end
-      return complete
-    end,
-  })
-
-  vim.api.nvim_create_user_command("SiaCompact", function()
-    local chat = ChatStrategy.by_buf()
-
-    if chat then
-      chat.is_busy = true
-      chat.canvas:update_progress({ { "Compacting conversation...", "WarningMsg" } })
-      M.compact_conversation(chat.conversation, "Requested by user", function(_)
-        chat.is_busy = false
-        chat:redraw()
-      end)
-    end
-  end, {})
 
   vim.treesitter.language.register("markdown", "sia")
 
@@ -645,13 +432,13 @@ end
 
 --- @param action sia.config.Action
 --- @param opts {context: sia.ActionContext, model: string?, named_prompt: boolean?}
-function M.main(action, opts)
+function M.execute_action(action, opts)
   local config = require("sia.config")
   local context = opts.context
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
     if not opts.named_prompt and (vim.bo[context.buf].filetype == "sia") then
-      strategy = ChatStrategy.by_buf(context.buf)
+      strategy = require("sia.strategy").ChatStrategy.by_buf(context.buf)
 
       if strategy and not strategy.is_busy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
@@ -668,18 +455,18 @@ function M.main(action, opts)
       if opts.model then
         action.model = opts.model
       end
-      local conversation = Conversation:new(action, context)
+      local conversation = require("sia.conversation").Conversation:new(action, context)
       if conversation.mode == "diff" then
         local options =
           vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
-        strategy = DiffStrategy:new(conversation, options)
+        strategy = require("sia.strategy").DiffStrategy:new(conversation, options)
       elseif conversation.mode == "insert" then
         local options = vim.tbl_deep_extend(
           "force",
           config.options.defaults.insert,
           action.insert or {}
         )
-        strategy = InsertStrategy:new(conversation, options)
+        strategy = require("sia.strategy").InsertStrategy:new(conversation, options)
       elseif conversation.mode == "hidden" then
         local options = vim.tbl_deep_extend(
           "force",
@@ -693,11 +480,11 @@ function M.main(action, opts)
           )
           return
         end
-        strategy = HiddenStrategy:new(conversation, options)
+        strategy = require("sia.strategy").HiddenStrategy:new(conversation, options)
       else
         local options =
           vim.tbl_deep_extend("force", config.options.defaults.chat, action.chat or {})
-        strategy = ChatStrategy:new(conversation, options)
+        strategy = require("sia.strategy").ChatStrategy:new(conversation, options)
       end
     end
 

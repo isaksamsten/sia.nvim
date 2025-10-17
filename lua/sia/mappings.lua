@@ -1,4 +1,7 @@
 local utils = require("sia.utils")
+local NO_ACTION_ERROR =
+  "Sia: No available action selected. Please ensure the action is enabled."
+
 local M = {}
 
 local function get_position(type)
@@ -87,18 +90,9 @@ function _G.__sia_execute(type)
   _G.__sia_execute_action = nil
 
   if action and not utils.is_action_disabled(action) then
-    require("sia").main(action, { context = context })
+    require("sia").execute_action(action, { context = context })
   else
-    vim.api.nvim_echo(
-      {
-        {
-          "Sia: No available action selected. Please ensure the action is enabled.",
-          "ErrorMsg",
-        },
-      },
-      true,
-      {}
-    )
+    vim.api.nvim_echo({ { NO_ACTION_ERROR, "ErrorMsg" } }, true, {})
   end
 end
 
