@@ -83,6 +83,8 @@ function M.execute_strategy(strategy)
 
   strategy.is_busy = true
   local start_time = vim.uv.hrtime()
+  --- @type sia.Usage?
+  local usage
 
   local function execute_round(is_initial)
     local timer
@@ -124,8 +126,6 @@ function M.execute_strategy(strategy)
     local first_on_stdout = true
     local incomplete = nil
     local error_initialize = false
-    --- @type sia.Usage?
-    local usage
 
     local stream = provider.new_stream(strategy)
     local job = call_provider(data, {
@@ -182,7 +182,15 @@ function M.execute_strategy(strategy)
                 incomplete = "data: " .. resp
               else
                 if provider.process_usage then
-                  usage = provider.process_usage(obj)
+                  local new_usage = provider.process_usage(obj)
+                  if not usage and new_usage then
+                    usage = new_usage
+                  elseif usage and new_usage then
+                    usage.total = (usage.total or 0) + (new_usage.total or 0)
+                    usage.completion = (usage.completion or 0)
+                      + (new_usage.completion or 0)
+                    usage.prompt = (usage.prompt or 0) + (new_usage.prompt or 0)
+                  end
                 end
                 if stream:process_stream_chunk(obj) then
                   vim.fn.jobpid(job_id)
