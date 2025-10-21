@@ -420,16 +420,58 @@ local function copilot_api_key()
     return nil
   end
 
+  ---Get the cache file path for storing the token
+  ---@return string cache_path The full path to the cache file
+  local function get_cache_path()
+    local cache_dir = vim.fn.stdpath("cache") .. "/sia"
+    if vim.fn.isdirectory(cache_dir) == 0 then
+      vim.fn.mkdir(cache_dir, "p")
+    end
+    return cache_dir .. "/copilot_token.json"
+  end
+
+  ---Load token from disk cache if it exists
+  ---@return table? token The cached token or nil if not found
+  local function load_cached_token()
+    local cache_path = get_cache_path()
+    if vim.fn.filereadable(cache_path) == 0 then
+      return nil
+    end
+    local status, cached = pcall(function()
+      return vim.json.decode(table.concat(vim.fn.readfile(cache_path), ""))
+    end)
+    if status and cached then
+      return cached
+    end
+    return nil
+  end
+
+  ---Save token to disk cache
+  ---@param token_data table The token data to cache
+  local function save_cached_token(token_data)
+    local cache_path = get_cache_path()
+    vim.fn.writefile({ vim.json.encode(token_data) }, cache_path)
+  end
+
   ---Closure that manages token state and retrieves a valid Copilot API token
   ---@return string? token A valid Copilot API token or nil if the request fails
   return function()
+    -- Check in-memory cache first
     if token and token.expires_at > os.time() then
       return token.token
     end
 
+    -- Check disk cache
+    token = load_cached_token()
+    if token and token.expires_at and token.expires_at > os.time() then
+      return token.token
+    end
+
+    -- Need to fetch a new token
     oauth = get_oauth_token()
     if not oauth then
       vim.notify("Sia: Can't find Copilot auth token")
+      return nil
     end
 
     local cmd = table.concat({
@@ -442,10 +484,12 @@ local function copilot_api_key()
     }, " ")
     local response = vim.fn.system(cmd)
     local status, json = pcall(vim.json.decode, response)
-    if status then
+    if status and json and json.token and json.expires_at then
       token = json
+      save_cached_token(token)
       return token.token
     end
+    return nil
   end
 end
 
