@@ -70,8 +70,8 @@ function StreamRenderer:append_substring(substring, temporary)
   end
   if self.use_cache then
     self.cache[#self.cache] = self.cache[#self.cache] .. substring
-    self.column = self.column + #substring
   end
+  self.column = self.column + #substring
 end
 
 --- @param temporary boolean?
@@ -86,9 +86,9 @@ function StreamRenderer:append_newline(temporary)
   elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   end
+  self.line = self.line + 1
+  self.column = 0
   if self.use_cache then
-    self.line = self.line + 1
-    self.column = 0
     self.cache[#self.cache + 1] = ""
   end
 end
