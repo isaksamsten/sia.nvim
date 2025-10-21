@@ -93,6 +93,14 @@ function StreamRenderer:append_newline(temporary)
   end
 end
 
+--- @param temporary boolean?
+function StreamRenderer:append_newline_if_needed(temporary)
+  if self.column == 0 then
+    return
+  end
+  self:append_newline(temporary)
+end
+
 function StreamRenderer:reset_cache()
   self.cache = { "" }
 end

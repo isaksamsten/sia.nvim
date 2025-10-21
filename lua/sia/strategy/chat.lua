@@ -274,7 +274,7 @@ function ChatStrategy:on_completed(control)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           if tool_result.result.display_content then
-            self.writer:append_newline()
+            self.writer:append_newline_if_needed()
             local line = self.writer.line
             for _, display in ipairs(tool_result.result.display_content) do
               self.writer:append(display)
