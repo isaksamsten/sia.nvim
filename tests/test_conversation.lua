@@ -35,10 +35,10 @@ local function create_tool_response_message(id, name, content)
   }
 end
 
---- @param query sia.Query
-local function count_pruned(query)
+--- @param messages sia.Message[]
+local function count_pruned(messages)
   local count = 0
-  for _, msg in ipairs(query.prompt) do
+  for _, msg in ipairs(messages) do
     if msg.content and string.find(msg.content, "pruned") then
       count = count + 1
     end
@@ -73,7 +73,7 @@ T["tool call filtering"]["under max limit should not filter"] = function()
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
   end
 
-  local query = conv:to_query()
+  local query = conv:prepare_messages()
   eq(0, count_pruned(query))
 end
 
@@ -105,13 +105,13 @@ T["tool call filtering"]["exceeding max should filter to keep most recent"] = fu
     )
   end
 
-  local query = conv:to_query()
-  eq(4, count_pruned(query))
-  eq("pruned", query.prompt[1].tool_calls[1]["function"].arguments)
-  eq("pruned", query.prompt[3].tool_calls[1]["function"].arguments)
-  eq("pruned", query.prompt[5].tool_calls[1]["function"].arguments)
-  eq("pruned", query.prompt[7].tool_calls[1]["function"].arguments)
-  eq('{"test": "hello"}', query.prompt[9].tool_calls[1]["function"].arguments)
+  local messages = conv:prepare_messages()
+  eq(4, count_pruned(messages))
+  eq("pruned", messages[1].tool_calls[1]["function"].arguments)
+  eq("pruned", messages[3].tool_calls[1]["function"].arguments)
+  eq("pruned", messages[5].tool_calls[1]["function"].arguments)
+  eq("pruned", messages[7].tool_calls[1]["function"].arguments)
+  eq('{"test": "hello"}', messages[9].tool_calls[1]["function"].arguments)
 end
 
 T["tool call filtering"]["should permanently mark outdated tool calls"] = function()
@@ -129,13 +129,13 @@ T["tool call filtering"]["should permanently mark outdated tool calls"] = functi
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
   end
 
-  local query1 = conv:to_query()
+  local query1 = conv:prepare_messages()
   eq(3, count_pruned(query1))
 
   conv:add_instruction(create_tool_call_message("call_6", "test_tool"))
   conv:add_instruction(create_tool_response_message("call_6", "test_tool"))
 
-  local query2 = conv:to_query()
+  local query2 = conv:prepare_messages()
   eq(3, count_pruned(query2))
 end
 
@@ -159,7 +159,7 @@ T["tool call filtering"]["should respect excluded tools"] = function()
   conv:add_instruction(create_tool_call_message("call_4", "regular_tool"))
   conv:add_instruction(create_tool_response_message("call_4", "test_tool"))
 
-  local query = conv:to_query()
+  local query = conv:prepare_messages()
 
   eq(2, count_pruned(query))
 end
@@ -189,7 +189,7 @@ T["tool call filtering"]["should handle failed tool calls"] = function()
   conv:add_instruction(create_tool_call_message("call_5", "test_tool"))
   conv:add_instruction(create_tool_response_message("call_5", "test_tool"))
 
-  local query = conv:to_query()
+  local query = conv:prepare_messages()
 
   eq(2, count_pruned(query))
 end
@@ -210,7 +210,7 @@ T["tool call filtering"]["add and remove"] = function()
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
   end
 
-  local query1 = conv:to_query()
+  local query1 = conv:prepare_messages()
   eq(3, count_pruned(query1))
 
   for i = 6, 8 do
@@ -218,7 +218,7 @@ T["tool call filtering"]["add and remove"] = function()
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
   end
 
-  local query2 = conv:to_query()
+  local query2 = conv:prepare_messages()
   eq(6, count_pruned(query2))
 end
 
@@ -238,7 +238,7 @@ T["tool call filtering"]["should only trigger when both conditions met"] = funct
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
   end
 
-  local query = conv:to_query()
+  local query = conv:prepare_messages()
 
   eq(0, count_pruned(query))
 end

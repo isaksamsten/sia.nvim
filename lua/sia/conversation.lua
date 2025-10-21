@@ -40,6 +40,7 @@ local tracker = require("sia.tracker")
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
+--- @field meta table?
 --- @field _outdated_tool_call boolean?
 --- @field description string?
 --- @field superseded boolean? -- Mark message as superseded by a newer overlapping message
@@ -193,6 +194,10 @@ function Message:get_content(outdated)
   end
 end
 
+function Message:has_content()
+  return self.content ~= nil or self.live_content ~= nil or self.tool_calls ~= nil
+end
+
 --- @return boolean
 function Message:is_outdated()
   if self.live_content then
@@ -217,31 +222,27 @@ end
 
 --- @param conversation sia.Conversation?
 --- @param outdated boolean?
---- @return sia.Prompt
-function Message:to_prompt(conversation, outdated)
+--- @return sia.Message
+function Message:prepare(conversation, outdated)
+  local message = vim.deepcopy(self)
   local context_conf = require("sia.config").get_context_config()
-  --- @type sia.Prompt
-  local prompt = { role = self.role, content = self:get_content(outdated) }
 
-  if self.tool_calls then
-    prompt.tool_calls = {}
-    for _, tool_call in ipairs(self.tool_calls) do
+  if message.tool_calls then
+    for i, tool_call in ipairs(message.tool_calls) do
       if tool_call.type == "function" then
         if
           context_conf.clear_input
-          and self.context
-          and self.context.clear_outdated_tool_input
-          and (self:is_outdated() or outdated)
+          and message.context
+          and message.context.clear_outdated_tool_input
+          and (message:is_outdated() or outdated)
         then
-          tool_call = self.context.clear_outdated_tool_input(tool_call)
+          message.tool_calls[i] = message.context.clear_outdated_tool_input(tool_call)
         end
-        table.insert(prompt.tool_calls, tool_call)
       end
     end
   end
-  if self._tool_call then
-    prompt.tool_call_id = self._tool_call.id
-  end
+  message.content = message:get_content(outdated)
+
   if self.role == "system" and conversation then
     --- @type string[]
     local tool_instructions = {}
@@ -256,14 +257,15 @@ function Message:to_prompt(conversation, outdated)
 
     if #tool_instructions > 0 then
       local tool_prompt = table.concat(tool_instructions, "\n")
-      if prompt.content ~= nil then
-        prompt.content = string.gsub(prompt.content, "%{%{([%w_]+)%}%}", {
+      local content = message.content
+      if message.content ~= nil and type(content) == "string" then
+        message.content = string.gsub(content, "%{%{([%w_]+)%}%}", {
           tool_instructions = tool_prompt,
         })
       end
     end
   end
-  return prompt
+  return message
 end
 
 function Message:is_shown()
@@ -576,9 +578,8 @@ function Conversation:get_messages(opts)
   end
 end
 
---- @param kind string?
---- @return sia.Query
-function Conversation:to_query(kind)
+--- @return sia.Message[]
+function Conversation:prepare_messages()
   local context_config = require("sia.config").get_context_config()
   local min_keep_tool_calls = context_config.keep or 5
   local max_tool_calls = context_config.max_tool or 100
@@ -627,12 +628,17 @@ function Conversation:to_query(kind)
     tool_filter[last_message._tool_call.id] = nil
   end
 
-  local prompt = vim
+  --- @type sia.Message[]
+  local messages = vim
     .iter(self.messages)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
       if not self.no_supersede and m.superseded then
+        return false
+      end
+
+      if not m:has_content() then
         return false
       end
 
@@ -648,13 +654,13 @@ function Conversation:to_query(kind)
       return true
     end)
     --- @param m sia.Message
-    --- @return sia.Prompt
+    --- @return sia.Message
     :map(function(m)
       local tool_call_id = m._tool_call and m._tool_call.id
       if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
         tool_call_id = m.tool_calls[1].id
       end
-      return m:to_prompt(self, tool_call_id and tool_filter[tool_call_id] == "outdated")
+      return m:prepare(self, tool_call_id and tool_filter[tool_call_id] == "outdated")
     end)
     --- @param p sia.Prompt
     --- @return boolean?
@@ -663,35 +669,7 @@ function Conversation:to_query(kind)
     end)
     :totable()
 
-  --- @type sia.Tool[]?
-  local tools = nil
-  -- We need to set tools to nil if there are no tools
-  -- so that unsupported models doesn't get confused.
-  if self.tools and #self.tools > 0 then
-    tools = {}
-    for _, tool in ipairs(self.tools) do
-      tools[#tools + 1] = {
-        type = "function",
-        ["function"] = {
-          name = tool.name,
-          description = tool.description,
-          parameters = {
-            type = "object",
-            properties = tool.parameters,
-            required = tool.required,
-            additionalProperties = false,
-          },
-        },
-      }
-    end
-  end
-
-  return {
-    model = self.model,
-    temperature = self.temperature,
-    prompt = prompt,
-    tools = tools,
-  }
+  return messages
 end
 
 return { Message = Message, Conversation = Conversation }

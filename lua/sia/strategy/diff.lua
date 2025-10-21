@@ -93,10 +93,11 @@ function DiffStrategy:on_stream_started()
   return self:buf_is_loaded()
 end
 
---- @param content string
-function DiffStrategy:on_content_received(content)
+function DiffStrategy:on_content_received(input)
   if self:buf_is_loaded() then
-    self.writer:append(content)
+    if input.content then
+      self.writer:append(input.content)
+    end
     return true
   end
   return false

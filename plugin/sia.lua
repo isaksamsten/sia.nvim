@@ -133,11 +133,11 @@ end, {
 vim.api.nvim_create_user_command("SiaDebug", function()
   local ChatStrategy = require("sia.strategy").ChatStrategy
   local chat = ChatStrategy.by_buf()
-  if not chat or not chat.conversation or not chat.conversation.to_query then
+  if not chat or not chat.conversation or not chat.conversation.prepare_messages then
     vim.notify("SiaDebug: No active Sia chat in this buffer.", vim.log.levels.WARN)
     return
   end
-  local ok, result = pcall(chat.conversation.to_query, chat.conversation)
+  local ok, result = pcall(chat.conversation.prepare_messages, chat.conversation)
   if not ok then
     vim.notify(
       "SiaDebug: Error generating conversation query: " .. tostring(result),

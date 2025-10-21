@@ -96,14 +96,16 @@ function InsertStrategy:on_cancelled()
   self:on_error()
 end
 
-function InsertStrategy:on_content_received(content)
+function InsertStrategy:on_content_received(input)
   if not self:is_buf_loaded() then
     return false
   end
   vim.api.nvim_buf_call(self.context.buf, function()
     pcall(vim.cmd.undojoin)
   end)
-  self.writer:append(content)
+  if input.content then
+    self.writer:append(input.content)
+  end
   return true
 end
 

@@ -61,8 +61,10 @@ function HiddenStrategy:on_error()
   self._options.callback(context, { "The operation failed" })
 end
 
-function HiddenStrategy:on_content_received(content)
-  self._writer:append(content)
+function HiddenStrategy:on_content_received(input)
+  if input.content then
+    self._writer:append(input.content)
+  end
 end
 
 function HiddenStrategy:on_completed(control)

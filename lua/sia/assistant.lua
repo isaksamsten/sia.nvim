@@ -9,73 +9,20 @@ local ERROR_API_KEY_MISSING = -100
 
 --- @class sia.ProviderOpts
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
---- @field on_exit (fun(_: any, code:number, _:any?):nil)
+--- @field on_exit (fun( _: any, code:number, _:any?):nil)
+--- @field base_url string
+--- @field api_key string?
+--- @field extra_args string[]?
 --- @field stream boolean?
 
 --- Call the provider defined in the query.
---- @param query sia.Query
+--- @param data table
 --- @param opts sia.ProviderOpts
 --- @return integer? jobid
-local function call_provider(query, opts)
-  local config = require("sia.config")
-  local model
-  local provider
-  if query.model == nil or type(query.model) == "string" then
-    model = config.options.models[query.model or config.get_default_model()]
-    if not model then
-      model = config.options.models[config.options.defaults.model]
-    end
-    provider = config.options.providers[model[1]]
-  else
-    model = {
-      nil,
-      query.model.name,
-      temperature = query.model.temperature,
-      function_calling = query.model.function_calling,
-    }
-    provider = query.model.provider
-  end
-
-  local prompt = query.prompt
-  if provider.format_messages then
-    provider.format_messages(model[2], prompt)
-  end
-
-  --- @type { model: string, temperature: number, messages: sia.Prompt[], stream: boolean?, stream_options: {include_usage: boolean}?, max_tokens: integer?}
-  local data = {
-    model = model[2],
-    messages = prompt,
-    tools = query.tools,
-  }
-
-  if not config.options.defaults.tools.enable or model.function_calling == false then
-    data.tools = nil
-  end
-
-  if not model.reasoning_effort then
-    data.temperature = query.temperature or config.options.defaults.temperature
-  end
-
-  if model.temperature then
-    data.temperature = model.temperature
-  end
-
-  if model.max_tokens then
-    data.max_tokens = model.max_tokens
-  end
-
-  if model.n then
-    data.n = model.n
-  end
-
-  if opts.stream then
-    data.stream = true
-    data.stream_options = { include_usage = true }
-  end
-
-  local api_key = provider.api_key()
+local function call_provider(data, opts)
+  local api_key = opts.api_key
   if api_key == nil then
-    vim.notify("Sia: API key is not set for " .. model[1])
+    vim.notify("Sia: API key is not set for " .. opts.base_url)
     opts.on_exit(nil, ERROR_API_KEY_MISSING, nil)
     return nil
   end
@@ -89,30 +36,13 @@ local function call_provider(query, opts)
     "--header",
     "content-type: application/json",
   }
-  if string.find(provider.base_url, "githubcopilot") ~= nil then
-    table.insert(args, "--header")
-    table.insert(args, "Copilot-Integration-Id: vscode-chat")
-    table.insert(args, "--header")
-    table.insert(
-      args,
-      string.format(
-        "editor-version: Neovim/%s.%s.%s",
-        vim.version().major,
-        vim.version().minor,
-        vim.version().patch
-      )
-    )
-    table.insert(args, "--header")
-    local initiator = "user"
-    local last = query.prompt[#query.prompt]
-    if last and last.role == "tool" then
-      initiator = "agent"
-    end
-    table.insert(args, "X-Initiator: " .. initiator)
+
+  for _, header in ipairs(opts.extra_args or {}) do
+    table.insert(args, header)
   end
 
   table.insert(args, "--url")
-  table.insert(args, provider.base_url)
+  table.insert(args, opts.base_url)
   table.insert(args, "--data-binary")
 
   local tmpfile = vim.fn.tempname()
@@ -149,6 +79,7 @@ function M.execute_strategy(strategy)
   if strategy.is_busy then
     return
   end
+  local config = require("sia.config")
 
   strategy.is_busy = true
   local start_time = vim.uv.hrtime()
@@ -169,14 +100,39 @@ function M.execute_strategy(strategy)
     end
     strategy:on_round_started()
 
-    local query = strategy:get_query()
+    local provider
+
+    local model =
+      config.options.models[strategy.conversation.model or config.get_default_model()]
+    if not model then
+      model = config.options.models[config.options.defaults.model]
+    end
+    provider = config.options.providers[model[1]]
+
+    local data = {
+      model = model[2],
+      stream = true,
+    }
+
+    local messages = strategy.conversation:prepare_messages()
+    provider.prepare_tools(data, strategy.conversation.tools)
+    provider.prepare_messages(data, model[2], messages)
+
+    if provider.prepare_parameters then
+      provider.prepare_parameters(data, model)
+    end
+
+    local extra_args = provider.get_headers and provider.get_headers(messages)
     local first_on_stdout = true
     local incomplete = nil
     local error_initialize = false
-    --- @type sia.Usage
+    --- @type sia.Usage?
     local usage
 
-    local job = call_provider(query, {
+    local job = call_provider(data, {
+      base_url = provider.base_url,
+      api_key = provider.api_key(),
+      extra_args = extra_args,
       on_stdout = function(job_id, responses, _)
         if first_on_stdout then
           first_on_stdout = false
@@ -226,36 +182,11 @@ function M.execute_strategy(strategy)
               if not status then
                 incomplete = "data: " .. resp
               else
-                if obj.usage then
-                  usage = {
-                    total = obj.usage.total_tokens or nil,
-                    prompt = obj.usage.prompt_tokens or nil,
-                    completion = obj.usage.completion_tokens or nil,
-                    total_time = 0,
-                  }
+                if provider.process_usage then
+                  usage = provider.process_usage(obj)
                 end
-                if obj.choices and #obj.choices > 0 then
-                  for _, choice in ipairs(obj.choices) do
-                    local delta = choice.delta
-                    if delta then
-                      local reasoning = delta.reasoning or delta.reasoning_content
-                      if reasoning and reasoning ~= "" then
-                        if not strategy:on_reasoning_received(reasoning) then
-                          vim.fn.jobstop(job_id)
-                        end
-                      end
-                      if delta.content and delta.content ~= "" then
-                        if not strategy:on_content_received(delta.content) then
-                          vim.fn.jobstop(job_id)
-                        end
-                      end
-                      if delta.tool_calls and delta.tool_calls ~= "" then
-                        if not strategy:on_tool_call_received(delta.tool_calls) then
-                          vim.fn.jobstop(job_id)
-                        end
-                      end
-                    end
-                  end
+                if provider.process_stream_chunk(strategy, obj) then
+                  vim.fn.jobpid(job_id)
                 end
               end
             end
@@ -333,14 +264,30 @@ function M.execute_strategy(strategy)
   execute_round(true)
 end
 
---- @param query sia.Query
---- @param callback fun(s:string?):nil
-function M.execute_query(query, callback)
+--- @param messages sia.Message[]
+--- @param opts {callback:fun(s:string?), model:string}
+function M.execute_query(messages, opts)
+  local config = require("sia.config")
   local response = ""
-  call_provider(query, {
-    on_stdout = function(_, data, _)
+  local model = config.options.models[opts.model or config.get_default_model()]
+  if not model then
+    model = config.options.models[config.options.defaults.model]
+  end
+  local provider = config.options.providers[model[1]]
+
+  local data = {
+    model = model[2],
+  }
+  provider.prepare_messages(data, model[2], messages)
+  if provider.prepare_parameters then
+    provider.prepare_parameters(data, model)
+  end
+  call_provider(data, {
+    base_url = provider.base_url,
+    api_key = provider.api_key(),
+    on_stdout = function(_, resp, _)
       if data ~= nil then
-        response = response .. table.concat(data, " ")
+        response = response .. table.concat(resp, " ")
       end
     end,
     on_exit = function()
@@ -348,10 +295,11 @@ function M.execute_query(query, callback)
         local ok, json = pcall(vim.json.decode, response, {
           luanil = { object = true },
         })
-        if ok and json and json.choices and #json.choices > 0 then
-          callback(json.choices[1].message.content)
+
+        if ok and json then
+          opts.callback(provider.process_response(json))
         else
-          callback(nil)
+          opts.callback(nil)
         end
       end
     end,

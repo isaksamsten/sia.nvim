@@ -311,12 +311,13 @@ function M.open_reply()
 end
 
 --- Compact a conversation by summarizing previous messages
---- @param conversation table The conversation object to compact
+--- @param conversation sia.Conversation The conversation object to compact
 --- @param reason string? Optional reason for compacting (used in summary message)
 --- @param callback function? Optional callback to execute after compacting
 M.compact_conversation = function(conversation, reason, callback)
-  local prompt = {
-    {
+  local Message = require("sia.conversation").Message
+  local messages = {
+    Message:from_table({
       role = "system",
       content = [[You are tasked with compacting a conversation by creating a
 comprehensive summary that preserves all essential information for
@@ -348,45 +349,46 @@ and continue working on the project without losing important details.
 
 The summary will replace the conversation history, so ensure no critical
 information is lost.]],
-    },
+    }),
   }
 
-  for _, message in ipairs(conversation:get_messages({ kind = "user" })) do
-    table.insert(prompt, message:to_prompt())
+  for _, message in ipairs(conversation:get_messages()) do
+    table.insert(messages, message:prepare())
   end
 
-  require("sia.assistant").execute_query({
-    prompt = prompt,
-  }, function(content)
-    if content then
-      conversation:clear_user_instructions()
+  require("sia.assistant").execute_query(messages, {
+    model = require("sia.config").get_default_model("fast_model"),
+    callback = function(content)
+      if content then
+        conversation:clear_user_instructions()
 
-      local summary_content
-      if reason then
-        summary_content = string.format(
-          "This is a summary of a previous conversation (%s):\n\n%s",
-          reason,
-          content
-        )
-      else
-        summary_content = string.format(
-          "This is a summary of the conversation which has been removed:\n %s",
-          content
-        )
+        local summary_content
+        if reason then
+          summary_content = string.format(
+            "This is a summary of a previous conversation (%s):\n\n%s",
+            reason,
+            content
+          )
+        else
+          summary_content = string.format(
+            "This is a summary of the conversation which has been removed:\n %s",
+            content
+          )
+        end
+
+        conversation:add_instruction({
+          role = "user",
+          content = summary_content,
+        })
+
+        if callback then
+          callback(content)
+        end
+      elseif callback then
+        callback(nil)
       end
-
-      conversation:add_instruction({
-        role = "user",
-        content = summary_content,
-      })
-
-      if callback then
-        callback(content)
-      end
-    elseif callback then
-      callback(nil)
-    end
-  end)
+    end,
+  })
 end
 
 function M.setup(options)

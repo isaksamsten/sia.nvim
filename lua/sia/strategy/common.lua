@@ -16,6 +16,7 @@ local M = {}
 --- @field column integer
 --- @field temporary boolean
 --- @field cache string[]
+--- @field extra table?
 --- @field use_cache boolean
 local StreamRenderer = {}
 StreamRenderer.__index = StreamRenderer
@@ -155,16 +156,9 @@ function Strategy:on_stream_started()
 end
 
 --- Callback triggered on each streaming content.
---- @param content string
+--- @param input { content: string?, reasoning: table?, extra: table? }
 --- @return boolean success
-function Strategy:on_content_received(content)
-  return true
-end
-
---- Callback triggered when the model is reasoning
---- @param content string
---- @return boolean success
-function Strategy:on_reasoning_received(content)
+function Strategy:on_content_received(input)
   return true
 end
 
@@ -207,27 +201,6 @@ end
 --- @param t table
 --- @return boolean success
 function Strategy:on_tool_call_received(t)
-  for i, v in ipairs(t) do
-    local func = v["function"]
-    --- Patch for gemini models
-    if v.index == nil then
-      v.index = i
-      v.id = "tool_call_id_" .. v.index
-    end
-
-    if not self.tools[v.index] then
-      self.tools[v.index] =
-        { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
-    end
-    if func.name then
-      self.tools[v.index]["function"].name = self.tools[v.index]["function"].name
-        .. func.name
-    end
-    if func.arguments then
-      self.tools[v.index]["function"].arguments = self.tools[v.index]["function"].arguments
-        .. func.arguments
-    end
-  end
   return true
 end
 
@@ -441,7 +414,7 @@ end
 --- @return sia.Query
 function Strategy:get_query()
   --- @type sia.Query
-  return self.conversation:to_query()
+  return self.conversation:prepare_messages()
 end
 
 --- @param buf integer

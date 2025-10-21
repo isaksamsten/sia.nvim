@@ -452,7 +452,13 @@ end
 --- @class sia.config.Provider
 --- @field base_url string
 --- @field api_key fun():string?
---- @field format_messages (fun(model:string, prompt:sia.Prompt[]):nil)?
+--- @field process_usage (fun(obj:table):sia.Usage?)?
+--- @field process_response fun(json:table):string?
+--- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])
+--- @field prepare_tools fun(data: table, tools:sia.Tool[])
+--- @field prepare_parameters fun(data: table, model: table)?
+--- @field get_headers (fun(messages:sia.Message[]):string[])?
+--- @field process_stream_chunk fun(strategy:sia.Strategy, obj:table):boolean?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
@@ -462,6 +468,7 @@ end
 --- @field providers table<string, sia.config.Provider>
 M.options = {
   providers = {
+    openai_responses = providers.openai_responses,
     openai = providers.openai,
     copilot = providers.copilot,
     gemini = providers.gemini,
@@ -474,9 +481,9 @@ M.options = {
   models = {
     ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
     ["zai/glm-4.6"] = { "zai", "GLM-4.6" },
-    ["openai/gpt-5"] = { "openai", "gpt-5", temperature = 1 },
+    ["openai/gpt-5"] = { "openai_responses", "gpt-4.1", temperature = 1 },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },
-    ["openai/gpt-4.1-mini"] = { "openai", "gpt-4.1-mini" },
+    ["openai/gpt-4.1-mini"] = { "openai_responses", "gpt-4.1-mini" },
     ["openai/gpt-4.1-nano"] = { "openai", "gpt-4.1-nano" },
     ["openai/gpt-4o"] = { "openai", "gpt-4o" },
     ["openai/gpt-4o-mini"] = { "openai", "gpt-4o-mini" },
