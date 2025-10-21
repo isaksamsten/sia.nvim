@@ -123,7 +123,7 @@ end
 --- @class sia.Strategy
 --- @field is_busy boolean?
 --- @field cancellable sia.Cancellable
---- @field tools table<integer, sia.ToolCall>
+--- @field pending_tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
 --- @field auto_continue_after_cancellation boolean?
@@ -136,7 +136,7 @@ Strategy.__index = Strategy
 function Strategy:new(conversation, cancellable)
   local obj = setmetatable({}, self)
   obj.conversation = conversation
-  obj.tools = {}
+  obj.pending_tools = {}
   obj.modified = {}
   obj.cancellable = cancellable or { is_cancelled = false }
   obj.auto_continue_after_cancellation = false
@@ -156,7 +156,7 @@ function Strategy:on_stream_started()
 end
 
 --- Callback triggered on each streaming content.
---- @param input { content: string?, reasoning: table?, extra: table? }
+--- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
 --- @return boolean success
 function Strategy:on_content_received(input)
   return true
@@ -218,7 +218,7 @@ end
 
 --- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
-  if not vim.tbl_isempty(self.tools) then
+  if not vim.tbl_isempty(self.pending_tools) then
     --- @type sia.ParsedTool[]
     local parallel_tools = {}
     --- @type sia.ParsedTool[]
@@ -231,7 +231,7 @@ function Strategy:execute_tools(opts)
     local tool_results = {}
 
     local index = 1
-    for _, tool in pairs(self.tools) do
+    for _, tool in pairs(self.pending_tools) do
       local tool_name = nil
       local tool_args = nil
       --- @type string?
@@ -280,7 +280,7 @@ function Strategy:execute_tools(opts)
       end
     end
 
-    self.tools = {}
+    self.pending_tools = {}
 
     if opts.handle_status_updates then
       opts.handle_status_updates(all_tools)

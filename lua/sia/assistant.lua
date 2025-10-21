@@ -100,14 +100,12 @@ function M.execute_strategy(strategy)
     end
     strategy:on_round_started()
 
-    local provider
-
     local model =
       config.options.models[strategy.conversation.model or config.get_default_model()]
     if not model then
       model = config.options.models[config.options.defaults.model]
     end
-    provider = config.options.providers[model[1]]
+    local provider = config.options.providers[model[1]]
 
     local data = {
       model = model[2],
@@ -129,6 +127,7 @@ function M.execute_strategy(strategy)
     --- @type sia.Usage?
     local usage
 
+    local stream = provider.new_stream(strategy)
     local job = call_provider(data, {
       base_url = provider.base_url,
       api_key = provider.api_key(),
@@ -185,7 +184,7 @@ function M.execute_strategy(strategy)
                 if provider.process_usage then
                   usage = provider.process_usage(obj)
                 end
-                if provider.process_stream_chunk(strategy, obj) then
+                if stream:process_stream_chunk(obj) then
                   vim.fn.jobpid(job_id)
                 end
               end
@@ -211,6 +210,7 @@ function M.execute_strategy(strategy)
           strategy.is_busy = false
           return
         end
+        stream:finalize()
 
         local finish = function()
           strategy.is_busy = false

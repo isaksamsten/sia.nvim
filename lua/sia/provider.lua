@@ -1,5 +1,169 @@
 local M = {}
 
+--- @class sia.ProviderStream
+--- @field strategy sia.Strategy
+local ProviderStream = {}
+ProviderStream.__index = ProviderStream
+
+--- Create a new stream instance
+--- @param strategy sia.Strategy
+--- @return sia.ProviderStream
+function ProviderStream.new(strategy)
+  local self = setmetatable({
+    strategy = strategy,
+  }, ProviderStream)
+  return self
+end
+
+--- @param obj table
+--- @return boolean? abort true to abort
+function ProviderStream:process_stream_chunk(_)
+  return false
+end
+
+function ProviderStream:finalize() end
+
+--- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
+--- @return boolean success
+function ProviderStream:send_content(input)
+  return self.strategy:on_content_received(input)
+end
+
+--- @class sia.OpenAICompletionStream : sia.ProviderStream
+--- @field pending_tool_calls sia.ToolCall[]
+local OpenAICompletionStream = {}
+OpenAICompletionStream.__index = OpenAICompletionStream
+setmetatable(OpenAICompletionStream, { __index = ProviderStream })
+
+function OpenAICompletionStream.new(strategy)
+  local self = ProviderStream.new(strategy)
+  setmetatable(self, OpenAICompletionStream)
+  --- @cast self sia.OpenAICompletionStream
+  self.pending_tool_calls = {}
+  return self
+end
+
+function OpenAICompletionStream:process_stream_chunk(obj)
+  if obj.choices and #obj.choices > 0 then
+    for _, choice in ipairs(obj.choices) do
+      local delta = choice.delta
+      if delta then
+        local reasoning = delta.reasoning or delta.reasoning_content
+        if reasoning and reasoning ~= "" then
+          if not self:send_content({ reasoning = { content = reasoning } }) then
+            return true
+          end
+        end
+        if delta.content and delta.content ~= "" then
+          if not self:send_content({ content = delta.content }) then
+            return true
+          end
+        end
+        if delta.tool_calls and delta.tool_calls ~= "" then
+          if not self.strategy:on_tool_call_received(delta.tool_calls) then
+            return true
+          end
+
+          for i, v in ipairs(delta.tool_calls) do
+            local func = v["function"]
+            --- Patch for gemini models
+            if v.index == nil then
+              v.index = i
+              v.id = "tool_call_id_" .. v.index
+            end
+
+            if not self.pending_tool_calls[v.index] then
+              self.pending_tool_calls[v.index] = {
+                ["function"] = { name = "", arguments = "" },
+                type = v.type,
+                id = v.id,
+              }
+            end
+            if func.name then
+              self.pending_tool_calls[v.index]["function"].name = self.pending_tool_calls[v.index]["function"].name
+                .. func.name
+            end
+            if func.arguments then
+              self.pending_tool_calls[v.index]["function"].arguments = self.pending_tool_calls[v.index]["function"].arguments
+                .. func.arguments
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+function OpenAICompletionStream:finalize()
+  if not self:send_content({ tool_calls = self.pending_tool_calls }) then
+    return true
+  end
+end
+
+--- @class sia.OpenAIResponsesStream : sia.ProviderStream
+--- @field pending_tool_calls sia.ToolCall[]
+--- @field response_id integer
+local OpenAIResponsesStream = {}
+OpenAIResponsesStream.__index = OpenAIResponsesStream
+setmetatable(OpenAIResponsesStream, { __index = ProviderStream })
+
+function OpenAIResponsesStream.new(strategy)
+  local self = ProviderStream.new(strategy)
+  setmetatable(self, OpenAIResponsesStream)
+  --- @cast self sia.OpenAIResponsesStream
+  self.pending_tool_calls = {}
+  return self
+end
+
+function OpenAIResponsesStream:process_stream_chunk(json)
+  if json.type == "response.created" then
+    if not self:send_content({ extra = { response_id = json.response.id } }) then
+      return true
+    end
+  end
+  if json.type == "response.reasoning_summary_text.delta" then
+    if not self:send_content({ reasoning = { content = json.delta } }) then
+      return true
+    end
+  elseif json.type == "response.output_text.delta" then
+    if not self:send_content({ content = json.delta }) then
+      return true
+    end
+  elseif
+    json.type == "response.completed"
+    and json.response
+    and json.response.output
+  then
+    for i, item in ipairs(json.response.output) do
+      if item.type == "function_call" and item.status == "completed" then
+        self.pending_tool_calls[i] = {
+          id = item.id,
+          call_id = item.call_id,
+          type = "function",
+          ["function"] = {
+            name = item.name,
+            arguments = item.arguments or "",
+          },
+        }
+      elseif item.type == "reasoning" then
+        local status = self:send_content({
+          reasoning = { id = item.id, encrypted_content = item.encrypted_content },
+        })
+
+        if not status then
+          return true
+        end
+      end
+    end
+  end
+end
+
+function OpenAIResponsesStream:finalize()
+  if not self:send_content({ tool_calls = self.pending_tool_calls }) then
+    return true
+  end
+end
+
 local prepare_parameters = function(data, model)
   local config = require("sia.config").options
   if model.n then
@@ -16,32 +180,6 @@ local prepare_parameters = function(data, model)
 
   if model.temperature then
     data.temperature = model.temperature
-  end
-end
-
---- @param strategy sia.Strategy
---- @param t table
-local process_stream_chunk_tool = function(strategy, t)
-  for i, v in ipairs(t) do
-    local func = v["function"]
-    --- Patch for gemini models
-    if v.index == nil then
-      v.index = i
-      v.id = "tool_call_id_" .. v.index
-    end
-
-    if not strategy.tools[v.index] then
-      strategy.tools[v.index] =
-        { ["function"] = { name = "", arguments = "" }, type = v.type, id = v.id }
-    end
-    if func.name then
-      strategy.tools[v.index]["function"].name = strategy.tools[v.index]["function"].name
-        .. func.name
-    end
-    if func.arguments then
-      strategy.tools[v.index]["function"].arguments = strategy.tools[v.index]["function"].arguments
-        .. func.arguments
-    end
   end
 end
 
@@ -66,39 +204,6 @@ local openai_completion = {
       return json.choices[1].message.content
     end
     return nil
-  end,
-
-  --- @param strategy sia.Strategy
-  --- @param obj table
-  --- @return boolean? abort return true to abort
-  process_stream_chunk = function(strategy, obj)
-    if obj.choices and #obj.choices > 0 then
-      for _, choice in ipairs(obj.choices) do
-        local delta = choice.delta
-        if delta then
-          local reasoning = delta.reasoning or delta.reasoning_content
-          if reasoning and reasoning ~= "" then
-            if
-              not strategy:on_content_received({ reasoning = { content = reasoning } })
-            then
-              return true
-            end
-          end
-          if delta.content and delta.content ~= "" then
-            if not strategy:on_content_received({ content = delta.content }) then
-              return true
-            end
-          end
-          if delta.tool_calls and delta.tool_calls ~= "" then
-            if strategy:on_tool_call_received(delta.tool_calls) then
-              process_stream_chunk_tool(strategy, delta.tool_calls)
-            else
-              return true
-            end
-          end
-        end
-      end
-    end
   end,
 
   prepare_messages = function(data, _, messages)
@@ -178,6 +283,7 @@ local openai_responses = {
     end
     return nil
   end,
+
   prepare_parameters = function(data, model)
     prepare_parameters(data, model)
     data.store = false
@@ -261,40 +367,6 @@ local openai_responses = {
         completion = usage.output_tokens or nil,
         total_time = 0,
       }
-    end
-  end,
-
-  process_stream_chunk = function(strategy, json)
-    strategy.cache = strategy.cache or {} --[[@diagnostic disable-line]]
-    if json.type == "response.created" then
-      strategy.cache.response_id = json.response.id
-    end
-    if json.type == "response.reasoning_summary_text.delta" then
-      strategy:on_content_received({ reasoning = { content = json.delta } })
-    elseif json.type == "response.output_text.delta" then
-      strategy:on_content_received({ content = json.delta })
-    elseif
-      json.type == "response.completed"
-      and json.response
-      and json.response.output
-    then
-      for i, item in ipairs(json.response.output) do
-        if item.type == "function_call" and item.status == "completed" then
-          strategy.tools[i] = {
-            id = item.id,
-            call_id = item.call_id,
-            type = "function",
-            ["function"] = {
-              name = item.name,
-              arguments = item.arguments or "",
-            },
-          }
-        elseif item.type == "reasoning" then
-          strategy:on_content_received({
-            reasoning = { id = item.id, encrypted_content = item.encrypted_content },
-          })
-        end
-      end
     end
   end,
 }
@@ -412,7 +484,7 @@ M.copilot = {
   prepare_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 --- @type sia.config.Provider
@@ -424,7 +496,7 @@ M.copilot_responses = {
   prepare_tools = openai_responses.prepare_tools,
   prepare_messages = openai_responses.prepare_messages,
   process_response = openai_responses.process_response,
-  process_stream_chunk = openai_responses.process_stream_chunk,
+  new_stream = OpenAIResponsesStream.new,
 }
 
 --- @type sia.config.Provider
@@ -438,7 +510,7 @@ M.openai = {
   prepare_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 --- @type sia.config.Provider
@@ -452,7 +524,7 @@ M.gemini = {
   add_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 --- @type sia.config.Provider
@@ -466,7 +538,7 @@ M.anthropic = {
   add_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 --- @type sia.config.Provider
@@ -480,7 +552,7 @@ M.zai_coding = {
   add_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 M.ollama = function(port)
@@ -495,7 +567,7 @@ M.ollama = function(port)
     add_parameters = openai_completion.prepare_parameters,
     prepare_tools = openai_completion.prepare_tools,
     prepare_messages = openai_completion.prepare_messages,
-    process_stream_chunk = openai_completion.process_stream_chunk,
+    new_stream = OpenAICompletionStream.new,
   }
 end
 
@@ -510,7 +582,7 @@ M.morph = {
   prepare_parameters = openai_completion.prepare_parameters,
   prepare_tools = openai_completion.prepare_tools,
   prepare_messages = openai_completion.prepare_messages,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
 }
 
 local OR_CACHING_PREFIXES = { "anthropic/", "google/" }
@@ -521,7 +593,7 @@ M.openrouter = {
   api_key = function()
     return os.getenv("OPENROUTER_API_KEY")
   end,
-  process_stream_chunk = openai_completion.process_stream_chunk,
+  new_stream = OpenAICompletionStream.new,
   process_response = openai_completion.process_response,
   process_usage = openai_completion.process_usage,
   prepare_parameters = openai_completion.prepare_parameters,
@@ -582,7 +654,7 @@ M.openai_responses = {
   prepare_tools = openai_responses.prepare_tools,
   process_response = openai_responses.process_response,
   process_usage = openai_responses.process_usage,
-  process_stream_chunk = openai_responses.process_stream_chunk,
+  new_stream = OpenAIResponsesStream.new,
 }
 
 return M

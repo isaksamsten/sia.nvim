@@ -458,7 +458,7 @@ end
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(messages:sia.Message[]):string[])?
---- @field process_stream_chunk fun(strategy:sia.Strategy, obj:table):boolean?
+--- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 
 --- @class sia.config.Options
 --- @field models sia.config.Models

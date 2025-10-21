@@ -106,6 +106,9 @@ function InsertStrategy:on_content_received(input)
   if input.content then
     self.writer:append(input.content)
   end
+  if input.tool_calls then
+    self.pending_tools = input.tool_calls
+  end
   return true
 end
 

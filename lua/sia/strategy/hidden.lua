@@ -65,6 +65,9 @@ function HiddenStrategy:on_content_received(input)
   if input.content then
     self._writer:append(input.content)
   end
+  if input.tool_calls then
+    self.pending_tools = input.tool_calls
+  end
 end
 
 function HiddenStrategy:on_completed(control)
