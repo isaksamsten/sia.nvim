@@ -125,7 +125,10 @@ function ChatStrategy:on_request_start()
 end
 
 function ChatStrategy:on_round_started()
-  return self:buf_is_loaded()
+  if not self:buf_is_loaded() then
+    return false
+  end
+  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
 end
 
 function ChatStrategy:on_error()
@@ -142,7 +145,6 @@ function ChatStrategy:on_stream_started()
     return false
   end
   self.canvas:clear_temporary_text()
-  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
   self:set_abort_keymap(self.buf)
   self.writer = StreamRenderer:new({
     canvas = self.canvas,
