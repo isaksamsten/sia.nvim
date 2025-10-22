@@ -257,20 +257,28 @@ local openai_completion = {
   end,
 
   prepare_messages = function(data, _, messages)
+    --- We need to shorten the id if the user has used another provider
+    --- @param id string
+    local function shorten_id(id)
+      if #id > 40 then
+        return id:sub(1, 4)
+      end
+      return id
+    end
     data.messages = vim
       .iter(messages)
       --- @param m sia.Message
       :map(function(m)
         local message = { role = m.role, content = m.content }
         if m._tool_call then
-          message.tool_call_id = m._tool_call.id
+          message.tool_call_id = shorten_id(m._tool_call.id)
         end
         if m.tool_calls then
           message.tool_calls = {}
           for _, tool_call in ipairs(m.tool_calls) do
             table.insert(message.tool_calls, {
               ["function"] = tool_call["function"],
-              id = tool_call.id,
+              id = shorten_id(tool_call.id),
               type = tool_call.type,
             })
           end
