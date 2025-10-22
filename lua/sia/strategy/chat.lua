@@ -176,7 +176,7 @@ function ChatStrategy:on_tool_call_received()
     return false
   end
   self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
-  return Strategy.on_tool_call_received(self)
+  return true
 end
 
 function ChatStrategy:get_win()
