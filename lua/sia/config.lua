@@ -506,6 +506,7 @@ M.options = {
     ["copilot/claude-sonnet-3.7"] = { "copilot", "claude-3.7-sonnet" },
     ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
     ["copilot/claude-sonnet-4.5"] = { "copilot", "claude-sonnet-4.5" },
+    ["copilot/claude-haiku-4.5"] = { "copilot", "claude-haiku-4.5" },
     ["copilot/o3-mini"] = { "copilot", "o3-mini", reasoning_effort = "medium" },
     ["copilot/grok-code-fast-1"] = { "copilot", "grok-code-fast-1" },
     ["gemini/1.5-flash-8b"] = { "gemini", "gemini-1.5-flash-8b" },
