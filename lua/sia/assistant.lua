@@ -218,7 +218,7 @@ function M.execute_strategy(strategy)
           strategy.is_busy = false
           return
         end
-        stream:finalize()
+        local final_content = stream:finalize()
 
         local finish = function()
           strategy.is_busy = false
@@ -250,6 +250,7 @@ function M.execute_strategy(strategy)
         strategy:on_completed({
           continue_execution = continue_execution,
           finish = finish,
+          content = final_content,
           usage = usage,
         })
       end,

@@ -163,11 +163,7 @@ function ChatStrategy:on_content_received(input)
     self.writer:append(input.content)
   end
   if input.reasoning then
-    if input.reasoning.content then
-      self.writer:append(input.reasoning.content, true)
-    else
-      self.writer.extra = input.reasoning.extra
-    end
+    self.writer:append(input.reasoning.content, true)
   end
   if input.tool_calls then
     self.pending_tools = input.tool_calls
@@ -211,12 +207,6 @@ function ChatStrategy:on_completed(control)
   end
 
   self.canvas:scroll_to_bottom()
-  if not self.writer:is_empty() then
-    self.conversation:add_instruction({
-      role = "assistant",
-      content = self.writer.cache,
-    })
-  end
   local handle_cleanup = function()
     self.writer = nil
     if not self:buf_is_loaded() then

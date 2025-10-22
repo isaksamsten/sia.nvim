@@ -124,7 +124,7 @@ function Message:from_table(instruction, context)
   if instruction._tool_call then
     obj._tool_call = instruction._tool_call
   end
-
+  obj.meta = {}
   obj.hide = instruction.hide
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
@@ -507,7 +507,7 @@ end
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param context sia.Context?
---- @param opts { ignore_duplicates: boolean?}?
+--- @param opts { ignore_duplicates: boolean?, meta: table?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
   -- We track per-kind updates to avoid two problems:
@@ -524,6 +524,9 @@ function Conversation:add_instruction(instruction, context, opts)
       done[message.kind] = true
     end
     table.insert(self.messages, message)
+    if opts.meta then
+      message.meta = opts.meta
+    end
   end
 end
 

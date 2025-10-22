@@ -15,9 +15,7 @@ local M = {}
 --- @field line integer
 --- @field column integer
 --- @field temporary boolean
---- @field cache string[]
 --- @field extra table?
---- @field use_cache boolean
 local StreamRenderer = {}
 StreamRenderer.__index = StreamRenderer
 
@@ -27,7 +25,6 @@ StreamRenderer.__index = StreamRenderer
 --- @field line integer? 0-indexed
 --- @field column integer? 0-indexed
 --- @field temporary boolean?
---- @field use_cache boolean?
 
 --- @param opts sia.StreamRendererOpts?
 function StreamRenderer:new(opts)
@@ -40,10 +37,7 @@ function StreamRenderer:new(opts)
     line = opts.line or 0,
     column = opts.column or 0,
     temporary = opts.temporary,
-    use_cache = opts.use_cache or opts.temporary == false,
-    cache = {},
   }
-  obj.cache[1] = ""
   setmetatable(obj, self)
   return obj
 end
@@ -68,9 +62,6 @@ function StreamRenderer:append_substring(substring, temporary)
       { substring }
     )
   end
-  if self.use_cache then
-    self.cache[#self.cache] = self.cache[#self.cache] .. substring
-  end
   self.column = self.column + #substring
 end
 
@@ -88,9 +79,6 @@ function StreamRenderer:append_newline(temporary)
   end
   self.line = self.line + 1
   self.column = 0
-  if self.use_cache then
-    self.cache[#self.cache + 1] = ""
-  end
 end
 
 --- @param temporary boolean?
@@ -101,12 +89,8 @@ function StreamRenderer:append_newline_if_needed(temporary)
   self:append_newline(temporary)
 end
 
-function StreamRenderer:reset_cache()
-  self.cache = { "" }
-end
-
 function StreamRenderer:is_empty()
-  return #self.cache == 0 or (#self.cache == 1 and self.cache[1] == "")
+  return self.start_col == self.column and self.start_line == self.line
 end
 
 --- @param content string The string content to append to the buffer.
@@ -171,7 +155,7 @@ function Strategy:on_content_received(input)
 end
 
 --- Callback triggered when the strategy is completed.
---- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage? }
+--- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage?, content: string[]? }
 function Strategy:on_completed(control) end
 
 function Strategy:on_error() end

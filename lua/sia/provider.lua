@@ -21,6 +21,7 @@ function ProviderStream:process_stream_chunk(_)
   return false
 end
 
+--- @return string[]? content
 function ProviderStream:finalize() end
 
 --- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
@@ -31,6 +32,7 @@ end
 
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
+--- @field content string
 local OpenAICompletionStream = {}
 OpenAICompletionStream.__index = OpenAICompletionStream
 setmetatable(OpenAICompletionStream, { __index = ProviderStream })
@@ -40,6 +42,7 @@ function OpenAICompletionStream.new(strategy)
   setmetatable(self, OpenAICompletionStream)
   --- @cast self sia.OpenAICompletionStream
   self.pending_tool_calls = {}
+  self.content = ""
   return self
 end
 
@@ -58,6 +61,7 @@ function OpenAICompletionStream:process_stream_chunk(obj)
           if not self:send_content({ content = delta.content }) then
             return true
           end
+          self.content = self.content .. delta.content
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
           if not self.strategy:on_tool_call_received(delta.tool_calls) then
@@ -94,15 +98,30 @@ function OpenAICompletionStream:process_stream_chunk(obj)
   end
 end
 
+--- @return string[]? content
 function OpenAICompletionStream:finalize()
   if not self:send_content({ tool_calls = self.pending_tool_calls }) then
-    return true
+    return nil
   end
+
+  if self.content == "" then
+    return nil
+  end
+
+  local content = vim.split(self.content, "\n")
+  self.strategy.conversation:add_instruction({
+    role = "assistant",
+    content = content,
+  })
+  return content
 end
 
 --- @class sia.OpenAIResponsesStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
---- @field response_id integer
+--- @field response_id integer?
+--- @field content string
+--- @field reasoning_summary string?
+--- @field encrypted_reasoning {id: integer, content: string}?
 local OpenAIResponsesStream = {}
 OpenAIResponsesStream.__index = OpenAIResponsesStream
 setmetatable(OpenAIResponsesStream, { __index = ProviderStream })
@@ -112,14 +131,14 @@ function OpenAIResponsesStream.new(strategy)
   setmetatable(self, OpenAIResponsesStream)
   --- @cast self sia.OpenAIResponsesStream
   self.pending_tool_calls = {}
+  self.content = ""
+  self.reasoning_summary = nil
   return self
 end
 
 function OpenAIResponsesStream:process_stream_chunk(json)
   if json.type == "response.created" then
-    if not self:send_content({ extra = { response_id = json.response.id } }) then
-      return true
-    end
+    self.response_id = json.response.id
   end
   if json.type == "response.reasoning_summary_text.delta" then
     if not self:send_content({ reasoning = { content = json.delta } }) then
@@ -129,14 +148,15 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     if not self:send_content({ content = json.delta }) then
       return true
     end
+    self.content = self.content .. json.delta
   elseif
     json.type == "response.completed"
     and json.response
     and json.response.output
   then
-    for i, item in ipairs(json.response.output) do
+    for _, item in ipairs(json.response.output) do
       if item.type == "function_call" and item.status == "completed" then
-        self.pending_tool_calls[i] = {
+        table.insert(self.pending_tool_calls, {
           id = item.id,
           call_id = item.call_id,
           type = "function",
@@ -144,24 +164,52 @@ function OpenAIResponsesStream:process_stream_chunk(json)
             name = item.name,
             arguments = item.arguments or "",
           },
-        }
-      elseif item.type == "reasoning" then
-        local status = self:send_content({
-          reasoning = { id = item.id, encrypted_content = item.encrypted_content },
         })
-
-        if not status then
-          return true
+      elseif item.type == "reasoning" then
+        self.encrypted_reasoning =
+          { id = item.id, encrypted_content = item.encrypted_content }
+        for _, subitem in ipairs(item.summary) do
+          if subitem.type == "summary_text" then
+            self.reasoning_summary = (self.reasoning_summary or "")
+              .. subitem.text
+              .. "\n"
+          end
         end
       end
     end
   end
 end
 
+--- @return string[]? content
 function OpenAIResponsesStream:finalize()
   if not self:send_content({ tool_calls = self.pending_tool_calls }) then
-    return true
+    return nil
   end
+
+  local reasoning
+  if self.encrypted_reasoning and self.reasoning_summary then
+    reasoning = {
+      summary = self.reasoning_summary,
+      encrypted_content = self.encrypted_reasoning,
+    }
+  end
+
+  if reasoning == nil and self.content == "" then
+    return nil
+  end
+
+  local content
+  if self.content ~= "" then
+    content = vim.split(self.content, "\n")
+  end
+
+  self.strategy.conversation:add_instruction({
+    hide = true,
+    role = "assistant",
+    content = content,
+  }, nil, { meta = { reasoning = reasoning } })
+
+  return content
 end
 
 local prepare_parameters = function(data, model)
@@ -288,10 +336,13 @@ local openai_responses = {
     prepare_parameters(data, model)
     data.store = false
     if model.can_reason or model.reasoning_effort then
+      data.temperature = nil
       data.include = { "reasoning.encrypted_content" }
     end
   end,
 
+  --- @param data table
+  --- @param messages sia.Message[]
   prepare_messages = function(data, _, messages)
     local instructions = vim
       .iter(messages)
@@ -325,8 +376,20 @@ local openai_responses = {
             arguments = tool_call["function"].arguments,
           })
         end
-      else
-        table.insert(input, { role = m.role, content = m.content })
+      elseif m.role ~= "system" then
+        local reasoning = m.meta.reasoning
+        if reasoning then
+          local item = { type = "reasoning" }
+          if reasoning.summary then
+            item.summary = { type = "summary_text", text = reasoning.summary }
+          end
+          if reasoning.encrypted_content then
+            item.encrypted_content = reasoning.encrypted_content
+          end
+          table.insert(input, item)
+        else
+          table.insert(input, { role = m.role, content = m.content })
+        end
       end
       i = i + 1
     end

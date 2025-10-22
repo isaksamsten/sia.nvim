@@ -69,7 +69,6 @@ function InsertStrategy:on_request_start()
     col = self.start_col,
     canvas = Canvas:new(self.context.buf, { temporary_text_hl = "SiaInsert" }),
     temporary = true,
-    use_cache = true,
   })
 
   self:set_abort_keymap(self.context.buf)
@@ -121,12 +120,6 @@ function InsertStrategy:on_completed(control)
 
   self:execute_tools({
     handle_tools_completion = function(opts)
-      if not self.writer:is_empty() then
-        self.conversation:add_instruction({
-          role = "assistant",
-          content = self.writer.cache,
-        })
-      end
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -153,7 +146,6 @@ function InsertStrategy:on_completed(control)
 
       if not self.writer:is_empty() then
         self.writer:append_newline()
-        self.writer:reset_cache()
       end
 
       if opts.cancelled then
@@ -163,7 +155,8 @@ function InsertStrategy:on_completed(control)
       end
     end,
     handle_empty_toolset = function()
-      if not self:is_buf_loaded() then
+      local content = control.content
+      if not self:is_buf_loaded() or not content then
         control.finish()
         self.conversation:untrack_messages()
         return
@@ -181,7 +174,7 @@ function InsertStrategy:on_completed(control)
           { "" }
         )
       end
-      local content = self.writer.cache
+
       vim.api.nvim_buf_set_text(
         self.context.buf,
         self.start_row - 1,
@@ -204,7 +197,7 @@ function InsertStrategy:on_completed(control)
         }
       )
       self:post_process(
-        self.writer.cache,
+        content,
         self.start_row - 1,
         self.start_col,
         end_row - 1,

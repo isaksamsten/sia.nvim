@@ -72,7 +72,6 @@ function DiffStrategy:on_request_start()
     canvas = Canvas:new(self.target_buf, { temporary_text_hl = "SiaInsert" }),
     line = vim.api.nvim_buf_line_count(self.target_buf) - 1,
     temporary = true,
-    use_cache = true,
   })
   self:set_abort_keymap(self.target_buf)
   return true
@@ -109,10 +108,6 @@ end
 function DiffStrategy:on_completed(control)
   self:execute_tools({
     handle_tools_completion = function(opts)
-      self.conversation:add_instruction({
-        role = "assistant",
-        content = self.writer.cache,
-      })
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -138,7 +133,6 @@ function DiffStrategy:on_completed(control)
         })
       end
       self.writer:append_newline()
-      self.writer:reset_cache()
 
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool(control)
@@ -149,10 +143,11 @@ function DiffStrategy:on_completed(control)
     handle_empty_toolset = function()
       vim.api.nvim_buf_clear_namespace(self.context.buf, DIFF_NS, 0, -1)
       local context = self.context
+      local content = control.content
       local buf_loaded = vim.api.nvim_buf_is_loaded(self.target_buf)
       local diff_win_valid = vim.api.nvim_win_is_valid(self.target_win)
       local curr_win_valid = context and vim.api.nvim_win_is_valid(context.win)
-      if not (buf_loaded and diff_win_valid and curr_win_valid) then
+      if not (buf_loaded and diff_win_valid and curr_win_valid and content) then
         control.finish()
         self.conversation:untrack_messages()
         return
@@ -165,13 +160,13 @@ function DiffStrategy:on_completed(control)
         self.context.pos[1] - 1,
         self.context.pos[2] - 1,
         false,
-        self.writer.cache
+        content
       )
       if context.pos[2] < vim.api.nvim_buf_line_count(context.buf) then
         local after = vim.api.nvim_buf_get_lines(context.buf, context.pos[2], -1, true)
         vim.api.nvim_buf_set_lines(
           self.target_buf,
-          #self.writer.cache + context.pos[2] - 1,
+          #content + context.pos[2] - 1,
           -1,
           false,
           after
