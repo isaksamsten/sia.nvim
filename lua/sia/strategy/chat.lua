@@ -281,7 +281,7 @@ function ChatStrategy:on_completed(control)
               kind = tool_result.result.kind,
             },
           }, tool_result.result.context)
-          self.writer:append_newline()
+          self.writer:append_newline_if_needed()
         end
       end
 
