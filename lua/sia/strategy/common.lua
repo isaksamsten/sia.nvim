@@ -401,13 +401,6 @@ function Strategy:execute_tools(opts)
   end
 end
 
---- Returns the query submitted to the LLM
---- @return sia.Query
-function Strategy:get_query()
-  --- @type sia.Query
-  return self.conversation:prepare_messages()
-end
-
 --- @param buf integer
 function Strategy:set_abort_keymap(buf)
   if vim.api.nvim_buf_is_valid(buf) then
