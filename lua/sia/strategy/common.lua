@@ -190,9 +190,8 @@ end
 --- Callback triggered when LLM wants to call a function
 ---
 --- Collects a streaming function call response
---- @param t table
 --- @return boolean success
-function Strategy:on_tool_call_received(t)
+function Strategy:on_tool_call_received()
   return true
 end
 

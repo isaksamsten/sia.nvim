@@ -63,8 +63,8 @@ function TestStrategy:on_content_received(input)
   end
   return true
 end
-function TestStrategy:on_tool_call_received(calls)
-  return common.Strategy.on_tool_call_received(self, calls)
+function TestStrategy:on_tool_call_received()
+  return common.Strategy.on_tool_call_received(self)
 end
 function TestStrategy:on_completed()
   self.completed = true

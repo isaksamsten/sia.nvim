@@ -171,12 +171,12 @@ function ChatStrategy:on_content_received(input)
   return true
 end
 
-function ChatStrategy:on_tool_call_received(tool)
+function ChatStrategy:on_tool_call_received()
   if not self:buf_is_loaded() then
     return false
   end
   self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
-  return Strategy.on_tool_call_received(self, tool)
+  return Strategy.on_tool_call_received(self)
 end
 
 function ChatStrategy:get_win()

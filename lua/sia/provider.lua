@@ -64,7 +64,7 @@ function OpenAICompletionStream:process_stream_chunk(obj)
           self.content = self.content .. delta.content
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
-          if not self.strategy:on_tool_call_received(delta.tool_calls) then
+          if not self.strategy:on_tool_call_received() then
             return true
           end
 
@@ -149,6 +149,8 @@ function OpenAIResponsesStream:process_stream_chunk(json)
       return true
     end
     self.content = self.content .. json.delta
+  elseif json.type == "response.function_call_arguments.delta" then
+    self.strategy:on_tool_call_received()
   elseif
     json.type == "response.completed"
     and json.response
