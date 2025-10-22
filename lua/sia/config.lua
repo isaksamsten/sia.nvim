@@ -469,6 +469,7 @@ end
 M.options = {
   providers = {
     openai_responses = providers.openai_responses,
+    copilot_responses = providers.copilot_responses,
     openai = providers.openai,
     copilot = providers.copilot,
     gemini = providers.gemini,
@@ -497,6 +498,7 @@ M.options = {
     ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1" },
     ["copilot/gpt-5"] = { "copilot", "gpt-5" },
     ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini" },
+    ["copilot/gpt-5-codex"] = { "copilot_responses", "gpt-5-codex", can_reason = true },
     ["copilot/gpt-4.1-mini"] = { "copilot", "gpt-4.1-mini" },
     ["copilot/gpt-4.1-nano"] = { "copilot", "gpt-4.1-nano" },
     ["copilot/o3"] = { "copilot", "o3", reasoning_effort = "medium" },
