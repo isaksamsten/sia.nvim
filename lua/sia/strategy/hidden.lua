@@ -1,6 +1,5 @@
 local common = require("sia.strategy.common")
 
-local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
 
 local HIDDEN_NS = vim.api.nvim_create_namespace("SiaHiddenStrategy")
@@ -43,42 +42,13 @@ function HiddenStrategy:on_request_start()
   end
 end
 
-function HiddenStrategy:on_stream_started()
-  local context = self.conversation.context
-  if context then
-    self:set_abort_keymap(context.buf)
-  end
-  self._writer = StreamRenderer:new()
-  return true
-end
-
 function HiddenStrategy:on_error()
   local context = self.conversation.context
-  if context then
-    vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
-    self:del_abort_keymap(context.buf)
-  end
   self._options.callback(context, { "The operation failed" })
 end
 
-function HiddenStrategy:on_content_received(input)
-  if input.content then
-    self._writer:append(input.content)
-  end
-  if input.tool_calls then
-    self.pending_tools = input.tool_calls
-  end
-end
-
-function HiddenStrategy:on_completed(control)
+function HiddenStrategy:on_complete(control)
   local context = self.conversation.context
-  if #self._writer.cache > 0 then
-    self.conversation:add_instruction({
-      role = "assistant",
-      content = self._writer.cache,
-      kind = "<assistant-callback>",
-    })
-  end
 
   self:execute_tools({
     cancellable = self.cancellable,
@@ -124,26 +94,16 @@ function HiddenStrategy:on_completed(control)
     end,
     handle_empty_toolset = function()
       if context then
-        self:del_abort_keymap(context.buf)
         vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
       end
-      local messages = self.conversation:get_messages({
-        filter = function(message)
-          return message.role == "assistant" and message.kind == "<assistant-callback>"
-        end,
-      })
-      local content = require("sia.conversation").Message.merge_content(messages)
-      self._options.callback(context, content)
-      if not content then
-        vim.api.nvim_echo({ { "Sia: No response received", "Error" } }, false, {})
-      end
+      self._options.callback(context, control.content)
       self.conversation:untrack_messages()
       control.finish()
     end,
   })
 end
 
-function HiddenStrategy:on_cancelled()
+function HiddenStrategy:on_cancel()
   local context = self.conversation.context
   if context then
     vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)

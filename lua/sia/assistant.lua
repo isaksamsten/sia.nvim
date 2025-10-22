@@ -100,7 +100,7 @@ function M.execute_strategy(strategy)
         data = { buf = strategy.buf },
       })
     end
-    strategy:on_round_started()
+    strategy:on_round_start()
 
     local model =
       config.options.models[strategy.conversation.model or config.get_default_model()]
@@ -153,7 +153,7 @@ function M.execute_strategy(strategy)
             end
           end
           if not error_initialize then
-            if not strategy:on_stream_started() then
+            if not strategy:on_stream_start() then
               strategy.is_busy = false
               strategy:on_error()
               vim.fn.jobstop(job_id)
@@ -211,7 +211,7 @@ function M.execute_strategy(strategy)
 
         if code == ERROR_API_KEY_MISSING or code == 143 or code == 137 then
           if code == 143 or code == 137 then
-            strategy:on_cancelled()
+            strategy:on_cancel()
           else
             strategy:on_error()
           end
@@ -231,7 +231,7 @@ function M.execute_strategy(strategy)
 
         local continue_execution = function()
           if strategy.cancellable.is_cancelled then
-            strategy:on_cancelled()
+            strategy:on_cancel()
             finish()
           else
             execute_round(false)
@@ -247,7 +247,7 @@ function M.execute_strategy(strategy)
           end
         end
 
-        strategy:on_completed({
+        strategy:on_complete({
           continue_execution = continue_execution,
           finish = finish,
           content = final_content,

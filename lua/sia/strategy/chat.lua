@@ -124,7 +124,7 @@ function ChatStrategy:on_request_start()
   return true
 end
 
-function ChatStrategy:on_round_started()
+function ChatStrategy:on_round_start()
   if not self:buf_is_loaded() then
     return false
   end
@@ -140,10 +140,11 @@ function ChatStrategy:on_error()
   })
 end
 
-function ChatStrategy:on_stream_started()
+function ChatStrategy:on_stream_start()
   if not self:buf_is_loaded() then
     return false
   end
+  self.canvas:clear_progress()
   self.canvas:clear_temporary_text()
   self:set_abort_keymap(self.buf)
   self.writer = StreamRenderer:new({
@@ -155,7 +156,7 @@ function ChatStrategy:on_stream_started()
   return true
 end
 
-function ChatStrategy:on_content_received(input)
+function ChatStrategy:on_content(input)
   if not self:buf_is_loaded() then
     return false
   end
@@ -171,7 +172,7 @@ function ChatStrategy:on_content_received(input)
   return true
 end
 
-function ChatStrategy:on_tool_call_received()
+function ChatStrategy:on_tools()
   if not self:buf_is_loaded() then
     return false
   end
@@ -183,7 +184,7 @@ function ChatStrategy:get_win()
   return vim.fn.bufwinid(self.buf)
 end
 
-function ChatStrategy:on_cancelled()
+function ChatStrategy:on_cancel()
   if not self:buf_is_loaded() then
     return false
   end
@@ -195,7 +196,7 @@ function ChatStrategy:on_cancelled()
   })
 end
 
-function ChatStrategy:on_completed(control)
+function ChatStrategy:on_complete(control)
   if not self.writer then
     control.finish()
     return
@@ -215,7 +216,7 @@ function ChatStrategy:on_completed(control)
     end
 
     self:del_abort_keymap(self.buf)
-    self.canvas:clear_extmarks()
+    self.canvas:clear_progress()
     if control.usage then
       self.canvas:update_usage(control.usage, self.assistant_extmark)
     end

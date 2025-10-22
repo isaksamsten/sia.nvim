@@ -159,8 +159,8 @@ T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = fun
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   local buf = strategy.buf
 
-  local original_on_start = strategy.on_stream_started
-  strategy.on_stream_started = function(self)
+  local original_on_start = strategy.on_stream_start
+  strategy.on_stream_start = function(self)
     -- Delete buffer during on_start to simulate failure
     vim.api.nvim_buf_delete(buf, { force = true })
     return false
@@ -172,7 +172,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = fun
   eq(strategy.is_busy, false)
 
   -- Restore original method
-  strategy.on_stream_started = original_on_start
+  strategy.on_stream_start = original_on_start
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = function()

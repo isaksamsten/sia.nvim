@@ -135,33 +135,106 @@ function Strategy:new(conversation, cancellable)
   return obj
 end
 
+--- Called at the very start of request execution, before any API calls are made.
+--- This is the initialization phase where the strategy should set up its UI,
+--- initialize buffers, and prepare to display content.
+---
+--- When: Once per request, before on_round_start()
+--- Triggers: SiaInit autocmd if successful
+---
+--- @return boolean success If false, execution stops and on_error() is called
 function Strategy:on_request_start()
   return true
 end
 
-function Strategy:on_round_started() end
+--- Called at the beginning of each round of execution. A request may have multiple
+--- rounds if tools are used (initial round + continuation rounds after tools execute).
+---
+--- When: Before each API call (initial request and after tool execution)
+--- Use for: Showing status updates like "Analyzing your request..." between rounds
+---
+--- @return nil This is a notification callback with no return value
+function Strategy:on_round_start() end
 
---- Callback triggered when the strategy starts.
---- @return boolean success
-function Strategy:on_stream_started()
+--- Called when the first data arrives from the streaming API response.
+--- This signals that streaming has begun and the strategy should prepare to
+--- receive content chunks. At this point, the API has responded successfully.
+---
+--- When: After on_request_start() and on_round_start(), when first stream data arrives
+--- Triggers: SiaStart autocmd if successful
+---
+--- @return boolean success If false, execution stops and on_error() is called
+function Strategy:on_stream_start()
   return true
 end
 
---- Callback triggered on each streaming content.
---- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
---- @return boolean success
-function Strategy:on_content_received(input)
+--- Called repeatedly during streaming for each piece of content that arrives.
+--- Content can be text chunks, reasoning content, or tool calls. This is where
+--- the strategy displays the streaming response to the user.
+---
+--- When: Multiple times during streaming as content arrives
+--- Frequency: Every time a delta arrives from the API (text, reasoning, or tool_calls)
+---
+--- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?}
+--- @return boolean success If false, streaming is aborted
+function Strategy:on_content(input)
   return true
 end
 
---- Callback triggered when the strategy is completed.
+--- Called after streaming completes. This is where the strategy executes tools
+--- (if any were detected), performs cleanup, and decides whether to continue with
+--- another round (if tools were used) or finish.
+---
+--- When: After all content has been streamed
+--- Triggers: SiaComplete autocmd when control.finish() is called
+---
+--- The control table provides:
+--- - continue_execution(): Start another round (typically after tool execution)
+--- - finish(): End execution and mark strategy as not busy
+--- - content: The complete streamed content as string[]
+--- - usage: Token usage statistics
+---
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage?, content: string[]? }
-function Strategy:on_completed(control) end
+function Strategy:on_complete(control) end
 
+--- Called when an error occurs during execution. This can be API errors,
+--- initialization failures, or stream errors.
+---
+--- Called when:
+--- - on_request_start() returns false
+--- - on_stream_start() returns false
+--- - API returns an error response
+---
+--- Use for: Cleanup, showing error messages to user
+---
+--- @return nil This is a notification callback
 function Strategy:on_error() end
 
-function Strategy:on_cancelled() end
+--- Called when the user cancels the operation (typically via the abort keymap).
+---
+--- When: User cancels via abort keymap
+---
+--- Use for: Cleanup, showing cancellation message to user
+---
+--- @return nil This is a notification callback
+function Strategy:on_cancel() end
 
+--- Called when tool calls are first detected in the API response.
+--- This is a notification that tools will be included in the response, allowing
+--- the strategy to show UI feedback like "Preparing to use tools...".
+---
+--- Note: The actual tool call data arrives later through on_content() with
+--- input.tool_calls populated. This callback just signals that tools were detected.
+---
+--- When: During streaming, before the complete tool_calls are assembled
+--- Use for: Showing status updates like "Preparing to use tools..."
+---
+--- @return boolean success If false, streaming is aborted
+function Strategy:on_tools()
+  return true
+end
+
+--- @protected
 --- @param control { continue_execution: (fun():nil), finish: (fun():nil) }
 function Strategy:confirm_continue_after_cancelled_tool(control)
   if
@@ -185,14 +258,6 @@ function Strategy:confirm_continue_after_cancelled_tool(control)
       end
     end)
   end
-end
-
---- Callback triggered when LLM wants to call a function
----
---- Collects a streaming function call response
---- @return boolean success
-function Strategy:on_tool_call_received()
-  return true
 end
 
 --- @class sia.ParsedTool

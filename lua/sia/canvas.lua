@@ -35,7 +35,7 @@ end
 
 function Canvas:update_tool_progress(content)
   local buf = self.buf
-  self:clear_extmarks()
+  self:clear_progress()
   self.progress_extmark =
     vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
       virt_lines = content,
@@ -44,7 +44,7 @@ function Canvas:update_tool_progress(content)
 end
 function Canvas:update_progress(content)
   local buf = self.buf
-  self:clear_extmarks()
+  self:clear_progress()
   table.insert(content, 1, { "🤖 ", "Normal" })
   self.progress_extmark =
     vim.api.nvim_buf_set_extmark(buf, PROGRESS_NS, self:line_count() - 1, 0, {
@@ -71,7 +71,7 @@ function Canvas:clear_temporary_text()
   self.reasoning_line = nil
 end
 
-function Canvas:clear_extmarks()
+function Canvas:clear_progress()
   pcall(vim.api.nvim_buf_del_extmark, self.buf, PROGRESS_NS, self.progress_extmark)
   self.progress_extmark = nil
 end

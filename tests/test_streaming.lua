@@ -45,13 +45,13 @@ end
 function TestStrategy:on_request_start()
   return true
 end
-function TestStrategy:on_stream_started()
+function TestStrategy:on_stream_start()
   return true
 end
 function TestStrategy:on_error()
   self.error = true
 end
-function TestStrategy:on_content_received(input)
+function TestStrategy:on_content(input)
   if input.content then
     table.insert(self.contents, input.content)
   end
@@ -63,10 +63,10 @@ function TestStrategy:on_content_received(input)
   end
   return true
 end
-function TestStrategy:on_tool_call_received()
-  return common.Strategy.on_tool_call_received(self)
+function TestStrategy:on_tools()
+  return common.Strategy.on_tools(self)
 end
-function TestStrategy:on_completed()
+function TestStrategy:on_complete()
   self.completed = true
 end
 

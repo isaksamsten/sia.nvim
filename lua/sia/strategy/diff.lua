@@ -84,15 +84,15 @@ function DiffStrategy:on_error()
   end
 end
 
-function DiffStrategy:on_cancelled()
+function DiffStrategy:on_cancel()
   self:on_error()
 end
 
-function DiffStrategy:on_stream_started()
+function DiffStrategy:on_stream_start()
   return self:buf_is_loaded()
 end
 
-function DiffStrategy:on_content_received(input)
+function DiffStrategy:on_content(input)
   if self:buf_is_loaded() then
     if input.content then
       self.writer:append(input.content)
@@ -105,7 +105,7 @@ function DiffStrategy:on_content_received(input)
   return false
 end
 
-function DiffStrategy:on_completed(control)
+function DiffStrategy:on_complete(control)
   self:execute_tools({
     handle_tools_completion = function(opts)
       if opts.results then

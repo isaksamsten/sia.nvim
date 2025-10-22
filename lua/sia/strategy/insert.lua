@@ -75,7 +75,7 @@ function InsertStrategy:on_request_start()
   return true
 end
 
-function InsertStrategy:on_stream_started()
+function InsertStrategy:on_stream_start()
   if not self:is_buf_loaded() then
     return false
   end
@@ -91,11 +91,11 @@ function InsertStrategy:on_error()
   self.writer.canvas:clear_temporary_text()
 end
 
-function InsertStrategy:on_cancelled()
+function InsertStrategy:on_cancel()
   self:on_error()
 end
 
-function InsertStrategy:on_content_received(input)
+function InsertStrategy:on_content(input)
   if not self:is_buf_loaded() then
     return false
   end
@@ -111,7 +111,7 @@ function InsertStrategy:on_content_received(input)
   return true
 end
 
-function InsertStrategy:on_completed(control)
+function InsertStrategy:on_complete(control)
   if not self:is_buf_loaded() then
     control.finish()
     self.conversation:untrack_messages()

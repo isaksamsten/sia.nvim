@@ -24,10 +24,11 @@ end
 --- @return string[]? content
 function ProviderStream:finalize() end
 
+--- @protected
 --- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
 --- @return boolean success
-function ProviderStream:send_content(input)
-  return self.strategy:on_content_received(input)
+function ProviderStream:on_content(input)
+  return self.strategy:on_content(input)
 end
 
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
@@ -53,18 +54,18 @@ function OpenAICompletionStream:process_stream_chunk(obj)
       if delta then
         local reasoning = delta.reasoning or delta.reasoning_content
         if reasoning and reasoning ~= "" then
-          if not self:send_content({ reasoning = { content = reasoning } }) then
+          if not self:on_content({ reasoning = { content = reasoning } }) then
             return true
           end
         end
         if delta.content and delta.content ~= "" then
-          if not self:send_content({ content = delta.content }) then
+          if not self:on_content({ content = delta.content }) then
             return true
           end
           self.content = self.content .. delta.content
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
-          if not self.strategy:on_tool_call_received() then
+          if not self.strategy:on_tools(delta.tool_calls) then
             return true
           end
 
@@ -100,7 +101,7 @@ end
 
 --- @return string[]? content
 function OpenAICompletionStream:finalize()
-  if not self:send_content({ tool_calls = self.pending_tool_calls }) then
+  if not self:on_content({ tool_calls = self.pending_tool_calls }) then
     return nil
   end
 
@@ -117,11 +118,12 @@ function OpenAICompletionStream:finalize()
 end
 
 --- @class sia.OpenAIResponsesStream : sia.ProviderStream
---- @field pending_tool_calls sia.ToolCall[]
---- @field response_id integer?
---- @field content string
---- @field reasoning_summary string?
---- @field encrypted_reasoning {id: integer, content: string}?
+--- @field private pending_tool_calls sia.ToolCall[]
+--- @field private response_id integer?
+--- @field private content string
+--- @field private reasoning_summary string?
+--- @field private tool_call_detected boolean
+--- @field private encrypted_reasoning {id: integer, content: string}?
 local OpenAIResponsesStream = {}
 OpenAIResponsesStream.__index = OpenAIResponsesStream
 setmetatable(OpenAIResponsesStream, { __index = ProviderStream })
@@ -133,6 +135,7 @@ function OpenAIResponsesStream.new(strategy)
   self.pending_tool_calls = {}
   self.content = ""
   self.reasoning_summary = nil
+  self.tool_call_detected = false
   return self
 end
 
@@ -141,16 +144,20 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     self.response_id = json.response.id
   end
   if json.type == "response.reasoning_summary_text.delta" then
-    if not self:send_content({ reasoning = { content = json.delta } }) then
+    if not self:on_content({ reasoning = { content = json.delta } }) then
       return true
     end
   elseif json.type == "response.output_text.delta" then
-    if not self:send_content({ content = json.delta }) then
+    if not self:on_content({ content = json.delta }) then
       return true
     end
     self.content = self.content .. json.delta
-  elseif json.type == "response.function_call_arguments.delta" then
-    self.strategy:on_tool_call_received()
+  elseif
+    json.type == "response.function_call_arguments.delta"
+    and not self.tool_call_detected
+  then
+    self.strategy:on_tools()
+    self.tool_call_detected = true
   elseif
     json.type == "response.completed"
     and json.response
@@ -184,7 +191,7 @@ end
 
 --- @return string[]? content
 function OpenAIResponsesStream:finalize()
-  if not self:send_content({ tool_calls = self.pending_tool_calls }) then
+  if not self:on_content({ tool_calls = self.pending_tool_calls }) then
     return nil
   end
 
