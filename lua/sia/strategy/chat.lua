@@ -144,7 +144,6 @@ function ChatStrategy:on_stream_start()
   if not self:buf_is_loaded() then
     return false
   end
-  self.canvas:clear_progress()
   self.canvas:clear_temporary_text()
   self:set_abort_keymap(self.buf)
   self.writer = StreamRenderer:new({
