@@ -11,7 +11,6 @@ local ERROR_API_KEY_MISSING = -100
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
 --- @field on_exit (fun( _: any, code:number, _:any?):nil)
 --- @field base_url string
---- @field api_key string?
 --- @field extra_args string[]?
 --- @field stream boolean?
 
@@ -20,19 +19,10 @@ local ERROR_API_KEY_MISSING = -100
 --- @param opts sia.ProviderOpts
 --- @return integer? jobid
 local function call_provider(data, opts)
-  local api_key = opts.api_key
-  if api_key == nil then
-    vim.notify("Sia: API key is not set for " .. opts.base_url)
-    opts.on_exit(nil, ERROR_API_KEY_MISSING, nil)
-    return nil
-  end
-
   local args = {
     "curl",
     "--silent",
     "--no-buffer",
-    "--header",
-    string.format("Authorization: Bearer %s", api_key),
     "--header",
     "content-type: application/json",
   }
@@ -108,6 +98,9 @@ function M.execute_strategy(strategy)
       model = config.options.models[config.options.defaults.model]
     end
     local provider = config.options.providers[model[1]]
+    if not provider then
+      provider = require("sia.provider.defaults")[model[1]]
+    end
 
     local data = {
       model = model[2],
@@ -122,7 +115,8 @@ function M.execute_strategy(strategy)
       provider.prepare_parameters(data, model)
     end
 
-    local extra_args = provider.get_headers and provider.get_headers(messages)
+    local extra_args = provider.get_headers
+      and provider.get_headers(provider.api_key(), messages)
     local first_on_stdout = true
     local incomplete = nil
     local error_initialize = false
@@ -130,7 +124,6 @@ function M.execute_strategy(strategy)
     local stream = provider.new_stream(strategy)
     local job = call_provider(data, {
       base_url = provider.base_url,
-      api_key = provider.api_key(),
       extra_args = extra_args,
       on_stdout = function(job_id, responses, _)
         if first_on_stdout then
@@ -283,6 +276,9 @@ function M.execute_query(messages, opts)
     model = config.options.models[config.options.defaults.model]
   end
   local provider = config.options.providers[model[1]]
+  if not provider then
+    provider = require("sia.provider.defaults")[model[1]]
+  end
 
   local data = {
     model = model[2],

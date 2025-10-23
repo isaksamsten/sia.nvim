@@ -1,4 +1,3 @@
-local providers = require("sia.provider")
 local M = {}
 
 --- @type table<string, {mtime: integer, json: table}?>
@@ -457,7 +456,7 @@ end
 --- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
 --- @field prepare_parameters fun(data: table, model: table)?
---- @field get_headers (fun(messages:sia.Message[]):string[])?
+--- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 
 --- @class sia.config.Options
@@ -467,18 +466,7 @@ end
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
 M.options = {
-  providers = {
-    openai_responses = providers.openai_responses,
-    copilot_responses = providers.copilot_responses,
-    openai = providers.openai,
-    copilot = providers.copilot,
-    gemini = providers.gemini,
-    anthropic = providers.anthropic,
-    ollama = providers.ollama(11434),
-    shimmy = providers.ollama(11435),
-    openrouter = providers.openrouter,
-    zai = providers.zai_coding,
-  },
+  providers = {},
   models = {
     ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
     ["zai/glm-4.6"] = { "zai", "GLM-4.6" },

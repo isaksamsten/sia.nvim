@@ -2,7 +2,6 @@ local assistant = require("sia.assistant")
 local mock = require("tests.mock")
 local common = require("sia.strategy.common")
 local config = require("sia.config")
-local provider = require("sia.provider")
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
 
@@ -73,7 +72,6 @@ end
 T["assistant.streaming"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
-      config.options.providers.openai = provider.openai
       config.options.models["openai/test"] = { "openai", "test-model" }
       config.options.defaults.model = "openai/test"
 

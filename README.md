@@ -5,7 +5,7 @@
 
 An LLM assistant for Neovim.
 
-Supports: OpenAI, Copilot, OpenRouter and Gemini (and any other OpenAI API compliant LLM).
+Supports: OpenAI, Copilot and OpenRouter (both OpenAI Chat Completions and Responses), anthropic (native API), Gemini and ZAI.
 
 ## Features
 

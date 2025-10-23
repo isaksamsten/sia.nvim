@@ -1,7 +1,6 @@
 local assistant = require("sia.assistant")
 local mock = require("tests.mock")
 local config = require("sia.config")
-local provider = require("sia.provider")
 local ChatStrategy = require("sia.strategy").ChatStrategy
 local Conversation = require("sia.conversation").Conversation
 local tracker = require("sia.tracker")
@@ -17,7 +16,6 @@ end
 T["strategy.chat"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
-      config.options.providers.openai = provider.openai
       config.options.models["openai/test"] = { "openai", "test-model" }
       config.options.defaults.model = "openai/test"
       config.options.defaults.fast_model = "openai/test"
