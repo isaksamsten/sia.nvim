@@ -124,6 +124,7 @@ return {
               type = "object",
               properties = tool.parameters,
               required = tool.required,
+              additionalProperties = false,
             },
           }
         end)
@@ -157,9 +158,9 @@ return {
           })
         end
         for _, tool_call in ipairs(m.tool_calls) do
-          local input = vim.empty_dict()
+          local input
           local arguments = tool_call["function"].arguments
-          if type(arguments) == "string" and arguments ~= "" then
+          if arguments ~= "" then
             local ok, decoded = pcall(vim.json.decode, arguments)
             if ok and type(decoded) == "table" then
               input = decoded
@@ -170,7 +171,7 @@ return {
             type = "tool_use",
             id = tool_call.id,
             name = tool_call["function"].name,
-            input = input,
+            input = input or vim.empty_dict(),
           })
         end
         table.insert(conversation_messages, {
