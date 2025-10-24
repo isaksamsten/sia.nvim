@@ -246,11 +246,14 @@ project analysis.
 
 ## Tool Approval System
 
-Sia includes a flexible approval system that allows you to control how tool operations are confirmed. You can choose between blocking (traditional) and non-blocking (async) approval modes.
+Sia includes a flexible approval system that allows you to control how tool
+operations are confirmed. You can choose between blocking (traditional) and
+non-blocking (async) approval modes.
 
 ### Async Approval Mode
 
-When enabled with `ui.approval.async = true`, tool approval requests are queued in the background without interrupting your workflow. This allows you to:
+When enabled with `ui.approval.async = true`, tool approval requests are queued
+in the background without interrupting your workflow. This allows you to:
 
 - **Continue working** while approvals accumulate
 - **Batch process approvals** when you're ready
@@ -258,7 +261,8 @@ When enabled with `ui.approval.async = true`, tool approval requests are queued 
 
 **How it works:**
 
-1. **Queued notifications**: When a tool needs approval, a notification appears in your window's statusline/winbar:
+1. **Queued notifications**: When a tool needs approval, a notification appears
+   in your window's winbar:
 
    ```
    󱇥 [conversation-name] Execute bash command 'git status'
@@ -269,7 +273,9 @@ When enabled with `ui.approval.async = true`, tool approval requests are queued 
    - `require("sia").accept()` - Auto-accepts without showing prompt
    - `require("sia").decline()` - Auto-declines without showing prompt
 
-All three functions will show a picker when multiple approvals are pending, allowing you to select which one to process. The difference is in the default action for a single pending approval.
+All three functions will show a picker when multiple approvals are pending,
+allowing you to select which one to process. The difference is in the default
+action for a single pending approval.
 
 3. **Suggested keybindings**:
    ```lua
