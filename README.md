@@ -279,6 +279,32 @@ All three functions will show a picker when multiple approvals are pending,
 allowing you to select which one to process. The difference is in the default
 action for a single pending approval.
 
+**Customizing Notifications:**
+
+The `async_notify` function controls how approval notifications are displayed.
+The default implementation uses the window's winbar, but you can customize it to
+use statusline, notification plugins (like nvim-notify), or any other mechanism.
+The function receives a message string and must return a cleanup function that
+restores the previous state.
+
+**Example using nvim-notify:**
+
+```lua
+async_notify = function(msg)
+  local notif = vim.notify(msg, vim.log.levels.INFO, {
+    title = "Sia Approval",
+    timeout = false, -- Keep visible until cleared
+  })
+
+  return function()
+    -- Dismiss the notification
+    if notif then
+      vim.notify("", vim.log.levels.INFO, { timeout=0, replace = notif })
+    end
+  end
+end
+```
+
 3. **Suggested keybindings**:
    ```lua
    keys = {
@@ -298,6 +324,21 @@ require("sia").setup({
         async = true,        -- Enable non-blocking approval mode
         use_vim_ui = false,  -- Use custom preview UI
         show_preview = true, -- Show detailed preview in prompts
+
+        -- Customize how approval notifications are displayed
+        async_notify = function(msg)
+          -- Default: show in winbar
+          local win = vim.api.nvim_get_current_win()
+          local old_winbar = vim.wo[win].winbar
+          vim.wo[win].winbar = msg
+
+          -- Return cleanup function to restore state
+          return function()
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].winbar = old_winbar
+            end
+          end
+        end,
       },
     },
   }
