@@ -38,6 +38,74 @@ local function cancellation_message(name)
   }
 end
 
+--- Global state for managing pending approvals
+--- @class sia.PendingApproval
+--- @field conversation sia.Conversation
+--- @field prompt string
+--- @field on_ready fun(choice:"y"|"n"|"p")
+
+--- @type sia.PendingApproval[]
+local pending_approvals = {}
+
+--- @param conversation sia.Conversation
+--- @param prompt string
+--- @param on_ready fun(choice:"y"|"n"|"p")
+local function register_pending_approval(conversation, prompt, on_ready)
+  local msg = string.format("%%#SiaApproval#󱇥 [%s] %s", conversation.name, prompt)
+
+  local win = vim.api.nvim_get_current_win()
+  local old_winbar = vim.wo[win].winbar
+  vim.wo[win].winbar = msg
+
+  local index = #pending_approvals + 1
+  local approval = {
+    conversation = conversation,
+    prompt = prompt,
+    on_ready = function(choice)
+      table.remove(pending_approvals, index)
+      if vim.api.nvim_win_is_valid(win) then
+        vim.wo[win].winbar = old_winbar
+      end
+      on_ready(choice)
+    end,
+  }
+  table.insert(pending_approvals, approval)
+end
+
+--- @param choice ("y"|"n"|"p")?
+M.show_approval = function(choice)
+  if #pending_approvals == 0 then
+    vim.notify("Sia: No pending approvals", vim.log.levels.INFO)
+    return
+  end
+
+  local function trigger_approval(idx)
+    if pending_approvals[idx] and pending_approvals[idx].on_ready then
+      pending_approvals[idx].on_ready(choice or "p")
+    end
+  end
+
+  if #pending_approvals == 1 then
+    trigger_approval(1)
+  else
+    local items = {}
+    for i, approval in ipairs(pending_approvals) do
+      table.insert(
+        items,
+        string.format("[%d] [%s] %s", i, approval.conversation.name, approval.prompt)
+      )
+    end
+
+    vim.ui.select(items, {
+      prompt = "Select approval to show:",
+    }, function(_, idx)
+      if idx then
+        trigger_approval(idx)
+      end
+    end)
+  end
+end
+
 --- @alias sia.PermissionOpts { auto_allow: integer}|{deny: boolean}|{ask: boolean}
 --- @alias sia.PatternDef string|{pattern: string, negate: boolean?}
 
@@ -131,13 +199,13 @@ local function select(items, opts, on_choice)
   for i, item in ipairs(items) do
     table.insert(choices, string.format("%d: %s", i, item))
   end
-  local clear_confirmation = require("sia.confirmation").show(choices)
+  local clear_preview = require("sia.preview").show(choices)
   vim.cmd.redraw()
   vim.ui.input(
     { prompt = "Type number and Enter or (Esc or empty cancels): " },
     function(resp)
-      if clear_confirmation then
-        clear_confirmation()
+      if clear_preview then
+        clear_preview()
       end
 
       local idx = tonumber(resp or "")
@@ -170,9 +238,9 @@ local function input(opts, on_confirm)
     confirmation_text = nil
   end
 
-  local clear_confirmation
+  local clear_preview
   if #prompt > 80 or prompt:find("\n") then
-    clear_confirmation = require("sia.confirmation").show(
+    clear_preview = require("sia.preview").show(
       vim.split(prompt, "\n", { trimempty = true, plain = true }),
       { wrap = opts.wrap }
     )
@@ -183,16 +251,15 @@ local function input(opts, on_confirm)
     confirmation_text = prompt
   end
 
-  local show_preview = require("sia.config").options.defaults.ui.show_preview
-  if show_preview and opts.preview and not clear_confirmation then
-    clear_confirmation =
-      require("sia.confirmation").show(opts.preview, { wrap = opts.wrap })
+  local show_preview = require("sia.config").options.defaults.ui.approval.show_preview
+  if show_preview and opts.preview and not clear_preview then
+    clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
     vim.cmd.redraw()
   end
 
   vim.ui.input({ prompt = confirmation_text }, function(resp)
-    if clear_confirmation then
-      clear_confirmation()
+    if clear_preview then
+      clear_preview()
     end
     on_confirm(resp)
   end)
@@ -270,6 +337,7 @@ M.new_tool = function(opts, execute)
     description = opts.description,
     required = opts.required,
     execute = function(args, conversation, callback, cancellable)
+      local approval_conf = require("sia.config").options.defaults.ui.approval
       --- @type sia.NewToolExecuteUserInput
       local user_input
 
@@ -292,66 +360,86 @@ M.new_tool = function(opts, execute)
           prompt = "Execute " .. (opts.name or "tool")
         end
 
-        local confirmation_text
-        if input_args.must_confirm then
-          confirmation_text = "Proceed? (y/N): "
-        else
-          confirmation_text = "Proceed? (Y/n/[a]lways): "
-        end
-
-        local input_fn = input
-        if require("sia.config").options.defaults.ui.use_vim_ui then
-          input_fn = vim.ui.input
-        end
-
-        input_fn({
-          prompt = string.format("%s - %s", prompt, confirmation_text),
-          preview = input_args.preview,
-          wrap = input_args.wrap,
-        }, function(resp)
-          if resp == nil then
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_cancelled",
-              cancelled = true,
-            })
-            return
-          end
-          local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
-          if response == "n" or response == "no" then
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_declined",
-              cancelled = true,
-            })
-            return
-          end
-
-          if
-            not input_args.must_confirm and (response == "a" or response == "always")
-          then
-            conversation.auto_confirm_tools[opts.name] = 1
-            input_args.on_accept()
-            return
-          end
-
-          local should_proceed = false
+        local function show_prompt()
+          local confirmation_text
           if input_args.must_confirm then
-            should_proceed = response == "y" or response == "yes"
+            confirmation_text = "Proceed? (y/N): "
           else
-            should_proceed = response == "" or response == "y" or response == "yes"
+            confirmation_text = "Proceed? (Y/n/[a]lways): "
           end
 
-          if should_proceed then
-            input_args.on_accept()
-          else
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_declined",
-              cancelled = true,
-            })
+          local input_fn = input
+          if approval_conf.use_vim_ui then
+            input_fn = vim.ui.input
           end
-        end)
+
+          input_fn({
+            prompt = string.format("%s - %s", prompt, confirmation_text),
+            preview = input_args.preview,
+            wrap = input_args.wrap,
+          }, function(resp)
+            if resp == nil then
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_cancelled",
+                cancelled = true,
+              })
+              return
+            end
+            local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
+            if response == "n" or response == "no" then
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_declined",
+                cancelled = true,
+              })
+              return
+            end
+
+            if
+              not input_args.must_confirm and (response == "a" or response == "always")
+            then
+              conversation.auto_confirm_tools[opts.name] = 1
+              input_args.on_accept()
+              return
+            end
+
+            local should_proceed = false
+            if input_args.must_confirm then
+              should_proceed = response == "y" or response == "yes"
+            else
+              should_proceed = response == "" or response == "y" or response == "yes"
+            end
+
+            if should_proceed then
+              input_args.on_accept()
+            else
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_declined",
+                cancelled = true,
+              })
+            end
+          end)
+        end
+
+        if approval_conf.async then
+          register_pending_approval(conversation, prompt, function(choice)
+            if choice == "y" then
+              input_args.on_accept()
+            elseif choice == "n" then
+              callback({
+                content = cancellation_message(opts.name),
+                kind = "user_declined",
+                cancelled = true,
+              })
+            else
+              show_prompt()
+            end
+          end)
+        else
+          show_prompt()
+        end
       end
       user_choice = function(prompt, choice_args)
         if permission and permission.auto_allow and not choice_args.must_confirm then
@@ -359,7 +447,7 @@ M.new_tool = function(opts, execute)
           return
         end
         local select_fn = select
-        if require("sia.config").options.defaults.ui.use_vim_ui then
+        if require("sia.config").options.defaults.ui.approval.use_vim_ui then
           select_fn = vim.ui.select
         end
         select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)

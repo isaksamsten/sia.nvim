@@ -67,13 +67,16 @@ require("sia").setup({
 
     -- UI behavior
     ui = {
-      use_vim_ui = false,    -- Use Vim's built-in input/select
       diff = {
         enable = true,       -- Enable diff system for change tracking
         show_signs = true,   -- Show signs in the gutter for changes
         char_diff = true,    -- Show character-level diffs
       },
-      show_preview = true,   -- Show preview when use_vim_ui is false
+      approval = {
+        use_vim_ui = false,  -- Use Vim's built-in input/select for approvals
+        show_preview = true, -- Show preview in approval prompts
+        async = false,       -- Queue approvals in background (non-blocking)
+      },
     },
 
     -- File operations
@@ -240,6 +243,64 @@ interact with your codebase and development environment:
 The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
 project analysis.
+
+## Tool Approval System
+
+Sia includes a flexible approval system that allows you to control how tool operations are confirmed. You can choose between blocking (traditional) and non-blocking (async) approval modes.
+
+### Async Approval Mode
+
+When enabled with `ui.approval.async = true`, tool approval requests are queued in the background without interrupting your workflow. This allows you to:
+
+- **Continue working** while approvals accumulate
+- **Batch process approvals** when you're ready
+- **Maintain focus** on editing without constant interruptions
+
+**How it works:**
+
+1. **Queued notifications**: When a tool needs approval, a notification appears in your window's statusline/winbar:
+
+   ```
+   󱇥 [conversation-name] Execute bash command 'git status'
+   ```
+
+2. **Process approvals**: When you're ready, use one of these functions:
+   - `require("sia").confirm()` - Shows the full approval prompt
+   - `require("sia").accept()` - Auto-accepts without showing prompt
+   - `require("sia").decline()` - Auto-declines without showing prompt
+
+All three functions will show a picker when multiple approvals are pending, allowing you to select which one to process. The difference is in the default action for a single pending approval.
+
+3. **Suggested keybindings**:
+   ```lua
+   keys = {
+     { "<Leader>ac", mode = "n", function() require("sia").confirm() end, desc = "Confirm pending tool" },
+     { "<Leader>ay", mode = "n", function() require("sia").accept() end, desc = "Accept pending tool" },
+     { "<Leader>an", mode = "n", function() require("sia").decline() end, desc = "Decline pending tool" },
+   }
+   ```
+
+**Configuration example:**
+
+```lua
+require("sia").setup({
+  defaults = {
+    ui = {
+      approval = {
+        async = true,        -- Enable non-blocking approval mode
+        use_vim_ui = false,  -- Use custom preview UI
+        show_preview = true, -- Show detailed preview in prompts
+      },
+    },
+  }
+})
+```
+
+**Traditional (Blocking) Mode:**
+
+If you prefer immediate prompts (the default behavior), keep `async = false`.
+Tool operations will show an approval prompt immediately and wait for your
+response before continuing.
 
 ### Local Configuration (Per Project)
 
@@ -489,6 +550,10 @@ keys = {
   },
   { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
   { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
+  -- Tool approval (async mode)
+  -- { "<Leader>ac", mode = "n", function() require("sia").confirm() end, desc = "Confirm pending tool", },
+  -- { "<Leader>ay", mode = "n", function() require("sia").accept() end, desc = "Accept pending tool", },
+  -- { "<Leader>an", mode = "n", function() require("sia").decline() end, desc = "Decline pending tool", },
   -- Or, to be consistent with vim.wo.diff
   --
   -- {

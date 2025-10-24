@@ -33,7 +33,6 @@ local STATUS_HL = {
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
---- @field name string
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private writer sia.StreamRenderer?
@@ -71,13 +70,8 @@ function ChatStrategy:new(conversation, options)
   ChatStrategy._buffers[obj.buf] = obj
   ChatStrategy._order[#ChatStrategy._order + 1] = obj.buf
 
-  if ChatStrategy.count() == 1 then
-    obj.name = "*sia*"
-  else
-    obj.name = "*sia " .. ChatStrategy.count() .. "*"
-  end
-
-  pcall(vim.api.nvim_buf_set_name, buf, obj.name)
+  obj.conversation.name = tostring(ChatStrategy.count())
+  pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
   local messages = conversation:get_messages()
   local model = obj.conversation.model or require("sia.config").get_default_model()
@@ -235,8 +229,12 @@ function ChatStrategy:on_complete(control)
         model = require("sia.config").get_default_model("fast_model"),
         callback = function(resp)
           if resp then
-            self.name = "*sia " .. resp:lower():gsub("%s+", "-") .. "*"
-            pcall(vim.api.nvim_buf_set_name, self.buf, self.name)
+            self.conversation.name = resp:lower():gsub("%s+", "-")
+            pcall(
+              vim.api.nvim_buf_set_name,
+              self.buf,
+              "*sia " .. self.conversation.name .. "*"
+            )
           end
           self.has_generated_name = true
           control.finish()

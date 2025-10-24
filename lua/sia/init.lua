@@ -9,6 +9,7 @@ local highlight_groups = {
   SiaUsage = {},
   SiaAssistant = { link = "DiffAdd" },
   SiaUser = { link = "DiffChange" },
+  SiaApproval = { link = "StatusLine" },
   SiaToolResult = { link = "DiffChange" },
   SiaDiffDelete = { link = "DiffDelete" },
   SiaDiffChange = { link = "DiffChange" },
@@ -308,6 +309,18 @@ function M.open_reply()
       vim.api.nvim_buf_delete(buf, { force = true })
     end, { buffer = buf })
   end
+end
+
+function M.confirm()
+  require("sia.tools.utils").show_approval()
+end
+
+function M.accept()
+  require("sia.tools.utils").show_approval("y")
+end
+
+function M.decline()
+  require("sia.tools.utils").show_approval("n")
 end
 
 --- Compact a conversation by summarizing previous messages

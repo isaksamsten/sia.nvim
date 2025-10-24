@@ -353,14 +353,18 @@ function M.get_default_action(mode)
     or M.options.defaults.actions[mode]
 end
 --- @class sia.config.Defaults.Ui
---- @field use_vim_ui boolean?
 --- @field diff sia.config.Defaults.Ui.Diff
---- @field show_preview boolean?
----
+--- @field approval sia.config.Defaults.Ui.Approval
+
 --- @class sia.config.Defaults.Ui.Diff
 --- @field enable boolean?
 --- @field show_signs boolean?
 --- @field char_diff boolean?
+
+--- @class sia.config.Defaults.Ui.Approval
+--- @field use_vim_ui boolean?
+--- @field show_preview boolean?
+--- @field async boolean?
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -545,13 +549,16 @@ M.options = {
       restrict_to_project_root = true,
     },
     ui = {
-      use_vim_ui = false,
       diff = {
         enable = true,
         show_signs = true,
         char_diff = true,
       },
-      show_preview = true, -- only if use_vim_ui is false
+      approval = {
+        use_vim_ui = false,
+        show_preview = true,
+        async = false,
+      },
     },
     tools = {
       enable = true,

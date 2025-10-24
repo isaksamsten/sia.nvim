@@ -322,6 +322,7 @@ end
 --- @field messages sia.Message[]
 --- @field no_supersede boolean?
 --- @field tools sia.config.Tool[]?
+--- @field name string
 --- @field model string?
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
@@ -356,6 +357,7 @@ function Conversation:new(action, context)
   obj.model = action.model
   obj.temperature = action.temperature
   obj.mode = action.mode
+  obj.name = ""
 
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
