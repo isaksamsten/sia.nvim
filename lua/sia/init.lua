@@ -291,7 +291,7 @@ function M.open_reply()
     vim.bo[buf].bufhidden = "hide"
     vim.bo[buf].swapfile = false
     vim.bo[buf].ft = "markdown"
-    vim.api.nvim_buf_set_name(buf, "*sia reply*" .. current.name)
+    vim.api.nvim_buf_set_name(buf, "*sia reply*" .. current.conversation.name)
     vim.api.nvim_win_set_height(win, 10)
 
     vim.keymap.set("n", "<CR>", function()
