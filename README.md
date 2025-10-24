@@ -252,6 +252,8 @@ non-blocking (async) approval modes.
 
 ### Async Approval Mode
 
+https://github.com/user-attachments/assets/05053a21-bb7d-48f9-a761-d3bfa0eaefd8
+
 When enabled with `ui.approval.async = true`, tool approval requests are queued
 in the background without interrupting your workflow. This allows you to:
 
