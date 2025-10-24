@@ -289,7 +289,7 @@ function M.execute_query(messages, opts)
   end
   call_provider(data, {
     base_url = provider.base_url,
-    api_key = provider.api_key(),
+    extra_args = provider.get_headers(provider.api_key(), messages),
     on_stdout = function(_, resp, _)
       if data ~= nil then
         response = response .. table.concat(resp, " ")
