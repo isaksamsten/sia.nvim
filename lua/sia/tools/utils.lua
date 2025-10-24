@@ -52,20 +52,14 @@ local pending_approvals = {}
 --- @param on_ready fun(choice:"y"|"n"|"p")
 local function register_pending_approval(conversation, prompt, on_ready)
   local msg = string.format("%%#SiaApproval#󱇥 [%s] %s", conversation.name, prompt)
-
-  local win = vim.api.nvim_get_current_win()
-  local old_winbar = vim.wo[win].winbar
-  vim.wo[win].winbar = msg
-
+  local clear = require("sia.config").options.defaults.ui.approval.async_notify(msg)
   local index = #pending_approvals + 1
   local approval = {
     conversation = conversation,
     prompt = prompt,
     on_ready = function(choice)
       table.remove(pending_approvals, index)
-      if vim.api.nvim_win_is_valid(win) then
-        vim.wo[win].winbar = old_winbar
-      end
+      clear()
       on_ready(choice)
     end,
   }

@@ -365,6 +365,7 @@ end
 --- @field use_vim_ui boolean?
 --- @field show_preview boolean?
 --- @field async boolean?
+--- @field async_notify fun(msg: string):fun()
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -553,6 +554,16 @@ M.options = {
         use_vim_ui = false,
         show_preview = true,
         async = false,
+        async_notify = function(msg)
+          local win = vim.api.nvim_get_current_win()
+          local old_winbar = vim.wo[win].winbar
+          vim.wo[win].winbar = msg
+          return function()
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].winbar = old_winbar
+            end
+          end
+        end,
       },
     },
     tools = {
