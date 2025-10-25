@@ -211,6 +211,13 @@ local function select(items, opts, on_choice)
   )
 end
 
+--- @class sia.InputOpts
+--- @field prompt string
+--- @field preview (fun(buf:integer):integer?)?
+--- @field wrap boolean?
+
+--- @param opts sia.InputOpts
+--- @param on_confirm fun(resp:string?)
 local function input(opts, on_confirm)
   local last_dash_pos = nil
   local search_pos = 1
@@ -288,6 +295,132 @@ end
 --- @field user_input sia.NewToolExecuteUserInput
 --- @field user_choice sia.NewToolExecuteUserChoice
 
+--- @param resp string?
+--- @param must_confirm boolean
+--- @param opts {on_accept: fun(mode:"always"|nil), on_cancel: fun(kind:"user_cancelled"|"user_declined")}
+local function handle_user_response(resp, must_confirm, opts)
+  if resp == nil then
+    return opts.on_cancel("user_cancelled")
+  end
+
+  local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
+
+  if response == "n" or response == "no" then
+    return opts.on_cancel("user_declined")
+  end
+
+  if not must_confirm and (response == "a" or response == "always") then
+    return opts.on_accept("always")
+  end
+
+  local should_proceed = must_confirm and (response == "y" or response == "yes")
+    or (response == "" or response == "y" or response == "yes")
+
+  if should_proceed then
+    opts.on_accept()
+  else
+    opts.on_cancel("user_declined")
+  end
+end
+
+--- Create a user_input handler for tool execution
+--- @param tool_name string
+--- @param conversation sia.Conversation
+--- @param callback fun(result:sia.ToolResult)
+--- @param permission sia.PermissionOpts?
+--- @return sia.NewToolExecuteUserInput
+local function create_user_input_handler(tool_name, conversation, callback, permission)
+  local approval_conf = require("sia.config").options.defaults.ui.approval
+  local ignore_confirm = conversation.ignore_tool_confirm
+    or (permission and permission.auto_allow)
+
+  return function(prompt, input_args)
+    if not input_args.must_confirm and ignore_confirm then
+      input_args.on_accept()
+      return
+    end
+
+    prompt = prompt or ("Execute " .. tool_name)
+
+    local function prompt_user()
+      local confirmation_text = input_args.must_confirm and "Proceed? (y/N): "
+        or "Proceed? (Y/n/[a]lways): "
+
+      local input_fn = approval_conf.use_vim_ui and vim.ui.input or input
+
+      input_fn({
+        prompt = string.format("%s - %s", prompt, confirmation_text),
+        preview = input_args.preview,
+        wrap = input_args.wrap,
+      }, function(resp)
+        handle_user_response(resp, input_args.must_confirm, {
+          on_accept = function(mode)
+            if mode == "always" then
+              conversation.auto_confirm_tools[tool_name] = 1
+            end
+            input_args.on_accept()
+          end,
+          on_cancel = function(kind)
+            callback({
+              content = cancellation_message(tool_name),
+              kind = kind,
+              cancelled = true,
+            })
+          end,
+        })
+      end)
+    end
+
+    if approval_conf.async then
+      register_pending_approval(conversation, prompt, function(choice)
+        if choice == "y" then
+          input_args.on_accept()
+        elseif choice == "n" then
+          callback({
+            content = cancellation_message(tool_name),
+            kind = "user_declined",
+            cancelled = true,
+          })
+        else
+          prompt_user()
+        end
+      end)
+    else
+      prompt_user()
+    end
+  end
+end
+
+--- @param tool_name string
+--- @param callback fun(result:sia.ToolResult)
+--- @param permission sia.PermissionOpts?
+--- @return sia.NewToolExecuteUserChoice
+local function create_user_choice_handler(tool_name, callback, permission)
+  return function(prompt, choice_args)
+    if permission and permission.auto_allow and not choice_args.must_confirm then
+      choice_args.on_accept(permission.auto_allow)
+      return
+    end
+
+    local select_fn = select
+    if require("sia.config").options.defaults.ui.approval.use_vim_ui then
+      select_fn = vim.ui.select
+    end
+
+    select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
+      if idx then
+        choice_args.on_accept(idx)
+      else
+        callback({
+          content = cancellation_message(tool_name),
+          kind = "user_cancelled",
+          cancelled = true,
+        })
+      end
+    end)
+  end
+end
+
 ---@param opts sia.NewToolOpts
 ---@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: sia.NewToolExecuteOpts?)
 ---@return sia.config.Tool
@@ -331,138 +464,8 @@ M.new_tool = function(opts, execute)
     description = opts.description,
     required = opts.required,
     execute = function(args, conversation, callback, cancellable)
-      local approval_conf = require("sia.config").options.defaults.ui.approval
-      --- @type sia.NewToolExecuteUserInput
-      local user_input
-
-      --- @type sia.NewToolExecuteUserChoice
-      local user_choice
-
       local permission = resolve_permission(args, conversation)
-      user_input = function(prompt, input_args)
-        if
-          not input_args.must_confirm
-          and (
-            conversation.ignore_tool_confirm or (permission and permission.auto_allow)
-          )
-        then
-          input_args.on_accept()
-          return
-        end
-
-        if prompt == nil then
-          prompt = "Execute " .. (opts.name or "tool")
-        end
-
-        local function show_prompt()
-          local confirmation_text
-          if input_args.must_confirm then
-            confirmation_text = "Proceed? (y/N): "
-          else
-            confirmation_text = "Proceed? (Y/n/[a]lways): "
-          end
-
-          local input_fn = input
-          if approval_conf.use_vim_ui then
-            input_fn = vim.ui.input
-          end
-
-          input_fn({
-            prompt = string.format("%s - %s", prompt, confirmation_text),
-            preview = input_args.preview,
-            wrap = input_args.wrap,
-          }, function(resp)
-            if resp == nil then
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_cancelled",
-                cancelled = true,
-              })
-              return
-            end
-            local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
-            if response == "n" or response == "no" then
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_declined",
-                cancelled = true,
-              })
-              return
-            end
-
-            if
-              not input_args.must_confirm and (response == "a" or response == "always")
-            then
-              conversation.auto_confirm_tools[opts.name] = 1
-              input_args.on_accept()
-              return
-            end
-
-            local should_proceed = false
-            if input_args.must_confirm then
-              should_proceed = response == "y" or response == "yes"
-            else
-              should_proceed = response == "" or response == "y" or response == "yes"
-            end
-
-            if should_proceed then
-              input_args.on_accept()
-            else
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_declined",
-                cancelled = true,
-              })
-            end
-          end)
-        end
-
-        if approval_conf.async then
-          register_pending_approval(conversation, prompt, function(choice)
-            if choice == "y" then
-              input_args.on_accept()
-            elseif choice == "n" then
-              callback({
-                content = cancellation_message(opts.name),
-                kind = "user_declined",
-                cancelled = true,
-              })
-            else
-              show_prompt()
-            end
-          end)
-        else
-          show_prompt()
-        end
-      end
-      user_choice = function(prompt, choice_args)
-        if permission and permission.auto_allow and not choice_args.must_confirm then
-          choice_args.on_accept(permission.auto_allow)
-          return
-        end
-        local select_fn = select
-        if require("sia.config").options.defaults.ui.approval.use_vim_ui then
-          select_fn = vim.ui.select
-        end
-        select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
-          if idx then
-            choice_args.on_accept(idx)
-          else
-            callback({
-              content = cancellation_message(opts.name),
-              kind = "user_cancelled",
-              cancelled = true,
-            })
-          end
-        end)
-      end
-      if not permission or not permission.deny then
-        execute(args, conversation, callback, {
-          cancellable = cancellable,
-          user_input = user_input,
-          user_choice = user_choice,
-        })
-      else
+      if permission and permission.deny then
         callback({
           content = {
             "OPERATION BLOCKED BY LOCAL CONFIGURATION",
@@ -478,7 +481,18 @@ M.new_tool = function(opts, execute)
             "3. Wait for their guidance before taking any further action",
           },
         })
+        return
       end
+
+      local user_input =
+        create_user_input_handler(opts.name, conversation, callback, permission)
+      local user_choice = create_user_choice_handler(opts.name, callback, permission)
+
+      execute(args, conversation, callback, {
+        cancellable = cancellable,
+        user_input = user_input,
+        user_choice = user_choice,
+      })
     end,
   }
 end
