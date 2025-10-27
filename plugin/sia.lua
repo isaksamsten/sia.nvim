@@ -145,7 +145,12 @@ vim.api.nvim_create_user_command("SiaDebug", function()
     )
     return
   end
-  local json_str = vim.json.encode(result)
+
+  local provider = require("sia.provider.openai").completion
+  local data = {}
+  provider.prepare_messages(data, "", result)
+  provider.prepare_tools(data, chat.conversation.tools)
+  local json_str = vim.json.encode(data)
   local pretty = json_str
   if vim.fn.executable("jq") == 1 then
     local jq_out = vim.fn.system({ "jq", "." }, json_str)
