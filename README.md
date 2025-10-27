@@ -314,7 +314,7 @@ require("sia").setup({
 
 The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
-- `show(msg)` - Show/update the notification. Called whenever the message changes (both initially and on updates).
+- `show(conversation_name, msg, total)` - Show/update the notification. Called whenever the message changes (both initially and on updates).
 - `clear()` - Clear/dismiss the notification
 
 **Example using nvim-notify:**
@@ -330,8 +330,8 @@ require("sia").setup({
             local notif_id = nil
 
             return {
-              show = function(msg)
-                notif_id = vim.notify(table.concat(msg, "\n"), vim.log.levels.INFO, {
+              show = function(_, msg, _)
+                notif_id = vim.notify(msg, vim.log.levels.INFO, {
                   title = "Sia Approval",
                   timeout = false,
                   replace = notif_id,  -- Replace if exists, create if not

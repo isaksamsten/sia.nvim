@@ -6,41 +6,11 @@ local M = {}
 --- @class sia.PendingApproval
 --- @field conversation sia.Conversation
 --- @field prompt string
---- @field on_ready fun(choice:"accept"|"decline"|"prompt"|"preview")
+--- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
 --- @type sia.PendingApproval[]
 local pending_approvals = {}
-
---- Get the appropriate message based on pending approvals
---- @return string[]?
-local function get_notification_message()
-  if #pending_approvals == 0 then
-    return nil
-  elseif #pending_approvals == 1 then
-    local approval = pending_approvals[1]
-    return vim.split(
-      string.format("󱇥 [%s] %s", approval.conversation.name, approval.prompt),
-      "\n"
-    )
-  else
-    local conversations = {}
-    for _, approval in ipairs(pending_approvals) do
-      conversations[approval.conversation.name] = true
-    end
-    local conv_count = vim.tbl_count(conversations)
-
-    return {
-      string.format(
-        "󱇥 %d approval%s pending from %d conversation%s",
-        #pending_approvals,
-        #pending_approvals > 1 and "s" or "",
-        conv_count,
-        conv_count > 1 and "s" or ""
-      ),
-    }
-  end
-end
 
 --- Default notifier using floating window
 --- @return sia.ApprovalNotifier
@@ -51,13 +21,19 @@ function M.floating_notifier()
 
   --- @type sia.ApprovalNotifier
   return {
-    show = function(msg)
+    show = function(name, msg, total)
       if not notification_buf or not vim.api.nvim_buf_is_valid(notification_buf) then
         notification_buf = vim.api.nvim_create_buf(false, true)
         vim.bo[notification_buf].bufhidden = "wipe"
       end
 
-      vim.api.nvim_buf_set_lines(notification_buf, 0, -1, false, msg)
+      local content = string.format("󱇥 [%s] %s", name, msg)
+      if total > 1 then
+        content = string.format("%s (+%d more)", content, total)
+      end
+      local split = vim.split(content, "\n")
+
+      vim.api.nvim_buf_set_lines(notification_buf, 0, -1, false, { split[1] })
 
       if not notification_win or not vim.api.nvim_win_is_valid(notification_win) then
         local width = vim.o.columns
@@ -117,7 +93,11 @@ function M.winbar_notifier()
         notification_win = vim.api.nvim_get_current_win()
         old_winbar = vim.wo[notification_win].winbar
       end
-      vim.wo[notification_win].winbar = msg[1]
+      local width = vim.fn.winwidth(notification_win)
+      if #msg > width then
+        msg = msg:sub(1, width - 1) .. "…"
+      end
+      vim.wo[notification_win].winbar = msg
     end,
 
     clear = function()
@@ -135,7 +115,7 @@ local default_notifier = M.floating_notifier()
 --- Show a pending approval notification to the user
 --- @param conversation sia.Conversation The conversation requesting approval
 --- @param prompt string The prompt to show to the user
---- @param opts { on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: fun():fun() }
+--- @param opts { on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
 function M.show(conversation, prompt, opts)
   local approval_config = require("sia.config").options.defaults.ui.approval
   local notifier = (approval_config.async and approval_config.async.notifier)
@@ -146,18 +126,15 @@ function M.show(conversation, prompt, opts)
     prompt = prompt,
   }
 
-  approval.on_ready = function(choice)
+  approval.on_ready = function(idx, choice)
     if choice ~= "preview" then
-      for i, a in ipairs(pending_approvals) do
-        if a == approval then
-          table.remove(pending_approvals, i)
-          break
-        end
-      end
-
-      local msg = get_notification_message()
-      if msg then
-        notifier.show(msg)
+      table.remove(pending_approvals, idx)
+      if #pending_approvals > 0 then
+        notifier.show(
+          conversation.name,
+          pending_approvals[1].prompt,
+          #pending_approvals
+        )
       else
         notifier.clear()
       end
@@ -171,7 +148,7 @@ function M.show(conversation, prompt, opts)
       opts.on_accept()
     elseif choice == "prompt" then
       opts.on_prompt()
-    elseif choice == "preview" then
+    elseif choice == "preview" and opts.on_preview then
       approval.clear_preview = opts.on_preview()
     else
       opts.on_cancel()
@@ -179,29 +156,24 @@ function M.show(conversation, prompt, opts)
   end
 
   table.insert(pending_approvals, approval)
+  notifier.show(conversation.name, pending_approvals[1].prompt, #pending_approvals)
+end
 
-  local msg = get_notification_message()
-  if msg then
-    notifier.show(msg)
+--- @param idx integer
+--- @param choice "accept"|"decline"|"prompt"|"preview"
+local function trigger_approval(idx, choice)
+  if #pending_approvals == 0 or not pending_approvals[idx] then
+    return
   end
+
+  pending_approvals[idx].on_ready(idx, choice)
 end
 
 --- Internal helper to trigger an approval with a specific choice
 --- @param choice "accept"|"decline"|"prompt"|"preview"
 local function trigger_pending_approval(choice)
-  if #pending_approvals == 0 then
-    vim.notify("Sia: No pending approvals", vim.log.levels.INFO)
-    return
-  end
-
-  local function trigger_approval(idx)
-    if pending_approvals[idx] and pending_approvals[idx].on_ready then
-      pending_approvals[idx].on_ready(choice)
-    end
-  end
-
   if #pending_approvals == 1 then
-    trigger_approval(1)
+    trigger_approval(1, choice)
   else
     local items = {}
     for _, approval in ipairs(pending_approvals) do
@@ -215,30 +187,50 @@ local function trigger_pending_approval(choice)
       prompt = "Select approval:",
     }, function(_, idx)
       if idx then
-        trigger_approval(idx)
+        trigger_approval(idx, choice)
       end
     end)
   end
 end
 
 --- Show the approval prompt to the user
-function M.prompt()
-  trigger_pending_approval("prompt")
+function M.prompt(opts)
+  opts = opts or {}
+  if opts.first then
+    trigger_approval(1, "prompt")
+  else
+    trigger_pending_approval("prompt")
+  end
 end
 
 --- Accept the pending approval
-function M.accept()
-  trigger_pending_approval("accept")
+function M.accept(opts)
+  opts = opts or {}
+  if opts.first then
+    trigger_approval(1, "accept")
+  else
+    trigger_pending_approval("accept")
+  end
 end
 
 --- Decline the pending approval
-function M.decline()
-  trigger_pending_approval("decline")
+function M.decline(opts)
+  opts = opts or {}
+  if opts.first then
+    trigger_approval(1, "decline")
+  else
+    trigger_pending_approval("decline")
+  end
 end
 
 --- Show preview for the pending approval
-function M.preview()
-  trigger_pending_approval("preview")
+function M.preview(opts)
+  opts = opts or {}
+  if opts.first then
+    trigger_approval(1, "preview")
+  else
+    trigger_pending_approval("preview")
+  end
 end
 
 --- Get the count of pending approvals

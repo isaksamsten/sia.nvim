@@ -362,7 +362,7 @@ end
 --- @field char_diff boolean?
 
 --- @class sia.ApprovalNotifier
---- @field show fun(msg: string[]) Show/update the notification. Called whenever the message changes.
+--- @field show fun(key: string, msg: string, total:integer?) Show/update the notification. Called whenever the message changes.
 --- @field clear fun() Clear/dismiss the notification
 
 --- @class sia.config.Defaults.Ui.Approval.Async
