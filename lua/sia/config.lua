@@ -361,11 +361,18 @@ end
 --- @field show_signs boolean?
 --- @field char_diff boolean?
 
+--- @class sia.ApprovalNotifier
+--- @field show fun(msg: string[]) Show/update the notification. Called whenever the message changes.
+--- @field clear fun() Clear/dismiss the notification
+
+--- @class sia.config.Defaults.Ui.Approval.Async
+--- @field enable boolean?
+--- @field notifier sia.ApprovalNotifier?
+
 --- @class sia.config.Defaults.Ui.Approval
 --- @field use_vim_ui boolean?
 --- @field show_preview boolean?
---- @field async boolean?
---- @field async_notify fun(msg: string):fun()
+--- @field async sia.config.Defaults.Ui.Approval.Async?
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -553,17 +560,9 @@ M.options = {
       approval = {
         use_vim_ui = false,
         show_preview = true,
-        async = false,
-        async_notify = function(msg)
-          local win = vim.api.nvim_get_current_win()
-          local old_winbar = vim.wo[win].winbar
-          vim.wo[win].winbar = msg
-          return function()
-            if vim.api.nvim_win_is_valid(win) then
-              vim.wo[win].winbar = old_winbar
-            end
-          end
-        end,
+        async = {
+          enable = false,
+        },
       },
     },
     tools = {

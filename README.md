@@ -264,53 +264,104 @@ in the background without interrupting your workflow. This allows you to:
 **How it works:**
 
 1. **Queued notifications**: When a tool needs approval, a notification appears
-   in your window's winbar:
+   in a floating window at the top of your screen:
 
    ```
    󱇥 [conversation-name] Execute bash command 'git status'
    ```
 
-2. **Process approvals**: When you're ready, use one of these functions:
-   - `require("sia").confirm()` - Shows the full approval prompt
-   - `require("sia").accept()` - Auto-accepts without showing prompt
-   - `require("sia").decline()` - Auto-declines without showing prompt
+   The notification uses the `SiaApproval` highlight group (linked to `StatusLine` by default).
 
-All three functions will show a picker when multiple approvals are pending,
+2. **Process approvals**: When you're ready, use one of these functions:
+   - `require("sia.approval").prompt()` - Shows the full approval prompt
+   - `require("sia.approval").accept()` - Auto-accepts without showing prompt
+   - `require("sia.approval").decline()` - Auto-declines without showing prompt
+   - `require("sia.approval").preview()` - Preview without showing prompt
+
+All our functions will show a picker when multiple approvals are pending,
 allowing you to select which one to process. The difference is in the default
 action for a single pending approval.
 
 **Customizing Notifications:**
 
-The `async_notify` function controls how approval notifications are displayed.
-The default implementation uses the window's winbar, but you can customize it to
-use statusline, notification plugins (like nvim-notify), or any other mechanism.
-The function receives a message string and must return a cleanup function that
-restores the previous state.
+By default, approval notifications are shown in a non-focusable floating window
+at the top of the editor. Sia provides built-in notifiers you can choose from,
+or you can provide your own custom notifier.
+
+**Built-in notifiers:**
+
+- `require("sia.approval").floating_notifier()` - Non-focusable floating window at top (default)
+- `require("sia.approval").winbar_notifier()` - Shows in the current window's winbar
+
+**Example using winbar:**
+
+```lua
+require("sia").setup({
+  defaults = {
+    ui = {
+      approval = {
+        async = {
+          enable = true,
+          notifier = require("sia.approval").winbar_notifier(),
+        },
+      },
+    },
+  },
+})
+```
+
+**Custom notifiers:**
+
+The `notifier` must implement the `sia.ApprovalNotifier` interface:
+
+- `show(msg)` - Show/update the notification. Called whenever the message changes (both initially and on updates).
+- `clear()` - Clear/dismiss the notification
 
 **Example using nvim-notify:**
 
 ```lua
-async_notify = function(msg)
-  local notif = vim.notify(msg, vim.log.levels.INFO, {
-    title = "Sia Approval",
-    timeout = false, -- Keep visible until cleared
-  })
+require("sia").setup({
+  defaults = {
+    ui = {
+      approval = {
+        async = {
+          enable = true,
+          notifier = (function()
+            local notif_id = nil
 
-  return function()
-    -- Dismiss the notification
-    if notif then
-      vim.notify("", vim.log.levels.INFO, { timeout=0, replace = notif })
-    end
-  end
-end
+            return {
+              show = function(msg)
+                notif_id = vim.notify(table.concat(msg, "\n"), vim.log.levels.INFO, {
+                  title = "Sia Approval",
+                  timeout = false,
+                  replace = notif_id,  -- Replace if exists, create if not
+                })
+              end,
+
+              clear = function()
+                if notif_id then
+                  vim.notify("", vim.log.levels.INFO, {
+                    timeout = 0,
+                    replace = notif_id
+                  })
+                  notif_id = nil
+                end
+              end,
+            }
+          end)(),
+        },
+      },
+    },
+  },
+})
 ```
 
 3. **Suggested keybindings**:
    ```lua
    keys = {
-     { "<Leader>ac", mode = "n", function() require("sia").confirm() end, desc = "Confirm pending tool" },
-     { "<Leader>ay", mode = "n", function() require("sia").accept() end, desc = "Accept pending tool" },
-     { "<Leader>an", mode = "n", function() require("sia").decline() end, desc = "Decline pending tool" },
+     { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool" },
+     { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool" },
+     { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool" },
    }
    ```
 
@@ -321,24 +372,13 @@ require("sia").setup({
   defaults = {
     ui = {
       approval = {
-        async = true,        -- Enable non-blocking approval mode
         use_vim_ui = false,  -- Use custom preview UI
         show_preview = true, -- Show detailed preview in prompts
 
-        -- Customize how approval notifications are displayed
-        async_notify = function(msg)
-          -- Default: show in winbar
-          local win = vim.api.nvim_get_current_win()
-          local old_winbar = vim.wo[win].winbar
-          vim.wo[win].winbar = msg
-
-          -- Return cleanup function to restore state
-          return function()
-            if vim.api.nvim_win_is_valid(win) then
-              vim.wo[win].winbar = old_winbar
-            end
-          end
-        end,
+        async = {
+          enable = true,     -- Enable non-blocking approval mode
+          -- notifier = { ... } -- Optional: customize notification display
+        },
       },
     },
   }
@@ -597,12 +637,12 @@ keys = {
     end,
     desc = "Next edit",
   },
+  -- Tool approval (async mode)
+  -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
+  -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
+  -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
   { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
   { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
-  -- Tool approval (async mode)
-  -- { "<Leader>ac", mode = "n", function() require("sia").confirm() end, desc = "Confirm pending tool", },
-  -- { "<Leader>ay", mode = "n", function() require("sia").accept() end, desc = "Accept pending tool", },
-  -- { "<Leader>an", mode = "n", function() require("sia").decline() end, desc = "Decline pending tool", },
   -- Or, to be consistent with vim.wo.diff
   --
   -- {
@@ -736,7 +776,6 @@ In the following screencast, we see a complete workflow example:
 Sia includes these built-in actions:
 
 - **commit**: Insert a commit message (Git repositories only, `gitcommit` filetype)
-
   - Example: `Sia /commit`
 
 - **doc**: Insert documentation for the function or class under cursor
@@ -800,18 +839,15 @@ Sia provides several built-in instructions that you can use by name in your acti
 You can reference these by their string name in the `instructions` array:
 
 - `"current_context"` - Provides the current selection or buffer context
-
   - In visual mode: sends the selected lines
   - In normal mode: minimal context about the file
   - Options: `require("sia.instructions").current_context({ show_line_numbers = true })`
 
 - `"current_buffer"` - Provides the entire current buffer
-
   - Sends the full file content with line numbers
   - Options: `require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true })`
 
 - `"visible_buffers"` - Lists all visible buffers in the current tab with cursor positions
-
   - Useful for giving the AI awareness of your workspace
   - Usage: `require("sia.instructions").visible_buffers()`
 

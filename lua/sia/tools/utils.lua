@@ -38,68 +38,6 @@ local function cancellation_message(name)
   }
 end
 
---- Global state for managing pending approvals
---- @class sia.PendingApproval
---- @field conversation sia.Conversation
---- @field prompt string
---- @field on_ready fun(choice:"y"|"n"|"p")
-
---- @type sia.PendingApproval[]
-local pending_approvals = {}
-
---- @param conversation sia.Conversation
---- @param prompt string
---- @param on_ready fun(choice:"y"|"n"|"p")
-local function register_pending_approval(conversation, prompt, on_ready)
-  local msg = string.format("%%#SiaApproval#󱇥 [%s] %s", conversation.name, prompt)
-  local clear = require("sia.config").options.defaults.ui.approval.async_notify(msg)
-  local index = #pending_approvals + 1
-  local approval = {
-    conversation = conversation,
-    prompt = prompt,
-    on_ready = function(choice)
-      table.remove(pending_approvals, index)
-      clear()
-      on_ready(choice)
-    end,
-  }
-  table.insert(pending_approvals, approval)
-end
-
---- @param choice ("y"|"n"|"p")?
-M.show_approval = function(choice)
-  if #pending_approvals == 0 then
-    vim.notify("Sia: No pending approvals", vim.log.levels.INFO)
-    return
-  end
-
-  local function trigger_approval(idx)
-    if pending_approvals[idx] and pending_approvals[idx].on_ready then
-      pending_approvals[idx].on_ready(choice or "p")
-    end
-  end
-
-  if #pending_approvals == 1 then
-    trigger_approval(1)
-  else
-    local items = {}
-    for i, approval in ipairs(pending_approvals) do
-      table.insert(
-        items,
-        string.format("[%d] [%s] %s", i, approval.conversation.name, approval.prompt)
-      )
-    end
-
-    vim.ui.select(items, {
-      prompt = "Select approval to show:",
-    }, function(_, idx)
-      if idx then
-        trigger_approval(idx)
-      end
-    end)
-  end
-end
-
 --- @alias sia.PermissionOpts { auto_allow: integer}|{deny: boolean}|{ask: boolean}
 --- @alias sia.PatternDef string|{pattern: string, negate: boolean?}
 
@@ -283,7 +221,7 @@ end
 --- @field must_confirm boolean?
 
 --- @class sia.NewToolExecuteUserInputOpts
---- @field on_accept fun():nil
+--- @field on_accept fun()
 --- @field must_confirm boolean?
 --- @field preview (fun(buf:integer):integer?)?
 --- @field wrap boolean?
@@ -371,20 +309,26 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
       end)
     end
 
-    if approval_conf.async then
-      register_pending_approval(conversation, prompt, function(choice)
-        if choice == "y" then
-          input_args.on_accept()
-        elseif choice == "n" then
+    if approval_conf.async and approval_conf.async.enable then
+      require("sia.approval").show(conversation, prompt, {
+        on_accept = input_args.on_accept,
+        on_cancel = function()
           callback({
             content = cancellation_message(tool_name),
             kind = "user_declined",
             cancelled = true,
           })
-        else
-          prompt_user()
-        end
-      end)
+        end,
+        on_prompt = prompt_user,
+        on_preview = function()
+          local clear = require("sia.preview").show(
+            input_args.preview,
+            { wrap = true, focusable = true }
+          )
+          vim.cmd.redraw()
+          return clear
+        end,
+      })
     else
       prompt_user()
     end

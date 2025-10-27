@@ -311,18 +311,6 @@ function M.open_reply()
   end
 end
 
-function M.confirm()
-  require("sia.tools.utils").show_approval()
-end
-
-function M.accept()
-  require("sia.tools.utils").show_approval("y")
-end
-
-function M.decline()
-  require("sia.tools.utils").show_approval("n")
-end
-
 --- Compact a conversation by summarizing previous messages
 --- @param conversation sia.Conversation The conversation object to compact
 --- @param reason string? Optional reason for compacting (used in summary message)
