@@ -336,32 +336,53 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
 end
 
 --- @param tool_name string
+--- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 --- @param permission sia.PermissionOpts?
 --- @return sia.NewToolExecuteUserChoice
-local function create_user_choice_handler(tool_name, callback, permission)
+local function create_user_choice_handler(tool_name, conversation, callback, permission)
   return function(prompt, choice_args)
     if permission and permission.auto_allow and not choice_args.must_confirm then
       choice_args.on_accept(permission.auto_allow)
       return
     end
 
-    local select_fn = select
-    if require("sia.config").options.defaults.ui.approval.use_vim_ui then
-      select_fn = vim.ui.select
+    local approval_conf = require("sia.config").options.defaults.ui.approval
+
+    local function prompt_user()
+      local select_fn = select
+      if approval_conf.use_vim_ui then
+        select_fn = vim.ui.select
+      end
+
+      select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
+        if idx then
+          choice_args.on_accept(idx)
+        else
+          callback({
+            content = cancellation_message(tool_name),
+            kind = "user_cancelled",
+            cancelled = true,
+          })
+        end
+      end)
     end
 
-    select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
-      if idx then
-        choice_args.on_accept(idx)
-      else
-        callback({
-          content = cancellation_message(tool_name),
-          kind = "user_cancelled",
-          cancelled = true,
-        })
-      end
-    end)
+    if approval_conf.async and approval_conf.async.enable then
+      require("sia.approval").show(conversation, prompt, {
+        on_accept = prompt_user,
+        on_cancel = function()
+          callback({
+            content = cancellation_message(tool_name),
+            kind = "user_declined",
+            cancelled = true,
+          })
+        end,
+        on_prompt = prompt_user,
+      })
+    else
+      prompt_user()
+    end
   end
 end
 
@@ -430,7 +451,8 @@ M.new_tool = function(opts, execute)
 
       local user_input =
         create_user_input_handler(opts.name, conversation, callback, permission)
-      local user_choice = create_user_choice_handler(opts.name, callback, permission)
+      local user_choice =
+        create_user_choice_handler(opts.name, conversation, callback, permission)
 
       execute(args, conversation, callback, {
         cancellable = cancellable,
