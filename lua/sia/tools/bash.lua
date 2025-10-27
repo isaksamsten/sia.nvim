@@ -153,6 +153,12 @@ git commit -m "$(cat <<'EOF'
 
   opts.user_input(prompt, {
     must_confirm = is_dangerous,
+    preview = function(preview_buf)
+      local lines = vim.split(args.command, "\n")
+      vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
+      vim.bo[preview_buf].ft = "sh"
+      return #lines
+    end,
     on_accept = function()
       if not conversation.shell then
         local Shell = require("sia.shell")
