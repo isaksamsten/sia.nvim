@@ -217,7 +217,7 @@ function M.show_messages(opts)
         end
 
         if content then
-          local buf_name = chat.name .. " " .. item:get_description()
+          local buf_name = chat.conversation.name .. " " .. item:get_description()
           local buf = vim.fn.bufnr(buf_name)
           if buf == -1 then
             buf = vim.api.nvim_create_buf(false, true)
