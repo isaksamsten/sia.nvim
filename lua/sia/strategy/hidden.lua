@@ -2,12 +2,9 @@ local common = require("sia.strategy.common")
 
 local Strategy = common.Strategy
 
-local HIDDEN_NS = vim.api.nvim_create_namespace("SiaHiddenStrategy")
-
 --- @class sia.HiddenStrategy : sia.Strategy
 --- @field conversation sia.Conversation
---- @field private _options sia.config.Hidden
---- @field private _writer sia.StreamRenderer?
+--- @field private options sia.config.Hidden
 local HiddenStrategy = setmetatable({}, { __index = Strategy })
 HiddenStrategy.__index = HiddenStrategy
 
@@ -16,35 +13,23 @@ HiddenStrategy.__index = HiddenStrategy
 --- @param cancellable sia.Cancellable?
 function HiddenStrategy:new(conversation, options, cancellable)
   local obj = setmetatable(Strategy:new(conversation, cancellable), self)
-  obj._options = options
-  obj._writer = nil
+  obj.options = options
   return obj
 end
 
+local function default_notify(msg)
+  vim.api.nvim_echo({ { "🤖 " .. msg, "SiaProgress" } }, false, {})
+end
+
 function HiddenStrategy:on_request_start()
-  local context = self.conversation.context
-  if context then
-    vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
-    vim.api.nvim_buf_set_extmark(context.buf, HIDDEN_NS, context.pos[1] - 1, 0, {
-      virt_lines = {
-        { { "🤖 ", "Normal" }, { "Analyzing your request...", "SiaProgress" } },
-      },
-      virt_lines_above = context.pos[1] - 1 > 0,
-      hl_group = "SiaInsert",
-      end_line = context.pos[2],
-    })
-  else
-    vim.api.nvim_echo(
-      { { "🤖 Analyzing your request...", "SiaProgress" } },
-      false,
-      {}
-    )
-  end
+  local notify = self.options.notify or default_notify
+  notify("Analyzing your request...")
   return true
 end
 
 function HiddenStrategy:on_tools()
-  vim.api.nvim_echo({ { "🤖 Preparing to use tools...", "SiaProgress" } }, false, {})
+  local notify = self.options.notify or default_notify
+  notify("Preparing to use tools...")
   return true
 end
 
@@ -57,12 +42,13 @@ end
 
 function HiddenStrategy:on_error()
   local context = self.conversation.context
-  self._options.callback(context, nil)
+  self.options.callback(context, nil)
 end
 
 function HiddenStrategy:on_complete(control)
   local context = self.conversation.context
 
+  local notify = self.options.notify or default_notify
   self:execute_tools({
     cancellable = self.cancellable,
     handle_status_updates = function(statuses)
@@ -73,23 +59,11 @@ function HiddenStrategy:on_complete(control)
         local tool = running_tools[1].tool
         local friendly_message = tool.message
         local message = friendly_message or ("Using " .. (tool.name or "tool") .. "...")
-        if context then
-          vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
-          vim.api.nvim_buf_set_extmark(context.buf, HIDDEN_NS, context.pos[1] - 1, 0, {
-            virt_lines = { { { "🤖 ", "Normal" }, { message, "SiaProgress" } } },
-            virt_lines_above = context.pos[1] - 1 > 0,
-          })
-        else
-          vim.api.nvim_echo({ { "🤖 " .. message, "SiaProgress" } }, false, {})
-        end
+        notify(message)
       end
     end,
     handle_tools_completion = function(opts)
-      vim.api.nvim_echo(
-        { { "🤖 Analyzing your request...", "SiaProgress" } },
-        false,
-        {}
-      )
+      notify("Analyzing your request...")
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -106,18 +80,14 @@ function HiddenStrategy:on_complete(control)
 
       if opts.cancelled then
         control.finish()
-        self._options.callback(context, nil)
+        self.options.callback(context, nil)
       else
         control.continue_execution()
       end
     end,
     handle_empty_toolset = function()
-      if context then
-        vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
-      end
-      self._options.callback(context, control.content)
+      self.options.callback(context, control.content)
       self.conversation:untrack_messages()
-      vim.api.nvim_echo({ { "🤖 Completed request!", "SiaProgress" } }, false, {})
       vim.defer_fn(function()
         vim.cmd.echo()
       end, 500)
@@ -129,10 +99,9 @@ end
 function HiddenStrategy:on_cancel()
   local context = self.conversation.context
   if context then
-    vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
     self:del_abort_keymap(context.buf)
   end
-  self._options.callback(
+  self.options.callback(
     self.conversation.context,
     { "Operation was cancelled by user" }
   )

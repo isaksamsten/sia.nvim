@@ -481,7 +481,7 @@ end
 
 --- @class sia.config.Hidden
 --- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
---- @field messages { on_start: string?, on_progress: string[]? }?
+--- @field notify fun(string)?
 
 --- @class sia.config.Instruction
 --- @field role sia.config.Role
