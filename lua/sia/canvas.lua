@@ -179,6 +179,7 @@ end
 --- @param messages sia.Message[]
 --- @param model string?
 function Canvas:render_messages(messages, model)
+  vim.bo[self.buf].modifiable = true
   for _, message in ipairs(messages) do
     if message:is_shown() then
       local content = message:get_content()
@@ -226,12 +227,14 @@ function Canvas:render_messages(messages, model)
       end
     end
   end
+  vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()
 end
 
 --- @param model string?
 --- @return integer? extmark_id
 function Canvas:render_assistant_header(model)
+  vim.bo[self.buf].modifiable = true
   local buf = self.buf
   local id
   if self:line_count() == 1 then
@@ -241,12 +244,15 @@ function Canvas:render_assistant_header(model)
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "/sia", "" })
     id = self:_set_assistant_extmark(self:line_count() - 1, model)
   end
+  vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()
   return id
 end
 
 function Canvas:clear()
+  vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
+  vim.bo[self.buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(self.buf, TOOL_RESULT_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)

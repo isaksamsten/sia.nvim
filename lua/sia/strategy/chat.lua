@@ -99,11 +99,9 @@ function ChatStrategy:redraw()
   if not self:buf_is_loaded() then
     return
   end
-  vim.bo[self.buf].modifiable = true
   self.canvas:clear()
   local model = self.conversation.model or require("sia.config").get_default_model()
   self.canvas:render_messages(self.conversation:get_messages(), model)
-  vim.bo[self.buf].modifiable = false
 end
 
 function ChatStrategy:on_request_start()
@@ -111,10 +109,10 @@ function ChatStrategy:on_request_start()
   if not self:buf_is_loaded() then
     return false
   end
-  vim.bo[self.buf].modifiable = true
   local model = self.conversation.model or require("sia.config").get_default_model()
   self.canvas:render_messages({ self.conversation:last_message() }, model)
   self.assistant_extmark = self.canvas:render_assistant_header(model)
+  vim.bo[self.buf].modifiable = true
   return true
 end
 
