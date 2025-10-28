@@ -27,7 +27,7 @@ function HiddenStrategy:on_request_start()
     vim.api.nvim_buf_clear_namespace(context.buf, HIDDEN_NS, 0, -1)
     vim.api.nvim_buf_set_extmark(context.buf, HIDDEN_NS, context.pos[1] - 1, 0, {
       virt_lines = {
-        { { "🤖 ", "Normal" }, { "Processing in background...", "SiaProgress" } },
+        { { "🤖 ", "Normal" }, { "Analyzing your request...", "SiaProgress" } },
       },
       virt_lines_above = context.pos[1] - 1 > 0,
       hl_group = "SiaInsert",
@@ -35,16 +35,29 @@ function HiddenStrategy:on_request_start()
     })
   else
     vim.api.nvim_echo(
-      { { "🤖 Processing in background...", "SiaProgress" } },
+      { { "🤖 Analyzing your request...", "SiaProgress" } },
       false,
       {}
     )
   end
+  return true
+end
+
+function HiddenStrategy:on_tools()
+  vim.api.nvim_echo({ { "🤖 Preparing to use tools...", "SiaProgress" } }, false, {})
+  return true
+end
+
+function HiddenStrategy:on_content(input)
+  if input.tool_calls then
+    self.pending_tools = input.tool_calls
+  end
+  return true
 end
 
 function HiddenStrategy:on_error()
   local context = self.conversation.context
-  self._options.callback(context, { "The operation failed" })
+  self._options.callback(context, nil)
 end
 
 function HiddenStrategy:on_complete(control)
@@ -72,6 +85,11 @@ function HiddenStrategy:on_complete(control)
       end
     end,
     handle_tools_completion = function(opts)
+      vim.api.nvim_echo(
+        { { "🤖 Analyzing your request...", "SiaProgress" } },
+        false,
+        {}
+      )
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -87,7 +105,8 @@ function HiddenStrategy:on_complete(control)
       end
 
       if opts.cancelled then
-        self:confirm_continue_after_cancelled_tool(control)
+        control.finish()
+        self._options.callback(context, nil)
       else
         control.continue_execution()
       end
@@ -98,6 +117,10 @@ function HiddenStrategy:on_complete(control)
       end
       self._options.callback(context, control.content)
       self.conversation:untrack_messages()
+      vim.api.nvim_echo({ { "🤖 Completed request!", "SiaProgress" } }, false, {})
+      vim.defer_fn(function()
+        vim.cmd.echo()
+      end, 500)
       control.finish()
     end,
   })
