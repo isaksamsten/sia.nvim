@@ -270,7 +270,7 @@ in the background without interrupting your workflow. This allows you to:
    󱇥 [conversation-name] Execute bash command 'git status'
    ```
 
-   The notification uses the `SiaApproval` highlight group (linked to `StatusLine` by default).
+   The notification uses the `SiaApprove` or `SiaApproveWarn` highlight group (both linked to `StatusLine` by default).
 
 2. **Process approvals**: When you're ready, use one of these functions:
    - `require("sia.approval").prompt()` - Shows the full approval prompt

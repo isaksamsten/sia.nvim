@@ -1,11 +1,20 @@
---- Module for handling async approval requests
---- This module manages pending approval prompts that can be shown asynchronously
 local M = {}
+
+--- @class sia.ApprovalNotifierOpts
+--- @field level "warn"|"info"
+--- @field name string
+--- @field message string
+--- @field total integer?
+
+--- @class sia.ApprovalNotifier
+--- @field show fun(args:sia.ApprovalNotifierOpts) Show/update the notification. Called whenever the message changes.
+--- @field clear fun() Clear/dismiss the notification
 
 --- Global state for managing pending approvals
 --- @class sia.PendingApproval
 --- @field conversation sia.Conversation
 --- @field prompt string
+--- @field level "warn"|"info"
 --- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
@@ -21,15 +30,15 @@ function M.floating_notifier()
 
   --- @type sia.ApprovalNotifier
   return {
-    show = function(name, msg, total)
+    show = function(args)
       if not notification_buf or not vim.api.nvim_buf_is_valid(notification_buf) then
         notification_buf = vim.api.nvim_create_buf(false, true)
         vim.bo[notification_buf].bufhidden = "wipe"
       end
 
-      local content = string.format("󱇥 [%s] %s", name, msg)
-      if total > 1 then
-        content = string.format("%s (+%d more)", content, total)
+      local content = string.format("󱇥 [%s] %s", args.name, args.message)
+      if args.total > 1 then
+        content = string.format("%s (+%d more)", content, args.total)
       end
       local split = vim.split(content, "\n")
 
@@ -51,8 +60,6 @@ function M.floating_notifier()
           zindex = 50,
         })
 
-        vim.wo[notification_win].winhighlight = "Normal:SiaApproval"
-
         if not resize_autocmd then
           resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
             callback = function()
@@ -64,6 +71,12 @@ function M.floating_notifier()
             end,
           })
         end
+      end
+
+      if args.level == "warn" then
+        vim.wo[notification_win].winhighlight = "Normal:SiaApproveWarn"
+      else
+        vim.wo[notification_win].winhighlight = "Normal:SiaApprove"
       end
     end,
 
@@ -88,16 +101,17 @@ function M.winbar_notifier()
 
   --- @type sia.ApprovalNotifier
   return {
-    show = function(msg)
+    show = function(args)
       if not notification_win or not vim.api.nvim_win_is_valid(notification_win) then
         notification_win = vim.api.nvim_get_current_win()
         old_winbar = vim.wo[notification_win].winbar
       end
       local width = vim.fn.winwidth(notification_win)
-      if #msg > width then
-        msg = msg:sub(1, width - 1) .. "…"
+      local message = args.message
+      if #message > width then
+        message = message:sub(1, width - 1) .. "…"
       end
-      vim.wo[notification_win].winbar = msg
+      vim.wo[notification_win].winbar = message
     end,
 
     clear = function()
@@ -115,7 +129,7 @@ local default_notifier = M.floating_notifier()
 --- Show a pending approval notification to the user
 --- @param conversation sia.Conversation The conversation requesting approval
 --- @param prompt string The prompt to show to the user
---- @param opts { on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
+--- @param opts { level: "warn"|"info", on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
 function M.show(conversation, prompt, opts)
   local approval_config = require("sia.config").options.defaults.ui.approval
   local notifier = (approval_config.async and approval_config.async.notifier)
@@ -124,17 +138,20 @@ function M.show(conversation, prompt, opts)
   local approval = {
     conversation = conversation,
     prompt = prompt,
+    level = opts.level,
   }
 
   approval.on_ready = function(idx, choice)
     if choice ~= "preview" then
       table.remove(pending_approvals, idx)
       if #pending_approvals > 0 then
-        notifier.show(
-          conversation.name,
-          pending_approvals[1].prompt,
-          #pending_approvals
-        )
+        local next_approval = pending_approvals[1]
+        notifier.show({
+          level = next_approval.level,
+          name = next_approval.conversation.name,
+          message = next_approval.prompt,
+          total = #pending_approvals,
+        })
       else
         notifier.clear()
       end
@@ -156,7 +173,13 @@ function M.show(conversation, prompt, opts)
   end
 
   table.insert(pending_approvals, approval)
-  notifier.show(conversation.name, pending_approvals[1].prompt, #pending_approvals)
+  local first_approval = pending_approvals[1]
+  notifier.show({
+    level = first_approval.level,
+    name = first_approval.conversation.name,
+    message = first_approval.prompt,
+    total = #pending_approvals,
+  })
 end
 
 --- @param idx integer

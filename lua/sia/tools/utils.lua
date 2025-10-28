@@ -311,6 +311,7 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
 
     if approval_conf.async and approval_conf.async.enable then
       require("sia.approval").show(conversation, prompt, {
+        level = input_args.must_confirm and "warn" or "info",
         on_accept = input_args.on_accept,
         on_cancel = function()
           callback({

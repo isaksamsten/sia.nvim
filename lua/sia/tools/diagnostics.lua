@@ -8,6 +8,21 @@ return tool_utils.new_tool({
   read_only = true,
   message = "Retrieving diagnostics...",
   description = "Get LSP diagnostics for a specific file",
+  system_prompt = [[Get LSP diagnostics for a specific file - includes syntax errors,
+type errors, warnings, and hints from the Language Server Protocol.
+
+Use this tool FIRST when investigating code problems. It provides instant feedback
+without compilation:
+- Syntax and parse errors
+- Type checking errors (TypeScript, Java, Rust, etc.)
+- Linting warnings and style issues
+- Unused variables, imports, dead code
+- LSP hints and suggestions
+
+Prefer this over bash compilation commands - it's instant, requires no build setup, and
+provides the same error information that a compiler would show.
+
+If no diagnostics are found, the code has no LSP-detected issues.]],
   parameters = {
     file = { type = "string", description = "The file path to get diagnostics for" },
   },
