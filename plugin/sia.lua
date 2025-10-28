@@ -389,9 +389,13 @@ vim.api.nvim_create_user_command("SiaCompact", function()
   if chat then
     chat.is_busy = true
     chat.canvas:update_progress({ { "Compacting conversation...", "WarningMsg" } })
-    M.compact_conversation(chat.conversation, "Requested by user", function(_)
-      chat.is_busy = false
-      chat:redraw()
-    end)
+    require("sia").compact_conversation(
+      chat.conversation,
+      "Requested by user",
+      function(_)
+        chat.is_busy = false
+        chat:redraw()
+      end
+    )
   end
 end, {})
