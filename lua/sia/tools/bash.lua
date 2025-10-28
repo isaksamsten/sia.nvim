@@ -144,12 +144,7 @@ git commit -m "$(cat <<'EOF'
     return
   end
   local is_dangerous = utils.detect_dangerous_command_patterns(args.command)
-  local prompt
-  if is_dangerous then
-    prompt = string.format("🚨 Execute: %s", args.command)
-  else
-    prompt = string.format("Execute: %s", args.command)
-  end
+  local prompt = string.format("Execute: %s", args.command)
 
   opts.user_input(prompt, {
     level = is_dangerous and "warn" or "info",
