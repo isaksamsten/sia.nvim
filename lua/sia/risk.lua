@@ -56,11 +56,9 @@ function M.get_risk_level(tool_name, args, default_level)
 
   local matched_level = nil
 
-  -- Check all argument patterns
   for arg_name, pattern_defs in pairs(risk_config.arguments) do
     local arg_value = args[arg_name]
-    
-    -- Check each pattern for this argument
+
     for _, pattern_def in ipairs(pattern_defs) do
       if matches_pattern(arg_value, pattern_def.pattern) then
         if matched_level == nil then
@@ -72,8 +70,6 @@ function M.get_risk_level(tool_name, args, default_level)
     end
   end
 
-  -- If any pattern matched, return the highest matched level
-  -- Otherwise return the default
   return matched_level or default_level
 end
 
@@ -85,4 +81,3 @@ function M.allows_auto_confirm(level)
 end
 
 return M
-

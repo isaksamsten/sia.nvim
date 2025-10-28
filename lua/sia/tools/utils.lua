@@ -162,13 +162,11 @@ local function handle_user_response(resp, level, opts)
     return opts.on_cancel("user_declined")
   end
 
-  -- Only allow "always" for safe and info levels
   local risk = require("sia.risk")
   if risk.allows_auto_confirm(level) and (response == "a" or response == "always") then
     return opts.on_accept("always")
   end
 
-  -- For warn level, require explicit "yes"
   local should_proceed = response == "" or response == "y" or response == "yes"
 
   if should_proceed then
@@ -197,12 +195,10 @@ local function create_user_input_handler(
     or (permission and permission.auto_allow)
 
   return function(prompt, input_args)
-    -- Resolve the risk level
     local default_level = input_args.level or "info"
     local risk = require("sia.risk")
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
 
-    -- Auto-approve if allowed
     if risk.allows_auto_confirm(resolved_level) and ignore_confirm then
       input_args.on_accept()
       return
@@ -280,12 +276,10 @@ local function create_user_choice_handler(
   permission
 )
   return function(prompt, choice_args)
-    -- Resolve the risk level
     local default_level = choice_args.level or "info"
     local risk = require("sia.risk")
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
 
-    -- Auto-approve if allowed
     if
       permission
       and permission.auto_allow
@@ -376,7 +370,6 @@ M.new_tool = function(opts, execute)
         return false
       end
 
-      -- Check if risk level allows auto-confirm
       local risk = require("sia.risk")
       local resolved_level = risk.get_risk_level(opts.name, args, "info")
       return risk.allows_auto_confirm(resolved_level)

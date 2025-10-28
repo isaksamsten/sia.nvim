@@ -1,5 +1,17 @@
 local M = {}
 
+--- @param level sia.RiskLevel
+--- @return string
+local function get_icon(level)
+  if level == "safe" then
+    return ""
+  elseif level == "warn" then
+    return ""
+  else
+    return ""
+  end
+end
+
 --- @class sia.ApprovalNotifierOpts
 --- @field level sia.RiskLevel
 --- @field name string
@@ -36,7 +48,8 @@ function M.floating_notifier()
         vim.bo[notification_buf].bufhidden = "wipe"
       end
 
-      local content = string.format("󱇥 [%s] %s", args.name, args.message)
+      local icon = get_icon(args.level)
+      local content = string.format("%s [%s] %s", icon, args.name, args.message)
       if args.total > 1 then
         content = string.format("%s (+%d more)", content, args.total)
       end
@@ -78,7 +91,7 @@ function M.floating_notifier()
       elseif args.level == "safe" then
         vim.wo[notification_win].winhighlight = "Normal:SiaApproveSafe"
       else
-        vim.wo[notification_win].winhighlight = "Normal:SiaApprove"
+        vim.wo[notification_win].winhighlight = "Normal:SiaApproveInfo"
       end
     end,
 
