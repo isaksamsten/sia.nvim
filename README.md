@@ -815,6 +815,24 @@ conversation that is started.
 
 Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
+**Subagent:**
+
+- `SiaAgent [query]` - Dispatches an autonomous sub-agent to handle the query
+  in the background
+- `SiaAgent -m <model> [query]` - Dispatches a sub-agent using a specific model
+  (defaults to `fast_model`)
+
+The sub-agent runs independently with its own conversation and token budget,
+performing research or analysis tasks using read-only tools (glob, grep, read,
+websearch, fetch). It provides real-time progress updates in your main chat and
+integrates its final response seamlessly into your conversation. This is useful
+for:
+
+- Deep file searches across large codebases
+- Web research and documentation lookups
+- Complex exploratory tasks that require multiple tool calls
+- Any background work that shouldn't consume your main conversation's tokens
+
 **Other Commands:**
 
 - `SiaDebug` - Show the current conversation's JSON payload in a new buffer

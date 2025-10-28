@@ -1,3 +1,66 @@
+local function match_flag(s, flag, options)
+  local match = string.match(s, "-" .. flag .. "%s+([%w-_/.]*)$")
+  if match then
+    local models = vim
+      .iter(options)
+      :map(function(item)
+        return item
+      end)
+      :filter(function(model)
+        return vim.startswith(model, match)
+      end)
+      :totable()
+    return models
+  else
+    return nil
+  end
+end
+
+local function match_any_flag(prefix)
+  local config = require("sia.config")
+  local models = match_flag(prefix, "m", config.options.models)
+  if models then
+    return models
+  end
+
+  return nil
+end
+
+local function agent_complete(ArgLead, CmdLine, CursorPos)
+  local config = require("sia.config")
+  local cmd_type = vim.fn.getcmdtype()
+  local is_range = false
+
+  if cmd_type == ":" then
+    is_range = require("sia.utils").is_range_commend(CmdLine)
+  end
+
+  local prefix = string.sub(CmdLine, 1, CursorPos)
+  local choice = match_any_flag(prefix)
+  if choice then
+    return choice
+  else
+    if vim.startswith(ArgLead, "/") then
+      local complete = {}
+      local term = ArgLead:sub(2)
+      for key, prompt in pairs(config.options.actions) do
+        if
+          vim.startswith(key, term)
+          and not require("sia.utils").is_action_disabled(prompt)
+          and vim.bo.ft ~= "sia"
+        then
+          if prompt.range == nil or (prompt.range == is_range) then
+            table.insert(complete, "/" .. key)
+          end
+        end
+      end
+      return complete
+    end
+  end
+
+  return {}
+end
+
 local function find_and_remove_flag(flag, fargs)
   local index_of_flag
   for i, v in ipairs(fargs) do
@@ -86,48 +149,7 @@ end, {
   range = true,
   bang = true,
   nargs = "*",
-  complete = function(ArgLead, CmdLine, CursorPos)
-    local config = require("sia.config")
-    local cmd_type = vim.fn.getcmdtype()
-    local is_range = false
-
-    if cmd_type == ":" then
-      is_range = require("sia.utils").is_range_commend(CmdLine)
-    end
-
-    local match = string.match(string.sub(CmdLine, 1, CursorPos), "-m ([%w-_/.]*)$")
-    if match then
-      local models = vim
-        .iter(config.options.models)
-        :map(function(item)
-          return item
-        end)
-        :filter(function(model)
-          return vim.startswith(model, match)
-        end)
-        :totable()
-      return models
-    else
-      if vim.startswith(ArgLead, "/") then
-        local complete = {}
-        local term = ArgLead:sub(2)
-        for key, prompt in pairs(config.options.actions) do
-          if
-            vim.startswith(key, term)
-            and not require("sia.utils").is_action_disabled(prompt)
-            and vim.bo.ft ~= "sia"
-          then
-            if prompt.range == nil or (prompt.range == is_range) then
-              table.insert(complete, "/" .. key)
-            end
-          end
-        end
-        return complete
-      end
-    end
-
-    return {}
-  end,
+  complete = agent_complete,
 })
 
 vim.api.nvim_create_user_command("SiaDebug", function()
@@ -399,3 +421,88 @@ vim.api.nvim_create_user_command("SiaCompact", function()
     )
   end
 end, {})
+
+vim.api.nvim_create_user_command("SiaAgent", function(args)
+  local model = find_and_remove_flag("-m", args.fargs)
+  if #args.fargs == 0 then
+    vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
+    return
+  end
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+  local current = ChatStrategy.by_buf()
+  if not current then
+    vim.api.nvim_echo({ { "Sia: No active chat.", "ErrorMsg" } }, false, {})
+    return
+  end
+  if current.is_busy then
+    vim.api.nvim_echo({ { "Sia: Active chat is busy.", "ErrorMsg" } }, false, {})
+    return
+  end
+  local config = require("sia.config")
+  model = model or config.get_default_model("fast_model")
+  local HiddenStrategy = require("sia.strategy").HiddenStrategy
+  local Conversation = require("sia.conversation").Conversation
+  current.is_busy = true
+  current.canvas:update_progress({
+    { "Waiting for subagent to complete...", "NonText" },
+  })
+  local conversation = Conversation:new({
+    mode = "hidden",
+    model = model,
+    system = {
+
+      {
+        role = "system",
+        content = [[You are an autonomous agent. You perform the user's request using
+the available tools and provide a complete answer.
+
+You cannot ask questions or request user input. Complete the task using only the tools
+at your disposal and respond with your findings.
+
+<tools>
+{{tool_instructions}}
+</tools>]],
+      },
+    },
+    instructions = {
+      { role = "user", content = table.concat(args.fargs, " ") },
+    },
+    tools = {
+      "glob",
+      "grep",
+      "read",
+      "websearch",
+      "fetch",
+    },
+  }, nil)
+  conversation.name = current.conversation.name .. "-subagent"
+  local strategy = HiddenStrategy:new(conversation, {
+    notify = function(message)
+      current.canvas:update_progress({
+        { message, "NonText" },
+      })
+    end,
+    callback = function(_, reply)
+      current.canvas:clear_progress()
+      if reply then
+        current.conversation:add_instruction({ role = "assistant", content = reply })
+        local message = current.conversation.messages[#current.conversation.messages]
+        current.canvas:render_messages({ message }, model)
+      end
+      current.is_busy = false
+    end,
+  })
+  require("sia.assistant").execute_strategy(strategy)
+end, {
+  range = true,
+  bang = true,
+  nargs = "*",
+  complete = function(_, CmdLine, CursorPos)
+    local prefix = string.sub(CmdLine, 1, CursorPos)
+    local choice = match_any_flag(prefix)
+    if choice then
+      return choice
+    end
+    return {}
+  end,
+})
