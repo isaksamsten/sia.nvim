@@ -610,15 +610,16 @@ maintaining security and preventing accidental destructive operations.
 ### Risk Level System
 
 The risk level system provides visual feedback and control over how tool operations
-are presented in the approval UI. Unlike the permission system (which controls whether
+are presented in the async approval UI. Unlike the permission system (which controls whether
 operations require confirmation), the risk system lets you mark operations as safe,
-informational, or risky.
+informational, or risky. By default, the risk system is used together with the
+async approval system to highlight tool differently.
 
 **Risk Levels:**
 
-1. **`safe`** - Low-risk operations (displayed with `SiaApproveSafe` highlight)
-2. **`info`** - Standard operations (displayed with `SiaApprove` highlight, default)
-3. **`warn`** - High-risk operations (displayed with `SiaApproveWarn` highlight, requires explicit "yes")
+1. **`safe`** - Low-risk operations (by default, displayed with `SiaApproveSafe` highlight)
+2. **`info`** - Standard operations (by default, displayed with `SiaApproveInfo` highlight)
+3. **`warn`** - High-risk operations (by default, displayed with `SiaApproveWarn` highlight)
 
 **How it works:**
 
@@ -645,7 +646,7 @@ informational, or risky.
 
 #### Examples
 
-**Mark safe commands for quicker approval:**
+**Highlight safe commands:**
 
 ```json
 {
@@ -665,62 +666,24 @@ informational, or risky.
 }
 ```
 
-**Escalate dangerous commands:**
+**Highlight dangerous commands:**
 
 ```json
 {
   "risk": {
     "bash": {
       "arguments": {
-        "command": [
-          { "pattern": "rm", "level": "warn" },
-          { "pattern": "sudo", "level": "warn" },
-          { "pattern": "dd", "level": "warn" }
-        ]
+        "command": [{ "pattern": "rm", "level": "warn" }]
       }
     },
     "remove_file": {
       "arguments": {
-        "path": [
-          { "pattern": "%.(env|config)", "level": "warn" }
-        ]
+        "path": [{ "pattern": "%.(env|config)", "level": "warn" }]
       }
     }
   }
 }
 ```
-
-**Combined with auto-confirm:**
-
-When you configure `auto_confirm_tools = ["bash"]` in your global config:
-- `safe` and `info` level operations will auto-confirm
-- `warn` level operations always require explicit approval
-- You can de-escalate specific commands to enable auto-confirm
-
-```json
-{
-  "risk": {
-    "bash": {
-      "arguments": {
-        "command": [
-          { "pattern": "^git push", "level": "info" }
-        ]
-      }
-    }
-  }
-}
-```
-
-**Visual customization:**
-
-Customize highlight groups in your config:
-
-```lua
-vim.api.nvim_set_hl(0, "SiaApproveSafe", { bg = "#2d5016", fg = "#a7c080" })
-vim.api.nvim_set_hl(0, "SiaApprove", { link = "StatusLine" })
-vim.api.nvim_set_hl(0, "SiaApproveWarn", { bg = "#5d2f1a", fg = "#e67e80" })
-```
-
 
 ### Suggested Keybindings
 
