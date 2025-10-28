@@ -313,6 +313,20 @@ vim.api.nvim_create_user_command("SiaDiff", function()
   require("sia").show_edits_diff()
 end, {})
 
+vim.api.nvim_create_user_command("SiaAnswer", function(args)
+  local command = args.fargs[1]
+  local approval = require("sia.approval")
+  if command == "prompt" then
+    approval.prompt({ first = args.bang })
+  elseif command == "accept" then
+    approval.accept({ first = args.bang })
+  elseif command == "decline" then
+    approval.decline({ first = args.bang })
+  elseif command == "preview" then
+    approval.preview({ first = args.bang })
+  end
+end, { nargs = 1, bang = true })
+
 vim.api.nvim_create_user_command("SiaAdd", function(args)
   local cmd_name = table.remove(args.fargs, 1)
   local command = SIA_ADD_CMD[cmd_name]

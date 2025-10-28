@@ -714,6 +714,21 @@ conversation that is started.
 - `SiaReject` - Reject the change under the cursor
 - `SiaAccept!` - Accept **all** changes in the current buffer
 - `SiaReject!` - Reject **all** changes in the current buffer
+- `SiaDiff` - Show all changes in a diff view
+
+**Tool Approval (Async Mode):**
+
+- `SiaAnswer prompt` - Show the approval prompt for pending tool operations
+- `SiaAnswer accept` - Auto-accept the pending tool operation
+- `SiaAnswer decline` - Auto-decline the pending tool operation
+- `SiaAnswer preview` - Preview the pending tool operation
+
+Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
+
+**Other Commands:**
+
+- `SiaDebug` - Show the current conversation's JSON payload in a new buffer
+- `SiaCompact` - Compact the current conversation history
 
 **Navigation:**
 With the example keybindings configured, you can navigate between changes using `]c` (next change) and `[c` (previous change).
