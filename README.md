@@ -445,6 +445,17 @@ specific project:
         }
       }
     }
+  },
+  "risk": {
+    "bash": {
+      "arguments": {
+        "command": [
+          { "pattern": "^ls", "level": "safe" },
+          { "pattern": "^cat", "level": "safe" },
+          { "pattern": "rm", "level": "warn" }
+        ]
+      }
+    }
   }
 }
 ```
@@ -458,6 +469,7 @@ specific project:
 - **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)
 - **`context`**: Project-specific context management (tool pruning behavior)
 - **`permission`**: Fine-grained tool access control (see Permission System below)
+- **`risk`**: Configure risk levels for visual feedback and auto-confirm behavior (see Risk Level System below)
 
 ### Key Configuration Concepts
 
@@ -594,6 +606,121 @@ Patterns can be either:
 
 This system provides fine-grained control over AI assistant capabilities while
 maintaining security and preventing accidental destructive operations.
+
+### Risk Level System
+
+The risk level system provides visual feedback and control over how tool operations
+are presented in the approval UI. Unlike the permission system (which controls whether
+operations require confirmation), the risk system lets you mark operations as safe,
+informational, or risky.
+
+**Risk Levels:**
+
+1. **`safe`** - Low-risk operations (displayed with `SiaApproveSafe` highlight)
+2. **`info`** - Standard operations (displayed with `SiaApprove` highlight, default)
+3. **`warn`** - High-risk operations (displayed with `SiaApproveWarn` highlight, requires explicit "yes")
+
+**How it works:**
+
+- Each tool has a default risk level (usually `"info"`)
+- Your `risk` config can escalate or de-escalate operations based on patterns
+- Multiple matching patterns → highest risk level wins
+- Auto-confirm only applies when resolved risk level ≤ `info`
+
+**Configuration format:**
+
+```json
+{
+  "risk": {
+    "tool_name": {
+      "arguments": {
+        "parameter_name": [
+          { "pattern": "lua_pattern", "level": "safe|info|warn" }
+        ]
+      }
+    }
+  }
+}
+```
+
+#### Examples
+
+**Mark safe commands for quicker approval:**
+
+```json
+{
+  "risk": {
+    "bash": {
+      "arguments": {
+        "command": [
+          { "pattern": "^ls", "level": "safe" },
+          { "pattern": "^cat", "level": "safe" },
+          { "pattern": "^echo", "level": "safe" },
+          { "pattern": "^git status", "level": "safe" },
+          { "pattern": "^git diff", "level": "safe" }
+        ]
+      }
+    }
+  }
+}
+```
+
+**Escalate dangerous commands:**
+
+```json
+{
+  "risk": {
+    "bash": {
+      "arguments": {
+        "command": [
+          { "pattern": "rm", "level": "warn" },
+          { "pattern": "sudo", "level": "warn" },
+          { "pattern": "dd", "level": "warn" }
+        ]
+      }
+    },
+    "remove_file": {
+      "arguments": {
+        "path": [
+          { "pattern": "%.(env|config)", "level": "warn" }
+        ]
+      }
+    }
+  }
+}
+```
+
+**Combined with auto-confirm:**
+
+When you configure `auto_confirm_tools = ["bash"]` in your global config:
+- `safe` and `info` level operations will auto-confirm
+- `warn` level operations always require explicit approval
+- You can de-escalate specific commands to enable auto-confirm
+
+```json
+{
+  "risk": {
+    "bash": {
+      "arguments": {
+        "command": [
+          { "pattern": "^git push", "level": "info" }
+        ]
+      }
+    }
+  }
+}
+```
+
+**Visual customization:**
+
+Customize highlight groups in your config:
+
+```lua
+vim.api.nvim_set_hl(0, "SiaApproveSafe", { bg = "#2d5016", fg = "#a7c080" })
+vim.api.nvim_set_hl(0, "SiaApprove", { link = "StatusLine" })
+vim.api.nvim_set_hl(0, "SiaApproveWarn", { bg = "#5d2f1a", fg = "#e67e80" })
+```
+
 
 ### Suggested Keybindings
 

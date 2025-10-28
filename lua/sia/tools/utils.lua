@@ -1,9 +1,5 @@
 local M = {}
 
--- Permission type aliases are defined in lua/sia/permissions.lua
--- @alias sia.PermissionOpts
--- @alias sia.PatternDef
-
 --- @param clear_args string[]
 --- @return fun(t:sia.ToolCall):sia.ToolCall
 function M.gen_clear_outdated_tool_input(clear_args)
@@ -137,11 +133,11 @@ end
 --- @class sia.NewToolExecuteUserChoiceOpts
 --- @field choices string[]
 --- @field on_accept fun(choice:integer):nil
---- @field must_confirm boolean?
+--- @field level sia.RiskLevel?
 
 --- @class sia.NewToolExecuteUserInputOpts
 --- @field on_accept fun()
---- @field must_confirm boolean?
+--- @field level sia.RiskLevel?
 --- @field preview (fun(buf:integer):integer?)?
 --- @field wrap boolean?
 
@@ -153,9 +149,9 @@ end
 --- @field user_choice sia.NewToolExecuteUserChoice
 
 --- @param resp string?
---- @param must_confirm boolean
+--- @param level sia.RiskLevel
 --- @param opts {on_accept: fun(mode:"always"|nil), on_cancel: fun(kind:"user_cancelled"|"user_declined")}
-local function handle_user_response(resp, must_confirm, opts)
+local function handle_user_response(resp, level, opts)
   if resp == nil then
     return opts.on_cancel("user_cancelled")
   end
@@ -166,12 +162,14 @@ local function handle_user_response(resp, must_confirm, opts)
     return opts.on_cancel("user_declined")
   end
 
-  if not must_confirm and (response == "a" or response == "always") then
+  -- Only allow "always" for safe and info levels
+  local risk = require("sia.risk")
+  if risk.allows_auto_confirm(level) and (response == "a" or response == "always") then
     return opts.on_accept("always")
   end
 
-  local should_proceed = must_confirm and (response == "y" or response == "yes")
-    or (response == "" or response == "y" or response == "yes")
+  -- For warn level, require explicit "yes"
+  local should_proceed = response == "" or response == "y" or response == "yes"
 
   if should_proceed then
     opts.on_accept()
@@ -182,17 +180,30 @@ end
 
 --- Create a user_input handler for tool execution
 --- @param tool_name string
+--- @param args table
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 --- @param permission sia.PermissionOpts?
 --- @return sia.NewToolExecuteUserInput
-local function create_user_input_handler(tool_name, conversation, callback, permission)
+local function create_user_input_handler(
+  tool_name,
+  args,
+  conversation,
+  callback,
+  permission
+)
   local approval_conf = require("sia.config").options.defaults.ui.approval
   local ignore_confirm = conversation.ignore_tool_confirm
     or (permission and permission.auto_allow)
 
   return function(prompt, input_args)
-    if not input_args.must_confirm and ignore_confirm then
+    -- Resolve the risk level
+    local default_level = input_args.level or "info"
+    local risk = require("sia.risk")
+    local resolved_level = risk.get_risk_level(tool_name, args, default_level)
+
+    -- Auto-approve if allowed
+    if risk.allows_auto_confirm(resolved_level) and ignore_confirm then
       input_args.on_accept()
       return
     end
@@ -200,7 +211,7 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
     prompt = prompt or ("Execute " .. tool_name)
 
     local function prompt_user()
-      local confirmation_text = input_args.must_confirm and "Proceed? (y/N): "
+      local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
 
       local input_fn = approval_conf.use_vim_ui and vim.ui.input or input
@@ -210,7 +221,7 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
         preview = input_args.preview,
         wrap = input_args.wrap,
       }, function(resp)
-        handle_user_response(resp, input_args.must_confirm, {
+        handle_user_response(resp, resolved_level, {
           on_accept = function(mode)
             if mode == "always" then
               conversation.auto_confirm_tools[tool_name] = 1
@@ -230,7 +241,7 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
 
     if approval_conf.async and approval_conf.async.enable then
       require("sia.approval").show(conversation, prompt, {
-        level = input_args.must_confirm and "warn" or "info",
+        level = resolved_level,
         on_accept = input_args.on_accept,
         on_cancel = function()
           callback({
@@ -256,13 +267,30 @@ local function create_user_input_handler(tool_name, conversation, callback, perm
 end
 
 --- @param tool_name string
+--- @param args table
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 --- @param permission sia.PermissionOpts?
 --- @return sia.NewToolExecuteUserChoice
-local function create_user_choice_handler(tool_name, conversation, callback, permission)
+local function create_user_choice_handler(
+  tool_name,
+  args,
+  conversation,
+  callback,
+  permission
+)
   return function(prompt, choice_args)
-    if permission and permission.auto_allow and not choice_args.must_confirm then
+    -- Resolve the risk level
+    local default_level = choice_args.level or "info"
+    local risk = require("sia.risk")
+    local resolved_level = risk.get_risk_level(tool_name, args, default_level)
+
+    -- Auto-approve if allowed
+    if
+      permission
+      and permission.auto_allow
+      and risk.allows_auto_confirm(resolved_level)
+    then
       choice_args.on_accept(permission.auto_allow)
       return
     end
@@ -344,7 +372,14 @@ M.new_tool = function(opts, execute)
       end
 
       local permission = resolve_permission(args, conversation)
-      return permission ~= nil and permission.auto_allow ~= nil
+      if not permission or not permission.auto_allow then
+        return false
+      end
+
+      -- Check if risk level allows auto-confirm
+      local risk = require("sia.risk")
+      local resolved_level = risk.get_risk_level(opts.name, args, "info")
+      return risk.allows_auto_confirm(resolved_level)
     end,
     description = opts.description,
     required = opts.required,
@@ -370,9 +405,9 @@ M.new_tool = function(opts, execute)
       end
 
       local user_input =
-        create_user_input_handler(opts.name, conversation, callback, permission)
+        create_user_input_handler(opts.name, args, conversation, callback, permission)
       local user_choice =
-        create_user_choice_handler(opts.name, conversation, callback, permission)
+        create_user_choice_handler(opts.name, args, conversation, callback, permission)
 
       execute(args, conversation, callback, {
         cancellable = cancellable,

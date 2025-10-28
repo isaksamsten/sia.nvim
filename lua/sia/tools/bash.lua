@@ -152,7 +152,7 @@ git commit -m "$(cat <<'EOF'
   end
 
   opts.user_input(prompt, {
-    must_confirm = is_dangerous,
+    level = is_dangerous and "warn" or "info",
     preview = function(preview_buf)
       local lines = vim.split(args.command, "\n")
       vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)

@@ -124,6 +124,90 @@ local function validate_permissions(permission)
   return true
 end
 
+local function validate_risk_patterns(patterns, path)
+  if type(patterns) ~= "table" then
+    return false, path .. " must be an array, got " .. type(patterns)
+  end
+
+  local valid_levels = { safe = true, info = true, warn = true }
+
+  for i, pattern_def in ipairs(patterns) do
+    if type(pattern_def) ~= "table" then
+      return false,
+        path
+          .. "["
+          .. i
+          .. "] must be an object with 'pattern' and 'level' fields, got "
+          .. type(pattern_def)
+    end
+
+    if type(pattern_def.pattern) ~= "string" then
+      return false,
+        path .. "[" .. i .. "].pattern must be a string, got " .. type(
+          pattern_def.pattern
+        )
+    end
+
+    if type(pattern_def.level) ~= "string" then
+      return false,
+        path .. "[" .. i .. "].level must be a string, got " .. type(pattern_def.level)
+    end
+
+    if not valid_levels[pattern_def.level] then
+      return false,
+        path
+          .. "["
+          .. i
+          .. "].level must be one of 'safe', 'info', or 'warn', got '"
+          .. pattern_def.level
+          .. "'"
+    end
+
+    local ok, err = pcall(string.match, "test", pattern_def.pattern)
+    if not ok then
+      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. err
+    end
+  end
+  return true
+end
+
+local function validate_risk(risk)
+  if not risk then
+    return true
+  end
+
+  if type(risk) ~= "table" then
+    return false, "'risk' must be an object, got " .. type(risk)
+  end
+
+  for tool_name, tool_risk in pairs(risk) do
+    if type(tool_risk) ~= "table" then
+      return false,
+        "risk." .. tool_name .. " must be an object, got " .. type(tool_risk)
+    end
+
+    if not tool_risk.arguments then
+      return false, "risk." .. tool_name .. " must have an 'arguments' field"
+    end
+
+    if type(tool_risk.arguments) ~= "table" then
+      return false,
+        "risk." .. tool_name .. ".arguments must be an object, got " .. type(
+          tool_risk.arguments
+        )
+    end
+
+    for param_name, patterns in pairs(tool_risk.arguments) do
+      local path = "risk." .. tool_name .. ".arguments." .. param_name
+      local ok, err = validate_risk_patterns(patterns, path)
+      if not ok then
+        return false, err
+      end
+    end
+  end
+  return true
+end
+
 local function validate_context(context)
   if not context then
     return true
@@ -228,6 +312,11 @@ end
 --- @field fast_model string?
 --- @field plan_model string?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
+--- @field risk table?
+--- @field context sia.config.Context?
+--- @field fast_model string?
+--- @field plan_model string?
+--- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field context sia.config.Context?
 
 --- @return sia.LocalConfig?
@@ -297,6 +386,7 @@ function M.get_local_config()
   end
 
   validate(validate_permissions, json.permission)
+  validate(validate_risk, json.risk)
   validate(validate_context, json.context)
   validate(validate_action, json.action)
   validate(validate_model_field, json, "model")
@@ -315,7 +405,7 @@ function M.get_local_config()
   end)
 
   config_cache[root] = { mtime = stat.mtime.sec, json = not has_failed and json or nil }
-  return json
+  return config_cache[root].json
 end
 
 --- @param type ("model"|"fast_model"|"plan_model")?

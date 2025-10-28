@@ -10,6 +10,7 @@ local highlight_groups = {
   SiaAssistant = { link = "DiffAdd" },
   SiaUser = { link = "DiffChange" },
   SiaApprove = { link = "StatusLine" },
+  SiaApproveSafe = { link = "StatusLine" },
   SiaApproveWarn = { link = "StatusLine" },
   SiaToolResult = { link = "DiffChange" },
   SiaDiffDelete = { link = "DiffDelete" },

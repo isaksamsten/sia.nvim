@@ -1,7 +1,7 @@
 local M = {}
 
 --- @class sia.ApprovalNotifierOpts
---- @field level "warn"|"info"
+--- @field level sia.RiskLevel
 --- @field name string
 --- @field message string
 --- @field total integer?
@@ -14,7 +14,7 @@ local M = {}
 --- @class sia.PendingApproval
 --- @field conversation sia.Conversation
 --- @field prompt string
---- @field level "warn"|"info"
+--- @field level sia.RiskLevel
 --- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
@@ -75,6 +75,8 @@ function M.floating_notifier()
 
       if args.level == "warn" then
         vim.wo[notification_win].winhighlight = "Normal:SiaApproveWarn"
+      elseif args.level == "safe" then
+        vim.wo[notification_win].winhighlight = "Normal:SiaApproveSafe"
       else
         vim.wo[notification_win].winhighlight = "Normal:SiaApprove"
       end
@@ -129,7 +131,7 @@ local default_notifier = M.floating_notifier()
 --- Show a pending approval notification to the user
 --- @param conversation sia.Conversation The conversation requesting approval
 --- @param prompt string The prompt to show to the user
---- @param opts { level: "warn"|"info", on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
+--- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
 function M.show(conversation, prompt, opts)
   local approval_config = require("sia.config").options.defaults.ui.approval
   local notifier = (approval_config.async and approval_config.async.notifier)
