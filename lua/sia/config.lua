@@ -562,6 +562,7 @@ end
 --- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
+--- @field subagents table<string, {prompt:string, model:string}>
 --- @field providers table<string, sia.config.Provider>
 M.options = {
   providers = {},
@@ -769,6 +770,7 @@ M.options = {
     commit = require("sia.actions").commit(),
     doc = require("sia.actions").doc(),
   },
+  subagents = {},
 }
 
 function M.setup(options)

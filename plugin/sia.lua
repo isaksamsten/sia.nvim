@@ -61,6 +61,7 @@ local function agent_complete(ArgLead, CmdLine, CursorPos)
   return {}
 end
 
+--- @return string?
 local function find_and_remove_flag(flag, fargs)
   local index_of_flag
   for i, v in ipairs(fargs) do
@@ -74,10 +75,6 @@ local function find_and_remove_flag(flag, fargs)
     return value
   end
 end
-
-local flags = {
-  ["-m"] = { pattern = "", completion = function() end },
-}
 
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
@@ -424,6 +421,8 @@ end, {})
 
 vim.api.nvim_create_user_command("SiaAgent", function(args)
   local model = find_and_remove_flag("-m", args.fargs)
+  local system_prompt = find_and_remove_flag("-s", args.fargs)
+
   if #args.fargs == 0 then
     vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
     return
@@ -438,68 +437,28 @@ vim.api.nvim_create_user_command("SiaAgent", function(args)
     vim.api.nvim_echo({ { "Sia: Active chat is busy.", "ErrorMsg" } }, false, {})
     return
   end
+
   local config = require("sia.config")
-  model = model or config.get_default_model("fast_model")
-  local HiddenStrategy = require("sia.strategy").HiddenStrategy
-  local Conversation = require("sia.conversation").Conversation
-  current.is_busy = true
-  current.canvas:update_progress({
-    { "Waiting for subagent to complete...", "NonText" },
+
+  local prompt = table.concat(args.fargs, " ")
+  local subagent_config = system_prompt and config.options.subagents[system_prompt]
+  require("sia.subagent").start(current, prompt, {
+    model = model or subagent_config and subagent_config.model,
+    system_prompt = subagent_config and subagent_config.prompt,
   })
-  local conversation = Conversation:new({
-    mode = "hidden",
-    model = model,
-    system = {
-
-      {
-        role = "system",
-        content = [[You are an autonomous agent. You perform the user's request using
-the available tools and provide a complete answer.
-
-You cannot ask questions or request user input. Complete the task using only the tools
-at your disposal and respond with your findings.
-
-<tools>
-{{tool_instructions}}
-</tools>]],
-      },
-    },
-    instructions = {
-      { role = "user", content = table.concat(args.fargs, " ") },
-    },
-    tools = {
-      "glob",
-      "grep",
-      "read",
-      "websearch",
-      "fetch",
-    },
-  }, nil)
-  conversation.name = current.conversation.name .. "-subagent"
-  local strategy = HiddenStrategy:new(conversation, {
-    notify = function(message)
-      current.canvas:update_progress({
-        { message, "NonText" },
-      })
-    end,
-    callback = function(_, reply)
-      current.canvas:clear_progress()
-      if reply then
-        current.conversation:add_instruction({ role = "assistant", content = reply })
-        local message = current.conversation.messages[#current.conversation.messages]
-        current.canvas:render_messages({ message }, model)
-      end
-      current.is_busy = false
-    end,
-  })
-  require("sia.assistant").execute_strategy(strategy)
 end, {
   range = true,
   bang = true,
   nargs = "*",
   complete = function(_, CmdLine, CursorPos)
+    local config = require("sia.config")
     local prefix = string.sub(CmdLine, 1, CursorPos)
-    local choice = match_any_flag(prefix)
+    local choice = match_flag(prefix, "m", config.options.models)
+    if choice then
+      return choice
+    end
+
+    choice = match_flag(prefix, "s", config.options.subagents)
     if choice then
       return choice
     end

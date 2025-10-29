@@ -823,15 +823,17 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
   (defaults to `fast_model`)
 
 The sub-agent runs independently with its own conversation and token budget,
-performing research or analysis tasks using read-only tools (glob, grep, read,
-websearch, fetch). It provides real-time progress updates in your main chat and
-integrates its final response seamlessly into your conversation. This is useful
-for:
+performing research or analysis tasks using read-only tools. It provides
+real-time progress updates in your main chat and integrates its final response
+seamlessly into your conversation.
+
+**Common Use Cases:**
 
 - Deep file searches across large codebases
 - Web research and documentation lookups
+- Planning and summarization tasks
 - Complex exploratory tasks that require multiple tool calls
-- Any background work that shouldn't consume your main conversation's tokens
+- Background work that shouldn't consume your main conversation's tokens
 
 **Other Commands:**
 
@@ -839,7 +841,8 @@ for:
 - `SiaCompact` - Compact the current conversation history
 
 **Navigation:**
-With the example keybindings configured, you can navigate between changes using `]c` (next change) and `[c` (previous change).
+With the example keybindings configured, you can navigate between changes using
+`]c` (next change) and `[c` (previous change).
 
 ## Change management
 
