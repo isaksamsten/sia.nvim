@@ -20,14 +20,6 @@ local function validate_permission_patterns(patterns, path)
             pattern_def.pattern
           )
       end
-
-      if pattern_def.negate ~= nil and type(pattern_def.negate) ~= "boolean" then
-        return false,
-          path .. "[" .. i .. "].negate must be a boolean, got " .. type(
-            pattern_def.negate
-          )
-      end
-
       pattern = pattern_def.pattern
     else
       return false,
@@ -38,10 +30,11 @@ local function validate_permission_patterns(patterns, path)
           .. type(pattern_def)
     end
 
-    local ok, err = pcall(string.match, "test", pattern)
+    local ok, regex = pcall(vim.regex, "\\v" .. pattern)
     if not ok then
-      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. err
+      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
     end
+    patterns[i] = regex
   end
   return true
 end
@@ -163,10 +156,12 @@ local function validate_risk_patterns(patterns, path)
           .. "'"
     end
 
-    local ok, err = pcall(string.match, "test", pattern_def.pattern)
+    local ok, regex = pcall(vim.regex, "\\v" .. pattern_def.pattern)
     if not ok then
-      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. err
+      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
     end
+
+    patterns[i] = { level = pattern_def.level, regex = regex }
   end
   return true
 end
@@ -404,8 +399,12 @@ function M.get_local_config()
     return true
   end)
 
-  config_cache[root] = { mtime = stat.mtime.sec, json = not has_failed and json or nil }
-  return config_cache[root].json
+  if has_failed then
+    return nil
+  end
+
+  config_cache[root] = { mtime = stat.mtime.sec, json = json }
+  return json
 end
 
 --- @param type ("model"|"fast_model"|"plan_model")?

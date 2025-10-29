@@ -441,7 +441,7 @@ specific project:
     "ask": {
       "write": {
         "arguments": {
-          "path": [{ "pattern": "%.md$", "negate": true }]
+          "path": ["^(\\.md$)@!.*"]
         }
       }
     }
@@ -536,7 +536,8 @@ You can safely view, edit, or delete files in `.sia/memory/` - they're meant to 
 
 ### Permission System
 
-The permission system uses Lua patterns to control tool access:
+The permission system uses **Vim regex patterns** (with very magic mode `\v`)
+to control tool access:
 
 **Rule Precedence** (in order):
 
@@ -551,17 +552,20 @@ The permission system uses Lua patterns to control tool access:
 - `choice` (allow rules only): Auto-selection index for multi-choice prompts (default: 1)
 
 **Pattern Format**:
-Patterns can be either:
+Patterns are Vim regex strings using very magic mode (`\v`):
 
-- Simple strings: `"git status"`
-- Objects with negate option: `{"pattern": "%.md$", "negate": true}`
+- Simple pattern strings: `"^git status$"`, `"^ls"`, `"\\.lua$"`
+- Multiple patterns in an array are OR'd together: `["^git status", "^git diff", "^git log"]`
+- Use negative lookahead for exclusions: `"^(rm|sudo)@!.*"` (matches anything NOT starting with rm or sudo)
 
 **Pattern Matching**:
 
+- Patterns use Vim regex syntax with `\v` (very magic mode)
 - Multiple patterns in an array are OR'd together
 - All configured argument patterns must match for the rule to apply
 - `nil` arguments are treated as empty strings (`""`)
 - Non-string arguments are converted to strings with `tostring()`
+- See `:help vim.regex()` for full syntax details
 
 ### Examples
 
@@ -573,7 +577,7 @@ Patterns can be either:
     "allow": {
       "bash": {
         "arguments": {
-          "command": ["git status", "git diff.*", "git log.*"]
+          "command": ["^git status$", "^git diff", "^git log"]
         }
       }
     }
@@ -589,14 +593,14 @@ Patterns can be either:
     "allow": {
       "edit": {
         "arguments": {
-          "target_file": ["src/.*%.(js|ts|py)"]
+          "target_file": ["src/.*\\.(js|ts|py)$"]
         }
       }
     },
     "deny": {
       "remove_file": {
         "arguments": {
-          "path": [".*%.(config|env).*"]
+          "path": [".*\\.(config|env)"]
         }
       }
     }
@@ -636,7 +640,7 @@ async approval system to highlight tool differently.
     "tool_name": {
       "arguments": {
         "parameter_name": [
-          { "pattern": "lua_pattern", "level": "safe|info|warn" }
+          { "pattern": "vim_regex_pattern", "level": "safe|info|warn" }
         ]
       }
     }
@@ -673,12 +677,12 @@ async approval system to highlight tool differently.
   "risk": {
     "bash": {
       "arguments": {
-        "command": [{ "pattern": "rm", "level": "warn" }]
+        "command": [{ "pattern": "\\brm\\b", "level": "warn" }]
       }
     },
     "remove_file": {
       "arguments": {
-        "path": [{ "pattern": "%.(env|config)", "level": "warn" }]
+        "path": [{ "pattern": "\\.(env|config)$", "level": "warn" }]
       }
     }
   }

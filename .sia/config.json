@@ -10,31 +10,7 @@
     "deny": {
       "bash": {
         "arguments": {
-          "command": ["^rm", "&&%s*rm"]
-        }
-      }
-    },
-    "ask": {
-      "bash": {
-        "arguments": {
-          "command": [
-            "&&",
-            "||",
-            ";",
-            "%$",
-            "%(",
-            "%)",
-            "`",
-            "%$%(",
-            "%|",
-            "%>",
-            "%>>",
-            "%<",
-            "2>",
-            "2>>",
-            "&>",
-            "&>>"
-          ]
+          "command": ["^rm", "\\&\\&\\s*rm"]
         }
       }
     },
@@ -47,12 +23,12 @@
       "grep": {
         "arguments": {
           "pattern": [".*"],
-          "glob": ["%.lua$"]
+          "glob": ["\\.lua$"]
         }
       },
       "read": {
         "arguments": {
-          "path": ["%.lua$", "README.md$"]
+          "path": ["\\.lua$", "README.md$"]
         }
       },
       "fetch": {

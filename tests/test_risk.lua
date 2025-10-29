@@ -2,11 +2,32 @@ local risk = require("sia.risk")
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
 
+-- Helper to compile patterns to vim.regex objects like config.lua does
+local function compile_risk_config(config)
+  if not config or not config.risk then
+    return config
+  end
+
+  for tool_name, tool_risk in pairs(config.risk) do
+    if tool_risk.arguments then
+      for param_name, patterns in pairs(tool_risk.arguments) do
+        for i, pattern_def in ipairs(patterns) do
+          local regex = vim.regex("\\v" .. pattern_def.pattern)
+          -- Replace with just {level, regex}
+          patterns[i] = { level = pattern_def.level, regex = regex }
+        end
+      end
+    end
+  end
+
+  return config
+end
+
 local function with_mock_local_config(mock, fn)
   local config = require("sia.config")
   local original_get_local_config = config.get_local_config
   config.get_local_config = function()
-    return mock
+    return compile_risk_config(mock)
   end
   local ok, err = pcall(fn)
   config.get_local_config = original_get_local_config
@@ -35,7 +56,7 @@ T["risk level resolution"]["returns default when tool not in config"] = function
   with_mock_local_config({
     risk = {
       edit = {
-        arguments = { target_file = { { pattern = "%.env$", level = "warn" } } },
+        arguments = { target_file = { { pattern = "\\.env$", level = "warn" } } },
       },
     },
   }, function()

@@ -4,11 +4,41 @@ local eq = MiniTest.expect.equality
 
 T["permissions (nil treated as empty)"] = MiniTest.new_set()
 
+local function compile_pattern(pattern_def)
+  if type(pattern_def) == "string" then
+    return vim.regex("\\v" .. pattern_def)
+  elseif type(pattern_def) == "table" and pattern_def.pattern then
+    return vim.regex("\\v" .. pattern_def.pattern)
+  else
+    return pattern_def
+  end
+end
+
+local function compile_permission_config(config)
+  if not config or not config.permission then
+    return config
+  end
+
+  for section_name, section in pairs(config.permission) do
+    for tool_name, tool_perms in pairs(section) do
+      if tool_perms.arguments then
+        for param_name, patterns in pairs(tool_perms.arguments) do
+          for i, pattern_def in ipairs(patterns) do
+            patterns[i] = compile_pattern(pattern_def)
+          end
+        end
+      end
+    end
+  end
+
+  return config
+end
+
 local function with_mock_local_config(mock, fn)
   local config = require("sia.config")
   local original_get_local_config = config.get_local_config
   config.get_local_config = function()
-    return mock
+    return compile_permission_config(mock)
   end
   local ok, err = pcall(fn)
   config.get_local_config = original_get_local_config
@@ -96,7 +126,10 @@ T["permissions (nil treated as empty)"]["allow auto-allow when arg is missing (n
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local can_parallel = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, {})
+    local can_parallel = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      {}
+    )
     eq(true, can_parallel)
   end)
 end
@@ -158,8 +191,14 @@ T["permissions (nil treated as empty)"]["allow with exact string pattern"] = fun
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { foo = "foo" })
-    local ok2 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { foo = "bar" })
+    local ok1 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { foo = "foo" }
+    )
+    local ok2 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { foo = "bar" }
+    )
     eq(true, ok1)
     eq(false, ok2)
   end)
@@ -177,8 +216,14 @@ T["permissions (nil treated as empty)"]["allow with numeric coerced to string"] 
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { n = 123 })
-    local ok2 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { n = "abc" })
+    local ok1 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { n = 123 }
+    )
+    local ok2 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { n = "abc" }
+    )
     eq(true, ok1)
     eq(false, ok2)
   end)
@@ -196,18 +241,24 @@ T["permissions (nil treated as empty)"]["allow requires all configured keys to m
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { a = "x", b = "y" })
-    local ok2 = tool.allow_parallel({ ignore_tool_confirm = false, auto_confirm_tools = {} }, { a = "x", b = "nope" })
+    local ok1 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { a = "x", b = "y" }
+    )
+    local ok2 = tool.allow_parallel(
+      { ignore_tool_confirm = false, auto_confirm_tools = {} },
+      { a = "x", b = "nope" }
+    )
     eq(true, ok1)
     eq(false, ok2)
   end)
 end
 
-T["permissions (nil treated as empty)"]["ask triggers on negate pattern when not matching 'safe'"] = function()
+T["permissions (nil treated as empty)"]["ask triggers on negative lookahead pattern when not matching 'safe'"] = function()
   with_mock_local_config({
     permission = {
       ask = {
-        dummy = { arguments = { action = { { pattern = "^safe", negate = true } } } },
+        dummy = { arguments = { action = { "^(safe)@!.*" } } },
       },
     },
   }, function()
@@ -232,18 +283,25 @@ T["permissions (nil treated as empty)"]["ask triggers on negate pattern when not
     end)
 
     local result
-    tool.execute({ action = "rm -rf" }, { auto_confirm_tools = { dummy = 1 } }, function(res)
-      result = res
-    end)
+    tool.execute(
+      { action = "rm -rf" },
+      { auto_confirm_tools = { dummy = 1 } },
+      function(res)
+        result = res
+      end
+    )
 
     eq(true, prompt_called)
     eq("ok", result.kind)
 
-    -- now with a matching 'safe' value, the negate pattern should NOT trigger ask
     prompt_called = false
-    tool.execute({ action = "safe run" }, { auto_confirm_tools = { dummy = 1 } }, function(res)
-      result = res
-    end)
+    tool.execute(
+      { action = "safe run" },
+      { auto_confirm_tools = { dummy = 1 } },
+      function(res)
+        result = res
+      end
+    )
     eq(false, prompt_called)
 
     vim.ui.input = original_vim_ui_input
@@ -274,11 +332,11 @@ T["permissions (nil treated as empty)"]["deny blocks on positive string pattern"
   end)
 end
 
-T["permissions (nil treated as empty)"]["deny blocks on object pattern (negate=false)"] = function()
+T["permissions (nil treated as empty)"]["deny blocks on simple string pattern"] = function()
   with_mock_local_config({
     permission = {
       deny = {
-        dummy = { arguments = { value = { { pattern = "^bad", negate = false } } } },
+        dummy = { arguments = { value = { "^bad" } } },
       },
     },
   }, function()
