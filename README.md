@@ -240,9 +240,48 @@ interact with your codebase and development environment:
 - **compact_conversation** - Intelligently summarize and compact conversation
   history when topics change
 
+### Task Management
+
+- **write_todos** - Create and manage todo lists for tracking multi-step tasks
+  (add new todos, update status, or clear completed items)
+- **read_todos** - Read the current todo list with IDs, descriptions, and
+  status for each item
+
 The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
 project analysis.
+
+## Task Tracking with Todos
+
+When working on complex tasks, Sia can create and manage a todo list to track
+progress. This helps you stay organized and gives visibility into multi-step
+workflows.
+
+**How it works:**
+
+When you ask Sia to work on a task with multiple steps, it will automatically:
+
+1. **Break down the task** into concrete, actionable todos
+2. **Update status** as it completes each step (pending → current → done)
+3. **Track progress** throughout the conversation
+
+**Viewing todos:**
+
+Todos are shown in a floating status window that appears automatically when
+they're being used. You can also check the current todo list at any time by
+asking Sia "what's the status?" or "show todos".
+
+**Collaborative todos:**
+
+The todo list is collaborative - you can manually update todo statuses at any
+time, and Sia will respect your changes. This is useful if you want to:
+
+- Skip a step that's no longer needed
+- Mark something as done that you completed yourself
+- Reprioritize what Sia should work on next
+
+Todos help Sia stay focused on your goals and make it easier to resume work
+after interruptions or context switches.
 
 ## Tool Approval System
 
@@ -785,6 +824,7 @@ keys = {
   { "p", mode = "n", require("sia").show_messages, ft = "sia" },
   { "x", mode = "n", require("sia").remove_message, ft = "sia" },
   { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
+  { "t", mode = "n", require("sia").todos, ft = "sia" },
 }
 ```
 
