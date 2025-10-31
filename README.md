@@ -253,6 +253,8 @@ project analysis.
 
 ## Task Tracking with Todos
 
+https://github.com/user-attachments/assets/0db7be98-2ec5-4bba-ba51-3afe8201f0ae
+
 When working on complex tasks, Sia can create and manage a todo list to track
 progress. This helps you stay organized and gives visibility into multi-step
 workflows.
