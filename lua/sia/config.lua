@@ -309,10 +309,6 @@ end
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
---- @field fast_model string?
---- @field plan_model string?
---- @field permission { deny: table?, allow: table?, ask: table?}?
---- @field context sia.config.Context?
 
 --- @return sia.LocalConfig?
 function M.get_local_config()
@@ -484,6 +480,7 @@ end
 
 --- @class sia.config.Instruction
 --- @field role sia.config.Role
+--- @field template boolean?
 --- @field hide boolean?
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.InstructionContent[])?

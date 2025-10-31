@@ -1,4 +1,5 @@
 local tracker = require("sia.tracker")
+local template = require("sia.template")
 
 --- @alias sia.CacheControl {type: "ephemeral"}
 --- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
@@ -33,6 +34,7 @@ local tracker = require("sia.tracker")
 --- @class sia.Message
 --- @field role sia.config.Role
 --- @field context sia.Context?
+--- @field template boolean
 --- @field hide boolean?
 --- @field kind string?
 --- @field content (string|sia.InstructionContent[])?
@@ -81,16 +83,7 @@ local function make_content(instruction, context)
     --- @cast tmp sia.InstructionContent[]
     content = tmp
   elseif instruction.content ~= nil and type(instruction.content) == "string" then
-    local tmp = instruction.content
-    --- @cast tmp string
-    if context and context.buf and vim.api.nvim_buf_is_loaded(context.buf) then
-      tmp = string.gsub(tmp, "%{%{(%w+)%}%}", {
-        filetype = vim.bo[context.buf].ft,
-        today = os.date("%Y-%m-%d"),
-      })
-    end
-
-    content = tmp
+    content = instruction.content
   end
   if instruction.role == "tool" then
     content = content or nil
@@ -125,6 +118,7 @@ function Message:from_table(instruction, context)
     obj._tool_call = instruction._tool_call
   end
   obj.meta = {}
+  obj.template = instruction.template or false
   obj.hide = instruction.hide
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
@@ -243,26 +237,11 @@ function Message:prepare(conversation, outdated)
   end
   message.content = message:get_content(outdated)
 
-  if self.role == "system" and conversation then
-    --- @type string[]
-    local tool_instructions = {}
-    if vim.tbl_count(conversation.tools) > 0 then
-      for _, tool in ipairs(conversation.tools) do
-        if tool.system_prompt then
-          tool_instructions[#tool_instructions + 1] =
-            string.format("<%s>\n%s\n</%s>", tool.name, tool.system_prompt, tool.name)
-        end
-      end
-    end
-
-    if #tool_instructions > 0 then
-      local tool_prompt = table.concat(tool_instructions, "\n")
-      local content = message.content
-      if message.content ~= nil and type(content) == "string" then
-        message.content = string.gsub(content, "%{%{([%w_]+)%}%}", {
-          tool_instructions = tool_prompt,
-        })
-      end
+  if self.template and conversation then
+    local content = message.content
+    if message.content ~= nil and type(content) == "string" then
+      local template_context = conversation:build_template_context(message.context)
+      message.content = template.render(content, template_context)
     end
   end
   return message
@@ -581,6 +560,39 @@ function Conversation:get_messages(opts)
   else
     return return_messages
   end
+end
+
+--- Build template context for rendering system prompts
+--- @param context sia.Context?
+--- @return table Template context
+function Conversation:build_template_context(context)
+  local tool_names = vim.tbl_map(function(tool)
+    return tool.name
+  end, self.tools)
+
+  local tool_instructions = {}
+  if vim.tbl_count(self.tools) > 0 then
+    for _, tool in ipairs(self.tools) do
+      if tool.system_prompt then
+        tool_instructions[#tool_instructions + 1] =
+          string.format("<%s>\n%s\n</%s>", tool.name, tool.system_prompt, tool.name)
+      end
+    end
+  end
+
+  return {
+    filetype = (context and context.buf and vim.api.nvim_buf_is_loaded(context.buf))
+        and vim.bo[context.buf].ft
+      or "",
+    today = os.date("%Y-%m-%d"),
+    tool_instructions = table.concat(tool_instructions, "\n"),
+    tools = tool_names,
+    has_tools = #self.tools > 0,
+    tool_count = #self.tools,
+    has_tool = function(name)
+      return vim.tbl_contains(tool_names, name)
+    end,
+  }
 end
 
 --- @return sia.Message[]
