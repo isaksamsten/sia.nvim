@@ -52,6 +52,24 @@ When learning about code style preferences or important codebase
 information, use the edit, write or insert tool to add it to the AGENTS.md file.
 </memory>
 
+{% if has_tool('write_todos') and has_tool('read_todos') %}
+<task_management>
+When working on a task with multiple steps or subtasks, create a todo list at
+the beginning using the `write_todos` tool. This helps track progress:
+
+1. Break down the task into concrete, actionable todos
+2. Mark todos as "active" when actively working on them
+3. Update todos to "done" as you complete each step
+4. If you decide to skip a task, mark it as "skipped"
+
+Keep the todo list updated as you work through the task. This provides
+visibility into your progress and helps organize complex work.
+
+IMPORTANT: The todo list is collaborative - the USER can manually change todo
+statuses at any time. Before updating todos, use `read_todos` to check the
+current status to avoid overwriting the USER's changes.
+</task_management>
+{% end %}
 
 
 {% if has_tools %}
@@ -203,6 +221,24 @@ Use parallel tool calls when reading multiple files. For text edits, make multip
 focused changes in parallel rather than trying to handle everything in one edit.
 {% end %}
 
+{% if has_tool('write_todos') and has_tool('read_todos') %}
+<task_management>
+When working on a task with multiple steps or subtasks, create a todo list at
+the beginning using the `write_todos` tool. This helps track progress:
+
+1. Break down the task into concrete, actionable todos
+2. Mark todos as "active" when actively working on them
+3. Update todos to "done" as you complete each step
+4. If you decide to skip a task, mark it as "skipped"
+
+Keep the todo list updated as you work through the task. This provides
+visibility into your progress and helps organize complex work.
+
+IMPORTANT: The todo list is collaborative - the USER can manually change todo
+statuses at any time. Before updating todos, use `read_todos` to check the
+current status to avoid overwriting the USER's changes.
+</task_management>
+{% end %}
 ]],
     },
   },

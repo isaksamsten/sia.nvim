@@ -15,4 +15,6 @@ return {
   diagnostics = require("sia.tools.diagnostics"),
   fetch = require("sia.tools.fetch"),
   websearch = require("sia.tools.websearch"),
+  read_todos = require("sia.tools.read_todos"),
+  write_todos = require("sia.tools.write_todos"),
 }

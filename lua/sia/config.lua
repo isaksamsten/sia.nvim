@@ -668,6 +668,8 @@ M.options = {
         bash = require("sia.tools").bash,
         fetch = require("sia.tools").fetch,
         websearch = require("sia.tools").websearch,
+        write_todos = require("sia.tools").write_todos,
+        read_todos = require("sia.tools").read_todos,
       },
     },
     actions = {
@@ -730,6 +732,8 @@ M.options = {
           "bash",
           "fetch",
           "websearch",
+          "write_todos",
+          "read_todos",
         },
       },
     },

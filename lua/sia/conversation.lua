@@ -1,6 +1,11 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
 
+--- @class sia.conversation.Todo
+--- @field id integer
+--- @field description string
+--- @field status string
+
 --- @alias sia.CacheControl {type: "ephemeral"}
 --- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
 --- @alias sia.InstructionFileContent {type: "file", file: {filename: string, file_data: string}, cache_control: sia.CacheControl?}
@@ -305,6 +310,7 @@ end
 --- @field model string?
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
+--- @field todos  {buf: number?, items: sia.conversation.Todo[]}
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
@@ -341,6 +347,10 @@ function Conversation:new(action, context)
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
   obj.auto_confirm_tools = {}
+  obj.todos = {
+    buf = nil,
+    items = {},
+  }
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
