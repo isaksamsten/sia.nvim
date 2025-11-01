@@ -765,6 +765,8 @@ M.options = {
         "remove",
         "fetch",
         "websearch",
+        "read_todos",
+        "write_todos",
       },
     },
     commit = require("sia.actions").commit(),
