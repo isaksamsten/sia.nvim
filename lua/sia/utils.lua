@@ -684,6 +684,12 @@ function M.is_memory(filename)
   return false
 end
 
+function M.get_memory_root(filename)
+  local root = M.detect_project_root(filename)
+  local memory_dir = normalize(vim.fs.joinpath(root, ".sia", "memory"))
+  return memory_dir
+end
+
 --- Format memory file name in a human-friendly way
 --- @param filename string The full path to the memory file
 --- @return string friendly_name Human-readable name

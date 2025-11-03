@@ -102,6 +102,13 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   end
 
   local is_memory = utils.is_memory(args.target_file)
+  if is_memory then
+    local memory_dir = utils.get_memory_root(args.target_file)
+    local stat = vim.uv.fs_stat(memory_dir)
+    if not stat then
+      vim.fn.mkdir(memory_dir, "p")
+    end
+  end
   local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
   if not buf then
     callback({

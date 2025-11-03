@@ -60,6 +60,13 @@ For small, targeted changes, prefer the edit tool instead.]],
     return
   end
   local is_memory = utils.is_memory(args.path)
+  if is_memory then
+    local memory_dir = utils.get_memory_root(args.target_file)
+    local stat = vim.uv.fs_stat(memory_dir)
+    if not stat then
+      vim.fn.mkdir(memory_dir, "p")
+    end
+  end
   local file_exists = vim.fn.filereadable(args.path) == 1
   local prompt = file_exists
       and string.format("Overwrite existing file %s with new content", args.path)
