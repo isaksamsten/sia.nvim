@@ -104,6 +104,9 @@ return tool_utils.new_tool({
   read_only = false,
   message = function(args)
     local parts = {}
+    if args.replace and #args.replace > 0 then
+      table.insert(parts, string.format("replacing with %d todo(s)", #args.replace))
+    end
     if args.add and #args.add > 0 then
       table.insert(parts, string.format("adding %d todo(s)", #args.add))
     end
@@ -116,12 +119,28 @@ return tool_utils.new_tool({
     return "Writing todos: " .. table.concat(parts, ", ")
   end,
   system_prompt = [[Manage todos for this conversation. You can add new todos, update
-existing ones, or clear completed todos.
+existing ones, clear completed todos, or replace the entire list.
 
 The tool returns a summary of what was added, updated, or cleared, including the IDs
 of newly added todos for future reference.]],
   description = "Add, update, or clear todos for this conversation",
   parameters = {
+    replace = {
+      type = "array",
+      items = {
+        type = "object",
+        properties = {
+          description = { type = "string", description = "Task description" },
+          status = {
+            type = "string",
+            enum = { "pending", "active", "done", "skipped" },
+            description = "Initial status (default: pending)",
+          },
+        },
+        required = { "description" },
+      },
+      description = "Replace all existing todos with this new list",
+    },
     add = {
       type = "array",
       items = {
@@ -190,6 +209,26 @@ of newly added todos for future reference.]],
     end
   end
 
+  if args.replace and #args.replace > 0 then
+    conversation.todos.items = {}
+    next_id = 1
+    table.insert(response, "Replaced all todos with:")
+    for _, new_todo in ipairs(args.replace) do
+      local todo = {
+        id = next_id,
+        description = new_todo.description,
+        status = new_todo.status or "pending",
+      }
+      table.insert(conversation.todos.items, todo)
+      table.insert(
+        response,
+        string.format("  - [%d] %s (%s)", todo.id, todo.description, todo.status)
+      )
+      next_id = next_id + 1
+    end
+    table.insert(response, "")
+  end
+
   if args.add and #args.add > 0 then
     table.insert(response, "Added todos:")
     for _, new_todo in ipairs(args.add) do
@@ -254,7 +293,7 @@ of newly added todos for future reference.]],
 
   render_todos_buffer(conversation)
 
-  if is_first_time and args.add and #args.add > 0 then
+  if (args.replace and #args.replace > 0) or (args.add and #args.add > 0) then
     vim.schedule(function()
       require("sia").todos("open")
     end)
@@ -269,7 +308,6 @@ of newly added todos for future reference.]],
   end
 
   if all_completed or #conversation.todos.items == 0 then
-    conversation.todos.items = {}
     response = { "All items are done or skipped!" }
     vim.schedule(function()
       require("sia").todos("close")
