@@ -767,6 +767,7 @@ M.options = {
         "websearch",
         "read_todos",
         "write_todos",
+        "bash",
       },
     },
     commit = require("sia.actions").commit(),
