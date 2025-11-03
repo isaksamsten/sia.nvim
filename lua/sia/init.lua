@@ -345,12 +345,20 @@ function M.todos(action)
   local todos_win
   if is_full_width then
     vim.cmd("vertical topleft split")
-    todos_win = vim.api.nvim_get_current_win()
+    if is_open then
+      todos_win = existing_win
+    else
+      todos_win = vim.api.nvim_get_current_win()
+    end
     local width = math.floor(screen_width * 0.2)
     vim.api.nvim_win_set_width(todos_win, width)
   else
-    vim.cmd("belowright split")
-    todos_win = vim.api.nvim_get_current_win()
+    if is_open then
+      todos_win = existing_win
+    else
+      vim.cmd("belowright split")
+      todos_win = vim.api.nvim_get_current_win()
+    end
     local max_height = math.floor(vim.o.lines * 0.2)
     vim.api.nvim_win_set_height(
       todos_win,
