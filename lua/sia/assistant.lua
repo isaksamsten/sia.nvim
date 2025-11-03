@@ -186,7 +186,7 @@ function M.execute_strategy(strategy)
                   end
                 end
                 if stream:process_stream_chunk(obj) then
-                  vim.fn.jobpid(job_id)
+                  vim.fn.jobstop(job_id)
                 end
               end
             end
