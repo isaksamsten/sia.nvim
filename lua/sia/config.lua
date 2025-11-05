@@ -614,7 +614,11 @@ M.options = {
     fast_model = "openai/gpt-4.1-mini",
     plan_model = "openai/o3-mini",
     temperature = 0.3, -- default temperature
-    context = nil,
+    context = {
+      max_tool = 40,
+      keep = 5,
+      clear_input = true,
+    },
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },
