@@ -54,7 +54,7 @@ function M.new(project_root)
   self.command_queue = {}
   self.is_executing = false
   self.is_alive = false
-  self.shell_path = vim.env.SHELL or "/bin/bash"
+  self.shell_path = "/bin/bash"
 
   local id = string.format("%x", math.random(0x10000))
   self.temp_files = {
