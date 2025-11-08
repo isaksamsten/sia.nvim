@@ -763,10 +763,7 @@ function M.reject_diff(buf)
     return true
   end
 
-  while diff_state.reference_hunks and #diff_state.reference_hunks > 0 do
-    M.reject_single_hunk(buf, 1)
-  end
-
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, diff_state.baseline)
   cleanup_diff_state(buf)
   return true
 end
