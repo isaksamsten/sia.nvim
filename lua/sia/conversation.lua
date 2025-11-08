@@ -304,7 +304,7 @@ end
 --- @class sia.Conversation
 --- @field context sia.Context?
 --- @field messages sia.Message[]
---- @field no_supersede boolean?
+--- @field enable_supersede boolean
 --- @field tools sia.config.Tool[]?
 --- @field name string
 --- @field model string?
@@ -343,6 +343,7 @@ function Conversation:new(action, context)
   obj.temperature = action.temperature
   obj.mode = action.mode
   obj.name = ""
+  obj.enable_supersede = true
 
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
@@ -661,7 +662,7 @@ function Conversation:prepare_messages()
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
-      if not self.no_supersede and m.superseded then
+      if self.enable_supersede and m.superseded then
         return false
       end
 

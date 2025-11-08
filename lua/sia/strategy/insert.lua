@@ -18,7 +18,7 @@ InsertStrategy.__index = InsertStrategy
 --- @param options sia.config.Insert
 function InsertStrategy:new(conversation, options)
   local obj = setmetatable(Strategy:new(conversation), self)
-  obj.conversation.no_supersede = true
+  obj.conversation.enable_supersede = false
   if not conversation.context then
     error("Can't intialize InsertStrategy")
   end
