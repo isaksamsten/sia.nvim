@@ -1,3 +1,4 @@
+local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local MAX_LINE_LENGTH = 200
 local MAX_MATCHES = 100
@@ -8,7 +9,8 @@ return tool_utils.new_tool({
   system_prompt = [[- Fast content search
 - Searches files using regluar expressions as supported by rg
 - Supports glob patterns to specify files
-- The root of the search is always the current working directory
+- Optionally specify a path to search within a specific directory
+- The root of the search is the current working directory (or specified path)
 - Do not use search to get the content of a file, use tools or ask the user to
   add the information.
 - When you are doing an open ended search that may require multiple rounds of
@@ -20,7 +22,17 @@ return tool_utils.new_tool({
   parameters = {
     glob = { type = "string", description = "Glob pattern for files to search" },
     pattern = { type = "string", description = "Search pattern" },
+    path = {
+      type = "string",
+      description = "Directory path to search within (e.g., `lua/sia`, `.`). If not provided, searches from current directory.",
+    },
   },
+  auto_apply = function(args, conversation)
+    if utils.is_memory(args.path) then
+      return 1
+    end
+    return conversation.auto_confirm_tools["grep"]
+  end,
   required = { "pattern" },
 }, function(args, _, callback, opts)
   local command = { "rg", "--column", "--no-heading", "--no-follow", "--color=never" }
@@ -35,15 +47,27 @@ return tool_utils.new_tool({
   end
 
   local prompt = string.format("Search for `%s` in all files", args.pattern)
-  if args.glob then
+  if args.glob and args.path then
+    prompt = string.format(
+      "Search for `%s` in files matching `%s` within `%s`",
+      args.pattern,
+      args.glob,
+      args.path
+    )
+  elseif args.glob then
     prompt =
       string.format("Search for `%s` in files matching `%s`", args.pattern, args.glob)
+  elseif args.path then
+    prompt = string.format("Search for `%s` in `%s`", args.pattern, args.path)
   end
 
   opts.user_input(prompt, {
     on_accept = function()
       table.insert(command, "--")
       table.insert(command, args.pattern)
+      if args.path then
+        table.insert(command, args.path)
+      end
 
       vim.system(command, {
         text = true,
@@ -65,27 +89,34 @@ return tool_utils.new_tool({
               truncated_line = prefix .. truncated_rest .. "...[TRUNCATED]"
             end
 
-            table.insert(
-              matches,
-              {
-                file = file,
-                lnum = tonumber(lnum),
-                col = tonumber(col),
-                text = truncated_line,
-              }
-            )
+            table.insert(matches, {
+              file = file,
+              lnum = tonumber(lnum),
+              col = tonumber(col),
+              text = truncated_line,
+            })
             if not file_mtimes[file] then
               local stat = vim.loop.fs_stat(file)
               file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
             end
           end
         end
-        if #matches == 0 then
+        local is_memory = args.path and utils.is_memory(args.path)
+        if #matches == 0 and not is_memory then
           local no_match_msg =
             string.format("🔍 No matches found for `%s`", args.pattern)
-          if args.glob then
+          if args.glob and args.path then
+            no_match_msg = no_match_msg
+              .. string.format(
+                " in files matching `%s` within `%s`",
+                args.glob,
+                args.path
+              )
+          elseif args.glob then
             no_match_msg = no_match_msg
               .. string.format(" in files matching `%s`", args.glob)
+          elseif args.path then
+            no_match_msg = no_match_msg .. string.format(" in `%s`", args.path)
           end
 
           callback({
@@ -123,13 +154,18 @@ return tool_utils.new_tool({
           table.insert(output, matches[i].text)
         end
         local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
-        if args.glob then
+        if args.glob and args.path then
+          display_msg = display_msg
+            .. string.format(" in `%s` within `%s`", args.glob, args.path)
+        elseif args.glob then
           display_msg = display_msg .. string.format(" in `%s`", args.glob)
+        elseif args.path then
+          display_msg = display_msg .. string.format(" in `%s`", args.path)
         end
 
         callback({
           content = output,
-          display_content = { display_msg },
+          display_content = not is_memory and { display_msg } or nil,
         })
       end)
     end,
