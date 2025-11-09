@@ -105,8 +105,13 @@ If there are no tools available to read files, ask the user to add them with
 `SiaAdd file` or `SiaAdd buffer`.
 </tool_calling>
 
+{% if has_tools %}
 <tools>
-{{tool_instructions}}
+{% for tool in tools %}
+<{{tool.name}}>
+{{tool.system_prompt}}
+</{{tool.name}}>
+{% end %}
 </tools>
 
 <use_parallel_tool_calls>
@@ -211,7 +216,11 @@ Use the edit tool to update it with new preferences you learn.
 
 {% if has_tools %}
 <tools>
-{{tool_instructions}}
+{% for tool in tools %}
+<{{tool.name}}>
+{{tool.system_prompt}}
+</{{tool.name}}>
+{% end %}
 </tools>
 Use parallel tool calls when reading multiple files. For text edits, make multiple
 focused changes in parallel rather than trying to handle everything in one edit.

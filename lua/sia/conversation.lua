@@ -577,10 +577,6 @@ end
 --- @param context sia.Context?
 --- @return table Template context
 function Conversation:build_template_context(context)
-  local tool_names = vim.tbl_map(function(tool)
-    return tool.name
-  end, self.tools)
-
   local tool_instructions = {}
   if vim.tbl_count(self.tools) > 0 then
     for _, tool in ipairs(self.tools) do
@@ -596,12 +592,11 @@ function Conversation:build_template_context(context)
         and vim.bo[context.buf].ft
       or "",
     today = os.date("%Y-%m-%d"),
-    tool_instructions = table.concat(tool_instructions, "\n"),
-    tools = tool_names,
+    tools = self.tools,
     has_tools = #self.tools > 0,
     tool_count = #self.tools,
     has_tool = function(name)
-      return vim.tbl_contains(tool_names, name)
+      return self.tool_fn[name] ~= nil
     end,
   }
 end
