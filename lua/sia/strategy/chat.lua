@@ -247,7 +247,7 @@ function ChatStrategy:on_complete(control)
         local win = self:get_win()
         provider.get_stats(vim.api.nvim_win_get_width(win), function(stats)
           vim.wo[win].winbar = stats
-        end)
+        end, self.conversation)
       end
     end
   end

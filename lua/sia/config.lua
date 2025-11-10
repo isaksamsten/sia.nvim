@@ -567,7 +567,7 @@ end
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
---- @field get_stats fun(width: integer, callback:fun(string))?
+--- @field get_stats fun(width: integer, callback:fun(stats: string), conversation: sia.Conversation)?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
@@ -610,18 +610,71 @@ M.options = {
     ["gemini/2.5-pro"] = { "gemini", "gemini-2.5-pro" },
     ["anthropic/claude-sonnet-4"] = { "anthropic", "claude-4-sonnet-20250514" },
     ["anthropic/claude-sonnet-3.7"] = { "anthropic", "claude-3-7-sonnet-latest" },
-    ["openrouter/claude-sonnet-4"] = { "openrouter", "anthropic/claude-sonnet-4" },
-    ["openrouter/claude-sonnet-4.5"] = { "openrouter", "anthropic/claude-sonnet-4.5" },
-    ["openrouter/claude-haiku-4.5"] = { "openrouter", "anthropic/claude-haiku-4.5" },
-    ["openrouter/gemini-2.5-pro"] = { "openrouter", "google/gemini-2.5-pro" },
-    ["openrouter/glm-4.5"] = { "openrouter", "z-ai/glm-4.5" },
-    ["openrouter/qwen3-coder"] = { "openrouter", "qwen/qwen3-coder" },
-    ["openrouter/kimi-k2"] = { "openrouter", "moonshotai/kimi-k2" },
-    ["openrouter/gpt-5"] = { "openrouter", "openai/gpt-5" },
-    ["openrouter/gpt-5-codex"] = { "openrouter", "openai/gpt-5-codex" },
-    ["openrouter/gpt-5-mini"] = { "openrouter", "openai/gpt-5-mini" },
-    ["openrouter/grok-code-fast-1"] = { "openrouter", "x-ai/grok-code-fast-1" },
-    ["openrouter/qwen3-next"] = { "openrouter", "qwen/qwen3-next-80b-a3b-instruct" },
+    ["openrouter/claude-sonnet-4"] = {
+      "openrouter",
+      "anthropic/claude-sonnet-4",
+      pricing = { input = 3.00, output = 15.00 },
+    },
+    ["openrouter/claude-sonnet-4.5"] = {
+      "openrouter",
+      "anthropic/claude-sonnet-4.5",
+      pricing = { input = 3.00, output = 15.00 },
+    },
+    ["openrouter/claude-haiku-4.5"] = {
+      "openrouter",
+      "anthropic/claude-haiku-4.5",
+      pricing = { input = 1.00, output = 5.00 },
+    },
+    ["openrouter/gemini-2.5-pro"] = {
+      "openrouter",
+      "google/gemini-2.5-pro",
+      pricing = { input = 1.25, output = 5.00 },
+    },
+    ["openrouter/glm-4.5"] = {
+      "openrouter",
+      "z-ai/glm-4.5",
+      pricing = { input = 0.35, output = 2.00 },
+    },
+    ["openrouter/glm-4.6"] = {
+      "openrouter",
+      "z-ai/glm-4.6",
+      pricing = { input = 0.45, output = 1.50 },
+    },
+    ["openrouter/qwen3-coder"] = {
+      "openrouter",
+      "qwen/qwen3-coder",
+      pricing = { input = 0.07, output = 0.26 },
+    },
+    ["openrouter/kimi-k2"] = {
+      "openrouter",
+      "moonshotai/kimi-k2",
+      pricing = { input = 0.40, output = 2.0 },
+    },
+    ["openrouter/gpt-5"] = {
+      "openrouter",
+      "openai/gpt-5",
+      pricing = { input = 1.25, output = 10.00 },
+    },
+    ["openrouter/gpt-5-codex"] = {
+      "openrouter",
+      "openai/gpt-5-codex",
+      pricing = { input = 1.25, output = 10.00 },
+    },
+    ["openrouter/gpt-5-mini"] = {
+      "openrouter",
+      "openai/gpt-5-mini",
+      pricing = { input = 0.25, output = 2.0 },
+    },
+    ["openrouter/grok-code-fast-1"] = {
+      "openrouter",
+      "x-ai/grok-code-fast-1",
+      pricing = { input = 0.20, output = 1.50 },
+    },
+    ["openrouter/qwen3-next"] = {
+      "openrouter",
+      "qwen/qwen3-next-80b-a3b-instruct",
+      pricing = { input = 0.10, output = 1.10 },
+    },
   },
   instructions = {},
   --- @type sia.config.Defaults

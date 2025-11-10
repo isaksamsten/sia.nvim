@@ -3,8 +3,8 @@ local M = {}
 local ERROR_API_KEY_MISSING = -100
 --- @class sia.Usage
 --- @field total integer?
---- @field prompt integer?
---- @field completion integer?
+--- @field input integer?
+--- @field output integer?
 --- @field total_time number
 
 --- @class sia.ProviderOpts
@@ -176,13 +176,16 @@ function M.execute_strategy(strategy)
               else
                 if provider.process_usage then
                   local new_usage = provider.process_usage(obj)
+                  if new_usage and strategy.conversation.add_usage then
+                    strategy.conversation:add_usage(new_usage)
+                  end
+
                   if not usage and new_usage then
                     usage = new_usage
                   elseif usage and new_usage then
                     usage.total = (usage.total or 0) + (new_usage.total or 0)
-                    usage.completion = (usage.completion or 0)
-                      + (new_usage.completion or 0)
-                    usage.prompt = (usage.prompt or 0) + (new_usage.prompt or 0)
+                    usage.output = (usage.output or 0) + (new_usage.output or 0)
+                    usage.input = (usage.input or 0) + (new_usage.input or 0)
                   end
                 end
                 if stream:process_stream_chunk(obj) then

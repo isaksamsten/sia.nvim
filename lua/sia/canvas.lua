@@ -116,12 +116,12 @@ function Canvas:update_usage(usage, extmark_id)
 
   local usage_text = {}
 
-  if usage.prompt and usage.prompt > 0 then
-    table.insert(usage_text, { "  " .. usage.prompt, "SiaUsage" })
+  if usage.input and usage.input > 0 then
+    table.insert(usage_text, { "  " .. usage.input, "SiaUsage" })
   end
 
-  if usage.completion and usage.completion > 0 then
-    table.insert(usage_text, { "  " .. usage.completion, "SiaUsage" })
+  if usage.output and usage.output > 0 then
+    table.insert(usage_text, { "  " .. usage.output, "SiaUsage" })
   end
 
   if usage.total then

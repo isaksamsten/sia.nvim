@@ -3,6 +3,48 @@ local get_headers = function(api_key, _)
   return { "--header", string.format("Authorization: Bearer %s", api_key) }
 end
 
+-- OpenAI Model Pricing (per 1M tokens, USD)
+-- Last updated: 2025-01-10
+-- Source: https://platform.openai.com/docs/pricing
+local PRICING = {
+  -- GPT-5 models
+  ["gpt-5"] = { input = 1.25, output = 10.00 },
+  ["gpt-5-mini"] = { input = 0.25, output = 2.00 },
+  ["gpt-5-nano"] = { input = 0.05, output = 0.40 },
+  ["gpt-5-chat-latest"] = { input = 1.25, output = 10.00 },
+  ["gpt-5-codex"] = { input = 1.25, output = 10.00 },
+  ["gpt-5-pro"] = { input = 15.00, output = 120.00 },
+
+  -- GPT-4.1 models
+  ["gpt-4.1"] = { input = 2.00, output = 8.00 },
+  ["gpt-4.1-mini"] = { input = 0.40, output = 1.60 },
+  ["gpt-4.1-nano"] = { input = 0.10, output = 0.40 },
+
+  -- GPT-4o models
+  ["gpt-4o"] = { input = 2.50, output = 10.00 },
+  ["gpt-4o-2024-08-06"] = { input = 2.50, output = 10.00 },
+  ["gpt-4o-2024-05-13"] = { input = 5.00, output = 15.00 },
+  ["gpt-4o-mini"] = { input = 0.15, output = 0.60 },
+  ["gpt-4o-mini-2024-07-18"] = { input = 0.15, output = 0.60 },
+
+  -- o1 reasoning models
+  ["o1"] = { input = 15.00, output = 60.00 },
+  ["o1-pro"] = { input = 150.00, output = 600.00 },
+  ["o1-mini"] = { input = 1.10, output = 4.40 },
+
+  -- o3 reasoning models
+  ["o3"] = { input = 2.00, output = 8.00 },
+  ["o3-pro"] = { input = 20.00, output = 80.00 },
+  ["o3-mini"] = { input = 1.10, output = 4.40 },
+  ["o3-deep-research"] = { input = 10.00, output = 40.00 },
+
+  -- o4 reasoning models
+  ["o4-mini"] = { input = 1.10, output = 4.40 },
+  ["o4-mini-deep-research"] = { input = 2.00, output = 8.00 },
+}
+
+local get_stats = common.create_cost_stats(PRICING)
+
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
 --- @field content string
@@ -205,8 +247,8 @@ local M = {
       if obj.usage then
         return {
           total = obj.usage.total_tokens or nil,
-          prompt = obj.usage.prompt_tokens or nil,
-          completion = obj.usage.completion_tokens or nil,
+          input = obj.usage.prompt_tokens or nil,
+          output = obj.usage.completion_tokens or nil,
           total_time = 0,
         }
       end
@@ -279,6 +321,7 @@ local M = {
         :totable()
     end,
     new_stream = OpenAICompletionStream.new,
+    get_stats = get_stats,
   },
 
   responses = {
@@ -292,8 +335,8 @@ local M = {
         local usage = json.response.usage
         return {
           total = usage.total_tokens or nil,
-          prompt = usage.input_tokens or nil,
-          completion = usage.output_tokens or nil,
+          input = usage.input_tokens or nil,
+          output = usage.output_tokens or nil,
           total_time = 0,
         }
       end
@@ -401,6 +444,7 @@ local M = {
         :totable()
     end,
     new_stream = OpenAIResponsesStream.new,
+    get_stats = get_stats,
   },
 }
 
@@ -450,6 +494,7 @@ function M.completion_compatible(base_url, opts)
       M.completion.prepare_tools(data, tools)
     end,
     new_stream = M.completion.new_stream,
+    get_stats = common.create_cost_stats(nil),
   }
 end
 

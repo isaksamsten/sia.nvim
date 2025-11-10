@@ -314,6 +314,7 @@ end
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
+--- @field usage_history sia.Usage[]
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -352,6 +353,7 @@ function Conversation:new(action, context)
     buf = nil,
     items = {},
   }
+  obj.usage_history = {}
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
@@ -571,6 +573,32 @@ function Conversation:get_messages(opts)
   else
     return return_messages
   end
+end
+
+--- Add usage statistics from a request/response cycle
+--- @param usage sia.Usage
+function Conversation:add_usage(usage)
+  table.insert(self.usage_history, usage)
+end
+
+--- Get cumulative usage across all requests in this conversation
+--- @return sia.Usage
+function Conversation:get_cumulative_usage()
+  --- @type sia.Usage
+  local cumulative = {
+    input = 0,
+    output = 0,
+    total = 0,
+    total_time = 0,
+  }
+
+  for _, usage in ipairs(self.usage_history) do
+    cumulative.input = cumulative.input + (usage.input or 0)
+    cumulative.output = cumulative.output + (usage.output or 0)
+    cumulative.total = cumulative.total + (usage.total or 0)
+  end
+
+  return cumulative
 end
 
 --- Build template context for rendering system prompts

@@ -1,5 +1,34 @@
 local common = require("sia.provider.common")
 
+-- Pricing per 1M tokens (USD) - Standard tier
+-- Last updated: 2025-01-10
+-- Source: https://www.anthropic.com/pricing
+local PRICING = {
+  -- Claude 4.1 models
+  ["claude-opus-4.1"] = { input = 15.00, output = 75.00 },
+
+  -- Claude 4.5 models (standard pricing, ≤ 200K tokens)
+  ["claude-sonnet-4.5"] = { input = 3.00, output = 15.00 },
+  ["claude-haiku-4.5"] = { input = 1.00, output = 5.00 },
+
+  -- Claude 4 models
+  ["claude-opus-4"] = { input = 15.00, output = 75.00 },
+  ["claude-sonnet-4"] = { input = 3.00, output = 15.00 },
+
+  -- Claude 3.7 models
+  ["claude-sonnet-3.7"] = { input = 3.00, output = 15.00 },
+
+  -- Claude 3.5 models
+  ["claude-3-5-sonnet-20241022"] = { input = 3.00, output = 15.00 },
+  ["claude-3-5-sonnet-20240620"] = { input = 3.00, output = 15.00 },
+  ["claude-3-5-haiku-20241022"] = { input = 0.80, output = 4.00 },
+
+  -- Claude 3 models (legacy)
+  ["claude-3-opus-20240229"] = { input = 15.00, output = 75.00 },
+  ["claude-3-sonnet-20240229"] = { input = 3.00, output = 15.00 },
+  ["claude-3-haiku-20240307"] = { input = 0.25, output = 1.25 },
+}
+
 --- @class sia.AnthropicStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
 --- @field content string
@@ -78,15 +107,15 @@ return {
       local usage = obj.message.usage
       return {
         total = (usage.input_tokens or 0) + (usage.output_tokens or 0),
-        prompt = usage.input_tokens or nil,
-        completion = usage.output_tokens or nil,
+        input = usage.input_tokens or nil,
+        output = usage.output_tokens or nil,
         total_time = 0,
       }
     elseif obj.usage then
       return {
         total = (obj.usage.input_tokens or 0) + (obj.usage.output_tokens or 0),
-        prompt = obj.usage.input_tokens or nil,
-        completion = obj.usage.output_tokens or nil,
+        input = obj.usage.input_tokens or nil,
+        output = obj.usage.output_tokens or nil,
         total_time = 0,
       }
     end
@@ -205,4 +234,5 @@ return {
     }
   end,
   new_stream = AnthropicStream.new,
+  get_stats = common.create_cost_stats(PRICING),
 }
