@@ -134,6 +134,49 @@ Any range is supported. For example:
 - `:Sia write snake in pygame` - Opens a chat with the generated answer for the query.
 - `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
 
+## Cost Tracking
+
+Sia provides real-time cost tracking and token usage monitoring in the chat
+window's status bar (winbar). This helps you track API costs and token
+consumption during conversations.
+
+### Display Format
+
+**OpenAI, Anthropic, and OpenRouter models:**
+
+Shows a cost-based progress bar where $1.00 = 100%, along with cumulative token
+usage:
+
+```
+        ■■■━━━━━━━━━━━━━━ ~$0.023              45.2K tokens
+```
+
+**Copilot:**
+
+Shows days until quota reset, usage percentage, and session tokens:
+
+```
+7d              ■■■■■■━━━━━━━━━━ 45%              123.4K tokens
+```
+
+### Adding Pricing to Custom Models
+
+For OpenRouter or other custom models, you can add pricing information to your model configuration:
+
+```lua
+require("sia").setup({
+  models = {
+    ["openrouter/custom-model"] = {
+      "openrouter",
+      "provider/model-name",
+      pricing = { input = 3.00, output = 15.00 }  -- Per 1M tokens in USD
+    },
+  }
+})
+```
+
+Enable by setting `defaults.chat.show_stats = true`.
+
 ## Interaction Modes
 
 Sia supports three primary interaction modes that determine how the AI
