@@ -13,20 +13,10 @@ local PRICING = {
 
   -- Claude 4 models
   ["claude-opus-4"] = { input = 15.00, output = 75.00 },
-  ["claude-sonnet-4"] = { input = 3.00, output = 15.00 },
+  ["claude-4-sonnet-20250514"] = { input = 3.00, output = 15.00 },
 
   -- Claude 3.7 models
   ["claude-sonnet-3.7"] = { input = 3.00, output = 15.00 },
-
-  -- Claude 3.5 models
-  ["claude-3-5-sonnet-20241022"] = { input = 3.00, output = 15.00 },
-  ["claude-3-5-sonnet-20240620"] = { input = 3.00, output = 15.00 },
-  ["claude-3-5-haiku-20241022"] = { input = 0.80, output = 4.00 },
-
-  -- Claude 3 models (legacy)
-  ["claude-3-opus-20240229"] = { input = 15.00, output = 75.00 },
-  ["claude-3-sonnet-20240229"] = { input = 3.00, output = 15.00 },
-  ["claude-3-haiku-20240307"] = { input = 0.25, output = 1.25 },
 }
 
 --- @class sia.AnthropicStream : sia.ProviderStream
@@ -105,17 +95,17 @@ return {
   process_usage = function(obj)
     if obj.type == "message_start" and obj.message and obj.message.usage then
       local usage = obj.message.usage
+      local input = usage.input_tokens or 0
+      local cache_write = usage.cache_creation_input_tokens or 0
+      local cache_read = usage.cache_read_input_tokens or 0
+      local output = usage.output_tokens or 0
+      --- @type sia.Usage
       return {
-        total = (usage.input_tokens or 0) + (usage.output_tokens or 0),
-        input = usage.input_tokens or nil,
-        output = usage.output_tokens or nil,
-        total_time = 0,
-      }
-    elseif obj.usage then
-      return {
-        total = (obj.usage.input_tokens or 0) + (obj.usage.output_tokens or 0),
-        input = obj.usage.input_tokens or nil,
-        output = obj.usage.output_tokens or nil,
+        total = input + cache_read + cache_write + output,
+        input = input,
+        output = output,
+        cache_read = cache_read,
+        cache_write = cache_write,
         total_time = 0,
       }
     end
@@ -234,5 +224,5 @@ return {
     }
   end,
   new_stream = AnthropicStream.new,
-  get_stats = common.create_cost_stats(PRICING),
+  get_stats = common.create_cost_stats(PRICING, { read = 0.1, write = 1.25 }),
 }

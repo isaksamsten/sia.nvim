@@ -146,79 +146,7 @@ local copilot_extra_header = function(_, messages)
   return args
 end
 
----Construct a winbar statusline string from the Copilot stats
----@param json table The parsed JSON response from the Copilot API
----@param progress_width number The width of the progress
----@param conversation sia.Conversation
----@return string winbar The formatted winbar string
-local function construct_winbar(json, progress_width, conversation)
-  local premium = json.quota_snapshots and json.quota_snapshots.premium_interactions
-  if not premium then
-    return ""
-  end
-
-  local percent_remaining = premium.percent_remaining or 0
-  local used_percent = 1 - (percent_remaining / 100)
-
-  local bar_width = math.min(20, progress_width - 11)
-
-  local filled_bars = math.floor(used_percent * bar_width)
-  if filled_bars > bar_width then
-    filled_bars = bar_width
-  end
-  local empty_bars = bar_width - filled_bars
-
-  local bar_hl = used_percent >= 1 and "%#DiagnosticError#"
-    or used_percent >= 0.45 and "%#DiagnosticWarn#"
-    or "%#DiagnosticOk#"
-
-  local bar = bar_hl
-    .. " "
-    .. string.rep("■", filled_bars)
-    .. string.rep("━", empty_bars)
-    .. bar_hl
-
-  local usage_percent = math.floor((1 - percent_remaining / 100) * 100)
-  local percent_display = string.format("%d%%%%", usage_percent) .. "%#Normal#"
-
-  local days_remaining = ""
-  if json.quota_reset_date_utc then
-    local year, month, day = json.quota_reset_date_utc:match("(%d+)-(%d+)-(%d+)")
-    if year and month and day then
-      local reset_time = os.time({
-        year = tonumber(year),
-        month = tonumber(month),
-        day = tonumber(day),
-        hour = 0,
-        min = 0,
-        sec = 0,
-      })
-      local now = os.time()
-      local days = math.ceil((reset_time - now) / 86400)
-
-      days_remaining = "%#Normal#" .. days .. "d "
-    end
-  end
-
-  local token_display = ""
-  if conversation then
-    local usage = conversation:get_cumulative_usage()
-    if usage and usage.total > 0 then
-      local token_str = require("sia.provider.common").format_token_count(usage.total)
-      token_display = "%#Normal#" .. token_str
-    end
-  end
-
-  return string.format(
-    "%%#Normal#%s%%=%s %s%%#Normal#%%=%s%%#Normal#",
-    days_remaining,
-    bar,
-    percent_display,
-    token_display
-  )
-end
-
-local function get_stats(width, callback, conversation)
+local function get_stats(callback, conversation)
   local oauth = get_oauth_token()
   local cmd = {
     "curl",
@@ -236,9 +164,47 @@ local function get_stats(width, callback, conversation)
     { text = true },
     vim.schedule_wrap(function(response)
       local status, json = pcall(vim.json.decode, response.stdout)
+
+      local token_display = ""
+      if conversation then
+        local usage = conversation:get_cumulative_usage()
+        if usage and usage.total > 0 then
+          token_display = require("sia.provider.common").format_token_count(usage.total)
+        end
+      end
       if status then
-        local winbar = construct_winbar(json, width / 2, conversation)
-        callback(winbar)
+        local premium = json.quota_snapshots
+          and json.quota_snapshots.premium_interactions
+        if not premium then
+          return nil
+        end
+
+        local percent_remaining = premium.percent_remaining or 0
+        local used_percent = 1 - (percent_remaining / 100)
+        local percent_display = string.format("%d%%%%", math.floor(used_percent * 100))
+
+        local days_remaining
+        if json.quota_reset_date_utc then
+          local year, month, day = json.quota_reset_date_utc:match("(%d+)-(%d+)-(%d+)")
+          if year and month and day then
+            local reset_time = os.time({
+              year = tonumber(year) or 0,
+              month = tonumber(month) or 0,
+              day = tonumber(day) or 0,
+            })
+            local now = os.time()
+            days_remaining = math.ceil((reset_time - now) / 86400) .. "d"
+          end
+        end
+        callback({
+          bar = { percent = used_percent, icon = " ", text = percent_display },
+          left = days_remaining,
+          right = token_display,
+        })
+      else
+        callback({
+          right = token_display,
+        })
       end
     end)
   )

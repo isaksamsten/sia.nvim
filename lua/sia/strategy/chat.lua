@@ -19,6 +19,38 @@ local STATUS_HL = {
   done = "DiagnosticOk",
 }
 
+--- @param win integer
+--- @param stats table
+local function default_render_stats(win, stats)
+  local win_width = vim.api.nvim_win_get_width(win)
+  local left = stats.left or ""
+  local center = ""
+  local right = stats.right or ""
+
+  if stats.bar then
+    local used_percent = stats.bar.percent or 0
+    local bar_width = math.min(20, win_width - 11)
+    local filled_bars = math.ceil(used_percent * bar_width)
+    if filled_bars > bar_width then
+      filled_bars = bar_width
+    end
+    local empty_bars = bar_width - filled_bars
+
+    local bar_hl = used_percent >= 1 and "%#DiagnosticError#"
+      or used_percent >= 0.75 and "%#DiagnosticWarn#"
+      or "%#DiagnosticOk#"
+    center = bar_hl
+      .. (stats.bar.icon and (" " .. stats.bar.icon) or "")
+      .. string.rep("■", filled_bars)
+      .. string.rep("━", empty_bars)
+      .. (stats.bar.text and (" " .. stats.bar.text) or "")
+      .. bar_hl
+  end
+
+  vim.wo[win].winbar =
+    string.format("%%#Normal#%s%%=%s%%#Normal#%%=%s%%#Normal#", left, center, right)
+end
+
 --- @class sia.ToolCall
 --- @field id string
 --- @field type string
@@ -244,9 +276,12 @@ function ChatStrategy:on_complete(control)
     if self.options.show_stats then
       local provider = require("sia.config").get_provider(self.conversation.model)
       if provider.get_stats then
-        local win = self:get_win()
-        provider.get_stats(vim.api.nvim_win_get_width(win), function(stats)
-          vim.wo[win].winbar = stats
+        provider.get_stats(function(stats)
+          if stats then
+            local render_stats = self.options.render_stats or default_render_stats
+            local win = self:get_win()
+            render_stats(win, stats)
+          end
         end, self.conversation)
       end
     end

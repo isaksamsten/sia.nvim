@@ -588,12 +588,16 @@ function Conversation:get_cumulative_usage()
   local cumulative = {
     input = 0,
     output = 0,
+    cache_read = 0,
+    cache_write = 0,
     total = 0,
     total_time = 0,
   }
 
   for _, usage in ipairs(self.usage_history) do
     cumulative.input = cumulative.input + (usage.input or 0)
+    cumulative.cache_read = cumulative.cache_read + (usage.cache_read or 0)
+    cumulative.cache_write = cumulative.cache_write + (usage.cache_write or 0)
     cumulative.output = cumulative.output + (usage.output or 0)
     cumulative.total = cumulative.total + (usage.total or 0)
   end

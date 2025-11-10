@@ -43,7 +43,7 @@ local PRICING = {
   ["o4-mini-deep-research"] = { input = 2.00, output = 8.00 },
 }
 
-local get_stats = common.create_cost_stats(PRICING)
+local get_stats = common.create_cost_stats(PRICING, { read = 0.1 })
 
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
@@ -245,10 +245,23 @@ local M = {
     get_headers = get_headers,
     process_usage = function(obj)
       if obj.usage then
+        local cache_read = nil
+        local input_tokens = obj.usage.prompt_tokens
+        if
+          obj.usage.prompt_tokens_details
+          and obj.usage.prompt_tokens_details.cached_tokens
+        then
+          cache_read = obj.usage.prompt_tokens_details.cached_tokens
+          -- Subtract cached tokens from input since prompt_tokens includes them
+          if input_tokens and cache_read then
+            input_tokens = input_tokens - cache_read
+          end
+        end
         return {
           total = obj.usage.total_tokens or nil,
-          input = obj.usage.prompt_tokens or nil,
+          input = input_tokens or nil,
           output = obj.usage.completion_tokens or nil,
+          cache_read = cache_read,
           total_time = 0,
         }
       end
@@ -333,10 +346,20 @@ local M = {
     process_usage = function(json)
       if json.type == "response.completed" and json.response.usage then
         local usage = json.response.usage
+        local cache_read = nil
+        local input_tokens = usage.input_tokens
+        if usage.input_tokens_details and usage.input_tokens_details.cached_tokens then
+          cache_read = usage.input_tokens_details.cached_tokens
+          -- Subtract cached tokens from input since input_tokens includes them
+          if input_tokens and cache_read then
+            input_tokens = input_tokens - cache_read
+          end
+        end
         return {
           total = usage.total_tokens or nil,
-          input = usage.input_tokens or nil,
+          input = input_tokens or nil,
           output = usage.output_tokens or nil,
+          cache_read = cache_read,
           total_time = 0,
         }
       end

@@ -104,22 +104,30 @@ end
 --- @param pricing { input: number, output: number }
 --- @param input_tokens integer
 --- @param output_tokens integer
+--- @param multiplier number?
 --- @return number cost in USD
-local function calculate_cost_from_pricing(pricing, input_tokens, output_tokens)
-  local input_cost = (input_tokens / 1000000) * pricing.input
+local function calculate_cost_from_pricing(
+  pricing,
+  input_tokens,
+  output_tokens,
+  multiplier
+)
+  multiplier = multiplier or 1.0
+  local input_cost = (input_tokens / 1000000) * pricing.input * multiplier
   local output_cost = (output_tokens / 1000000) * pricing.output
   return input_cost + output_cost
 end
 
 --- Create a cost-based stats function for providers
---- @param builtin_pricing table<string, { input: number, output: number }>? Optional built-in pricing table
---- @return fun(width: integer, callback: fun(stats: string), conversation: sia.Conversation)
-function M.create_cost_stats(builtin_pricing)
-  return function(width, callback, conversation)
+--- @param builtin_pricing table<string, { input: number, output: number }>
+--- @param cache_multiplier {read: number, write: number}?
+--- @return fun(callback: fun(stats: table?), conversation: sia.Conversation)
+function M.create_cost_stats(builtin_pricing, cache_multiplier)
+  return function(callback, conversation)
     local usage = conversation:get_cumulative_usage()
 
     if not usage or usage.total == 0 then
-      callback("")
+      callback()
       return
     end
 
@@ -134,19 +142,58 @@ function M.create_cost_stats(builtin_pricing)
         if model_spec.pricing then
           cost =
             calculate_cost_from_pricing(model_spec.pricing, usage.input, usage.output)
+          if model_spec.cache_multiplier then
+            if usage.cache_read then
+              cost = cost
+                + calculate_cost_from_pricing(
+                  model_spec.pricing,
+                  usage.cache_write,
+                  0,
+                  model_spec.cache_multiplier.read
+                )
+            end
+            if usage.cache_write then
+              cost = cost
+                + calculate_cost_from_pricing(
+                  model_spec.pricing,
+                  usage.cache_write,
+                  0,
+                  model_spec.cache_multiplier.write
+                )
+            end
+          end
         elseif builtin_pricing then
           local actual_model_name = model_spec[2]
           local pricing = builtin_pricing[actual_model_name]
           if pricing then
             cost = calculate_cost_from_pricing(pricing, usage.input, usage.output)
+            if cache_multiplier then
+              if usage.cache_read then
+                cost = cost
+                  + calculate_cost_from_pricing(
+                    pricing,
+                    usage.cache_read,
+                    0,
+                    cache_multiplier.read
+                  )
+              end
+              if usage.cache_write then
+                cost = cost
+                  + calculate_cost_from_pricing(
+                    pricing,
+                    usage.cache_write,
+                    0,
+                    cache_multiplier.write
+                  )
+              end
+            end
           end
         end
       end
     end
 
     if not cost then
-      local winbar = string.format("%%#Normal#%%= %s%%=%%#Normal#", token_str)
-      callback(winbar)
+      callback({ right = token_str })
       return
     end
 
@@ -160,33 +207,10 @@ function M.create_cost_stats(builtin_pricing)
     local max_cost = 1.0
     local cost_percent = math.min(cost / max_cost, 1)
 
-    local bar_width = math.min(20, math.floor(width / 2) - 20)
-    local filled_bars = math.floor(cost_percent * bar_width)
-    local empty_bars = bar_width - filled_bars
-
-    local bar_hl
-    if cost_percent >= 0.90 then
-      bar_hl = "%#DiagnosticError#"
-    elseif cost_percent >= 0.50 then
-      bar_hl = "%#DiagnosticWarn#"
-    else
-      bar_hl = "%#DiagnosticOk#"
-    end
-
-    local bar = bar_hl
-      .. " "
-      .. string.rep("■", filled_bars)
-      .. string.rep("━", empty_bars)
-      .. bar_hl
-
-    local winbar = string.format(
-      "%%#Normal#%%=%s ~%s %%#Normal#%%=%s%%#Normal#",
-      bar,
-      cost_str,
-      token_str
-    )
-
-    callback(winbar)
+    callback({
+      bar = { percent = cost_percent, icon = "", text = cost_str },
+      right = token_str,
+    })
   end
 end
 

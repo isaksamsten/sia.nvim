@@ -488,6 +488,7 @@ end
 --- @field cmd string?
 --- @field wo table<string, any>?
 --- @field show_stats boolean?
+--- @field render_stats fun(win:integer, stats:table)?
 
 --- @class sia.config.Hidden
 --- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
@@ -567,7 +568,7 @@ end
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
---- @field get_stats fun(width: integer, callback:fun(stats: string), conversation: sia.Conversation)?
+--- @field get_stats fun(callback:fun(stats: table), conversation: sia.Conversation)?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
@@ -609,26 +610,30 @@ M.options = {
     ["gemini/1.5-pro"] = { "gemini", "gemini-1.5-pro" },
     ["gemini/2.5-pro"] = { "gemini", "gemini-2.5-pro" },
     ["anthropic/claude-sonnet-4"] = { "anthropic", "claude-4-sonnet-20250514" },
-    ["anthropic/claude-sonnet-3.7"] = { "anthropic", "claude-3-7-sonnet-latest" },
+    ["anthropic/claude-sonnet-4.5"] = { "anthropic", "claude-4.5-sonnet" },
     ["openrouter/claude-sonnet-4"] = {
       "openrouter",
       "anthropic/claude-sonnet-4",
       pricing = { input = 3.00, output = 15.00 },
+      cache_multiplier = { read = 0.1, write = 1.25 },
     },
     ["openrouter/claude-sonnet-4.5"] = {
       "openrouter",
       "anthropic/claude-sonnet-4.5",
       pricing = { input = 3.00, output = 15.00 },
+      cache_multiplier = { read = 0.1, write = 1.25 },
     },
     ["openrouter/claude-haiku-4.5"] = {
       "openrouter",
       "anthropic/claude-haiku-4.5",
       pricing = { input = 1.00, output = 5.00 },
+      cache_multiplier = { read = 0.1, write = 1.25 },
     },
     ["openrouter/gemini-2.5-pro"] = {
       "openrouter",
       "google/gemini-2.5-pro",
       pricing = { input = 1.25, output = 5.00 },
+      cache_multiplier = { read = 0.1, write = 1.25 },
     },
     ["openrouter/glm-4.5"] = {
       "openrouter",
