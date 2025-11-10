@@ -241,6 +241,15 @@ function ChatStrategy:on_complete(control)
     else
       control.finish()
     end
+    if self.options.show_stats then
+      local provider = require("sia.config").get_provider(self.conversation.model)
+      if provider.get_stats then
+        local win = self:get_win()
+        provider.get_stats(vim.api.nvim_win_get_width(win), function(stats)
+          vim.wo[win].winbar = stats
+        end)
+      end
+    end
   end
 
   self:execute_tools({

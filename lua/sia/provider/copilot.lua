@@ -1,5 +1,46 @@
 local openai = require("sia.provider.openai")
 
+---Find the appropriate configuration directory based on the OS
+---@return string? config_path The full path to the config directory or nil if not found
+local function find_config()
+  local config = vim.fn.expand("$XDG_CONFIG_HOME")
+  if config and vim.fn.isdirectory(config) > 0 then
+    return config
+  elseif vim.fn.has("win32") > 0 then
+    config = vim.fn.expand("~/AppData/Local")
+    if vim.fn.isdirectory(config) > 0 then
+      return config
+    end
+  else
+    config = vim.fn.expand("~/.config")
+    if vim.fn.isdirectory(config) > 0 then
+      return config
+    end
+  end
+end
+
+---Extract the OAuth token from the GitHub Copilot apps.json configuration file
+---@return string? oauth_token The OAuth token if found, nil otherwise
+local function get_oauth_token(oauth)
+  if oauth then
+    return oauth
+  end
+  local config_home = find_config()
+  if not config_home then
+    return nil
+  end
+  local apps = config_home .. "/github-copilot/apps.json"
+  if vim.fn.filereadable(apps) == 1 then
+    local data = vim.json.decode(table.concat(vim.fn.readfile(apps), " "))
+    for key, value in pairs(data) do
+      if string.find(key, "github.com") then
+        return value.oauth_token
+      end
+    end
+  end
+  return nil
+end
+
 ---Get a valid GitHub Copilot API key by:
 ---1. Looking up the OAuth token in the GitHub Copilot config
 ---2. Using the OAuth token to request a temporary access token from GitHub's API
@@ -7,47 +48,6 @@ local openai = require("sia.provider.openai")
 local function copilot_api_key()
   local token = nil
   local oauth = nil
-
-  ---Find the appropriate configuration directory based on the OS
-  ---@return string? config_path The full path to the config directory or nil if not found
-  local function find_config()
-    local config = vim.fn.expand("$XDG_CONFIG_HOME")
-    if config and vim.fn.isdirectory(config) > 0 then
-      return config
-    elseif vim.fn.has("win32") > 0 then
-      config = vim.fn.expand("~/AppData/Local")
-      if vim.fn.isdirectory(config) > 0 then
-        return config
-      end
-    else
-      config = vim.fn.expand("~/.config")
-      if vim.fn.isdirectory(config) > 0 then
-        return config
-      end
-    end
-  end
-
-  ---Extract the OAuth token from the GitHub Copilot apps.json configuration file
-  ---@return string? oauth_token The OAuth token if found, nil otherwise
-  local function get_oauth_token()
-    if oauth then
-      return oauth
-    end
-    local config_home = find_config()
-    if not config_home then
-      return nil
-    end
-    local apps = config_home .. "/github-copilot/apps.json"
-    if vim.fn.filereadable(apps) == 1 then
-      local data = vim.json.decode(table.concat(vim.fn.readfile(apps), " "))
-      for key, value in pairs(data) do
-        if string.find(key, "github.com") then
-          return value.oauth_token
-        end
-      end
-    end
-    return nil
-  end
 
   ---Get the cache file path for storing the token
   ---@return string cache_path The full path to the cache file
@@ -97,7 +97,7 @@ local function copilot_api_key()
     end
 
     -- Need to fetch a new token
-    oauth = get_oauth_token()
+    oauth = get_oauth_token(oauth)
     if not oauth then
       vim.notify("Sia: Can't find Copilot auth token")
       return nil
@@ -146,16 +146,102 @@ local copilot_extra_header = function(_, messages)
   return args
 end
 
-return {
-  completion = openai.completion_compatible(
-    "https://api.githubcopilot.com/chat/completions",
-    {
-      api_key = copilot_api_key(),
-      get_headers = copilot_extra_header,
-    }
-  ),
-  responses = openai.responses_compatible("https://api.githubcopilot.com/responses", {
+---Construct a winbar statusline string from the Copilot stats
+---@param json table The parsed JSON response from the Copilot API
+---@param progress_width number The width of the progress
+---@return string winbar The formatted winbar string
+local function construct_winbar(json, progress_width)
+  local premium = json.quota_snapshots and json.quota_snapshots.premium_interactions
+  if not premium then
+    return ""
+  end
+
+  local percent_remaining = premium.percent_remaining or 0
+  local used_percent = 1 - (percent_remaining / 100)
+
+  local bar_width = math.max(10, progress_width - 11)
+
+  local filled_bars = math.floor(used_percent * bar_width)
+  if filled_bars > bar_width then
+    filled_bars = bar_width
+  end
+  local empty_bars = bar_width - filled_bars
+
+  local bar_hl = used_percent >= 1 and "%#DiagnosticError#"
+    or used_percent >= 0.45 and "%#DiagnosticWarn#"
+    or "%#DiagnosticOk#"
+
+  local bar = bar_hl
+    .. string.rep("■", filled_bars)
+    .. string.rep("━", empty_bars)
+    .. bar_hl
+
+  local usage_percent = math.floor((1 - percent_remaining / 100) * 100)
+  local percent_display = string.format(" %d%%%%", usage_percent) .. "%#WinBar#"
+
+  local days_remaining = ""
+  if json.quota_reset_date_utc then
+    local year, month, day = json.quota_reset_date_utc:match("(%d+)-(%d+)-(%d+)")
+    if year and month and day then
+      local reset_time = os.time({
+        year = tonumber(year),
+        month = tonumber(month),
+        day = tonumber(day),
+        hour = 0,
+        min = 0,
+        sec = 0,
+      })
+      local now = os.time()
+      local days = math.ceil((reset_time - now) / 86400)
+
+      days_remaining = "%#StatusLine#" .. days .. "d" .. "%#StatusLine#"
+    end
+  end
+
+  return "%#StatusLine#%= " .. bar .. percent_display .. "%=" .. days_remaining
+end
+
+local function get_stats(width, callback)
+  local oauth = get_oauth_token()
+  local cmd = {
+    "curl",
+    "--silent",
+    "--header",
+    "Authorization: Bearer " .. oauth,
+    "--header",
+    "Accept: */*",
+    "--header",
+    "User-Agent: Sia.nvim",
+    "https://api.github.com/copilot_internal/user",
+  }
+  vim.system(
+    cmd,
+    { text = true },
+    vim.schedule_wrap(function(response)
+      local status, json = pcall(vim.json.decode, response.stdout)
+      if status then
+        local winbar = construct_winbar(json, width / 2)
+        callback(winbar)
+      end
+    end)
+  )
+end
+
+local completion =
+  openai.completion_compatible("https://api.githubcopilot.com/chat/completions", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
-  }),
+  })
+completion.get_stats = get_stats
+
+local responses =
+  openai.responses_compatible("https://api.githubcopilot.com/responses", {
+    api_key = copilot_api_key(),
+    get_headers = copilot_extra_header,
+  })
+responses.get_stats = get_stats
+
+return {
+  completion = completion,
+  responses = responses,
 }

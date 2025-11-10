@@ -411,6 +411,20 @@ function M.get_default_model(type)
   return lc[type] or M.options.defaults[type]
 end
 
+--- @param model string?
+--- @return sia.config.Provider
+function M.get_provider(model)
+  local model_spec = M.options.models[model or M.get_default_model()]
+  if not model then
+    model_spec = M.options.models[M.options.defaults.model]
+  end
+  local provider = M.options.providers[model_spec[1]]
+  if not provider then
+    provider = require("sia.provider.defaults")[model_spec[1]]
+  end
+  return provider
+end
+
 --- @return boolean
 function M.get_auto_continue()
   local lc = M.get_local_config() or {}
@@ -473,6 +487,7 @@ end
 --- @class sia.config.Chat
 --- @field cmd string?
 --- @field wo table<string, any>?
+--- @field show_stats boolean?
 
 --- @class sia.config.Hidden
 --- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
@@ -552,6 +567,7 @@ end
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
+--- @field get_stats fun(width: integer, callback:fun(string))?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
@@ -622,6 +638,7 @@ M.options = {
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },
+      show_stats = true,
     },
     hidden = {
       messages = {},
