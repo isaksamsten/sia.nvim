@@ -159,6 +159,8 @@ Shows days until quota reset, usage percentage, and session tokens:
 7d              ■■■■■■━━━━━━━━━━ 45%              123.4K tokens
 ```
 
+https://github.com/user-attachments/assets/8ac71544-d18e-403d-b2b5-48a862f36138
+
 ### Adding Pricing to Custom Models
 
 For OpenRouter or other custom models, you can add pricing information to your model configuration:
