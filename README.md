@@ -140,30 +140,12 @@ Sia provides real-time cost tracking and token usage monitoring in the chat
 window's status bar (winbar). This helps you track API costs and token
 consumption during conversations.
 
-### Display Format
-
-**OpenAI, Anthropic, and OpenRouter models:**
-
-Shows a cost-based progress bar where $1.00 = 100%, along with cumulative token
-usage:
-
-```
-        ■■■━━━━━━━━━━━━━━ ~$0.023              45.2K tokens
-```
-
-**Copilot:**
-
-Shows days until quota reset, usage percentage, and session tokens:
-
-```
-7d              ■■■■■■━━━━━━━━━━ 45%              123.4K tokens
-```
-
 https://github.com/user-attachments/assets/8ac71544-d18e-403d-b2b5-48a862f36138
 
 ### Adding Pricing to Custom Models
 
-For OpenRouter or other custom models, you can add pricing information to your model configuration:
+For OpenRouter or other custom models, you can add pricing information to your
+model configuration:
 
 ```lua
 require("sia").setup({
@@ -171,13 +153,41 @@ require("sia").setup({
     ["openrouter/custom-model"] = {
       "openrouter",
       "provider/model-name",
-      pricing = { input = 3.00, output = 15.00 }  -- Per 1M tokens in USD
+      pricing = { input = 3.00, output = 15.00 },  -- Per 1M tokens in USD
+      cache_multiplier = { read = 0.1, write = 1.25 }  -- Optional: cache pricing multipliers
     },
   }
 })
 ```
 
+**Cache pricing multipliers:**
+
+- `read`: Multiplier for cached tokens read from cache
+- `write`: Multiplier for cache creation tokens (only Anthropic is currently supported)
+
+Providers with built-in cache multipliers (Anthropic, OpenAI) will
+automatically apply these. For custom models, specify `cache_multiplier`
+in the model configuration.
+
 Enable by setting `defaults.chat.show_stats = true`.
+
+### Customizing Stats Display
+
+```lua
+require("sia").setup({
+  defaults = {
+    chat = {
+      show_stats = true,
+      render_stats = function(win, stats)
+        -- stats table contains:
+        -- - left: string (optional, e.g., "7d" for Copilot days remaining)
+        -- - bar: { percent: number, icon: string, text: string } (optional)
+        -- - right: string (optional, e.g., token count)
+      end
+    }
+  }
+})
+```
 
 ## Interaction Modes
 
