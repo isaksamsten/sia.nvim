@@ -582,7 +582,8 @@ M.options = {
   models = {
     ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
     ["zai/glm-4.6"] = { "zai", "GLM-4.6" },
-    ["openai/gpt-5"] = { "openai_responses", "gpt-4.1", temperature = 1 },
+    ["openai/gpt-5"] = { "openai_responses", "gpt-5" },
+    ["openai/gpt-5-codex"] = { "openai_responses", "gpt-5-codex" },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },
     ["openai/gpt-4.1-mini"] = { "openai_responses", "gpt-4.1-mini" },
     ["openai/gpt-4.1-nano"] = { "openai", "gpt-4.1-nano" },
