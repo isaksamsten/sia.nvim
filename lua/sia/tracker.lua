@@ -51,11 +51,15 @@ function M.ensure_tracked(buf, id)
         if not tracker or tracker.marked_for_deletion then
           return true
         end
-        tracker.tick = tracker.tick + 1
+        local any_tracked_edit = false
         for conv, tick in pairs(tracker.ticks) do
           if not tracker.editing[conv] then
             tracker.ticks[conv] = tick + 1
+            any_tracked_edit = true
           end
+        end
+        if any_tracked_edit then
+          tracker.tick = tracker.tick + 1
         end
       end,
       on_detach = function()
