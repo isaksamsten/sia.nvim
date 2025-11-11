@@ -1,23 +1,23 @@
 local M = {}
 
---- @type table<integer, {tick:integer, editing: boolean, refcount: integer}>
+--- @type table<integer, {tick: integer, ticks:table<integer, integer>, editing: table<integer, boolean>, refcount: integer, marked_for_deletion: boolean?}>
 M.tracked_buffers = {}
 
 --- @param buf integer
 --- @return boolean
 local function should_track_buffer(buf)
-  if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
-    return false
-  end
-
-  if vim.bo[buf].buftype ~= "" then
-    return false
-  end
-
-  local bufname = vim.api.nvim_buf_get_name(buf)
-  if bufname == "" then
-    return false
-  end
+  -- if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+  --   return false
+  -- end
+  --
+  -- if vim.bo[buf].buftype ~= "" then
+  --   return false
+  -- end
+  --
+  -- local bufname = vim.api.nvim_buf_get_name(buf)
+  -- if bufname == "" then
+  --   return false
+  -- end
 
   -- if not vim.bo[buf].buflisted then
   --   return false
@@ -26,13 +26,10 @@ local function should_track_buffer(buf)
   return true
 end
 
-local function cleanup(buf)
-  M.tracked_buffers[buf] = nil
-end
-
 --- @param buf integer
+--- @param id integer?
 --- @return integer
-function M.ensure_tracked(buf)
+function M.ensure_tracked(buf, id)
   if not should_track_buffer(buf) then
     return 0
   end
@@ -40,27 +37,57 @@ function M.ensure_tracked(buf)
   if not M.tracked_buffers[buf] then
     M.tracked_buffers[buf] = {
       tick = 0,
-      editing = false,
+      ticks = {},
+      editing = {},
       refcount = 1,
+      marked_for_deletion = false,
     }
+    if id then
+      M.tracked_buffers[buf].ticks[id] = 0
+    end
     vim.api.nvim_buf_attach(buf, false, {
       on_lines = function()
         local tracker = M.tracked_buffers[buf]
-        if not tracker then
+        if not tracker or tracker.marked_for_deletion then
           return true
         end
-        if not tracker.editing then
-          tracker.tick = tracker.tick + 1
+        tracker.tick = tracker.tick + 1
+        for conv, tick in pairs(tracker.ticks) do
+          if not tracker.editing[conv] then
+            tracker.ticks[conv] = tick + 1
+          end
         end
       end,
       on_detach = function()
-        cleanup(buf)
+        M.tracked_buffers[buf] = nil
       end,
     })
   else
-    M.tracked_buffers[buf].refcount = M.tracked_buffers[buf].refcount + 1
+    local tracker = M.tracked_buffers[buf]
+    if tracker.marked_for_deletion then
+      tracker.marked_for_deletion = false
+      tracker.tick = 0
+      tracker.refcount = 1
+      if id then
+        tracker.ticks[id] = 0
+      end
+      return tracker.ticks[id] or tracker.tick
+    else
+      tracker.refcount = tracker.refcount + 1
+      if id then
+        tracker.ticks[id] = 0
+      end
+    end
   end
-  return M.tracked_buffers[buf].tick
+
+  -- Lazy initialization: if this conversation hasn't tracked this buffer yet,
+  -- inherit the current global tick (handles pre-conversation context)
+  local tracker = M.tracked_buffers[buf]
+  if id and not tracker.ticks[id] then
+    tracker.ticks[id] = tracker.tick
+  end
+
+  return tracker.ticks[id] or tracker.tick
 end
 
 --- Decrement the reference count for a tracked buffer
@@ -74,23 +101,26 @@ function M.untrack(buf)
 
   tracker.refcount = tracker.refcount - 1
   if tracker.refcount <= 0 then
-    cleanup(buf)
+    -- Mark for deletion but don't cleanup immediately
+    -- The on_lines callback will return true on next change, triggering on_detach
+    tracker.marked_for_deletion = true
   end
 end
 
 --- @param buf integer
+--- @param id integer
 --- @param callback fun():any
 --- @return any
-function M.non_tracked_edit(buf, callback)
+function M.non_tracked_edit(buf, id, callback)
   local tracker = M.tracked_buffers[buf]
   if tracker then
-    tracker.editing = true
+    tracker.editing[id] = true
   end
 
   local ok, result = pcall(callback)
 
   if tracker then
-    tracker.editing = false
+    tracker.editing[id] = false
   end
 
   if not ok then
@@ -102,32 +132,22 @@ end
 
 --- Get the current user tick count for a buffer
 --- @param buf integer The buffer number to get the tick count for
+--- @param id integer Conversation ID
 --- @return integer The current tick count, or 0 if the buffer is not tracked
 ---
---- Example usage:
---- ```lua
---- local tracker = require("sia.tracker")
----
---- -- Ensure buffer is tracked and get initial tick
---- local buf = vim.api.nvim_get_current_buf()
---- local initial_tick = tracker.ensure_tracked(buf)
----
---- -- Later, check if buffer has been modified by user
---- local current_tick = tracker.user_tick(buf)
---- if current_tick > initial_tick then
----   print("Buffer has been modified by user")
---- end
----
---- -- Use with non_tracked_edit to make programmatic changes
---- tracker.non_tracked_edit(buf, function()
----   vim.api.nvim_buf_set_lines(buf, 0, 1, false, {"-- Added comment"})
---- end)
---- -- Tick count remains unchanged after non_tracked_edit
---- assert(tracker.user_tick(buf) == current_tick)
---- ```
-function M.user_tick(buf)
+--- Fallback behavior: If this conversation hasn't tracked this buffer yet,
+--- initializes ticks[id] to the current global tick. This allows pre-conversation
+--- context (e.g., from SiaAdd) to inherit the correct freshness snapshot.
+function M.user_tick(buf, id)
   local tracker = M.tracked_buffers[buf]
-  return tracker and tracker.tick or 0
+  if not tracker then
+    return 0
+  end
+
+  if not tracker.ticks[id] then
+    tracker.ticks[id] = tracker.tick
+  end
+  return tracker.ticks[id]
 end
 
 return M

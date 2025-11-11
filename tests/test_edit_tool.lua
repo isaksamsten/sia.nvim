@@ -22,21 +22,6 @@ local function mock_file_loader(buf)
   end
 end
 
-local function mock_tracker()
-  local original_non_tracked_edit = tracker.non_tracked_edit
-  local original_ensure_tracked = tracker.ensure_tracked
-  tracker.non_tracked_edit = function(_, fn)
-    fn()
-  end
-  tracker.ensure_tracked = function(_)
-    return 1
-  end
-  return function()
-    tracker.non_tracked_edit = original_non_tracked_edit
-    tracker.ensure_tracked = original_ensure_tracked
-  end
-end
-
 local function create_mock_conversation(auto_confirm_edit)
   return {
     auto_confirm_tools = {
@@ -49,7 +34,6 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   local buf =
     create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -74,7 +58,6 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   eq("edit", result.kind)
   eq(result.content[1], "Edited test.lua:")
   eq("+  print(test)", result.content[7])
-  restore_tracker()
   restore_file_loader()
 end
 
@@ -82,7 +65,6 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   local buf =
     create_test_buffer({ "function hello()", "  print('world')", "end", "other code" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -112,13 +94,11 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   )
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["successful inline edit"] = function()
   local buf = create_test_buffer({ "hello world isak" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -146,13 +126,11 @@ T["sia.tools.edit"]["successful inline edit"] = function()
   )
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
   local buf = create_test_buffer({ "function test()", "  return true", "end" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -180,13 +158,11 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
   )
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["create new file"] = function()
   local buf = create_test_buffer({})
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -208,13 +184,11 @@ T["sia.tools.edit"]["create new file"] = function()
   eq(result.content[1], "Edited new_file.lua:")
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["auto confirm for AGENTS.md"] = function()
   local buf = create_test_buffer({ "# Agents", "Some content" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local args = {
     target_file = "AGENTS.md",
@@ -229,13 +203,11 @@ T["sia.tools.edit"]["auto confirm for AGENTS.md"] = function()
   eq("edit", result.kind)
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["auto confirm for .sia/memory/file.md"] = function()
   local buf = create_test_buffer({ "# Agents", "Some content" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local args = {
     target_file = ".sia/memory/test.md",
@@ -250,7 +222,6 @@ T["sia.tools.edit"]["auto confirm for .sia/memory/file.md"] = function()
   eq("edit", result.kind)
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["missing target_file parameter"] = function()
@@ -329,7 +300,6 @@ end
 T["sia.tools.edit"]["no matches found"] = function()
   local buf = create_test_buffer({ "hello world" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -348,13 +318,11 @@ T["sia.tools.edit"]["no matches found"] = function()
   eq("❌ Failed to edit test.txt", result.display_content[1])
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["multiple matches found"] = function()
   local buf = create_test_buffer({ "test line", "another test line", "final test" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local result = nil
   local callback = function(res)
@@ -384,13 +352,11 @@ T["sia.tools.edit"]["multiple matches found"] = function()
   eq("❌ Failed to edit test.txt", result.display_content[1])
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["max failed matches reached"] = function()
   local buf = create_test_buffer({ "hello world" })
   local restore_file_loader = mock_file_loader(buf)
-  local restore_tracker = mock_tracker()
 
   local results = {}
   local callback = function(res)
@@ -419,7 +385,6 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   )
 
   restore_file_loader()
-  restore_tracker()
 end
 
 T["sia.tools.edit"]["tool metadata"] = function()

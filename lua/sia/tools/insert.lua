@@ -151,7 +151,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
       if not is_memory then
         diff.update_baseline(buf)
       end
-      tracker.non_tracked_edit(buf, function()
+      tracker.non_tracked_edit(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(
           buf,
           insert_line - 1,

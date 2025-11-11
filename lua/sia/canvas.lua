@@ -117,13 +117,10 @@ function Canvas:update_usage(usage, extmark_id)
   local usage_text = {}
 
   if usage.input and usage.input > 0 then
-    table.insert(
-      usage_text,
-      {
-        "  " .. usage.input + (usage.cache_read or 0) + (usage.cache_write or 0),
-        "SiaUsage",
-      }
-    )
+    table.insert(usage_text, {
+      "  " .. usage.input + (usage.cache_read or 0) + (usage.cache_write or 0),
+      "SiaUsage",
+    })
   end
 
   if usage.output and usage.output > 0 then
@@ -182,13 +179,15 @@ function Canvas:_set_user_extmark(line)
     hl_group = "SiaUser",
   })
 end
---- @param messages sia.Message[]
+--- @param messages sia.PreparedMessage[]
 --- @param model string?
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
   for _, message in ipairs(messages) do
-    if message:is_shown() then
-      local content = message:get_content()
+    if
+      not (message.hide == true or message.role == "system" or message.role == "tool")
+    then
+      local content = message.content
       if content and type(content) == "string" then
         local line_count = vim.api.nvim_buf_line_count(self.buf)
         local heading = "/you"

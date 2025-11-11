@@ -563,10 +563,10 @@ end
 --- @field api_key fun():string?
 --- @field process_usage (fun(obj:table):sia.Usage?)?
 --- @field process_response fun(json:table):string?
---- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])
+--- @field prepare_messages fun(data: table, model:string, prompt:sia.PreparedMessage[])
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
 --- @field prepare_parameters fun(data: table, model: table)?
---- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
+--- @field get_headers (fun(api_key:string?, messages:sia.PreparedMessage[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 --- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
 

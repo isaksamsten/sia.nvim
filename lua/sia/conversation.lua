@@ -1,6 +1,17 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
 
+--- @class sia.PreparedMessage
+--- @field role string
+--- @field content (string|sia.InstructionContent[])?
+--- @field hide boolean
+--- @field outdated boolean
+--- @field superseded boolean
+--- @field tool_calls sia.ToolCall[]?
+--- @field _tool_call sia.ToolCall?
+--- @field meta table?
+--- @field description string?
+
 --- @class sia.conversation.Stats
 --- @field bar { percent: number, text: string?, icon: string?}?
 --- @field left string?
@@ -22,7 +33,6 @@ local template = require("sia.template")
 --- @field tool_calls sia.ToolCall[]?
 --- @field tool_call_id string?
 
---- @alias sia.Query { model: (string|table)?, temperature: number?, prompt: sia.Prompt[], tools: sia.Tool[]?}
 --- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
@@ -180,19 +190,20 @@ function Message:new(instruction, context)
   end
 end
 
+--- @param message sia.Message
 --- @param outdated boolean?
 --- @return (string|sia.InstructionContent[])?
-function Message:get_content(outdated)
-  if self.content then
-    if outdated or self:is_outdated() then
+local function get_message_content(message, outdated)
+  if message.content then
+    if outdated then
       return string.format(
         "System Note: History pruned. %s",
-        self.context and self.context.outdated_message or ""
+        message.context and message.context.outdated_message or ""
       )
     end
-    return self.content
-  elseif self.live_content then
-    return self.live_content()
+    return message.content
+  elseif message.live_content then
+    return message.live_content()
   else
     return nil
   end
@@ -202,8 +213,9 @@ function Message:has_content()
   return self.content ~= nil or self.live_content ~= nil or self.tool_calls ~= nil
 end
 
+--- @param id integer
 --- @return boolean
-function Message:is_outdated()
+function Message:is_outdated(id)
   if self.live_content then
     return false
   end
@@ -216,7 +228,7 @@ function Message:is_outdated()
     and (self.role == "tool" or self.role ~= "assistant")
   then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
-      return self.context.tick ~= tracker.user_tick(self.context.buf)
+      return self.context.tick ~= tracker.user_tick(self.context.buf, id)
     else
       return true
     end
@@ -224,65 +236,71 @@ function Message:is_outdated()
   return false
 end
 
---- @param conversation sia.Conversation?
+--- @param conversation sia.Conversation
+--- @param message sia.Message
 --- @param outdated boolean?
---- @return sia.Message
-function Message:prepare(conversation, outdated)
-  local message = vim.deepcopy(self)
-  local context_conf = require("sia.config").get_context_config()
+--- @return sia.PreparedMessage
+local function prepare_message(conversation, message, outdated)
+  local hide = false
+  if message.hide then
+    hide = true
+  end
 
+  local context_conf = require("sia.config").get_context_config()
+  local meta
+  if message.meta then
+    meta = vim.deepcopy(message.meta)
+  end
+
+  local _tool_call
+  if message._tool_call then
+    _tool_call = vim.deepcopy(message._tool_call)
+  end
+
+  local description = message:get_description()
+  outdated = outdated or message:is_outdated(conversation.id)
+
+  local tool_calls
   if message.tool_calls then
+    tool_calls = vim.deepcopy(message.tool_calls)
     for i, tool_call in ipairs(message.tool_calls) do
       if tool_call.type == "function" then
         if
           context_conf.clear_input
           and message.context
           and message.context.clear_outdated_tool_input
-          and (message:is_outdated() or outdated)
+          and outdated
         then
-          message.tool_calls[i] = message.context.clear_outdated_tool_input(tool_call)
+          tool_calls[i] = message.context.clear_outdated_tool_input(tool_call)
         end
       end
     end
   end
-  message.content = message:get_content(outdated)
-
-  if self.template and conversation then
-    local content = message.content
-    if message.content ~= nil and type(content) == "string" then
+  local content = get_message_content(message, outdated)
+  if message.template and conversation then
+    if content ~= nil and type(content) == "string" then
       local template_context = conversation:build_template_context(message.context)
-      message.content = template.render(content, template_context)
+      content = template.render(content, template_context)
     end
   end
-  return message
-end
 
-function Message:is_shown()
-  return not (self.hide == true or self.role == "system" or self.role == "tool")
-end
-
---- @param messages sia.Message[]?
---- @return string[]? content
-function Message.merge_content(messages)
-  if messages == nil then
-    return nil
-  end
-
-  return vim
-    .iter(messages)
-    :map(function(m)
-      return m:get_content()
-    end)
-    :filter(function(content)
-      return content ~= nil
-    end)
-    :flatten()
-    :totable()
+  --- @type sia.PreparedMessage
+  return {
+    role = message.role,
+    hide = hide,
+    meta = meta or {},
+    outdated = outdated,
+    superseded = message.superseded or false,
+    description = description,
+    content = content,
+    _tool_call = _tool_call,
+    tool_calls = tool_calls,
+  }
 end
 
 --- @return string
 function Message:get_description()
-  if self.role == "tool" then
+  if self.role == "tool" and self._tool_call then
     local f = self._tool_call["function"]
     return self.role .. ": result from " .. f.name
   end
@@ -292,7 +310,7 @@ function Message:get_description()
     return self.role .. ": " .. description
   end
 
-  local content = self:get_content()
+  local content = get_message_content(self, false)
   if content then
     return self.role .. ": " .. string.sub(content:gsub("\n", " "), 1, 40)
   elseif self.tool_calls then
@@ -305,8 +323,12 @@ function Message:get_description()
   return self.role
 end
 
+---@type integer
+local CONVERSATION_ID = 1
+
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
+--- @field id integer Session unique identifier for a conversation
 --- @field context sia.Context?
 --- @field messages sia.Message[]
 --- @field enable_supersede boolean
@@ -350,6 +372,8 @@ function Conversation:new(action, context)
   obj.mode = action.mode
   obj.name = ""
   obj.enable_supersede = true
+  obj.id = CONVERSATION_ID
+  CONVERSATION_ID = CONVERSATION_ID + 1
 
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
@@ -529,9 +553,9 @@ function Conversation:add_instruction(instruction, context, opts)
   end
 end
 
---- @return sia.Message message
+--- @return sia.PreparedMessage message
 function Conversation:last_message()
-  return self.messages[#self.messages]
+  return prepare_message(self, self.messages[#self.messages], false)
 end
 
 --- @param index integer
@@ -558,22 +582,22 @@ function Conversation:execute_tool(name, arguments, opts)
   end
 end
 
---- @param opts {filter: (fun(message: sia.Message):boolean)?, mapping: boolean?}?
---- @return sia.Message[] messages
---- @return table<integer, integer>? mappings if mapping is set to true
+--- @param opts {filter: (fun(message: sia.PreparedMessage):boolean)?}?
+--- @return sia.PreparedMessage[] messages
+--- @return table<integer, integer>? mappings if filter is used
 function Conversation:get_messages(opts)
   opts = opts or {}
 
   local mappings = {}
   local return_messages = {}
-  for i, message in ipairs(self.messages) do
+  for i, message in ipairs(self:prepare_messages()) do
     if opts.filter == nil or opts.filter(message) then
       table.insert(return_messages, message)
       table.insert(mappings, i)
     end
   end
 
-  if opts.mapping then
+  if opts.filter then
     return return_messages, mappings
   else
     return return_messages
@@ -638,7 +662,7 @@ function Conversation:build_template_context(context)
   }
 end
 
---- @return sia.Message[]
+--- @return sia.PreparedMessage[]
 function Conversation:prepare_messages()
   local context_config = require("sia.config").get_context_config()
   local min_keep_tool_calls = context_config.keep or 5
@@ -714,15 +738,19 @@ function Conversation:prepare_messages()
       return true
     end)
     --- @param m sia.Message
-    --- @return sia.Message
+    --- @return sia.PreparedMessage
     :map(function(m)
       local tool_call_id = m._tool_call and m._tool_call.id
       if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
         tool_call_id = m.tool_calls[1].id
       end
-      return m:prepare(self, tool_call_id and tool_filter[tool_call_id] == "outdated")
+      return prepare_message(
+        self,
+        m,
+        tool_call_id and tool_filter[tool_call_id] == "outdated"
+      )
     end)
-    --- @param p sia.Prompt
+    --- @param p sia.PreparedMessage
     --- @return boolean?
     :filter(function(p)
       return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)

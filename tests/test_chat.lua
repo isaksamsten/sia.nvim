@@ -66,7 +66,8 @@ T["strategy.chat"]["simple message"]["test correct output"] = function()
   }, nil)
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
-  eq("Hello World", strategy.conversation.messages[2]:get_content())
+  local messages = strategy.conversation:get_messages()
+  eq("Hello World", messages[2].content)
   eq(
     { "/sia", "", "Hello World" },
     vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
@@ -84,15 +85,15 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
 
-  eq(tracker.user_tick(buf), 0)
+  eq(tracker.user_tick(buf, conversation.id), 0)
   eq(tracker.tracked_buffers[buf].refcount, 1)
 
-  eq(strategy.conversation.messages[1].context.buf, buf)
-  eq(strategy.conversation.messages[1]:is_outdated(), false)
+  local messages = strategy.conversation:prepare_messages()
+  eq(messages[1].outdated, false)
 
   ChatStrategy.remove(strategy.buf)
-  eq(tracker.user_tick(buf), 0)
-  eq(tracker.tracked_buffers[buf], nil)
+  eq(tracker.user_tick(buf, conversation.id), 0)
+  eq(tracker.tracked_buffers[buf].marked_for_deletion, true)
 end
 
 T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({

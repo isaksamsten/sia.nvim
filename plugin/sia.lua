@@ -236,7 +236,7 @@ local SIA_ADD_CMD = {
         if buf then
           conversation:add_instruction("current_context", {
             buf = buf,
-            tick = require("sia.tracker").ensure_tracked(buf),
+            tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
             kind = "context",
             mode = "v",
           })
@@ -293,7 +293,11 @@ local SIA_ADD_CMD = {
         if buf ~= -1 then
           conversation:add_instruction(
             "current_context",
-            { buf = buf, tick = require("sia.tracker").ensure_tracked(buf), mode = "v" }
+            {
+              buf = buf,
+              tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
+              mode = "v",
+            }
           )
         end
       end

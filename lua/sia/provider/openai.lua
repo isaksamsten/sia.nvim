@@ -382,6 +382,7 @@ local M = {
       end
       return nil
     end,
+    --- @param messages sia.PreparedMessage[]
     prepare_messages = function(data, _, messages)
       local instructions = vim
         .iter(messages)
@@ -517,7 +518,7 @@ function M.completion_compatible(base_url, opts)
       M.completion.prepare_tools(data, tools)
     end,
     new_stream = M.completion.new_stream,
-    get_stats = common.create_cost_stats(nil),
+    get_stats = common.create_cost_stats(),
   }
 end
 

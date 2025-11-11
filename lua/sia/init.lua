@@ -189,18 +189,18 @@ function M.show_messages(opts)
   opts = opts or {}
   local chat = require("sia.strategy").ChatStrategy.by_buf()
   if chat then
-    local contexts, mappings = chat.conversation:get_messages({ mapping = true })
-    if #contexts == 0 then
+    local messages, mappings = chat.conversation:get_messages({ mapping = true })
+    if #messages == 0 then
       vim.notify("Sia: No messages in the current conversation.")
       return
     end
-    vim.ui.select(contexts, {
+    vim.ui.select(messages, {
       prompt = "Show message",
-      --- @param message sia.Message
+      --- @param message sia.PreparedMessage
       format_item = function(message)
-        local outdated = message:is_outdated()
-        local description = message:get_description()
-        local empty = message:get_content()
+        local outdated = message.outdated
+        local description = message.description
+        local empty = message.content
         if outdated then
           return "[outdated] " .. description
         elseif empty == nil and message.role == "user" then
@@ -211,7 +211,7 @@ function M.show_messages(opts)
           return description
         end
       end,
-      --- @param item sia.Message?
+      --- @param item sia.PreparedMessage?
       --- @param idx integer
     }, function(item, idx)
       if item and mappings then
@@ -219,16 +219,15 @@ function M.show_messages(opts)
         if item.tool_calls then
           content = vim.inspect(item.tool_calls)
         else
-          content = item:get_content()
+          content = item.content
         end
 
         if content then
-          local buf_name = chat.conversation.name .. " " .. item:get_description()
+          local buf_name = chat.conversation.name .. " " .. item.description
           local buf = vim.fn.bufnr(buf_name)
           if buf == -1 then
             buf = vim.api.nvim_create_buf(false, true)
             vim.bo[buf].ft = "markdown"
-            -- vim.bo[buf].modifiable = false
             vim.api.nvim_buf_set_name(buf, buf_name)
           end
           vim.api.nvim_buf_set_lines(
@@ -478,7 +477,7 @@ information is lost.]],
   }
 
   for _, message in ipairs(conversation:get_messages()) do
-    table.insert(messages, message:prepare())
+    table.insert(messages, message)
   end
 
   require("sia.assistant").execute_query(messages, {

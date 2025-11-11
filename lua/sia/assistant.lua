@@ -276,7 +276,7 @@ function M.execute_strategy(strategy)
   execute_round(true)
 end
 
---- @param messages sia.Message[]
+--- @param messages sia.PreparedMessage[]
 --- @param opts {callback:fun(s:string?), model:string}
 function M.execute_query(messages, opts)
   local config = require("sia.config")

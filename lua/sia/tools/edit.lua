@@ -219,7 +219,7 @@ one specific change with clear, unique context.
         if not is_memory then
           diff.update_baseline(buf)
         end
-        tracker.non_tracked_edit(buf, function()
+        tracker.non_tracked_edit(buf, conversation.id, function()
           if match.col_span then
             vim.api.nvim_buf_set_text(
               buf,
@@ -291,7 +291,7 @@ one specific change with clear, unique context.
           context = {
             buf = buf,
             pos = { edit_start, edit_end },
-            tick = tracker.ensure_tracked(buf),
+            tick = tracker.ensure_tracked(buf, conversation.id),
             outdated_message = create_outdated_message(
               args.target_file,
               edit_start,

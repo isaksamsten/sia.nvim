@@ -27,7 +27,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
     file = { type = "string", description = "The file path to get diagnostics for" },
   },
   required = { "file" },
-}, function(args, _, callback)
+}, function(args, conversation, callback)
   if not args.file then
     callback({
       content = { "Error: No file path was provided" },
@@ -63,7 +63,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
     callback({
       display_content = { string.format("🩺 No diagnostics found for %s", args.file) },
       content = { string.format("No diagnostics found for %s", args.file) },
-      context = { buf = buf, tick = tracker.ensure_tracked(buf) },
+      context = { buf = buf, tick = tracker.ensure_tracked(buf, conversation.id) },
       kind = "diagnostics",
     })
     return
@@ -99,7 +99,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
 
   callback({
     content = content,
-    context = { buf = buf, tick = tracker.ensure_tracked(buf) },
+    context = { buf = buf, tick = tracker.ensure_tracked(buf, conversation.id) },
     kind = "diagnostics",
     display_content = { string.format("🩺 Found %d diagnostics", #diagnostics) },
   })

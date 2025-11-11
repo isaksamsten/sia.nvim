@@ -61,7 +61,7 @@ TIP: Start with a small last_n value to get oriented, then increase if you need 
         goto continue
       end
 
-      local content = message:get_content()
+      local content = message.content
       if content and type(content) == "string" then
         local matches = true
         if query_lower then
@@ -197,7 +197,7 @@ Use this to understand context and previous discussions.
           role = "assistant",
           content = reply,
         })
-        local message = chat.conversation.messages[#chat.conversation.messages]
+        local message = chat.conversation:last_message()
         chat.canvas:render_messages({ message }, model)
       end
       chat.is_busy = false

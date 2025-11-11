@@ -41,7 +41,7 @@ For small, targeted changes, prefer the edit tool instead.]],
     end
     return conversation.auto_confirm_tools["write"]
   end,
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   if not args.path then
     callback({
       content = { "Error: No file path provided" },
@@ -87,7 +87,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         diff.update_baseline(buf)
       end
       local lines = vim.split(args.content, "\n", { plain = true })
-      tracker.non_tracked_edit(buf, function()
+      tracker.non_tracked_edit(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
         vim.api.nvim_buf_call(buf, function()
           pcall(vim.cmd, "noa silent write!")
