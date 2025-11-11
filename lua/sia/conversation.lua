@@ -1,6 +1,11 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
 
+--- @class sia.conversation.Stats
+--- @field bar { percent: number, text: string?, icon: string?}?
+--- @field left string?
+--- @field right string?
+
 --- @class sia.conversation.Todo
 --- @field id integer
 --- @field description string

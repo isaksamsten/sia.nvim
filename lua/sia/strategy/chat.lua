@@ -20,7 +20,7 @@ local STATUS_HL = {
 }
 
 --- @param win integer
---- @param stats table
+--- @param stats sia.conversation.Stats
 local function default_render_stats(win, stats)
   local win_width = vim.api.nvim_win_get_width(win)
   local left = stats.left or ""

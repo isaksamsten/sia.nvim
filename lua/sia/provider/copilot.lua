@@ -146,6 +146,8 @@ local copilot_extra_header = function(_, messages)
   return args
 end
 
+--- @param callback fun(stats: sia.conversation.Stats?)
+--- @param conversation sia.Conversation
 local function get_stats(callback, conversation)
   local oauth = get_oauth_token()
   local cmd = {

@@ -488,7 +488,7 @@ end
 --- @field cmd string?
 --- @field wo table<string, any>?
 --- @field show_stats boolean?
---- @field render_stats fun(win:integer, stats:table)?
+--- @field render_stats fun(win:integer, stats:sia.ConversationStats)?
 
 --- @class sia.config.Hidden
 --- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
@@ -568,7 +568,7 @@ end
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
---- @field get_stats fun(callback:fun(stats: table), conversation: sia.Conversation)?
+--- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models

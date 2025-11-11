@@ -121,7 +121,7 @@ end
 --- Create a cost-based stats function for providers
 --- @param builtin_pricing table<string, { input: number, output: number }>
 --- @param cache_multiplier {read: number, write: number}?
---- @return fun(callback: fun(stats: table?), conversation: sia.Conversation)
+--- @return fun(callback: fun(stats: sia.conversation.Stats?), conversation: sia.Conversation)
 function M.create_cost_stats(builtin_pricing, cache_multiplier)
   return function(callback, conversation)
     local usage = conversation:get_cumulative_usage()
