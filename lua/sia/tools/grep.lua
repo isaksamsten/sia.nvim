@@ -9,7 +9,7 @@ return tool_utils.new_tool({
   system_prompt = [[- Fast content search
 - Searches files using regluar expressions as supported by rg
 - Supports glob patterns to specify files
-- Optionally specify a path to search within a specific directory
+- Optionally specify a path to search within a specific directory or file
 - The root of the search is the current working directory (or specified path)
 - Do not use search to get the content of a file, use tools or ask the user to
   add the information.
@@ -24,7 +24,7 @@ return tool_utils.new_tool({
     pattern = { type = "string", description = "Search pattern" },
     path = {
       type = "string",
-      description = "Directory path to search within (e.g., `lua/sia`, `.`). If not provided, searches from current directory.",
+      description = "Directory or file path to search within (e.g., `lua/sia`, `lua/sia/config.lua`, `.`). If not provided, searches from current directory.",
     },
   },
   auto_apply = function(args, conversation)
@@ -78,8 +78,24 @@ return tool_utils.new_tool({
         local matches = {}
         local file_mtimes = {}
 
+        local is_single_file = false
+        if args.path then
+          local stat = vim.loop.fs_stat(args.path)
+          is_single_file = stat ~= nil and stat.type == "file"
+        end
+
         for _, line in ipairs(lines) do
-          local file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
+          local file, lnum, col, rest
+
+          if is_single_file then
+            lnum, col, rest = line:match("^(%d+):(%d+):(.*)$")
+            if lnum and col then
+              file = args.path
+            end
+          else
+            file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
+          end
+
           if file and lnum and col then
             local truncated_line = line
             if #line > MAX_LINE_LENGTH then
