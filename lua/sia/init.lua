@@ -189,7 +189,7 @@ function M.show_messages(opts)
   opts = opts or {}
   local chat = require("sia.strategy").ChatStrategy.by_buf()
   if chat then
-    local messages, mappings = chat.conversation:get_messages({ mapping = true })
+    local messages = chat.conversation:get_messages()
     if #messages == 0 then
       vim.notify("Sia: No messages in the current conversation.")
       return
