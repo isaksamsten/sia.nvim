@@ -306,47 +306,15 @@ The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
 project analysis.
 
-## Task Tracking with Todos
+## Core Concepts
 
-https://github.com/user-attachments/assets/0db7be98-2ec5-4bba-ba51-3afe8201f0ae
-
-When working on complex tasks, Sia can create and manage a todo list to track
-progress. This helps you stay organized and gives visibility into multi-step
-workflows.
-
-**How it works:**
-
-When you ask Sia to work on a task with multiple steps, it will automatically:
-
-1. **Break down the task** into concrete, actionable todos
-2. **Update status** as it completes each step (pending → current → done)
-3. **Track progress** throughout the conversation
-
-**Viewing todos:**
-
-Todos are shown in a floating status window that appears automatically when
-they're being used. You can also check the current todo list at any time by
-asking Sia "what's the status?" or "show todos".
-
-**Collaborative todos:**
-
-The todo list is collaborative - you can manually update todo statuses at any
-time, and Sia will respect your changes. This is useful if you want to:
-
-- Skip a step that's no longer needed
-- Mark something as done that you completed yourself
-- Reprioritize what Sia should work on next
-
-Todos help Sia stay focused on your goals and make it easier to resume work
-after interruptions or context switches.
-
-## Tool Approval System
+### Tool Approval System
 
 Sia includes a flexible approval system that allows you to control how tool
 operations are confirmed. You can choose between blocking (traditional) and
 non-blocking (async) approval modes.
 
-### Async Approval Mode
+#### Async Approval Mode
 
 https://github.com/user-attachments/assets/7d9607c9-0846-4415-b32a-db1b51abbf56
 
@@ -487,7 +455,7 @@ If you prefer immediate prompts (the default behavior), keep `async = false`.
 Tool operations will show an approval prompt immediately and wait for your
 response before continuing.
 
-### Local Configuration (Per Project)
+### Project-Level Configuration
 
 Create `.sia/config.json` in your project root to customize Sia for that
 specific project:
@@ -567,70 +535,7 @@ specific project:
 - **`permission`**: Fine-grained tool access control (see Permission System below)
 - **`risk`**: Configure risk levels for visual feedback and auto-confirm behavior (see Risk Level System below)
 
-### Key Configuration Concepts
-
-#### Context Management
-
-Control how Sia manages conversation history and tool call pruning:
-
-- **Tool pruning**: Use `context.max_tool` to set when pruning occurs and
-  `context.keep` to control how many recent tool calls are retained
-- **Pruning exclusions**: Use `context.exclude` to specify tool names that
-  should never be pruned (e.g., `["grep", "glob"]`)
-- **Input parameter clearing**: Use `context.clear_input` to also remove tool
-  input parameters during pruning
-
-#### Auto-Continue Behavior
-
-When a user cancels a tool operation, Sia normally asks "Continue? (Y/n/[a]lways)". Setting `auto_continue: true` bypasses this prompt and automatically continues execution. This is useful for automated workflows where you want the AI to keep working even if individual operations are cancelled.
-
-#### Custom Default Actions
-
-The `action` configuration allows you to override the default actions for different interaction modes:
-
-- **`insert`**: Action used when calling `:Sia!` (insert mode)
-- **`diff`**: Action used when calling `:Sia!` with a range (diff mode)
-- **`chat`**: Action used when calling `:Sia` (chat mode)
-
-Each field should reference an action name defined in your global configuration. This allows you to customize the behavior, system prompts, tools, and models used for different types of interactions on a per-project basis.
-
-**Example**: Use a specialized action for writing in a specific project:
-
-```json
-{
-  "action": {
-    "chat": "prose"
-  }
-}
-```
-
-#### Memory System
-
-Sia maintains persistent memory across conversations using the `.sia/memory/` directory in your project root. This allows the AI assistant to:
-
-- **Track progress on complex tasks**: Remember what it has tried, what worked,
-  and what didn't
-- **Learn from iterations**: Build on previous attempts and avoid repeating
-  mistakes
-- **Resume after interruption**: Continue work seamlessly even if the
-  conversation or Neovim session ends
-- **Document decisions**: Keep a record of architectural choices, bug fixes,
-  and implementation details
-
-**How it works:**
-
-1. The assistant checks `.sia/memory/` at the start of each conversation
-2. It reads relevant memory files to understand previous progress
-3. As work progresses, it updates memory files with new findings and status
-4. Memory files use markdown format for human readability
-
-You can safely view, edit, or delete files in `.sia/memory/` - they're meant to be human-readable and editable. The assistant will adapt to any changes you make.
-
-**Permission behavior:** Tool operations on `.sia/memory/` files never require user confirmation - they are automatically accepted. This ensures the assistant can maintain its memory efficiently without interrupting your workflow.
-
-**Note:** Add `.sia/` to your `.gitignore` if you don't want to commit memory files to version control, or commit them if you want to share context with your team.
-
-### Permission System
+#### Permission System
 
 The permission system uses **Vim regex patterns** (with very magic mode `\v`)
 to control tool access:
@@ -663,7 +568,7 @@ Patterns are Vim regex strings using very magic mode (`\v`):
 - Non-string arguments are converted to strings with `tostring()`
 - See `:help vim.regex()` for full syntax details
 
-### Examples
+##### Examples
 
 **Auto-approve safe git commands:**
 
@@ -707,7 +612,7 @@ Patterns are Vim regex strings using very magic mode (`\v`):
 This system provides fine-grained control over AI assistant capabilities while
 maintaining security and preventing accidental destructive operations.
 
-### Risk Level System
+#### Risk Level System
 
 The risk level system provides visual feedback and control over how tool operations
 are presented in the async approval UI. Unlike the permission system (which controls whether
@@ -744,7 +649,7 @@ async approval system to highlight tool differently.
 }
 ```
 
-#### Examples
+##### Examples
 
 **Highlight safe commands:**
 
@@ -784,6 +689,131 @@ async approval system to highlight tool differently.
   }
 }
 ```
+
+#### Context Management
+
+Control how Sia manages conversation history and tool call pruning:
+
+- **Tool pruning**: Use `context.max_tool` to set when pruning occurs and
+  `context.keep` to control how many recent tool calls are retained
+- **Pruning exclusions**: Use `context.exclude` to specify tool names that
+  should never be pruned (e.g., `["grep", "glob"]`)
+- **Input parameter clearing**: Use `context.clear_input` to also remove tool
+  input parameters during pruning
+
+#### Auto-Continue Behavior
+
+When a user cancels a tool operation, Sia normally asks "Continue?
+(Y/n/[a]lways)". Setting `auto_continue: true` bypasses this prompt and
+automatically continues execution. This is useful for automated workflows where
+you want the AI to keep working even if individual operations are cancelled.
+
+#### Custom Default Actions
+
+The `action` configuration allows you to override the default actions for different interaction modes:
+
+- **`insert`**: Action used when calling `:Sia!` (insert mode)
+- **`diff`**: Action used when calling `:Sia!` with a range (diff mode)
+- **`chat`**: Action used when calling `:Sia` (chat mode)
+
+Each field should reference an action name defined in your global configuration. This allows you to customize the behavior, system prompts, tools, and models used for different types of interactions on a per-project basis.
+
+**Example**: Use a specialized action for writing in a specific project:
+
+```json
+{
+  "action": {
+    "chat": "prose"
+  }
+}
+```
+
+### Agent Memory
+
+Sia maintains persistent memory across conversations using the `.sia/memory/` directory in your project root. This allows the AI assistant to:
+
+- **Track progress on complex tasks**: Remember what it has tried, what worked,
+  and what didn't
+- **Learn from iterations**: Build on previous attempts and avoid repeating
+  mistakes
+- **Resume after interruption**: Continue work seamlessly even if the
+  conversation or Neovim session ends
+- **Document decisions**: Keep a record of architectural choices, bug fixes,
+  and implementation details
+
+**How it works:**
+
+1. The assistant checks `.sia/memory/` at the start of each conversation
+2. It reads relevant memory files to understand previous progress
+3. As work progresses, it updates memory files with new findings and status
+4. Memory files use markdown format for human readability
+
+You can safely view, edit, or delete files in `.sia/memory/` - they're meant to be human-readable and editable. The assistant will adapt to any changes you make.
+
+**Permission behavior:** Tool operations on `.sia/memory/` files never require user confirmation - they are automatically accepted. This ensures the assistant can maintain its memory efficiently without interrupting your workflow.
+
+**Note:** Add `.sia/` to your `.gitignore` if you don't want to commit memory files to version control, or commit them if you want to share context with your team.
+
+### Task Tracking with Todos
+
+https://github.com/user-attachments/assets/0db7be98-2ec5-4bba-ba51-3afe8201f0ae
+
+When working on complex tasks, Sia can create and manage a todo list to track
+progress. This helps you stay organized and gives visibility into multi-step
+workflows.
+
+**How it works:**
+
+When you ask Sia to work on a task with multiple steps, it will automatically:
+
+1. **Break down the task** into concrete, actionable todos
+2. **Update status** as it completes each step (pending → current → done)
+3. **Track progress** throughout the conversation
+
+**Viewing todos:**
+
+Todos are shown in a floating status window that appears automatically when
+they're being used. You can also check the current todo list at any time by
+asking Sia "what's the status?" or "show todos".
+
+**Collaborative todos:**
+
+The todo list is collaborative - you can manually update todo statuses at any
+time, and Sia will respect your changes. This is useful if you want to:
+
+- Skip a step that's no longer needed
+- Mark something as done that you completed yourself
+- Reprioritize what Sia should work on next
+
+Todos help Sia stay focused on your goals and make it easier to resume work
+after interruptions or context switches.
+
+### Concurrent Conversations
+
+Sia supports running multiple conversations simultaneously, each maintaining
+its own independent view of file changes.
+
+**How it works:**
+
+When conversation A makes changes to a file using the edit/write/insert tools:
+
+- **Conversation A** (which made the changes) continues to see the original
+  content it read, allowing it to understand what changed and continue its work
+  coherently
+- **Conversation B** (which also read the same file) sees that content
+  invalidated with "History pruned... read again if needed", prompting it to
+  refresh if that file is relevant to its task
+
+**Example:**
+
+1. Both conversations A and B read `auth.py`
+2. Conversation A refactors a function in `auth.py`
+3. Conversation A still sees the original content (knows what it changed)
+4. Conversation B sees the content marked as outdated (knows it needs to
+   re-read the modified version)
+
+This allows multiple conversations to work independently while staying aware of
+each other's changes.
 
 ### Suggested Keybindings
 
@@ -946,7 +976,7 @@ seamlessly into your conversation.
 With the example keybindings configured, you can navigate between changes using
 `]c` (next change) and `[c` (previous change).
 
-## Change management
+## Reviewing Changes
 
 If Sia uses the edit tools (insert, write, or edit), it will maintain a diff
 state for the buffer in which the changes are inserted. The diff state
