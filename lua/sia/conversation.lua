@@ -220,6 +220,11 @@ function Message:is_outdated(id)
     return false
   end
 
+  -- Check if marked as outdated by prepare_messages (context limit filtering)
+  if self._outdated_tool_call then
+    return true
+  end
+
   if
     self.context
     and self.context.buf

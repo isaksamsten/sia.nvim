@@ -935,10 +935,12 @@ seamlessly into your conversation.
 - Complex exploratory tasks that require multiple tool calls
 - Background work that shouldn't consume your main conversation's tokens
 
-**Other Commands:**
+**Conversation Management:**
 
-- `SiaDebug` - Show the current conversation's JSON payload in a new buffer
+- `SiaClear` - Remove outdated tool calls and their results from the conversation history
+- `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
 - `SiaCompact` - Compact the current conversation history
+- `SiaDebug` - Show the current conversation's JSON payload in a new buffer
 
 **Navigation:**
 With the example keybindings configured, you can navigate between changes using

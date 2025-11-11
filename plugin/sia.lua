@@ -291,14 +291,11 @@ local SIA_ADD_CMD = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          conversation:add_instruction(
-            "current_context",
-            {
-              buf = buf,
-              tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
-              mode = "v",
-            }
-          )
+          conversation:add_instruction("current_context", {
+            buf = buf,
+            tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
+            mode = "v",
+          })
         end
       end
     end,
@@ -469,3 +466,49 @@ end, {
     return {}
   end,
 })
+
+vim.api.nvim_create_user_command("SiaClear", function(args)
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+  local chat = ChatStrategy.by_buf()
+
+  if not chat or not chat.conversation then
+    vim.api.nvim_echo(
+      { { "Sia: No active chat in this buffer.", "ErrorMsg" } },
+      false,
+      {}
+    )
+    return
+  end
+
+  if args.bang then
+    chat.conversation:clear_user_instructions()
+    vim.api.nvim_echo(
+      { { "Sia: Cleared all non-system messages.", "Normal" } },
+      false,
+      {}
+    )
+  else
+    local conversation = chat.conversation
+
+    -- Run prepare_messages to mark tool calls as outdated
+    conversation:prepare_messages()
+
+    local messages_to_keep = {}
+    local removed_count = 0
+
+    for _, message in ipairs(conversation.messages) do
+      if not message:is_outdated(conversation.id) then
+        table.insert(messages_to_keep, message)
+      else
+        removed_count = removed_count + 1
+        if message.context and message.context.buf and message.context.tick then
+          require("sia.tracker").untrack(message.context.buf)
+        end
+      end
+    end
+
+    conversation.messages = messages_to_keep
+    local msg = string.format("Sia: Cleared %d outdated message(s).", removed_count)
+    vim.api.nvim_echo({ { msg, "Normal" } }, false, {})
+  end
+end, { bang = true })
