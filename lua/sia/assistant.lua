@@ -179,9 +179,7 @@ function M.execute_strategy(strategy)
                 if provider.process_usage then
                   local new_usage = provider.process_usage(obj)
                   if new_usage and strategy.conversation.add_usage then
-                    new_usage.total_time = (vim.uv.hrtime() - start_time)
-                      / 1000000
-                      / 1000
+                    new_usage.total_time = (vim.uv.hrtime() - start_time) / 1000000000
                     strategy.conversation:add_usage(new_usage)
                   end
 
