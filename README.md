@@ -879,7 +879,6 @@ In the chat view (with `ft=sia`), you can bind the following mappings for effici
 ```lua
 keys = {
   { "p", mode = "n", require("sia").show_messages, ft = "sia" },
-  { "x", mode = "n", require("sia").remove_message, ft = "sia" },
   { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
   { "t", mode = "n", require("sia").todos, ft = "sia" },
 }

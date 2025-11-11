@@ -558,12 +558,6 @@ function Conversation:last_message()
   return prepare_message(self, self.messages[#self.messages], false)
 end
 
---- @param index integer
---- @return sia.Message?
-function Conversation:remove_instruction(index)
-  return table.remove(self.messages, index)
-end
-
 --- @param name string
 --- @param arguments table
 --- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?) }

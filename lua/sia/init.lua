@@ -161,29 +161,6 @@ function M.show_edits_qf(opts)
   vim.cmd("copen")
 end
 
-function M.remove_message()
-  local chat = require("sia.strategy").ChatStrategy.by_buf()
-  if chat then
-    local messages, mappings = chat.conversation:get_messages({ mapping = true })
-    if #messages == 0 then
-      vim.notify("Sia: No messages in current conversation.")
-      return
-    end
-    vim.ui.select(messages, {
-      prompt = "Delete message",
-      format_item = function(item)
-        return item:get_description()
-      end,
-      --- @param idx integer?
-    }, function(_, idx)
-      if idx and mappings then
-        chat.conversation:remove_instruction(mappings[idx])
-        chat:redraw()
-      end
-    end)
-  end
-end
-
 --- @param opts table?
 function M.show_messages(opts)
   opts = opts or {}
@@ -212,9 +189,8 @@ function M.show_messages(opts)
         end
       end,
       --- @param item sia.PreparedMessage?
-      --- @param idx integer
-    }, function(item, idx)
-      if item and mappings then
+    }, function(item, _)
+      if item then
         local content
         if item.tool_calls then
           content = vim.inspect(item.tool_calls)
