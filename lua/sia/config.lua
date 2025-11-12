@@ -415,9 +415,6 @@ end
 --- @return sia.config.Provider
 function M.get_provider(model)
   local model_spec = M.options.models[model or M.get_default_model()]
-  if not model then
-    model_spec = M.options.models[M.options.defaults.model]
-  end
   local provider = M.options.providers[model_spec[1]]
   if not provider then
     provider = require("sia.provider.defaults")[model_spec[1]]
