@@ -32,7 +32,7 @@ will be truncated.]],
     end
     return nil
   end,
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
@@ -161,7 +161,7 @@ will be truncated.]],
         context = {
           buf = buf,
           pos = pos,
-          tick = tracker.ensure_tracked(buf),
+          tick = tracker.ensure_tracked(buf, conversation.id),
           outdated_message = outdated_message,
         },
         kind = "context",
