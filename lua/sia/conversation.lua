@@ -213,13 +213,11 @@ function Message:is_outdated(id)
     return true
   end
 
-  if
-    self.context
-    and self.context.buf
-    and self.context.tick
-    and self.kind ~= nil
-    and (self.role == "tool" or self.role ~= "assistant")
-  then
+  local has_tick = self.context ~= nil
+    and self.context.buf ~= nil
+    and self.context.tick ~= nil
+  local from_assistant = self.role == "tool" or self.role ~= "assistant"
+  if has_tick and self.kind ~= nil and from_assistant then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
       return self.context.tick ~= tracker.user_tick(self.context.buf, id)
     else
