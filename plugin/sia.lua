@@ -80,6 +80,10 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
   local model = find_and_remove_flag("-m", args.fargs)
+  if model and not require("sia.config").options.models[model] then
+    vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
+    return
+  end
 
   if #args.fargs == 0 and not vim.b.sia then
     vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
@@ -422,6 +426,11 @@ end, {})
 
 vim.api.nvim_create_user_command("SiaAgent", function(args)
   local model = find_and_remove_flag("-m", args.fargs)
+  if model and not require("sia.config").options.models[model] then
+    vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
+    return
+  end
+
   local system_prompt = find_and_remove_flag("-s", args.fargs)
 
   if #args.fargs == 0 then
