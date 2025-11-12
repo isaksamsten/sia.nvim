@@ -147,6 +147,41 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   )
 
   opts.user_input(insert_description, {
+    preview = function(preview_buf)
+      local existing_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+      local context_lines = 3
+      local start_line = math.max(1, insert_line - context_lines)
+      local end_line = math.min(#existing_lines, insert_line + context_lines - 1)
+
+      local before_context = vim.list_slice(existing_lines, start_line, end_line)
+      local before_text = table.concat(before_context, "\n")
+
+      local after_context = vim.list_slice(existing_lines, start_line, insert_line - 1)
+      for _, line in ipairs(text_lines) do
+        table.insert(after_context, line)
+      end
+      local remaining = vim.list_slice(existing_lines, insert_line, end_line)
+      for _, line in ipairs(remaining) do
+        table.insert(after_context, line)
+      end
+      local after_text = table.concat(after_context, "\n")
+
+      local unified_diff = utils.create_unified_diff(before_text, after_text, {
+        old_start = start_line,
+        new_start = start_line,
+        ctxlen = context_lines,
+      })
+
+      if not unified_diff or unified_diff == "" then
+        return nil
+      end
+
+      local diff_lines = vim.split(unified_diff, "\n")
+      vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, diff_lines)
+      vim.bo[preview_buf].ft = "diff"
+      return #diff_lines
+    end,
     on_accept = function()
       if not is_memory then
         diff.update_baseline(buf)
@@ -199,7 +234,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
           outdated_message = create_outdated_message(
             args.target_file,
             insert_line,
-            edit_end - edit_start
+            edit_end - edit_start + 1
           ),
         },
         kind = "edit",

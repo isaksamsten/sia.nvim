@@ -72,6 +72,36 @@ For small, targeted changes, prefer the edit tool instead.]],
       and string.format("Overwrite existing file %s with new content", args.path)
     or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
+    preview = function(preview_buf)
+      if file_exists then
+        local existing_content = vim.fn.readfile(args.path)
+        local old_text = table.concat(existing_content, "\n")
+        local new_text = args.content
+
+        local unified_diff = utils.create_unified_diff(old_text, new_text, {
+          old_start = 1,
+          new_start = 1,
+        })
+
+        if not unified_diff or unified_diff == "" then
+          return nil
+        end
+
+        local diff_lines = vim.split(unified_diff, "\n")
+        vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, diff_lines)
+        vim.bo[preview_buf].ft = "diff"
+        return #diff_lines
+      else
+        local lines = vim.split(args.content, "\n", { plain = true })
+        vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
+        local ft = vim.filetype.match({ filename = args.path })
+        if ft then
+          vim.bo[preview_buf].ft = ft
+        end
+
+        return #lines
+      end
+    end,
     on_accept = function()
       local buf = utils.ensure_file_is_loaded(args.path, { listed = not is_memory })
       if not buf then
