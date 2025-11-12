@@ -139,19 +139,17 @@ end
 --- @param id integer Conversation ID
 --- @return integer The current tick count, or 0 if the buffer is not tracked
 ---
---- Fallback behavior: If this conversation hasn't tracked this buffer yet,
---- initializes ticks[id] to the current global tick. This allows pre-conversation
---- context (e.g., from SiaAdd) to inherit the correct freshness snapshot.
+--- Fallback behavior: Use the global tick
 function M.user_tick(buf, id)
   local tracker = M.tracked_buffers[buf]
   if not tracker then
     return 0
   end
-
-  if not tracker.ticks[id] then
-    tracker.ticks[id] = tracker.tick
+  if tracker.marked_for_deletion then
+    return tracker.tick
   end
-  return tracker.ticks[id]
+
+  return tracker.ticks[id] or tracker.tick
 end
 
 return M
