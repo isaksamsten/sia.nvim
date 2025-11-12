@@ -58,7 +58,6 @@ local template = require("sia.template")
 --- @field hide boolean?
 --- @field kind string?
 --- @field content (string|sia.InstructionContent[])?
---- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
@@ -127,7 +126,6 @@ end
 function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
   obj.role = instruction.role
-  obj.live_content = instruction.live_content
   obj.kind = instruction.kind
 
   if instruction.tool_calls then
@@ -198,24 +196,18 @@ local function get_message_content(message, outdated)
       )
     end
     return message.content
-  elseif message.live_content then
-    return message.live_content()
   else
     return nil
   end
 end
 
 function Message:has_content()
-  return self.content ~= nil or self.live_content ~= nil or self.tool_calls ~= nil
+  return self.content ~= nil or self.tool_calls ~= nil
 end
 
 --- @param id integer
 --- @return boolean
 function Message:is_outdated(id)
-  if self.live_content then
-    return false
-  end
-
   -- Check if marked as outdated by prepare_messages (context limit filtering)
   if self._outdated_tool_call then
     return true
