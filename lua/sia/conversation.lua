@@ -58,7 +58,6 @@ local template = require("sia.template")
 --- @field hide boolean?
 --- @field kind string?
 --- @field content (string|sia.InstructionContent[])?
---- @field content_gen fun(context: sia.Context?):string
 --- @field live_content (fun():string?)
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
@@ -69,11 +68,11 @@ local template = require("sia.template")
 local Message = {}
 Message.__index = Message
 
---- @param content_gen fun(context: sia.Context?):string?
+--- @param generator fun(context: sia.Context?):string?
 --- @param context sia.Context?
 --- @return string? content
-local function generate_content(content_gen, context)
-  local tmp = content_gen(context)
+local function generate_content(generator, context)
+  local tmp = generator(context)
   if tmp then
     if type(tmp) == "table" then
       return table.concat(tmp, "\n")
@@ -91,7 +90,7 @@ local function make_content(instruction, context)
   --- @type (string|sia.InstructionContent[])?
   local content
   if type(instruction.content) == "function" then
-    content = generate_content(instruction.content, context)
+    content = generate_content(instruction.content --[[@as fun()]], context)
   elseif
     type(instruction.content) == "table" and type(instruction.content[1]) == "string"
   then
@@ -143,9 +142,6 @@ function Message:from_table(instruction, context)
   obj.content = make_content(instruction, context)
   obj.description = make_description(instruction, context)
   obj.context = context
-  if type(instruction.content) == "function" then
-    obj.content_gen = instruction.content
-  end
   return obj
 end
 
