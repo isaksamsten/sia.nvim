@@ -6,22 +6,18 @@ M.tracked_buffers = {}
 --- @param buf integer
 --- @return boolean
 local function should_track_buffer(buf)
-  -- if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
-  --   return false
-  -- end
-  --
-  -- if vim.bo[buf].buftype ~= "" then
-  --   return false
-  -- end
-  --
-  -- local bufname = vim.api.nvim_buf_get_name(buf)
-  -- if bufname == "" then
-  --   return false
-  -- end
+  if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
+    return false
+  end
 
-  -- if not vim.bo[buf].buflisted then
-  --   return false
-  -- end
+  if vim.bo[buf].buftype ~= "" then
+    return false
+  end
+
+  local bufname = vim.api.nvim_buf_get_name(buf)
+  if bufname == "" then
+    return false
+  end
 
   return true
 end
@@ -45,6 +41,7 @@ function M.ensure_tracked(buf, id)
     if id then
       M.tracked_buffers[buf].ticks[id] = 0
     end
+
     vim.api.nvim_buf_attach(buf, false, {
       on_lines = function()
         local tracker = M.tracked_buffers[buf]
