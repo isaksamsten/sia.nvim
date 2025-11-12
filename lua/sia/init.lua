@@ -182,8 +182,6 @@ function M.show_messages(opts)
           return "[outdated] " .. description
         elseif empty == nil and message.role == "user" then
           return "[empty] " .. description
-        elseif message.superseded then
-          return "[superseded] " .. description
         else
           return description
         end

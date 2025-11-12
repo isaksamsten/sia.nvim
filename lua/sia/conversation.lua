@@ -6,7 +6,6 @@ local template = require("sia.template")
 --- @field content (string|sia.InstructionContent[])?
 --- @field hide boolean
 --- @field outdated boolean
---- @field superseded boolean
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
@@ -281,7 +280,6 @@ local function prepare_message(conversation, message, outdated)
     hide = hide,
     meta = meta or {},
     outdated = outdated,
-    superseded = message.superseded or false,
     description = description,
     content = content,
     _tool_call = _tool_call,
@@ -490,7 +488,6 @@ function Conversation:_update_overlapping_messages(context, kind)
       old_context
       and message.kind ~= nil
       and message.kind == "context"
-      and message.kind == kind
       and old_context.buf
       and message.content
       and (message.role == "user" or message.role == "tool")
