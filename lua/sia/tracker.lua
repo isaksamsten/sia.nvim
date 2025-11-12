@@ -22,6 +22,29 @@ local function should_track_buffer(buf)
   return true
 end
 
+local function attach(buf)
+  vim.api.nvim_buf_attach(buf, false, {
+    on_lines = function()
+      local tracker = M.tracked_buffers[buf]
+      if not tracker or tracker.marked_for_deletion then
+        return true
+      end
+      local any_tracked_edit = false
+      for conv, tick in pairs(tracker.ticks) do
+        if not tracker.editing[conv] then
+          tracker.ticks[conv] = tick + 1
+          any_tracked_edit = true
+        end
+      end
+      if any_tracked_edit then
+        tracker.tick = tracker.tick + 1
+      end
+    end,
+    on_detach = function()
+      M.tracked_buffers[buf] = nil
+    end,
+  })
+end
 --- @param buf integer
 --- @param id integer?
 --- @return integer
@@ -41,28 +64,7 @@ function M.ensure_tracked(buf, id)
     if id then
       M.tracked_buffers[buf].ticks[id] = 0
     end
-
-    vim.api.nvim_buf_attach(buf, false, {
-      on_lines = function()
-        local tracker = M.tracked_buffers[buf]
-        if not tracker or tracker.marked_for_deletion then
-          return true
-        end
-        local any_tracked_edit = false
-        for conv, tick in pairs(tracker.ticks) do
-          if not tracker.editing[conv] then
-            tracker.ticks[conv] = tick + 1
-            any_tracked_edit = true
-          end
-        end
-        if any_tracked_edit then
-          tracker.tick = tracker.tick + 1
-        end
-      end,
-      on_detach = function()
-        M.tracked_buffers[buf] = nil
-      end,
-    })
+    attach(buf)
   else
     local tracker = M.tracked_buffers[buf]
     if tracker.marked_for_deletion then
@@ -75,9 +77,6 @@ function M.ensure_tracked(buf, id)
       return tracker.ticks[id] or tracker.tick
     else
       tracker.refcount = tracker.refcount + 1
-      if id then
-        tracker.ticks[id] = 0
-      end
     end
   end
 
@@ -96,7 +95,7 @@ end
 --- @param buf integer
 function M.untrack(buf)
   local tracker = M.tracked_buffers[buf]
-  if not tracker then
+  if not tracker or tracker.marked_for_deletion then
     return
   end
 
