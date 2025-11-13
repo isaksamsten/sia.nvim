@@ -87,7 +87,6 @@ function M.create_context(args)
     pos = { args.line1, args.line2 },
     bang = args.bang,
   }
-  opts.tick = require("sia.tracker").ensure_tracked(opts.buf)
   local name = vim.api.nvim_buf_get_name(opts.buf)
   opts.outdated_message = string.format(
     "Previously viewed content from %s - file was modified, read file if needed",
@@ -106,6 +105,7 @@ function M.create_context(args)
   then
     opts.pos = nil
   end
+  opts.tick = require("sia.tracker").ensure_tracked(opts.buf, { pos = opts.pos })
   return opts
 end
 

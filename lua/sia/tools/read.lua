@@ -161,7 +161,7 @@ will be truncated.]],
         context = {
           buf = buf,
           pos = pos,
-          tick = tracker.ensure_tracked(buf, conversation.id),
+          tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
           outdated_message = outdated_message,
         },
         kind = "context",

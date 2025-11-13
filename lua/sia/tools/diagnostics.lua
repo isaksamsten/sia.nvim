@@ -63,7 +63,10 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
     callback({
       display_content = { string.format("🩺 No diagnostics found for %s", args.file) },
       content = { string.format("No diagnostics found for %s", args.file) },
-      context = { buf = buf, tick = tracker.ensure_tracked(buf, conversation.id) },
+      context = {
+        buf = buf,
+        tick = tracker.ensure_tracked(buf, { id = conversation.id }),
+      },
       kind = "diagnostics",
     })
     return
@@ -99,7 +102,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
 
   callback({
     content = content,
-    context = { buf = buf, tick = tracker.ensure_tracked(buf, conversation.id) },
+    context = { buf = buf, tick = tracker.ensure_tracked(buf, { id = conversation.id }) },
     kind = "diagnostics",
     display_content = { string.format("🩺 Found %d diagnostics", #diagnostics) },
   })

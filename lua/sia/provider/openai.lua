@@ -8,6 +8,11 @@ end
 -- Source: https://platform.openai.com/docs/pricing
 local PRICING = {
   -- GPT-5 models
+  ["gpt-5.1"] = { input = 1.25, output = 10.00 },
+  ["gpt-5.1-mini"] = { input = 0.25, output = 2.00 },
+  ["gpt-5.1-codex"] = { input = 1.25, output = 10.00 },
+
+  -- GPT-5 models
   ["gpt-5"] = { input = 1.25, output = 10.00 },
   ["gpt-5-mini"] = { input = 0.25, output = 2.00 },
   ["gpt-5-nano"] = { input = 0.05, output = 0.40 },

@@ -86,13 +86,13 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   assistant.execute_strategy(strategy)
 
   eq(tracker.user_tick(buf, conversation.id), 0)
-  eq(tracker.tracked_buffers[buf].refcount, 1)
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
 
   local messages = strategy.conversation:prepare_messages()
   eq(messages[1].outdated, false)
 
   ChatStrategy.remove(strategy.buf)
-  eq(tracker.user_tick(buf, conversation.id), 0)
+  eq(tracker.user_tick(buf, conversation.id), -1)
   eq(tracker.tracked_buffers[buf].marked_for_deletion, true)
 end
 

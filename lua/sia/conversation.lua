@@ -218,7 +218,8 @@ function Message:is_outdated(id)
   local from_assistant = self.role == "tool" or self.role ~= "assistant"
   if has_tick and self.kind ~= nil and from_assistant then
     if vim.api.nvim_buf_is_loaded(self.context.buf) then
-      return self.context.tick ~= tracker.user_tick(self.context.buf, id)
+      return self.context.tick
+        ~= tracker.user_tick(self.context.buf, id, self.context.pos)
     else
       return true
     end
@@ -423,7 +424,7 @@ end
 function Conversation:untrack_messages()
   for _, message in ipairs(self.messages) do
     if message.context and message.context.buf and message.context.tick then
-      tracker.untrack(message.context.buf)
+      tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
     end
   end
 end

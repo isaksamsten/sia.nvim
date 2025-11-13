@@ -24,7 +24,10 @@ function _G.__sia_add_buffer()
       strategy.conversation:add_instruction("current_context", {
         buf = vim.api.nvim_get_current_buf(),
         cursor = vim.api.nvim_win_get_cursor(0),
-        tick = require("sia.tracker").ensure_tracked(buf, strategy.conversation.id),
+        tick = require("sia.tracker").ensure_tracked(
+          buf,
+          { id = strategy.conversation.id }
+        ),
         outdated_message = string.format(
           "Previously viewed content from %s - file was modified, read file if needed",
           vim.fn.fnamemodify(name, ":.")
@@ -44,12 +47,16 @@ function _G.__sia_add_context(type)
     local name = vim.api.nvim_buf_get_name(buf)
     require("sia.utils").with_chat_strategy({
       on_select = function(strategy)
+        local pos = { start_line, end_line }
         return strategy.conversation:add_instruction("current_context", {
           buf = vim.api.nvim_get_current_buf(),
           cursor = vim.api.nvim_win_get_cursor(0),
-          pos = { start_line, end_line },
+          pos = pos,
           mode = "v",
-          tick = require("sia.tracker").ensure_tracked(buf, strategy.conversation.id),
+          tick = require("sia.tracker").ensure_tracked(
+            buf,
+            { id = strategy.conversation.id, pos = pos }
+          ),
           outdated_message = string.format(
             "Previously viewed content from %s - file was modified, read file if needed",
             vim.fn.fnamemodify(name, ":.")
@@ -69,17 +76,20 @@ function _G.__sia_execute(type)
     _G.__sia_execute_action = nil -- reset
     return
   end
-
+  local pos = { start_line, end_line }
   --- @type sia.ActionContext
   local context = {
     start_line = start_line,
     end_line = end_line,
-    pos = { start_line, end_line },
+    pos = pos,
     mode = "v",
     buf = vim.api.nvim_get_current_buf(),
     win = vim.api.nvim_get_current_win(),
     cursor = vim.api.nvim_win_get_cursor(0),
-    tick = require("sia.tracker").ensure_tracked(vim.api.nvim_get_current_buf()),
+    tick = require("sia.tracker").ensure_tracked(
+      vim.api.nvim_get_current_buf(),
+      { pos = pos }
+    ),
   }
   local action
   if _G.__sia_execute_action == nil and vim.b.sia then

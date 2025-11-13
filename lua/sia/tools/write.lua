@@ -117,7 +117,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         diff.update_baseline(buf)
       end
       local lines = vim.split(args.content, "\n", { plain = true })
-      tracker.non_tracked_edit(buf, conversation.id, function()
+      tracker.without_tracking(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
         vim.api.nvim_buf_call(buf, function()
           pcall(vim.cmd, "noa silent write!")

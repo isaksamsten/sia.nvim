@@ -240,7 +240,7 @@ local SIA_ADD_CMD = {
         if buf then
           conversation:add_instruction("current_context", {
             buf = buf,
-            tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
+            tick = require("sia.tracker").ensure_tracked(buf, { id = conversation.id }),
             kind = "context",
             mode = "v",
           })
@@ -297,7 +297,7 @@ local SIA_ADD_CMD = {
         if buf ~= -1 then
           conversation:add_instruction("current_context", {
             buf = buf,
-            tick = require("sia.tracker").ensure_tracked(buf, conversation.id),
+            tick = require("sia.tracker").ensure_tracked(buf, { id = conversation.id }),
             mode = "v",
           })
         end
@@ -511,7 +511,10 @@ vim.api.nvim_create_user_command("SiaClear", function(args)
       else
         removed_count = removed_count + 1
         if message.context and message.context.buf and message.context.tick then
-          require("sia.tracker").untrack(message.context.buf)
+          require("sia.tracker").untrack(
+            message.context.buf,
+            { id = conversation.id, pos = message.context.pos }
+          )
         end
       end
     end
