@@ -595,6 +595,17 @@ M.options = {
     ["copilot/gpt-5"] = { "copilot", "gpt-5" },
     ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini" },
     ["copilot/gpt-5-codex"] = { "copilot_responses", "gpt-5-codex", can_reason = true },
+    ["copilot/gpt-5.1"] = { "copilot", "gpt-5.1" },
+    ["copilot/gpt-5.1-codex-mini"] = {
+      "copilot_responses",
+      "gpt-5.1-codex-mini",
+      can_reason = true,
+    },
+    ["copilot/gpt-5.1-codex"] = {
+      "copilot_responses",
+      "gpt-5.1-codex",
+      can_reason = true,
+    },
     ["copilot/claude-haiku-4.5"] = { "copilot", "claude-haiku-4.5" },
     ["copilot/claude-opus-4.1"] = { "copilot", "claude-opus-4.1" },
     ["copilot/claude-sonnet-4"] = { "copilot", "claude-sonnet-4" },
