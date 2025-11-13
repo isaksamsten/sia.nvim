@@ -1,5 +1,7 @@
 local M = {}
 
+--- TODO: refactor to only return the arguments..
+--- fun(t:table):table
 --- @param clear_args string[]
 --- @return fun(t:sia.ToolCall):sia.ToolCall
 function M.gen_clear_outdated_tool_input(clear_args)
@@ -16,7 +18,12 @@ function M.gen_clear_outdated_tool_input(clear_args)
         end
         new_func.arguments = vim.json.encode(arguments)
       end
-      return { id = tool.id, type = tool.type, ["function"] = new_func }
+      return {
+        id = tool.id,
+        call_id = tool.call_id,
+        type = tool.type,
+        ["function"] = new_func,
+      }
     end
     return tool
   end
