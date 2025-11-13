@@ -1,6 +1,13 @@
 local M = {}
 
---- @type table<integer, {tick: integer, ticks:table<integer, integer>, editing: table<integer, boolean>, refcount: integer, marked_for_deletion: boolean?}>
+--- @class sia.tracker.Tracked
+--- @field tick integer
+--- @field ticks table<integer, integer>
+--- @field editing table<integer, boolean>
+--- @field refcount integer
+--- @field marked_for_deletion boolean
+
+--- @type table<integer, sia.tracker.Tracked>
 M.tracked_buffers = {}
 
 --- @param buf integer
@@ -22,6 +29,19 @@ local function should_track_buffer(buf)
   return true
 end
 
+local function update_tick(tracker)
+  local any_tracked_edit = false
+  for conv, tick in pairs(tracker.ticks) do
+    if not tracker.editing[conv] then
+      tracker.ticks[conv] = tick + 1
+      any_tracked_edit = true
+    end
+  end
+  if any_tracked_edit then
+    tracker.tick = tracker.tick + 1
+  end
+end
+
 local function attach(buf)
   vim.api.nvim_buf_attach(buf, false, {
     on_lines = function()
@@ -29,22 +49,21 @@ local function attach(buf)
       if not tracker or tracker.marked_for_deletion then
         return true
       end
-      local any_tracked_edit = false
-      for conv, tick in pairs(tracker.ticks) do
-        if not tracker.editing[conv] then
-          tracker.ticks[conv] = tick + 1
-          any_tracked_edit = true
-        end
+      update_tick(tracker)
+    end,
+    on_reload = function()
+      local tracker = M.tracked_buffers[buf]
+      if not tracker or tracker.marked_for_deletion then
+        return
       end
-      if any_tracked_edit then
-        tracker.tick = tracker.tick + 1
-      end
+      update_tick(tracker)
     end,
     on_detach = function()
       M.tracked_buffers[buf] = nil
     end,
   })
 end
+
 --- @param buf integer
 --- @param id integer?
 --- @return integer
