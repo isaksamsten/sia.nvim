@@ -219,14 +219,9 @@ function M.ensure_tracked(buf, opts)
   -- For new region we inherit tick from global if that exists
   local inherited_tick = 0
   if id and tracker.global then
-    for _, global_region in ipairs(tracker.global) do
-      if
-        global_region.pos
-        and pos
-        and global_region.pos[1] == pos[1]
-        and global_region.pos[2] == pos[2]
-      then
-        inherited_tick = global_region.tick
+    for _, region in ipairs(tracker.global) do
+      if region.pos and pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
+        inherited_tick = region.tick
         break
       end
     end
