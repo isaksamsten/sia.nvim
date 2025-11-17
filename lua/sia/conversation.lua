@@ -658,6 +658,19 @@ function Conversation:get_messages(opts)
   end
 end
 
+--- @return sia.Context[]
+function Conversation:get_contexts()
+  mark_outdated_messages(self)
+  local contexts = {}
+  for _, message in ipairs(self.messages) do
+    local ctx = message.context
+    if ctx and ctx.buf and message.kind == "context" and message.status == nil then
+      table.insert(contexts, ctx)
+    end
+  end
+  return contexts
+end
+
 --- Add usage statistics from a request/response cycle
 --- @param usage sia.Usage
 function Conversation:add_usage(usage)
