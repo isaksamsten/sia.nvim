@@ -52,7 +52,7 @@ local function update_tick(tracker, first, last_old, last_new)
   local line_delta = last_new - last_old
 
   local function overlaps(region_start, region_end)
-    return region_start <= (change_end - 1) and change_start <= region_end
+    return region_start <= change_end and change_start <= region_end
   end
 
   for id, regions_array in pairs(tracker.regions) do
