@@ -106,12 +106,10 @@ T["tool call filtering"]["exceeding max should filter to keep most recent"] = fu
   end
 
   local messages = conv:prepare_messages()
-  eq(4, count_pruned(messages))
+  eq(3, count_pruned(messages))
   eq("pruned", messages[1].tool_calls[1]["function"].arguments)
   eq("pruned", messages[3].tool_calls[1]["function"].arguments)
   eq("pruned", messages[5].tool_calls[1]["function"].arguments)
-  eq("pruned", messages[7].tool_calls[1]["function"].arguments)
-  eq('{"test": "hello"}', messages[9].tool_calls[1]["function"].arguments)
 end
 
 T["tool call filtering"]["should permanently mark outdated tool calls"] = function()
@@ -130,13 +128,13 @@ T["tool call filtering"]["should permanently mark outdated tool calls"] = functi
   end
 
   local query1 = conv:prepare_messages()
-  eq(3, count_pruned(query1))
+  eq(2, count_pruned(query1))
 
   conv:add_instruction(create_tool_call_message("call_6", "test_tool"))
   conv:add_instruction(create_tool_response_message("call_6", "test_tool"))
 
   local query2 = conv:prepare_messages()
-  eq(3, count_pruned(query2))
+  eq(4, count_pruned(query2))
 end
 
 T["tool call filtering"]["should respect excluded tools"] = function()

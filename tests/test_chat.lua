@@ -79,7 +79,7 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   vim.api.nvim_buf_set_name(buf, "buffer " .. buf)
   local conversation = Conversation:new({
     instructions = {
-      { role = "user", content = "Here's the content of the file" },
+      { role = "user", kind = "context", content = "Here's the content of the file" },
     },
   }, { tick = tracker.ensure_tracked(buf), buf = buf })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
@@ -88,8 +88,10 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   eq(tracker.user_tick(buf, conversation.id), 0)
   eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
 
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+
   local messages = strategy.conversation:prepare_messages()
-  eq(messages[1].outdated, false)
+  eq(string.find(messages[1].content, "pruned") ~= nil, true)
 
   ChatStrategy.remove(strategy.buf)
   eq(tracker.user_tick(buf, conversation.id), -1)

@@ -5,7 +5,6 @@ local template = require("sia.template")
 --- @field role string
 --- @field content (string|sia.InstructionContent[])?
 --- @field hide boolean
---- @field outdated boolean
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
@@ -60,9 +59,8 @@ local template = require("sia.template")
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
---- @field _outdated_tool_call boolean?
 --- @field description string?
---- @field superseded boolean? -- Mark message as superseded by a newer overlapping message
+--- @field status ("outdated"|"failed"|"superseded")?
 local Message = {}
 Message.__index = Message
 
@@ -79,6 +77,94 @@ local function generate_content(generator, context)
     end
   end
   return nil
+end
+
+--- @param message sia.Message
+--- @param id integer
+--- @return boolean
+local function is_outdated(message, id)
+  local has_tick = message.context ~= nil
+    and message.context.buf ~= nil
+    and message.context.tick ~= nil
+  local not_assistant = message.role == "tool" or message.role ~= "assistant"
+  if has_tick and message.kind ~= nil and not_assistant then
+    if vim.api.nvim_buf_is_loaded(message.context.buf) then
+      return message.context.tick
+        ~= tracker.user_tick(message.context.buf, id, message.context.pos)
+    else
+      return true
+    end
+  end
+  return false
+end
+
+--- @param conversation sia.Conversation
+local function mark_outdated_messages(conversation)
+  local context_config = require("sia.config").get_context_config()
+  local min_keep = context_config.keep or 5
+  local max_tool_calls = context_config.max_tool or 100
+  local exclude_tool = context_config.exclude or {}
+  -- print(min_keep_tool_calls, max_tool_calls, exclude_tool)
+
+  --- @type table<string, "failed"|"outdated">
+  local tool_filter = {}
+
+  --- @type {id:string, index:integer, name:string}[]
+  local tool_calls_info = {}
+  for i, m in ipairs(conversation.messages) do
+    if m._tool_call and m._tool_call.id then
+      if m.kind == "failed" then
+        tool_filter[m._tool_call.id] = "failed"
+      elseif m.status == "outdated" then
+        tool_filter[m._tool_call.id] = "outdated"
+      else
+        table.insert(
+          tool_calls_info,
+          { id = m._tool_call.id, index = i, name = m._tool_call["function"].name }
+        )
+      end
+    end
+  end
+
+  if min_keep < #tool_calls_info and #tool_calls_info > max_tool_calls then
+    table.sort(tool_calls_info, function(a, b)
+      return a.index > b.index
+    end)
+
+    for i, info in ipairs(tool_calls_info) do
+      if i > min_keep and not vim.tbl_contains(exclude_tool, info.name) then
+        tool_filter[info.id] = "outdated"
+      end
+    end
+  end
+
+  local last_message = conversation.messages[#conversation.messages]
+  if
+    last_message
+    and last_message.kind == "failed"
+    and last_message._tool_call
+    and last_message._tool_call.id
+  then
+    tool_filter[last_message._tool_call.id] = nil
+  end
+
+  for _, m in ipairs(conversation.messages) do
+    if not m.status then
+      local tool_call_id = m._tool_call and m._tool_call.id
+      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
+        tool_call_id = m.tool_calls[1].id
+      end
+
+      if tool_call_id and tool_filter[tool_call_id] == "failed" then
+        m.status = "failed"
+      elseif
+        (tool_call_id and tool_filter[tool_call_id] == "outdated")
+        or is_outdated(m, conversation.id)
+      then
+        m.status = "outdated"
+      end
+    end
+  end
 end
 
 --- @param instruction sia.config.Instruction
@@ -184,11 +270,10 @@ function Message:new(instruction, context)
 end
 
 --- @param message sia.Message
---- @param outdated boolean?
 --- @return (string|sia.InstructionContent[])?
-local function get_message_content(message, outdated)
+local function get_message_content(message)
   if message.content then
-    if outdated then
+    if message.status and message.status == "outdated" then
       return string.format(
         "System Note: History pruned. %s",
         message.context and message.context.outdated_message or ""
@@ -204,34 +289,10 @@ function Message:has_content()
   return self.content ~= nil or self.tool_calls ~= nil
 end
 
---- @param id integer
---- @return boolean
-function Message:is_outdated(id)
-  -- Check if marked as outdated by prepare_messages (context limit filtering)
-  if self._outdated_tool_call then
-    return true
-  end
-
-  local has_tick = self.context ~= nil
-    and self.context.buf ~= nil
-    and self.context.tick ~= nil
-  local from_assistant = self.role == "tool" or self.role ~= "assistant"
-  if has_tick and self.kind ~= nil and from_assistant then
-    if vim.api.nvim_buf_is_loaded(self.context.buf) then
-      return self.context.tick
-        ~= tracker.user_tick(self.context.buf, id, self.context.pos)
-    else
-      return true
-    end
-  end
-  return false
-end
-
 --- @param conversation sia.Conversation
 --- @param message sia.Message
---- @param outdated boolean?
 --- @return sia.PreparedMessage
-local function prepare_message(conversation, message, outdated)
+local function prepare_message(conversation, message)
   local hide = false
   if message.hide then
     hide = true
@@ -249,7 +310,6 @@ local function prepare_message(conversation, message, outdated)
   end
 
   local description = message:get_description()
-  outdated = outdated or message:is_outdated(conversation.id)
 
   local tool_calls
   if message.tool_calls then
@@ -260,14 +320,15 @@ local function prepare_message(conversation, message, outdated)
           context_conf.clear_input
           and message.context
           and message.context.clear_outdated_tool_input
-          and outdated
+          and message.status
+          and message.status == "outdated"
         then
           tool_calls[i] = message.context.clear_outdated_tool_input(tool_call)
         end
       end
     end
   end
-  local content = get_message_content(message, outdated)
+  local content = get_message_content(message)
   if message.template and conversation then
     if content ~= nil and type(content) == "string" then
       local template_context = conversation:build_template_context(message.context)
@@ -280,7 +341,6 @@ local function prepare_message(conversation, message, outdated)
     role = message.role,
     hide = hide,
     meta = meta or {},
-    outdated = outdated,
     description = description,
     content = content,
     _tool_call = _tool_call,
@@ -300,7 +360,7 @@ function Message:get_description()
     return self.role .. ": " .. description
   end
 
-  local content = get_message_content(self, false)
+  local content = get_message_content(self)
   if content then
     return self.role .. ": " .. string.sub(content:gsub("\n", " "), 1, 40)
   elseif self.tool_calls then
@@ -494,7 +554,7 @@ function Conversation:_update_overlapping_messages(context, kind)
       and (message.role == "user" or message.role == "tool")
     then
       if should_mask_existing(context, old_context) then
-        message.superseded = true
+        message.status = "superseded"
 
         -- If this is a tool result being superseded, mark its tool call ID for superseding
         if message.role == "tool" and message._tool_call then
@@ -509,7 +569,7 @@ function Conversation:_update_overlapping_messages(context, kind)
     if message.role == "assistant" and message.tool_calls then
       for _, tool_call in ipairs(message.tool_calls) do
         if tool_call_ids_to_supersede[tool_call.id] then
-          message.superseded = true
+          message.status = "superseded"
           break
         end
       end
@@ -517,9 +577,13 @@ function Conversation:_update_overlapping_messages(context, kind)
   end
 end
 
+--- By default it excludes overlapping contexts and mark outdated messages.
+---
+--- Set ignore_duplicates = true to keep duplicate messages
+--- Set mark_outdated = false to keep outdated messages
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param context sia.Context?
---- @param opts { ignore_duplicates: boolean?, meta: table?}?
+--- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
   -- We track per-kind updates to avoid two problems:
@@ -539,6 +603,10 @@ function Conversation:add_instruction(instruction, context, opts)
     if opts.meta then
       message.meta = opts.meta
     end
+  end
+
+  if opts.mark_outdated ~= false then
+    mark_outdated_messages(self)
   end
 end
 
@@ -647,61 +715,13 @@ end
 
 --- @return sia.PreparedMessage[]
 function Conversation:prepare_messages()
-  local context_config = require("sia.config").get_context_config()
-  local min_keep_tool_calls = context_config.keep or 5
-  local max_tool_calls = context_config.max_tool or 100
-  local exclude_tool = context_config.exclude or {}
-
-  --- @type table<string, "failed"|"outdated">
-  local tool_filter = {}
-
-  --- @type {id:string, index:integer, name:string}[]
-  local tool_calls_info = {}
-  for i, m in ipairs(self.messages) do
-    if m._tool_call and m._tool_call.id then
-      if m.kind == "failed" then
-        tool_filter[m._tool_call.id] = "failed"
-      elseif m._outdated_tool_call then
-        tool_filter[m._tool_call.id] = "outdated"
-      else
-        table.insert(
-          tool_calls_info,
-          { id = m._tool_call.id, index = i, name = m._tool_call["function"].name }
-        )
-      end
-    end
-  end
-
-  if min_keep_tool_calls < #tool_calls_info and #tool_calls_info > max_tool_calls then
-    table.sort(tool_calls_info, function(a, b)
-      return a.index > b.index
-    end)
-
-    for i, info in ipairs(tool_calls_info) do
-      if i > min_keep_tool_calls and not vim.tbl_contains(exclude_tool, info.name) then
-        tool_filter[info.id] = "outdated"
-        self.messages[info.index]._outdated_tool_call = true
-      end
-    end
-  end
-
-  local last_message = self.messages[#self.messages]
-  if
-    last_message
-    and last_message.kind == "failed"
-    and last_message._tool_call
-    and last_message._tool_call.id
-  then
-    tool_filter[last_message._tool_call.id] = nil
-  end
-
   --- @type sia.Message[]
   local messages = vim
     .iter(self.messages)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
-      if self.enable_supersede and m.superseded then
+      if self.enable_supersede and m.status == "superseded" then
         return false
       end
 
@@ -709,12 +729,7 @@ function Conversation:prepare_messages()
         return false
       end
 
-      local tool_call_id = m._tool_call and m._tool_call.id
-      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
-        tool_call_id = m.tool_calls[1].id
-      end
-
-      if tool_call_id and tool_filter[tool_call_id] == "failed" then
+      if m.status == "failed" then
         return false
       end
 
@@ -723,15 +738,10 @@ function Conversation:prepare_messages()
     --- @param m sia.Message
     --- @return sia.PreparedMessage
     :map(function(m)
-      local tool_call_id = m._tool_call and m._tool_call.id
-      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
-        tool_call_id = m.tool_calls[1].id
+      if not m.status and is_outdated(m, self.id) then
+        m.status = "outdated"
       end
-      return prepare_message(
-        self,
-        m,
-        tool_call_id and tool_filter[tool_call_id] == "outdated"
-      )
+      return prepare_message(self, m)
     end)
     --- @param p sia.PreparedMessage
     --- @return boolean?
