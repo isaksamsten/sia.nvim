@@ -445,7 +445,11 @@ function Conversation:new(action, context)
   Conversation.pending_messages = {}
 
   for _, instruction in ipairs(action.instructions or {}) do
-    obj:add_instruction(instruction, context, { ignore_duplicates = true })
+    obj:add_instruction(
+      instruction,
+      context,
+      { ignore_duplicates = true, mark_outdated = false }
+    )
   end
 
   obj.tools = {}
