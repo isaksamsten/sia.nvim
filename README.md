@@ -910,7 +910,10 @@ In the chat view (with `ft=sia`), you can bind the following mappings for effici
 keys = {
   { "p", mode = "n", require("sia").show_messages, ft = "sia" },
   { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
+  -- toggle the todo view
   { "t", mode = "n", require("sia").todos, ft = "sia" },
+  -- show a quickfix window with active context references
+  { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
 }
 ```
 
