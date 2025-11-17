@@ -110,12 +110,6 @@ function M.current_context(global)
 
           return string.format("%s\n%s", instruction, table.concat(code, "\n"))
         else
-          -- local content =
-          --   string.format("The conversation was initiated from the file: %s", utils.get_filename(ctx.buf, ":p"))
-          --
-          -- if ctx.cursor then
-          --   content = string.format("%s with the cursor at %d", content, ctx.cursor[1])
-          -- end
           return nil
         end
       end,
