@@ -377,6 +377,34 @@ function M.todos(action)
   )
 end
 
+--- Show contexts in quickfix list
+function M.show_contexts()
+  local chat = require("sia.strategy").ChatStrategy.by_buf()
+  if not chat then
+    return
+  end
+
+  local contexts = chat.conversation:get_contexts()
+  if #contexts == 0 then
+    vim.notify("No contexts available", vim.log.levels.INFO)
+    return
+  end
+
+  local qf_items = {}
+  for _, ctx in ipairs(contexts) do
+    table.insert(qf_items, {
+      bufnr = ctx.buf,
+      lnum = ctx.pos and ctx.pos[1] or 1,
+      end_lnum = ctx.pos and ctx.pos[2] or nil,
+      col = 1,
+      type = "I",
+    })
+  end
+
+  vim.fn.setqflist(qf_items, "r")
+  vim.cmd("copen")
+end
+
 function M.open_reply()
   local buf = vim.api.nvim_get_current_buf()
   local current = require("sia.strategy").ChatStrategy.by_buf(buf)
