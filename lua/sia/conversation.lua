@@ -104,7 +104,6 @@ local function mark_outdated_messages(conversation)
   local min_keep = context_config.keep or 5
   local max_tool_calls = context_config.max_tool or 100
   local exclude_tool = context_config.exclude or {}
-  -- print(min_keep_tool_calls, max_tool_calls, exclude_tool)
 
   --- @type table<string, "failed"|"outdated">
   local tool_filter = {}
