@@ -9,9 +9,10 @@ local eq = MiniTest.expect.equality
 local Conversation = {}
 Conversation.__index = Conversation
 function Conversation:new()
+  local Model = require("sia.model")
   return setmetatable({
     _messages = { { role = "user", content = { "hi" } } },
-    model = "mock/model",
+    model = Model.resolve("openai/gpt-4o-mini"),
     tool_fn = {},
   }, self)
 end

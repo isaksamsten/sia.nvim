@@ -39,20 +39,29 @@ end
 
 function M.prepare_parameters(data, model)
   local config = require("sia.config").options
-  if model.n then
-    data.n = model.n
+
+  local n = model:get_param("n")
+  if n then
+    data.n = n
   end
 
-  if model.max_tokens then
-    data.max_tokens = model.max_tokens
+  local max_tokens = model:get_param("max_tokens")
+  if max_tokens then
+    data.max_tokens = max_tokens
   end
 
-  if not model.reasoning_effort then
-    data.temperature = model.temperature or config.defaults.temperature
+  local reasoning_effort = model:get_param("reasoning_effort")
+  if not reasoning_effort then
+    data.temperature = model:get_param("temperature", config.defaults.temperature)
   end
 
-  if model.temperature then
-    data.temperature = model.temperature
+  local temperature = model:get_param("temperature")
+  if temperature then
+    data.temperature = temperature
+  end
+
+  if reasoning_effort then
+    data.reasoning_effort = reasoning_effort
   end
 end
 
@@ -135,57 +144,55 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
 
     local cost = nil
     if conversation and conversation.model then
-      local config = require("sia.config")
-      local model_spec = config.options.models[conversation.model]
+      local model = conversation.model
 
-      if model_spec then
-        if model_spec.pricing then
-          cost =
-            calculate_cost_from_pricing(model_spec.pricing, usage.input, usage.output)
-          if model_spec.cache_multiplier then
+      local pricing = model:get_param("pricing")
+      if pricing then
+        cost = calculate_cost_from_pricing(pricing, usage.input, usage.output)
+        local cache_mult = model:get_param("cache_multiplier")
+        if cache_mult then
+          if usage.cache_read then
+            cost = cost
+              + calculate_cost_from_pricing(
+                pricing,
+                usage.cache_read,
+                0,
+                cache_mult.read
+              )
+          end
+          if usage.cache_write then
+            cost = cost
+              + calculate_cost_from_pricing(
+                pricing,
+                usage.cache_write,
+                0,
+                cache_mult.write
+              )
+          end
+        end
+      elseif builtin_pricing then
+        local actual_model_name = model:api_name()
+        local builtin_price = builtin_pricing[actual_model_name]
+        if builtin_price then
+          cost = calculate_cost_from_pricing(builtin_price, usage.input, usage.output)
+          if cache_multiplier then
             if usage.cache_read then
               cost = cost
                 + calculate_cost_from_pricing(
-                  model_spec.pricing,
-                  usage.cache_write,
+                  builtin_price,
+                  usage.cache_read,
                   0,
-                  model_spec.cache_multiplier.read
+                  cache_multiplier.read
                 )
             end
             if usage.cache_write then
               cost = cost
                 + calculate_cost_from_pricing(
-                  model_spec.pricing,
+                  builtin_price,
                   usage.cache_write,
                   0,
-                  model_spec.cache_multiplier.write
+                  cache_multiplier.write
                 )
-            end
-          end
-        elseif builtin_pricing then
-          local actual_model_name = model_spec[2]
-          local pricing = builtin_pricing[actual_model_name]
-          if pricing then
-            cost = calculate_cost_from_pricing(pricing, usage.input, usage.output)
-            if cache_multiplier then
-              if usage.cache_read then
-                cost = cost
-                  + calculate_cost_from_pricing(
-                    pricing,
-                    usage.cache_read,
-                    0,
-                    cache_multiplier.read
-                  )
-              end
-              if usage.cache_write then
-                cost = cost
-                  + calculate_cost_from_pricing(
-                    pricing,
-                    usage.cache_write,
-                    0,
-                    cache_multiplier.write
-                  )
-              end
             end
           end
         end

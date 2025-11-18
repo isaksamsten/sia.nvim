@@ -574,7 +574,8 @@ function M.execute_action(action, opts)
 
         -- The user might have explicitly changed the model with -m
         if opts.model then
-          strategy.conversation.model = opts.model
+          local Model = require("sia.model")
+          strategy.conversation.model = Model.resolve(opts.model)
         end
       else
         vim.notify("Sia: conversation is busy")

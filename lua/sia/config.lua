@@ -285,27 +285,64 @@ end
 
 local function validate_model_field(json, field)
   if json[field] ~= nil then
-    if type(json[field]) ~= "string" then
+    local model_value = json[field]
+    local model_name
+
+    if type(model_value) == "string" then
+      model_name = model_value
+    elseif type(model_value) == "table" then
+      if type(model_value.name) ~= "string" then
+        return false,
+          string.format(
+            "'%s' must be a string or table with 'name' field, got table without valid name",
+            field
+          )
+      end
+      model_name = model_value.name
+    else
       return false,
-        string.format("'%s' must be a string, got %s", field, type(json[field]))
-    elseif not M.options.models[json[field]] then
+        string.format(
+          "'%s' must be a string or table, got %s",
+          field,
+          type(model_value)
+        )
+    end
+
+    if not M.options.models[model_name] then
       return false,
         string.format(
           "'%s' must be one of the allowed models, got '%s'",
           field,
-          tostring(json[field])
+          tostring(model_name)
         )
     end
   end
   return true
 end
 
+--- Normalize model config to a consistent table format
+--- @param model_value string|table|nil
+--- @return table|nil
+local function normalize_model_config(model_value)
+  if model_value == nil then
+    return nil
+  end
+
+  if type(model_value) == "string" then
+    return { name = model_value }
+  elseif type(model_value) == "table" then
+    return vim.tbl_extend("force", {}, model_value)
+  end
+
+  return nil
+end
+
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
 --- @field auto_continue boolean?
---- @field model string?
---- @field fast_model string?
---- @field plan_model string?
+--- @field model table?
+--- @field fast_model table?
+--- @field plan_model table?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
@@ -399,16 +436,25 @@ function M.get_local_config()
     return nil
   end
 
+  json.model = normalize_model_config(json.model)
+  json.fast_model = normalize_model_config(json.fast_model)
+  json.plan_model = normalize_model_config(json.plan_model)
+
   config_cache[root] = { mtime = stat.mtime.sec, json = json }
   return json
 end
 
 --- @param type ("model"|"fast_model"|"plan_model")?
---- @return string
+--- @return table? model config with at least {name:string}
 function M.get_default_model(type)
   local lc = M.get_local_config() or {}
   type = type or "model"
-  return lc[type] or M.options.defaults[type]
+
+  if lc[type] then
+    return lc[type]
+  end
+
+  return normalize_model_config(M.options.defaults[type])
 end
 
 --- @param model string?

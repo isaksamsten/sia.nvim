@@ -106,8 +106,10 @@ function ChatStrategy:new(conversation, options)
   pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
   local messages = conversation:get_messages()
-  local model = obj.conversation.model or require("sia.config").get_default_model()
-  obj.canvas:render_messages(vim.list_slice(messages, 1, #messages - 1), model)
+  obj.canvas:render_messages(
+    vim.list_slice(messages, 1, #messages - 1),
+    obj.conversation.model:name()
+  )
   obj.assistant_extmark = nil
 
   obj.has_generated_name = false
@@ -132,8 +134,10 @@ function ChatStrategy:redraw()
     return
   end
   self.canvas:clear()
-  local model = self.conversation.model or require("sia.config").get_default_model()
-  self.canvas:render_messages(self.conversation:get_messages(), model)
+  self.canvas:render_messages(
+    self.conversation:get_messages(),
+    self.conversation.model:name()
+  )
 end
 
 function ChatStrategy:on_request_start()
@@ -141,9 +145,9 @@ function ChatStrategy:on_request_start()
   if not self:buf_is_loaded() then
     return false
   end
-  local model = self.conversation.model or require("sia.config").get_default_model()
-  self.canvas:render_messages({ self.conversation:last_message() }, model)
-  self.assistant_extmark = self.canvas:render_assistant_header(model)
+  local model = self.conversation.model
+  self.canvas:render_messages({ self.conversation:last_message() }, model:name())
+  self.assistant_extmark = self.canvas:render_assistant_header(model:name())
   vim.bo[self.buf].modifiable = true
   return true
 end
@@ -274,7 +278,7 @@ function ChatStrategy:on_complete(control)
       control.finish()
     end
     if self.options.show_stats then
-      local provider = require("sia.config").get_provider(self.conversation.model)
+      local provider = self.conversation.model:get_provider()
       if provider.get_stats then
         provider.get_stats(function(stats)
           if stats then

@@ -463,7 +463,10 @@ specific project:
 ```json
 {
   "model": "copilot/gpt-5-mini",
-  "fast_model": "openai/gpt-4.1-mini",
+  "fast_model": {
+    "name": "openai/gpt-4.1-mini",
+    "temperature": 0.1
+  },
   "plan_model": "openai/o3-mini",
   "auto_continue": true,
   "action": {
@@ -526,8 +529,9 @@ specific project:
 
 #### Available Local Configuration Options
 
-- **Model Selection**: Override default models (`model`, `fast_model`,
-  `plan_model`) for this project
+- **Model Selection**: Override default models for this project. Models can be specified as:
+  - String: `"openai/gpt-4.1"` (uses default settings from setup)
+  - Object: `{ "name": "openai/gpt-4.1", "temperature": 0.7 }` (override model-specific parameters like temperature, pricing, or provider-specific options)
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)
 - **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)

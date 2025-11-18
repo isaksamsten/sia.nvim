@@ -383,7 +383,7 @@ local CONVERSATION_ID = 1
 --- @field enable_supersede boolean
 --- @field tools sia.config.Tool[]?
 --- @field name string
---- @field model string?
+--- @field model sia.Model
 --- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field todos  {buf: number?, items: sia.conversation.Todo[]}
@@ -416,7 +416,7 @@ end
 function Conversation:new(action, context)
   local obj = setmetatable({}, self)
   obj.context = context
-  obj.model = action.model
+  obj.model = require("sia.model").resolve(action.model)
   obj.temperature = action.temperature
   obj.mode = action.mode
   obj.name = ""

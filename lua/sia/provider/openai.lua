@@ -444,8 +444,12 @@ local M = {
     end,
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
+      if data.reasoning_effort then
+        data.reasoning = { effort = data.reasoning_effort }
+        data.reasoning_effort = nil
+      end
       data.store = false
-      if model.can_reason or model.reasoning_effort then
+      if model:get_param("can_reason") or model:get_param("reasoning_effort") then
         data.temperature = nil
         data.include = { "reasoning.encrypted_content" }
       end

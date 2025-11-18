@@ -94,24 +94,17 @@ function M.execute_strategy(strategy)
     end
     strategy:on_round_start()
 
-    local model =
-      config.options.models[strategy.conversation.model or config.get_default_model()]
-    if not model then
-      model = config.options.models[config.options.defaults.model]
-    end
-    local provider = config.options.providers[model[1]]
-    if not provider then
-      provider = require("sia.provider.defaults")[model[1]]
-    end
+    local model = strategy.conversation.model
+    local provider = model:get_provider()
 
     local data = {
-      model = model[2],
+      model = model:api_name(),
       stream = true,
     }
 
     local messages = strategy.conversation:prepare_messages()
     provider.prepare_tools(data, strategy.conversation.tools)
-    provider.prepare_messages(data, model[2], messages)
+    provider.prepare_messages(data, model:api_name(), messages)
 
     if provider.prepare_parameters then
       provider.prepare_parameters(data, model)
@@ -277,23 +270,17 @@ function M.execute_strategy(strategy)
 end
 
 --- @param messages sia.PreparedMessage[]
---- @param opts {callback:fun(s:string?), model:string}
+--- @param opts {callback:fun(s:string?), model:string|table?}
 function M.execute_query(messages, opts)
-  local config = require("sia.config")
   local response = ""
-  local model = config.options.models[opts.model or config.get_default_model()]
-  if not model then
-    model = config.options.models[config.options.defaults.model]
-  end
-  local provider = config.options.providers[model[1]]
-  if not provider then
-    provider = require("sia.provider.defaults")[model[1]]
-  end
+
+  local model = require("sia.model").resolve(opts.model)
+  local provider = model:get_provider()
 
   local data = {
-    model = model[2],
+    model = model:api_name(),
   }
-  provider.prepare_messages(data, model[2], messages)
+  provider.prepare_messages(data, model:api_name(), messages)
   if provider.prepare_parameters then
     provider.prepare_parameters(data, model)
   end
