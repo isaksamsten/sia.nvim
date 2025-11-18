@@ -51,13 +51,8 @@ function M.prepare_parameters(data, model)
   end
 
   local reasoning_effort = model:get_param("reasoning_effort")
-  if not reasoning_effort then
+  if not reasoning_effort and not model:get_param("can_reason") then
     data.temperature = model:get_param("temperature", config.defaults.temperature)
-  end
-
-  local temperature = model:get_param("temperature")
-  if temperature then
-    data.temperature = temperature
   end
 
   if reasoning_effort then
