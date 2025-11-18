@@ -57,6 +57,7 @@ function M.current_context(global)
   return {
     {
       role = "user",
+      mode = "v",
       kind = "context",
       description = function(ctx)
         if ctx.mode == "n" then

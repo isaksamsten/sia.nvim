@@ -218,6 +218,14 @@ function Message:from_table(instruction, context)
   if instruction._tool_call then
     obj._tool_call = instruction._tool_call
   end
+  if
+    instruction.mode
+    and context
+    and context.mode
+    and instruction.mode ~= context.mode
+  then
+    obj.status = "superseded"
+  end
   obj.meta = {}
   obj.template = instruction.template or false
   obj.hide = instruction.hide

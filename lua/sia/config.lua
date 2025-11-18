@@ -541,6 +541,7 @@ end
 --- @field role sia.config.Role
 --- @field template boolean?
 --- @field hide boolean?
+--- @field mode "v"|"n"|nil
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.InstructionContent[])?
 --- @field kind string?

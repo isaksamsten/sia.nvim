@@ -99,12 +99,9 @@ function M.create_context(args)
     opts.mode = "v"
   end
   if
-    args.count == -1
-    or (
-      args.line1 == 1
-      and args.line2 == vim.api.nvim_buf_line_count(opts.buf)
-      and args.line1 ~= args.line2
-    )
+    args.line1 == 1
+    and args.line2 == vim.api.nvim_buf_line_count(opts.buf)
+    and args.line1 ~= args.line2
   then
     opts.pos = nil
   end
