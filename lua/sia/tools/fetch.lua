@@ -223,30 +223,30 @@ Usage notes:
             end
           end
 
-          local Message = require("sia.conversation").Message
           html_to_markdown(body, function(markdown_content)
             local final_content = markdown_content or body
             if args.prompt then
               local config = require("sia.config")
-              require("sia.assistant").execute_query({
-                Message:from_table({ role = "system", content = SUB_AGENT_PROMPT }),
-                Message:from_table({
-                  role = "user",
-                  content = string.format(
-                    "%s. Here's the webpage:\n%s",
-                    args.prompt,
-                    final_content
-                  ),
-                }),
-              }, {
+              local conversation = require("sia.conversation").Conversation:new({
                 model = config.get_default_model("fast_model"),
-                callback = function(response)
-                  callback({
-                    content = vim.split(response, "\n", { trimempty = true }),
-                    display_content = { string.format("📄 Fetched %s", args.url) },
-                  })
-                end,
+                system = { { role = "system", content = SUB_AGENT_PROMPT } },
+                instructions = {
+                  {
+                    role = "user",
+                    content = string.format(
+                      "%s. Here's the webpage:\n%s",
+                      args.prompt,
+                      final_content
+                    ),
+                  },
+                },
               })
+              require("sia.assistant").fetch_response(conversation, function(response)
+                callback({
+                  content = vim.split(response, "\n", { trimempty = true }),
+                  display_content = { string.format("📄 Fetched %s", args.url) },
+                })
+              end)
             else
               callback({
                 content = vim.split(final_content, "\n", { trimempty = true }),

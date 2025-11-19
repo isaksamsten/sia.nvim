@@ -71,7 +71,6 @@ function M.execute_strategy(strategy)
   if strategy.is_busy then
     return
   end
-  local config = require("sia.config")
 
   strategy.is_busy = true
   local start_time = vim.uv.hrtime()
@@ -269,17 +268,18 @@ function M.execute_strategy(strategy)
   execute_round(true)
 end
 
---- @param messages sia.PreparedMessage[]
---- @param opts {callback:fun(s:string?), model:string|table?}
-function M.execute_query(messages, opts)
+--- @param conversation sia.Conversation
+--- @param callback fun(s:string?)
+function M.fetch_response(conversation, callback)
   local response = ""
 
-  local model = require("sia.model").resolve(opts.model)
+  local model = conversation.model
   local provider = model:get_provider()
 
   local data = {
     model = model:api_name(),
   }
+  local messages = conversation:prepare_messages()
   provider.prepare_messages(data, model:api_name(), messages)
   if provider.prepare_parameters then
     provider.prepare_parameters(data, model)
@@ -299,9 +299,9 @@ function M.execute_query(messages, opts)
         })
 
         if ok and json then
-          opts.callback(provider.process_response(json))
+          callback(provider.process_response(json))
         else
-          opts.callback(nil)
+          callback(nil)
         end
       end
     end,

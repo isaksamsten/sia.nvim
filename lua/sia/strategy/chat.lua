@@ -249,31 +249,33 @@ function ChatStrategy:on_complete(control)
     end
     vim.bo[self.buf].modifiable = false
     if not self.has_generated_name then
-      local Message = require("sia.conversation").Message
-      require("sia.assistant").execute_query({
-        Message:from_table({ role = "system", content = SUMMARIZE_PROMPT }),
-        Message:from_table({
-          role = "user",
-          content = table.concat(
-            vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
-            "\n"
-          ),
-        }),
-      }, {
+      local name_conv = require("sia.conversation").Conversation:new({
         model = require("sia.config").get_default_model("fast_model"),
-        callback = function(resp)
-          if resp then
-            self.conversation.name = resp:lower():gsub("%s+", "-")
-            pcall(
-              vim.api.nvim_buf_set_name,
-              self.buf,
-              "*sia " .. self.conversation.name .. "*"
-            )
-          end
-          self.has_generated_name = true
-          control.finish()
-        end,
+        system = {
+          { role = "system", content = SUMMARIZE_PROMPT },
+        },
+        instructions = {
+          {
+            role = "user",
+            content = table.concat(
+              vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
+              "\n"
+            ),
+          },
+        },
       })
+      require("sia.assistant").fetch_response(name_conv, function(resp)
+        if resp then
+          self.conversation.name = resp:lower():gsub("%s+", "-")
+          pcall(
+            vim.api.nvim_buf_set_name,
+            self.buf,
+            "*sia " .. self.conversation.name .. "*"
+          )
+        end
+        self.has_generated_name = true
+        control.finish()
+      end)
     else
       control.finish()
     end
