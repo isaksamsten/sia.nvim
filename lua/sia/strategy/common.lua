@@ -14,6 +14,8 @@ local M = {}
 --- @field start_col integer
 --- @field line integer
 --- @field column integer
+--- @field temporary_line integer
+--- @field temporary_column integer
 --- @field temporary boolean
 --- @field extra table?
 local StreamRenderer = {}
@@ -35,6 +37,8 @@ function StreamRenderer:new(opts)
     start_line = opts.line or 0,
     start_col = opts.column or 0,
     line = opts.line or 0,
+    temporary_line = opts.line or 0,
+    temporary_column = opts.column or 0,
     column = opts.column or 0,
     temporary = opts.temporary,
   }
@@ -50,7 +54,11 @@ function StreamRenderer:append_substring(substring, temporary)
     if not temporary then
       self.canvas:append_text_at(self.line, self.column, substring)
     else
-      self.canvas:append_temporary_text_at(self.line, self.column, substring)
+      self.canvas:append_temporary_text_at(
+        self.temporary_line,
+        self.temporary_column,
+        substring
+      )
     end
   elseif self.buf then
     vim.api.nvim_buf_set_text(
@@ -62,7 +70,12 @@ function StreamRenderer:append_substring(substring, temporary)
       { substring }
     )
   end
-  self.column = self.column + #substring
+  if temporary then
+    self.temporary_column = self.temporary_column + #substring
+  else
+    self.column = self.column + #substring
+    self.temporary_column = self.column
+  end
 end
 
 --- @param temporary boolean?
@@ -72,13 +85,20 @@ function StreamRenderer:append_newline(temporary)
     if not temporary then
       self.canvas:append_newline_at(self.line)
     else
-      self.canvas:append_temporary_newline_at(self.line)
+      self.canvas:append_temporary_newline_at(self.temporary_line)
     end
   elseif self.buf then
     vim.api.nvim_buf_set_lines(self.buf, self.line + 1, self.line + 1, false, { "" })
   end
-  self.line = self.line + 1
-  self.column = 0
+  if temporary then
+    self.temporary_column = 0
+    self.temporary_line = self.temporary_line + 1
+  else
+    self.line = self.line + 1
+    self.column = 0
+    self.temporary_column = 0
+    self.temporary_line = self.line
+  end
 end
 
 --- @param temporary boolean?

@@ -172,7 +172,6 @@ function ChatStrategy:on_stream_start()
   if not self:buf_is_loaded() then
     return false
   end
-  self.canvas:clear_temporary_text()
   self:set_abort_keymap(self.buf)
   self.writer = StreamRenderer:new({
     canvas = self.canvas,
@@ -243,6 +242,7 @@ function ChatStrategy:on_complete(control)
     end
 
     self:del_abort_keymap(self.buf)
+    self.canvas:clear_temporary_text()
     self.canvas:clear_progress()
     if control.usage then
       self.canvas:update_usage(control.usage, self.assistant_extmark)
