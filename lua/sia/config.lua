@@ -320,6 +320,42 @@ local function validate_model_field(json, field)
   return true
 end
 
+local function validate_models_overrides(models)
+  if not models then
+    return true
+  end
+
+  if type(models) ~= "table" then
+    return false, "'models' must be an object, got " .. type(models)
+  end
+
+  for model_name, overrides in pairs(models) do
+    if type(model_name) ~= "string" then
+      return false, "models keys must be strings (model names)"
+    end
+
+    if not M.options.models[model_name] then
+      return false,
+        string.format(
+          "models.%s: '%s' is not a valid model name",
+          model_name,
+          model_name
+        )
+    end
+
+    if type(overrides) ~= "table" then
+      return false,
+        string.format(
+          "models.%s must be an object with override parameters, got %s",
+          model_name,
+          type(overrides)
+        )
+    end
+  end
+
+  return true
+end
+
 --- Normalize model config to a consistent table format
 --- @param model_value string|table|nil
 --- @return table|nil
@@ -337,12 +373,40 @@ local function normalize_model_config(model_value)
   return nil
 end
 
+--- Get model overrides from local config for a specific model
+--- @param model_name string
+--- @return table|nil parameters override parameters, or nil if no overrides
+function M.get_model_overrides(model_name)
+  local lc = M.get_local_config()
+  if not lc or not lc.models then
+    return nil
+  end
+
+  return lc.models[model_name]
+end
+
+--- Resolve a model config by applying local config overrides
+--- @param model_spec {name: string}
+--- @return table
+function M.resolve_model_config(model_spec)
+  local name = model_spec.name
+  local overrides = M.get_model_overrides(name)
+  if overrides then
+    model_spec = vim.tbl_extend("force", overrides, model_spec)
+  end
+  -- Don't override the model name
+  model_spec.name = name
+
+  return model_spec
+end
+
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
 --- @field auto_continue boolean?
 --- @field model table?
 --- @field fast_model table?
 --- @field plan_model table?
+--- @field models table<string, table>?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
@@ -417,6 +481,7 @@ function M.get_local_config()
   validate(validate_risk, json.risk)
   validate(validate_context, json.context)
   validate(validate_action, json.action)
+  validate(validate_models_overrides, json.models)
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
   validate(validate_model_field, json, "plan_model")
@@ -445,7 +510,7 @@ function M.get_local_config()
 end
 
 --- @param type ("model"|"fast_model"|"plan_model")?
---- @return table? model config with at least {name:string}
+--- @return {name: string}
 function M.get_default_model(type)
   local lc = M.get_local_config() or {}
   type = type or "model"
@@ -454,7 +519,11 @@ function M.get_default_model(type)
     return lc[type]
   end
 
-  return normalize_model_config(M.options.defaults[type])
+  local default_model = normalize_model_config(M.options.defaults[type])
+  if not default_model then
+    error("default model is not set")
+  end
+  return default_model
 end
 
 --- @param model string?
@@ -567,7 +636,7 @@ end
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
 --- @field tools (sia.config.Tool|string)[]?
 --- @field ignore_tool_confirm boolean?
---- @field model string?
+--- @field model (string|{name: string})?
 --- @field temperature number?
 --- @field input sia.config.ActionInput?
 --- @field mode sia.config.ActionMode?

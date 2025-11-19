@@ -43,7 +43,7 @@ function M.resolve(model_config)
     model_config = { name = model_config }
   end
 
-  return Model:new(model_config)
+  return Model:new(config.resolve_model_config(model_config))
 end
 
 --- Get the model name (e.g., "openai/gpt-4.1")
