@@ -158,191 +158,198 @@ one specific change with clear, unique context.
   local matching = require("sia.matcher")
 
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local best_matches = matching.find_best_match(args.old_string, old_content)
-
-  if failed_matches[buf] == nil then
-    failed_matches[buf] = 0
-  end
-
-  if #best_matches.matches == 1 then
-    failed_matches[buf] = 0
-    local match = best_matches.matches[1]
-    local span = match.span
-
-    local edit_description
-    if match.col_span then
-      edit_description = string.format(
-        "Edit line %d (columns %d-%d) in %s",
-        span[1],
-        match.col_span[1],
-        match.col_span[2],
-        args.target_file
-      )
-    else
-      local line_description = span[1] == span[2] and string.format("line %d", span[1])
-        or string.format("lines %d-%d", span[1], span[2])
-      edit_description =
-        string.format("Edit %s in %s", line_description, args.target_file)
+  matching.find_best_match(args.old_string, old_content, function(result)
+    if failed_matches[buf] == nil then
+      failed_matches[buf] = 0
     end
 
-    opts.user_input(edit_description, {
-      preview = function(preview_buf)
-        local unified_diff =
-          vim.split(utils.create_unified_diff(args.old_string, args.new_string, {
-            old_start = span[1],
-            new_start = span[1],
-          }) or "", "\n")
-        if #unified_diff == 0 then
-          return nil
-        end
-        vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, unified_diff)
-        vim.bo[preview_buf].ft = "diff"
-        return #unified_diff
-      end,
-      on_accept = function()
-        local old_span_lines
-        if match.col_span then
-          old_span_lines = { old_content[span[1]] }
-        else
-          old_span_lines = {}
-          for i = span[1], span[2] do
-            table.insert(old_span_lines, old_content[i])
-          end
-        end
-        local new_text_lines
-        if best_matches.strip_line_number then
-          new_text_lines = matching.strip_line_numbers(args.new_string)
-        else
-          new_text_lines = vim.split(args.new_string, "\n")
-        end
+    if #result.matches == 1 then
+      failed_matches[buf] = 0
+      local match = result.matches[1]
+      local span = match.span
 
-        if not is_memory then
-          diff.update_baseline(buf)
-        end
-        tracker.without_tracking(buf, conversation.id, function()
-          if match.col_span then
-            vim.api.nvim_buf_set_text(
-              buf,
-              span[1] - 1,
-              match.col_span[1] - 1,
-              span[1] - 1,
-              match.col_span[2],
-              new_text_lines
-            )
-          else
-            vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_text_lines)
-          end
-          vim.api.nvim_buf_call(buf, function()
-            pcall(vim.cmd, "noa silent write!")
-          end)
-        end)
-        if not is_memory then
-          diff.update_reference(buf)
-        end
-
-        local edit_start = span[1]
-        local edit_end = span[1] + #new_text_lines - 1
-
-        local old_text = table.concat(old_span_lines, "\n")
-        local new_text = table.concat(new_text_lines, "\n")
-        local unified_diff = utils.create_unified_diff(old_text, new_text, {
-          old_start = span[1],
-          new_start = edit_start,
-          ctxlen = 3,
-        })
-
-        local diff_lines = vim.split(unified_diff or "", "\n")
-
-        local success_msg = string.format(
-          "Edited %s%s:",
-          args.target_file,
-          best_matches.fuzzy and " (the match was not perfect)" or ""
+      local edit_description
+      if match.col_span then
+        edit_description = string.format(
+          "Edit line %d (columns %d-%d) in %s",
+          span[1],
+          match.col_span[1],
+          match.col_span[2],
+          args.target_file
         )
-        table.insert(diff_lines, 1, success_msg)
-        local display_description
-        if not is_memory then
-          if match.col_span then
-            display_description = string.format(
-              "✏️ Edited line %d (columns %d-%d) in %s%s",
-              edit_start,
-              match.col_span[1],
-              match.col_span[2],
-              vim.fn.fnamemodify(args.target_file, ":."),
-              best_matches.fuzzy and " - please double-check the changes" or ""
-            )
-          else
-            local edit_span = edit_start ~= edit_end
-                and string.format("lines %d-%d", edit_start, edit_end)
-              or string.format("line %d", edit_start)
-            display_description = string.format(
-              "✏️ Edited %s in %s%s",
-              edit_span,
-              vim.fn.fnamemodify(args.target_file, ":."),
-              best_matches.fuzzy and " - please double-check the changes" or ""
-            )
-          end
-        else
-          local memory_name = utils.format_memory_name(args.target_file)
-          display_description = string.format("🧠 Updated %s", memory_name)
-        end
+      else
+        local line_description = span[1] == span[2]
+            and string.format("line %d", span[1])
+          or string.format("lines %d-%d", span[1], span[2])
+        edit_description =
+          string.format("Edit %s in %s", line_description, args.target_file)
+      end
 
-        local pos = { edit_start, edit_end }
-        callback({
-          content = diff_lines,
-          context = {
-            buf = buf,
-            pos = pos,
-            tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
-            outdated_message = create_outdated_message(
-              args.target_file,
-              edit_start,
-              edit_end
-            ),
-            clear_outdated_tool_input = clear_outdated_tool_input,
-          },
-          kind = "edit",
-          display_content = { display_description },
-        })
-      end,
-    })
-  else
-    failed_matches[buf] = failed_matches[buf] + 1
-    local match_description = #best_matches.matches == 0 and "no matches"
-      or "multiple matches"
-    if failed_matches[buf] >= MAX_FAILED_MATCHES then
-      callback({
-        kind = "failed",
-        content = {
-          string.format(
-            "Edit failed because %s were found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
-            match_description
-          ),
-        },
-        display_content = {
-          string.format(
-            FAILED_TO_EDIT_FILE,
-            vim.fn.fnamemodify(args.target_file, ":.")
-          ),
-        },
+      opts.user_input(edit_description, {
+        preview = function(preview_buf)
+          local unified_diff =
+            vim.split(utils.create_unified_diff(args.old_string, args.new_string, {
+              old_start = span[1],
+              new_start = span[1],
+            }) or "", "\n")
+          if #unified_diff == 0 then
+            return nil
+          end
+          vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, unified_diff)
+          vim.bo[preview_buf].ft = "diff"
+          return #unified_diff
+        end,
+        on_accept = function()
+          local old_span_lines
+          if match.col_span then
+            old_span_lines = { old_content[span[1]] }
+          else
+            old_span_lines = {}
+            for i = span[1], span[2] do
+              table.insert(old_span_lines, old_content[i])
+            end
+          end
+          local new_text_lines
+          if result.strip_line_number then
+            new_text_lines = matching.strip_line_numbers(args.new_string)
+          else
+            new_text_lines = vim.split(args.new_string, "\n")
+          end
+
+          if not is_memory then
+            diff.update_baseline(buf)
+          end
+          tracker.without_tracking(buf, conversation.id, function()
+            if match.col_span then
+              vim.api.nvim_buf_set_text(
+                buf,
+                span[1] - 1,
+                match.col_span[1] - 1,
+                span[1] - 1,
+                match.col_span[2],
+                new_text_lines
+              )
+            else
+              vim.api.nvim_buf_set_lines(
+                buf,
+                span[1] - 1,
+                span[2],
+                false,
+                new_text_lines
+              )
+            end
+            vim.api.nvim_buf_call(buf, function()
+              pcall(vim.cmd, "noa silent write!")
+            end)
+          end)
+          if not is_memory then
+            diff.update_reference(buf)
+          end
+
+          local edit_start = span[1]
+          local edit_end = span[1] + #new_text_lines - 1
+
+          local old_text = table.concat(old_span_lines, "\n")
+          local new_text = table.concat(new_text_lines, "\n")
+          local unified_diff = utils.create_unified_diff(old_text, new_text, {
+            old_start = span[1],
+            new_start = edit_start,
+            ctxlen = 3,
+          })
+
+          local diff_lines = vim.split(unified_diff or "", "\n")
+
+          local success_msg = string.format(
+            "Edited %s%s:",
+            args.target_file,
+            result.fuzzy and " (the match was not perfect)" or ""
+          )
+          table.insert(diff_lines, 1, success_msg)
+          local display_description
+          if not is_memory then
+            if match.col_span then
+              display_description = string.format(
+                "✏️ Edited line %d (columns %d-%d) in %s%s",
+                edit_start,
+                match.col_span[1],
+                match.col_span[2],
+                vim.fn.fnamemodify(args.target_file, ":."),
+                result.fuzzy and " - please double-check the changes" or ""
+              )
+            else
+              local edit_span = edit_start ~= edit_end
+                  and string.format("lines %d-%d", edit_start, edit_end)
+                or string.format("line %d", edit_start)
+              display_description = string.format(
+                "✏️ Edited %s in %s%s",
+                edit_span,
+                vim.fn.fnamemodify(args.target_file, ":."),
+                result.fuzzy and " - please double-check the changes" or ""
+              )
+            end
+          else
+            local memory_name = utils.format_memory_name(args.target_file)
+            display_description = string.format("🧠 Updated %s", memory_name)
+          end
+
+          local pos = { edit_start, edit_end }
+          callback({
+            content = diff_lines,
+            context = {
+              buf = buf,
+              pos = pos,
+              tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
+              outdated_message = create_outdated_message(
+                args.target_file,
+                edit_start,
+                edit_end
+              ),
+              clear_outdated_tool_input = clear_outdated_tool_input,
+            },
+            kind = "edit",
+            display_content = { display_description },
+          })
+        end,
       })
     else
-      callback({
-        kind = "failed",
-        content = {
-          string.format(
-            "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",
-            args.target_file,
-            match_description,
-            best_matches.fuzzy and " with fuzzy matching" or ""
-          ),
-        },
-        display_content = {
-          string.format(
-            FAILED_TO_EDIT_FILE,
-            vim.fn.fnamemodify(args.target_file, ":.")
-          ),
-        },
-      })
+      failed_matches[buf] = failed_matches[buf] + 1
+      local match_description = #result.matches == 0 and "no matches"
+        or "multiple matches"
+      if failed_matches[buf] >= MAX_FAILED_MATCHES then
+        callback({
+          kind = "failed",
+          content = {
+            string.format(
+              "Edit failed because %s were found. Please show the location(s) and the edit you want to make and let the user manually make the change.",
+              match_description
+            ),
+          },
+          display_content = {
+            string.format(
+              FAILED_TO_EDIT_FILE,
+              vim.fn.fnamemodify(args.target_file, ":.")
+            ),
+          },
+        })
+      else
+        callback({
+          kind = "failed",
+          content = {
+            string.format(
+              "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",
+              args.target_file,
+              match_description,
+              result.fuzzy and " with fuzzy matching" or ""
+            ),
+          },
+          display_content = {
+            string.format(
+              FAILED_TO_EDIT_FILE,
+              vim.fn.fnamemodify(args.target_file, ":.")
+            ),
+          },
+        })
+      end
     end
-  end
+  end, 50)
 end)
