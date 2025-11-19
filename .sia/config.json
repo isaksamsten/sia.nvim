@@ -28,12 +28,15 @@
       },
       "read": {
         "arguments": {
-          "path": ["\\.lua$", "README.md$"]
+          "path": ["\\.lua$", "README\\.md$"]
         }
       },
       "fetch": {
         "arguments": {
-          "url": ["^https://github.com/", "^https://raw.githubusercontent.com/"]
+          "url": [
+            "^https://github\\.com/",
+            "^https://raw\\.githubusercontent\\.com/"
+          ]
         }
       }
     }
