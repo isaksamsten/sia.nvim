@@ -12,7 +12,7 @@ function Conversation:new()
   local Model = require("sia.model")
   return setmetatable({
     _messages = { { role = "user", content = { "hi" } } },
-    model = Model.resolve("openai/gpt-4o-mini"),
+    model = Model.resolve("openai/gpt-4.1-mini"),
     tool_fn = {},
   }, self)
 end
