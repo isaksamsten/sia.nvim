@@ -271,7 +271,8 @@ T["sia.matcher"]["strip_line_numbers edge cases"] = function()
 end
 
 T["sia.matcher"]["multiple matches across different lines"] = function()
-  local match = matcher.find_best_match("hello", { "hello world", "goodbye", "hello again" })
+  local match =
+    matcher.find_best_match("hello", { "hello world", "goodbye", "hello again" })
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -349,7 +350,8 @@ T["sia.matcher"]["multiple matches single character"] = function()
 end
 
 T["sia.matcher"]["multiple matches at line boundaries"] = function()
-  local match = matcher.find_best_match("end", { "at the end", "end of start", "middle", "end" })
+  local match =
+    matcher.find_best_match("end", { "at the end", "end of start", "middle", "end" })
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -361,7 +363,8 @@ T["sia.matcher"]["multiple matches at line boundaries"] = function()
 end
 
 T["sia.matcher"]["multiple inline matches only"] = function()
-  local match = matcher.find_best_match("cat", { "catch the cat", "concatenate", "dog" })
+  local match =
+    matcher.find_best_match("cat", { "catch the cat", "concatenate", "dog" })
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -392,12 +395,14 @@ T["sia.matcher"]["inline matches with limit parameter"] = function()
   eq(1, #matches_one)
 
   -- Limit larger than matches available - should find all available
-  local matches_large_limit = matcher.find_inline_matches("test", haystack, { limit = 10 })
+  local matches_large_limit =
+    matcher.find_inline_matches("test", haystack, { limit = 10 })
   eq(3, #matches_large_limit)
 end
 
 T["sia.matcher"]["multiple matches with special characters"] = function()
-  local match = matcher.find_best_match("()", { "function() and ()", "() at start", "no match" })
+  local match =
+    matcher.find_best_match("()", { "function() and ()", "() at start", "no match" })
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -408,6 +413,258 @@ T["sia.matcher"]["multiple matches with special characters"] = function()
   eq(1, match.matches[2].span[1])
   eq(16, match.matches[2].col_span[1])
   eq(17, match.matches[2].col_span[2])
+end
+
+-- Async tests
+T["sia.matcher async"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      T.child = MiniTest.new_child_neovim()
+      T.child.restart({ "-u", "assets/minimal.lua" })
+    end,
+    post_once = function()
+      T.child.stop()
+    end,
+  },
+})
+
+T["sia.matcher async"]["basic inline match"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    matcher.find_best_match("isak", { "hello world isak" }, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(false, result.fuzzy)
+  eq(1, #result.matches)
+  eq(13, result.matches[1].col_span[1])
+  eq(1.0, result.matches[1].score)
+end
+
+T["sia.matcher async"]["multiline exact match"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    local text = "function hello()\n  print('world')\nend"
+    local haystack = { "function hello()", "  print('world')", "end", "other code" }
+
+    matcher.find_best_match(text, haystack, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(1, #result.matches)
+  eq(1, result.matches[1].span[1])
+  eq(3, result.matches[1].span[2])
+  eq(1.0, result.matches[1].score)
+end
+
+T["sia.matcher async"]["large haystack with custom time budget"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    -- Generate a large haystack
+    local haystack = {}
+    for i = 1, 5000 do
+      table.insert(haystack, "line " .. i)
+    end
+    table.insert(haystack, "special target line")
+
+    matcher.find_best_match("special target line", haystack, function(r)
+      _G.result = r
+      completed = true
+    end, 50) -- 50ms time budget
+
+    vim.wait(10000, function() return completed end, 50)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(1, #result.matches)
+  eq(5001, result.matches[1].span[1])
+  eq(1.0, result.matches[1].score)
+end
+
+T["sia.matcher async"]["fuzzy match with indent differences"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    local needle = "function test()\nreturn 42\nend"
+    local haystack = {
+      "other code",
+      "  function test()",
+      "    return 42",
+      "  end",
+      "more code"
+    }
+
+    matcher.find_best_match(needle, haystack, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(true, result.fuzzy)
+  eq(1, #result.matches)
+  eq(2, result.matches[1].span[1])
+  eq(4, result.matches[1].span[2])
+end
+
+T["sia.matcher async"]["no matches found"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    matcher.find_best_match("nonexistent", { "hello", "world" }, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(0, #result.matches)
+end
+
+T["sia.matcher async"]["line number stripping"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    local needle = "  200\tprint('hello')"
+    local haystack = { "  123\tprint('hello')", "  456\tother line" }
+
+    matcher.find_best_match(needle, haystack, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(true, result.strip_line_number)
+  eq(1, #result.matches)
+  eq(1, result.matches[1].span[1])
+end
+
+T["sia.matcher async"]["multiple inline matches"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    matcher.find_best_match("test", { "test this test", "another line" }, function(r)
+      _G.result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local result = T.child.lua_get("_G.result")
+
+  eq(true, completed)
+  eq(2, #result.matches)
+  eq(1, result.matches[1].col_span[1])
+  eq(11, result.matches[2].col_span[1])
+end
+
+T["sia.matcher async"]["results match sync version"] = function()
+  local code = [[
+    local matcher = require("sia.matcher")
+    local completed = false
+
+    local needle = "function test()\n  return 42\nend"
+    local haystack = {
+      "other code",
+      "function test()",
+      "  return 42",
+      "end",
+      "more code"
+    }
+
+    -- Get sync result
+    local sync_result = matcher.find_best_match(needle, haystack)
+
+    -- Get async result
+    matcher.find_best_match(needle, haystack, function(r)
+      _G.async_result = r
+      completed = true
+    end)
+
+    vim.wait(1000, function() return completed end, 10)
+    _G.completed = completed
+    _G.sync_result = sync_result
+  ]]
+
+  T.child.lua(code)
+  local completed = T.child.lua_get("_G.completed")
+  local async_result = T.child.lua_get("_G.async_result")
+  local sync_result = T.child.lua_get("_G.sync_result")
+
+  eq(true, completed)
+  eq(sync_result.fuzzy, async_result.fuzzy)
+  eq(#sync_result.matches, #async_result.matches)
+
+  if #async_result.matches > 0 then
+    eq(sync_result.matches[1].span[1], async_result.matches[1].span[1])
+    eq(sync_result.matches[1].span[2], async_result.matches[1].span[2])
+    -- Check scores are close (within 0.001)
+    eq(
+      true,
+      math.abs(async_result.matches[1].score - sync_result.matches[1].score) < 0.001
+    )
+  end
 end
 
 return T
