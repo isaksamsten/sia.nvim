@@ -279,6 +279,12 @@ local M = {
     end,
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
+
+      local response_format = model:get_param("response_format")
+      if response_format then
+        data.response_format = response_format
+      end
+
       if data.stream then
         data.stream_options = { include_usage = true }
       end
@@ -444,6 +450,26 @@ local M = {
     end,
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
+
+      local response_format = model:get_param("response_format")
+      if response_format then
+        data.text = data.text or {}
+        if
+          response_format.type == "json_schema"
+          and type(response_format.json_schema) == "table"
+        then
+          local js = response_format.json_schema
+          data.text.format = {
+            type = "json_schema",
+            name = js.name,
+            schema = js.schema,
+            strict = js.strict,
+          }
+        else
+          data.text.format = response_format
+        end
+      end
+
       if data.reasoning_effort then
         data.reasoning = { effort = data.reasoning_effort }
         data.reasoning_effort = nil
