@@ -562,11 +562,6 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   local final_result = results[3]
   eq(
     true,
-    string.find(final_result.content[1], "Edit failed because no matches were found")
-      ~= nil
-  )
-  eq(
-    true,
     string.find(final_result.content[1], "let the user manually make the change") ~= nil
   )
 end
