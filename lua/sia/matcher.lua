@@ -621,12 +621,17 @@ function M.strip_line_numbers(text)
   return stripped_lines, had_line_numbers
 end
 
+--- @class sia.matcher.Result
+--- @field matches sia.matcher.Match[]
+--- @field fuzzy boolean
+--- @field strip_line_number boolean
+
 --- Find best match with automatic line number stripping fallback
 --- @param needle string The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
---- @param callback fun(result: {matches: sia.matcher.Match[], fuzzy: boolean, strip_line_number: boolean})? Optional callback for async processing
+--- @param callback fun(result: sia.matcher.Result)? Optional callback for async processing
 --- @param time_budget_ms number? Time budget per batch in milliseconds (default: 200)
---- @return {matches: sia.matcher.Match[], fuzzy: boolean, strip_line_number: boolean}? Returns nil if callback provided (async mode)
+--- @return sia.matcher.Result? Returns nil if callback provided (async mode)
 function M.find_best_match(needle, haystack, callback, time_budget_ms)
   if not callback then
     local matches, fuzzy = _find_best_match(needle, haystack)
@@ -646,8 +651,12 @@ function M.find_best_match(needle, haystack, callback, time_budget_ms)
     if #matches == 0 then
       local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
       if had_line_numbers then
-        _find_best_match(stripped_needle, haystack, function(matches2, fuzzy2)
-          callback({ matches = matches2, fuzzy = true, strip_line_number = true })
+        _find_best_match(stripped_needle, haystack, function(stripped_matches, _)
+          callback({
+            matches = stripped_matches,
+            fuzzy = true,
+            strip_line_number = true,
+          })
         end, time_budget_ms)
         return
       end
