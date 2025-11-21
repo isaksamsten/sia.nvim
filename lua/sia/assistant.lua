@@ -13,7 +13,7 @@ local ERROR_API_KEY_MISSING = -100
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
 --- @field on_exit (fun( _: any, code:number, _:any?):nil)
 --- @field base_url string
---- @field endpoint string
+--- @field chat_endpoint string
 --- @field extra_args string[]?
 --- @field stream boolean?
 
@@ -35,7 +35,7 @@ local function call_provider(data, opts)
   end
 
   table.insert(args, "--url")
-  table.insert(args, opts.base_url .. opts.endpoint)
+  table.insert(args, opts.base_url .. opts.chat_endpoint)
   table.insert(args, "--data-binary")
 
   local tmpfile = vim.fn.tempname()
@@ -119,7 +119,7 @@ function M.execute_strategy(strategy)
     local stream = provider.new_stream(strategy)
     local job = call_provider(data, {
       base_url = provider.base_url,
-      endpoint = provider.endpoint,
+      chat_endpoint = provider.chat_endpoint,
       extra_args = extra_args,
       on_stdout = function(job_id, responses, _)
         if first_on_stdout then
@@ -288,7 +288,7 @@ function M.fetch_response(conversation, callback)
   end
   call_provider(data, {
     base_url = provider.base_url,
-    endpoint = provider.endpoint,
+    chat_endpoint = provider.chat_endpoint,
     extra_args = provider.get_headers(provider.api_key(), messages),
     on_stdout = function(_, resp, _)
       if data ~= nil then

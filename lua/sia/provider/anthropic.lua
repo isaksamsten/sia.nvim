@@ -89,7 +89,7 @@ end
 --- @type sia.config.Provider
 return {
   base_url = "https://api.anthropic.com/",
-  endpoint = "v1/messages",
+  chat_endpoint = "v1/messages",
   api_key = function()
     return os.getenv("ANTHROPIC_API_KEY")
   end,

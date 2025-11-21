@@ -244,7 +244,8 @@ local M = {
   --- @type sia.config.Provider
   completion = {
     base_url = "https://api.openai.com/",
-    endpoint = "v1/chat/completions",
+    chat_endpoint = "v1/chat/completions",
+    embedding_endpoint = "v1/embeddings",
     api_key = function()
       return os.getenv("OPENAI_API_KEY")
     end,
