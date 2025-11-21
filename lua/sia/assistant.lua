@@ -312,4 +312,39 @@ function M.fetch_response(conversation, callback)
   })
 end
 
+--- @param strings string[]
+--- @param model sia.Model
+--- @param callback fun(embeddings:number[][]?)
+function M.fetch_embedding(strings, model, callback)
+  local response = ""
+  local provider = model:get_provider()
+  local data = {
+    model = model:api_name(),
+  }
+  provider.prepare_embedding(data, strings, model)
+  call_provider(data, {
+    base_url = provider.base_url,
+    chat_endpoint = provider.embedding_endpoint,
+    extra_args = provider.get_headers(provider.api_key()),
+    on_stdout = function(_, resp, _)
+      if data ~= nil then
+        response = response .. table.concat(resp, " ")
+      end
+    end,
+    on_exit = function()
+      if response ~= "" then
+        local ok, json = pcall(vim.json.decode, response, {
+          luanil = { object = true },
+        })
+
+        if ok and json then
+          callback(provider.process_embeddings(json))
+        else
+          callback(nil)
+        end
+      end
+    end,
+  })
+end
+
 return M

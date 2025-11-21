@@ -526,17 +526,6 @@ function M.get_default_model(type)
   return default_model
 end
 
---- @param model string?
---- @return sia.config.Provider
-function M.get_provider(model)
-  local model_spec = M.options.models[model or M.get_default_model()]
-  local provider = M.options.providers[model_spec[1]]
-  if not provider then
-    provider = require("sia.provider.defaults")[model_spec[1]]
-  end
-  return provider
-end
-
 --- @return boolean
 function M.get_auto_continue()
   local lc = M.get_local_config() or {}
@@ -670,22 +659,27 @@ end
 --- @field ui sia.config.Defaults.Ui?
 
 --- @alias sia.config.Models table<string, [string, string]>
+--- @alias sia.config.Embeddings table<string, [string, string]>
 
 --- @class sia.config.Provider
 --- @field base_url string
---- @field endpoint string
+--- @field chat_endpoint string
+--- @field embedding_endpoint string?
 --- @field api_key fun():string?
 --- @field process_usage (fun(obj:table):sia.Usage?)?
 --- @field process_response fun(json:table):string?
+--- @field process_embeddings (fun(json:table):number[][])?
 --- @field prepare_messages fun(data: table, model:string, prompt:sia.PreparedMessage[])
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
 --- @field prepare_parameters fun(data: table, model: table)?
---- @field get_headers (fun(api_key:string?, messages:sia.PreparedMessage[]):string[])?
+--- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
+--- @field get_headers (fun(api_key:string?, messages:sia.PreparedMessage[]?):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 --- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
 
 --- @class sia.config.Options
 --- @field models sia.config.Models
+--- @field embeddings sia.config.Embeddings?
 --- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
@@ -808,6 +802,10 @@ M.options = {
       "qwen/qwen3-next-80b-a3b-instruct",
       pricing = { input = 0.10, output = 1.10 },
     },
+  },
+  embeddings = {
+    ["openai/text-embedding-3-small"] = { "openai", "text-embedding-3-small" },
+    ["openai/text-embedding-3-large"] = { "openai", "text-embedding-3-large" },
   },
   instructions = {},
   --- @type sia.config.Defaults

@@ -18,7 +18,10 @@ function Model:new(model_config)
 
   local model_spec = config.options.models[model_config.name]
   if not model_spec then
-    error(string.format("Unknown model: %s", model_config.name))
+    model_spec = config.options.embeddings[model_config.name]
+    if not model_spec then
+      error(string.format("Unknown model: %s", model_config.name))
+    end
   end
 
   local obj = setmetatable({}, self)

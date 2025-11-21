@@ -348,11 +348,24 @@ local M = {
     end,
     new_stream = OpenAICompletionStream.new,
     get_stats = get_stats,
+    prepare_embedding = function(data, strings, model)
+      data.encoding_format = "float"
+      data.input = strings
+    end,
+    process_embeddings = function(json)
+      if json.data then
+        local embeddings = {}
+        for _, datum in ipairs(json.data) do
+          embeddings[datum.index + 1] = datum.embedding
+        end
+        return embeddings
+      end
+    end,
   },
 
   responses = {
     base_url = "https://api.openai.com/",
-    endpoint = "v1/responses",
+    chat_endpoint = "v1/responses",
     api_key = function()
       return os.getenv("OPENAI_API_KEY")
     end,
@@ -520,11 +533,11 @@ local M = {
 --- @param base_url string
 --- @param opts sia.openai.CompatibleOpts
 --- @return sia.config.Provider
-function M.completion_compatible(base_url, endpoint, opts)
+function M.completion_compatible(base_url, chat_endpoint, opts)
   --- @type sia.config.Provider
   return {
     base_url = base_url,
-    endpoint = endpoint,
+    chat_endpoint = chat_endpoint,
     api_key = opts.api_key,
     prepare_parameters = function(data, model)
       M.completion.prepare_parameters(data, model)
@@ -562,11 +575,11 @@ function M.completion_compatible(base_url, endpoint, opts)
 end
 
 --- @return sia.config.Provider
-function M.responses_compatible(base_url, endpoint, opts)
+function M.responses_compatible(base_url, chat_endpoint, opts)
   --- @type sia.config.Provider
   return {
     base_url = base_url,
-    endpoint = endpoint,
+    chat_endpoint = chat_endpoint,
     api_key = opts.api_key,
     prepare_parameters = function(data, model)
       M.responses.prepare_parameters(data, model)
