@@ -88,7 +88,8 @@ end
 
 --- @type sia.config.Provider
 return {
-  base_url = "https://api.anthropic.com/v1/messages",
+  base_url = "https://api.anthropic.com/",
+  endpoint = "v1/messages",
   api_key = function()
     return os.getenv("ANTHROPIC_API_KEY")
   end,

@@ -213,14 +213,14 @@ local function get_stats(callback, conversation)
 end
 
 local completion =
-  openai.completion_compatible("https://api.githubcopilot.com/chat/completions", {
+  openai.completion_compatible("https://api.githubcopilot.com/", "chat/completions", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
   })
 completion.get_stats = get_stats
 
 local responses =
-  openai.responses_compatible("https://api.githubcopilot.com/responses", {
+  openai.responses_compatible("https://api.githubcopilot.com/", "responses", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
   })

@@ -243,7 +243,8 @@ end
 local M = {
   --- @type sia.config.Provider
   completion = {
-    base_url = "https://api.openai.com/v1/chat/completions",
+    base_url = "https://api.openai.com/",
+    endpoint = "v1/chat/completions",
     api_key = function()
       return os.getenv("OPENAI_API_KEY")
     end,
@@ -349,7 +350,8 @@ local M = {
   },
 
   responses = {
-    base_url = "https://api.openai.com/v1/responses",
+    base_url = "https://api.openai.com/",
+    endpoint = "v1/responses",
     api_key = function()
       return os.getenv("OPENAI_API_KEY")
     end,
@@ -517,10 +519,11 @@ local M = {
 --- @param base_url string
 --- @param opts sia.openai.CompatibleOpts
 --- @return sia.config.Provider
-function M.completion_compatible(base_url, opts)
+function M.completion_compatible(base_url, endpoint, opts)
   --- @type sia.config.Provider
   return {
     base_url = base_url,
+    endpoint = endpoint,
     api_key = opts.api_key,
     prepare_parameters = function(data, model)
       M.completion.prepare_parameters(data, model)
@@ -558,10 +561,11 @@ function M.completion_compatible(base_url, opts)
 end
 
 --- @return sia.config.Provider
-function M.responses_compatible(base_url, opts)
+function M.responses_compatible(base_url, endpoint, opts)
   --- @type sia.config.Provider
   return {
     base_url = base_url,
+    endpoint = endpoint,
     api_key = opts.api_key,
     prepare_parameters = function(data, model)
       M.responses.prepare_parameters(data, model)

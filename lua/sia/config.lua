@@ -673,6 +673,7 @@ end
 
 --- @class sia.config.Provider
 --- @field base_url string
+--- @field endpoint string
 --- @field api_key fun():string?
 --- @field process_usage (fun(obj:table):sia.Usage?)?
 --- @field process_response fun(json:table):string?
