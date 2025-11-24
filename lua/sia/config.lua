@@ -858,6 +858,7 @@ M.options = {
     tools = {
       enable = true,
       choices = {
+        history = require("sia.tools").history,
         locations = require("sia.tools").locations,
         read = require("sia.tools").read,
         edit = require("sia.tools").edit,
@@ -927,6 +928,7 @@ M.options = {
         tools = {
           "grep",
           "workspace",
+          "history",
           "locations",
           "edit",
           "write",

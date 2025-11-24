@@ -17,4 +17,5 @@ return {
   websearch = require("sia.tools.websearch"),
   read_todos = require("sia.tools.read_todos"),
   write_todos = require("sia.tools.write_todos"),
+  history = require("sia.tools.history"),
 }
