@@ -358,7 +358,7 @@ end
 
 --- Normalize model config to a consistent table format
 --- @param model_value string|table|nil
---- @return table|nil
+--- @return {name:string}?
 local function normalize_model_config(model_value)
   if model_value == nil then
     return nil
@@ -647,6 +647,7 @@ end
 --- @field model string
 --- @field fast_model string
 --- @field plan_model string
+--- @field embedding_model string?
 --- @field temperature number
 --- @field context sia.config.Context?
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
@@ -813,6 +814,7 @@ M.options = {
     model = "openai/gpt-4.1",
     fast_model = "openai/gpt-4.1-mini",
     plan_model = "openai/o3-mini",
+    embedding_model = "openai/text-embedding-3-small",
     temperature = 0.3, -- default temperature
     context = {
       max_tool = 40,
