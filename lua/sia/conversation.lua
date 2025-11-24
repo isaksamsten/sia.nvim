@@ -1,6 +1,16 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
 
+math.randomseed(os.time())
+
+local function make_uuid()
+  local uuid_template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+  return string.gsub(uuid_template, "[xy]", function(c)
+    local v = (c == "x") and math.random(0, 0xf) or math.random(8, 0xb)
+    return string.format("%x", v)
+  end)
+end
+
 --- @class sia.PreparedMessage
 --- @field role string
 --- @field content (string|sia.InstructionContent[])?
@@ -385,6 +395,7 @@ local CONVERSATION_ID = 1
 
 --- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
+--- @field uuid string
 --- @field id integer Session unique identifier for a conversation
 --- @field context sia.Context?
 --- @field messages sia.Message[]
@@ -431,6 +442,7 @@ function Conversation:new(action, context)
   obj.enable_supersede = true
   obj.id = CONVERSATION_ID
   CONVERSATION_ID = CONVERSATION_ID + 1
+  obj.uuid = make_uuid()
 
   obj.messages = {}
   obj.ignore_tool_confirm = action.ignore_tool_confirm
