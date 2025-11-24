@@ -108,7 +108,6 @@ function M.find_similar(query, targets, opts, callback)
     end
   end
 
-  local get_magnitude = make_get_magnitude(targets)
   local query_mag = magnitude(query)
   if query_mag == 0 then
     local result = {}
@@ -121,12 +120,12 @@ function M.find_similar(query, targets, opts, callback)
   end
 
   local function compute_similarity(target_idx)
-    local target_mag = get_magnitude(target_idx)
+    local target = targets[target_idx]
+    local target_mag = magnitude(target)
     if target_mag == 0 then
       return 0
     end
 
-    local target = targets[target_idx]
     local dot = dot_product(query, target)
     return dot / (query_mag * target_mag)
   end
@@ -156,11 +155,11 @@ function M.find_similar(query, targets, opts, callback)
   }
 
   local function process_batch()
-    local start_time = vim.loop.hrtime()
+    local start_time = vim.uv.hrtime()
     local time_budget_ns = time_budget_ms * 1000000
 
     local should_yield = function()
-      local elapsed_ns = vim.loop.hrtime() - start_time
+      local elapsed_ns = vim.uv.hrtime() - start_time
       return elapsed_ns >= time_budget_ns
     end
 
@@ -260,11 +259,11 @@ function M.similarity_matrix(embeddings, opts, callback)
   end
 
   local function process_batch()
-    local start_time = vim.loop.hrtime()
+    local start_time = vim.uv.hrtime()
     local time_budget_ns = time_budget_ms * 1000000
 
     local should_yield = function()
-      local elapsed_ns = vim.loop.hrtime() - start_time
+      local elapsed_ns = vim.uv.hrtime() - start_time
       return elapsed_ns >= time_budget_ns
     end
 
