@@ -294,6 +294,8 @@ interact with your codebase and development environment:
   (glob, grep, read) for complex search tasks
 - **compact_conversation** - Intelligently summarize and compact conversation
   history when topics change
+- **history** - Access and search saved conversation history (see [Conversation
+  History](#conversation-history) below)
 
 ### Task Management
 
@@ -792,6 +794,53 @@ time, and Sia will respect your changes. This is useful if you want to:
 Todos help Sia stay focused on your goals and make it easier to resume work
 after interruptions or context switches.
 
+### Conversation History
+
+Sia can save and retrieve conversation history, allowing the AI assistant to
+learn from past interactions and build on previous work.
+
+**Saving conversations:**
+
+Use `:SiaSave` in any chat window to save the current conversation to
+`.sia/history/`. The conversation is saved as a structured JSON file that
+includes:
+
+- User and assistant messages from the conversation
+- Conversation metadata (name, creation date, model used)
+- Automatically generated table of contents with topic summaries
+- Optional semantic embeddings for intelligent search (requires `embedding_model` configuration)
+
+**Accessing saved conversations:**
+
+The AI assistant can use the `history` tool to access past conversations in three ways:
+
+1. **Browse all conversations** - View a table of contents for all saved conversations with topics and date ranges
+2. **View specific messages** - Retrieve exact messages by index from a particular conversation
+3. **Semantic search** - Search across all conversations using natural language queries (requires embeddings)
+
+**Configuration:**
+
+To enable semantic search across conversation history, configure an embedding model:
+
+```lua
+require("sia").setup({
+  defaults = {
+    embedding_model = "openai/text-embedding-3-small",
+  }
+})
+```
+
+**Use cases:**
+
+- **Learn from past solutions**: "Find how we implemented authentication in previously"
+- **Resume old work**: "What did we discuss about the database migration?"
+- **Reference decisions**: "Search for conversations about API design choices"
+- **Build on previous knowledge**: The assistant can reference past successful approaches
+
+**Note:** Add `.sia/history/` to your `.gitignore` if you don't want to commit
+conversation history, or commit it if you want to share knowledge with your
+team.
+
 ### Concurrent Conversations
 
 Sia supports running multiple conversations simultaneously, each maintaining
@@ -974,6 +1023,7 @@ seamlessly into your conversation.
 
 **Conversation Management:**
 
+- `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
 - `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
 - `SiaCompact` - Compact the current conversation history
