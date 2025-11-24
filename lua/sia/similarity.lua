@@ -90,18 +90,18 @@ end
 ---
 --- @param query number[] The query embedding vector
 --- @param targets number[][] List of target embedding vectors to compare against
---- @param opts {top_k: integer?, time_budget_ms: integer?}? Options
---- @param callback fun(results: sia.similarity.Result[])? Callback for async mode
+--- @param opts {top_k: integer?, threshold: number?, time_budget_ms: integer?, callback: fun(results: sia.similarity.Result[])?}? Options
 --- @return sia.similarity.Result[]? results Returns nil in async mode
-function M.find_similar(query, targets, opts, callback)
+function M.find_similar(query, targets, opts)
   opts = opts or {}
   local top_k = opts.top_k or 10
+  local threshold = opts.threshold
   local time_budget_ms = opts.time_budget_ms or 50
 
   if #query == 0 or #targets == 0 then
     local result = {}
-    if callback then
-      callback(result)
+    if opts.callback then
+      opts.callback(result)
       return nil
     else
       return result
@@ -111,8 +111,8 @@ function M.find_similar(query, targets, opts, callback)
   local query_mag = magnitude(query)
   if query_mag == 0 then
     local result = {}
-    if callback then
-      callback(result)
+    if opts.callback then
+      opts.callback(result)
       return nil
     else
       return result
@@ -130,11 +130,13 @@ function M.find_similar(query, targets, opts, callback)
     return dot / (query_mag * target_mag)
   end
 
-  if not callback then
+  if not opts.callback then
     local results = {}
     for i = 1, #targets do
       local score = compute_similarity(i)
-      table.insert(results, { index = i, score = score })
+      if not threshold or score >= threshold then
+        table.insert(results, { index = i, score = score })
+      end
     end
 
     table.sort(results, function(a, b)
@@ -165,7 +167,9 @@ function M.find_similar(query, targets, opts, callback)
 
     while state.i <= #targets do
       local score = compute_similarity(state.i)
-      table.insert(state.results, { index = state.i, score = score })
+      if not threshold or score >= threshold then
+        table.insert(state.results, { index = state.i, score = score })
+      end
 
       state.i = state.i + 1
 
@@ -184,7 +188,7 @@ function M.find_similar(query, targets, opts, callback)
         table.insert(top_results, state.results[i])
       end
 
-      callback(top_results)
+      opts.callback(top_results)
     else
       vim.schedule(process_batch)
     end
