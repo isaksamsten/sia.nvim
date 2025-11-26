@@ -156,7 +156,10 @@ function ChatStrategy:on_round_start()
   if not self:buf_is_loaded() then
     return false
   end
-  self.canvas:update_progress({ { "Analyzing your request...", "NonText" } })
+  self.canvas:update_assistant_extmark(
+    self.assistant_extmark,
+    { status_text = "Analyzing...", model = self.conversation.model:name() }
+  )
 end
 
 function ChatStrategy:on_error()
@@ -190,7 +193,15 @@ function ChatStrategy:on_content(input)
     self.writer:append(input.content)
   end
   if input.reasoning then
-    self.writer:append(input.reasoning.content, true)
+    local content = input.reasoning.content
+    local first_line = content:match("^([^\n]*)")
+    local header = first_line and first_line:match("^%*%*(.*)%*%*$")
+
+    if header then
+      self.canvas:update_progress({ { header, "NonText" } })
+    else
+      self.writer:append(content, true)
+    end
   end
   if input.tool_calls then
     self.pending_tools = input.tool_calls
@@ -202,7 +213,12 @@ function ChatStrategy:on_tools()
   if not self:buf_is_loaded() then
     return false
   end
-  self.canvas:update_progress({ { "Preparing to use tools...", "NonText" } })
+  if self.assistant_extmark then
+    self.canvas:update_assistant_extmark(
+      self.assistant_extmark,
+      { status_text = "Calling tools...", model = self.conversation.model:name() }
+    )
+  end
   return true
 end
 
@@ -245,7 +261,10 @@ function ChatStrategy:on_complete(control)
     self.canvas:clear_temporary_text()
     self.canvas:clear_progress()
     if control.usage then
-      self.canvas:update_usage(control.usage, self.assistant_extmark)
+      self.canvas:update_assistant_extmark(
+        self.assistant_extmark,
+        { usage = control.usage, model = self.conversation.model:name() }
+      )
     end
     vim.bo[self.buf].modifiable = false
     if not self.has_generated_name then
@@ -296,15 +315,15 @@ function ChatStrategy:on_complete(control)
   self:execute_tools({
     cancellable = self.cancellable,
     handle_status_updates = function(statuses)
-      local lines = {}
-      for _, s in ipairs(statuses) do
-        local icon = STATUS_ICONS[s.status] or ""
-        local friendly_message = s.tool.message
-        local label = friendly_message or (s.tool.name or "tool")
-        local hl = STATUS_HL[s.status] or "NonText"
-        table.insert(lines, { { icon, hl }, { label, "NonText" } })
-      end
-      self.canvas:update_tool_progress(lines)
+      -- local lines = {}
+      -- for _, s in ipairs(statuses) do
+      --   local icon = STATUS_ICONS[s.status] or ""
+      --   local friendly_message = s.tool.message
+      --   local label = friendly_message or (s.tool.name or "tool")
+      --   local hl = STATUS_HL[s.status] or "NonText"
+      --   table.insert(lines, { { icon, hl }, { label, "NonText" } })
+      -- end
+      -- self.canvas:update_tool_progress(lines)
     end,
     handle_tools_completion = function(opts)
       if opts.results then

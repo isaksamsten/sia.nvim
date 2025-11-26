@@ -87,12 +87,13 @@ function Canvas:scroll_to_bottom()
   end
 end
 
---- @param usage sia.Usage
 --- @param extmark_id integer
-function Canvas:update_usage(usage, extmark_id)
+--- @param opts {model: string?, usage: sia.Usage?, status_text: string?},
+function Canvas:update_assistant_extmark(extmark_id, opts)
   if extmark_id == nil then
     return
   end
+  opts = opts or {}
 
   local extmark_details = vim.api.nvim_buf_get_extmark_by_id(
     self.buf,
@@ -105,44 +106,48 @@ function Canvas:update_usage(usage, extmark_id)
   end
 
   local line = extmark_details[1]
-  local details = extmark_details[3]
-  if not details then
-    return nil
-  end
+  local virt_text = {}
 
-  if not details.virt_text then
-    return
-  end
+  local usage = opts.usage
+  if usage then
+    local usage_text = {}
 
-  local usage_text = {}
-
-  if usage.input and usage.input > 0 then
-    table.insert(usage_text, {
-      "  " .. usage.input + (usage.cache_read or 0) + (usage.cache_write or 0),
-      "SiaUsage",
-    })
-  end
-
-  if usage.output and usage.output > 0 then
-    table.insert(usage_text, { "  " .. usage.output, "SiaUsage" })
-  end
-
-  if usage.total then
-    table.insert(usage_text, { "  " .. usage.total, "SiaUsage" })
-  end
-
-  if usage.total_time then
-    table.insert(
-      usage_text,
-      { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" }
-    )
-  end
-
-  if #usage_text > 0 then
-    usage_text[#usage_text][1] = usage_text[#usage_text][1] .. "  "
-    for i = #usage_text, 1, -1 do
-      table.insert(details.virt_text, 1, usage_text[i])
+    if usage.input and usage.input > 0 then
+      table.insert(usage_text, {
+        "  " .. usage.input + (usage.cache_read or 0) + (usage.cache_write or 0),
+        "SiaUsage",
+      })
     end
+
+    if usage.output and usage.output > 0 then
+      table.insert(usage_text, { "  " .. usage.output, "SiaUsage" })
+    end
+
+    if usage.total then
+      table.insert(usage_text, { "  " .. usage.total, "SiaUsage" })
+    end
+
+    if usage.total_time then
+      table.insert(
+        usage_text,
+        { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" }
+      )
+    end
+
+    if #usage_text > 0 then
+      usage_text[#usage_text][1] = usage_text[#usage_text][1] .. "  "
+      for _, text in ipairs(usage_text) do
+        table.insert(virt_text, text)
+      end
+    end
+  end
+
+  if opts.status_text then
+    table.insert(virt_text, { "  " .. opts.status_text .. "  ", "NonText" })
+  end
+
+  if opts.model then
+    table.insert(virt_text, { opts.model, "SiaModel" })
   end
 
   vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
@@ -151,7 +156,7 @@ function Canvas:update_usage(usage, extmark_id)
     hl_eol = true,
     hl_group = "SiaAssistant",
     hl_mode = "combine",
-    virt_text = details.virt_text,
+    virt_text = virt_text,
     virt_text_pos = "right_align",
   })
 end
