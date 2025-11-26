@@ -52,6 +52,8 @@ local get_stats = common.create_cost_stats(PRICING, { read = 0.1 })
 
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
+--- @field reasoning_opaque string?
+--- @field reasoning_text string?
 --- @field content string
 local OpenAICompletionStream = {}
 OpenAICompletionStream.__index = OpenAICompletionStream
@@ -71,7 +73,9 @@ function OpenAICompletionStream:process_stream_chunk(obj)
     for _, choice in ipairs(obj.choices) do
       local delta = choice.delta
       if delta then
-        local reasoning = delta.reasoning or delta.reasoning_content
+        local reasoning = delta.reasoning
+          or delta.reasoning_content
+          or delta.reasoning_text
         if reasoning and reasoning ~= "" then
           if not self:on_content({ reasoning = { content = reasoning } }) then
             return true
@@ -82,6 +86,13 @@ function OpenAICompletionStream:process_stream_chunk(obj)
             return true
           end
           self.content = self.content .. delta.content
+        end
+        -- Used by the gemini-3-pro model
+        if delta.reasoning_opaque then
+          self.reasoning_opaque = delta.reasoning_opaque
+        end
+        if delta.reasoning_text then
+          self.reasoning_text = delta.reasoning_text
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
           if not self.strategy:on_tools() then
@@ -124,15 +135,27 @@ function OpenAICompletionStream:finalize()
     return nil
   end
 
+  local content
   if self.content == "" then
-    return nil
+    content = nil
+  else
+    content = vim.split(self.content, "\n")
   end
+  self.strategy.conversation:add_instruction(
+    {
+      role = "assistant",
+      content = content,
+    },
+    nil,
+    {
+      meta = {
+        empty_content = true,
+        reasoning_opaque = self.reasoning_opaque,
+        reasoning_text = self.reasoning_text,
+      },
+    }
+  )
 
-  local content = vim.split(self.content, "\n")
-  self.strategy.conversation:add_instruction({
-    role = "assistant",
-    content = content,
-  })
   return content
 end
 
@@ -323,9 +346,9 @@ local M = {
         end
         return id
       end
-      data.messages = vim
+      local new_messages = vim
         .iter(messages)
-        --- @param m sia.Message
+        --- @param m sia.PreparedMessage
         :map(function(m)
           local message = { role = m.role, content = m.content }
           if m._tool_call then
@@ -341,10 +364,34 @@ local M = {
               })
             end
           end
+          if m.meta.reasoning_opaque then
+            message.reasoning_opaque = m.meta.reasoning_opaque
+          end
+          if m.meta.reasoning_text then
+            message.reasoning_text = m.meta.reasoning_text
+          end
 
           return message
         end)
         :totable()
+
+      data.messages = {}
+      local i = 1
+      while i <= #new_messages do
+        local current = new_messages[i]
+        local next = i < #new_messages and new_messages[i + 1] or nil
+        if
+          next
+          and next.role == current.role
+          and next.tool_calls
+          and not next.content
+        then
+          current.tool_calls = next.tool_calls
+          i = i + 1
+        end
+        i = i + 1
+        table.insert(data.messages, current)
+      end
     end,
     new_stream = OpenAICompletionStream.new,
     get_stats = get_stats,

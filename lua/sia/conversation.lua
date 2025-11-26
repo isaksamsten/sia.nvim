@@ -303,7 +303,7 @@ local function get_message_content(message)
 end
 
 function Message:has_content()
-  return self.content ~= nil or self.tool_calls ~= nil
+  return self.content ~= nil or self.tool_calls ~= nil or self.meta.empty_content
 end
 
 --- @param conversation sia.Conversation
@@ -778,11 +778,6 @@ function Conversation:prepare_messages()
         m.status = "outdated"
       end
       return prepare_message(self, m)
-    end)
-    --- @param p sia.PreparedMessage
-    --- @return boolean?
-    :filter(function(p)
-      return (p.content and p.content ~= "") or (p.tool_calls and #p.tool_calls > 0)
     end)
     :totable()
 
