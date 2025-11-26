@@ -169,9 +169,10 @@ vim.api.nvim_create_user_command("SiaDebug", function()
     return
   end
 
-  local provider = require("sia.provider.openai").completion
-  local data = {}
-  provider.prepare_messages(data, "", result)
+  local provider = chat.conversation.model:get_provider()
+  local data = { model = chat.conversation.model:api_name() }
+  provider.prepare_parameters(data, chat.conversation.model)
+  provider.prepare_messages(data, chat.conversation.model:api_name(), result)
   provider.prepare_tools(data, chat.conversation.tools)
   local json_str = vim.json.encode(data)
   local pretty = json_str
@@ -542,7 +543,6 @@ vim.api.nvim_create_user_command("SiaSave", function()
   if embedding_model_name then
     embedding_model = require("sia.model").resolve(embedding_model_name)
   end
-  print(embedding_model:name())
   local history = require("sia.history")
   local utils = require("sia.utils")
 
