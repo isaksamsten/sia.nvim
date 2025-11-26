@@ -531,9 +531,13 @@ specific project:
 
 #### Available Local Configuration Options
 
-- **Model Selection**: Override default models for this project. Models can be specified as:
-  - String: `"openai/gpt-4.1"` (uses default settings from setup)
+- **`model`**: Override the default model for this project. Can be specified as:
+  - String: `"openai/gpt-4.1"` (uses default settings)
   - Object: `{ "name": "openai/gpt-4.1", "temperature": 0.7 }` (override model-specific parameters like temperature, pricing, or provider-specific options)
+- **`fast_model` / `plan_model`**: Override the fast/plan models. Same format
+  as `model`.
+- **`models`**: Override parameters for specific models by name (e.g.,
+  `{ "openai/gpt-5.1": { "reasoning_effort": "medium" } }`).
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)
 - **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)
