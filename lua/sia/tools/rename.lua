@@ -19,10 +19,6 @@ Notes:
   },
   required = { "src", "dest" },
   auto_apply = function(args, conversation)
-    local is_memory = utils.is_memory(args.src) and utils.is_memory(args.dest)
-    if is_memory then
-      return 1
-    end
     return conversation.auto_confirm_tools["rename_file"]
   end,
   confirm = function(args)
@@ -41,8 +37,6 @@ Notes:
     })
     return
   end
-
-  local is_memory = utils.is_memory(args.src) and utils.is_memory(args.dest)
 
   local src_abs = vim.fn.fnamemodify(args.src, ":p")
   local dest_abs = vim.fn.fnamemodify(args.dest, ":p")
@@ -82,7 +76,7 @@ Notes:
   end
 
   local dest_stat = vim.uv.fs_stat(dest_abs)
-  if dest_stat and not is_memory then
+  if dest_stat then
     callback({
       content = {
         string.format(
@@ -153,20 +147,12 @@ Notes:
       local function rel(path)
         return vim.fn.fnamemodify(path, ":.")
       end
-      local src_memory_name = utils.format_memory_name(args.src)
-      local dest_memory_name = utils.format_memory_name(args.dest)
       callback({
         content = {
           string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
         display_content = {
-          is_memory
-              and string.format(
-                "🧠 Renamed %s → %s",
-                src_memory_name,
-                dest_memory_name
-              )
-            or string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
+          string.format("📁 Renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
       })
     end,

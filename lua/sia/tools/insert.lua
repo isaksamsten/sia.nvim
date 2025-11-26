@@ -68,9 +68,6 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
   },
   required = { "target_file", "line", "text" },
   auto_apply = function(args, conversation)
-    if utils.is_memory(args.target_file) then
-      return 1
-    end
     return conversation.auto_confirm_tools["insert"]
   end,
 }, function(args, conversation, callback, opts)
@@ -100,16 +97,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
     })
     return
   end
-
-  local is_memory = utils.is_memory(args.target_file)
-  if is_memory then
-    local memory_dir = utils.get_memory_root(args.target_file)
-    local stat = vim.uv.fs_stat(memory_dir)
-    if not stat then
-      vim.fn.mkdir(memory_dir, "p")
-    end
-  end
-  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = not is_memory })
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
@@ -183,9 +171,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
       return #diff_lines
     end,
     on_accept = function()
-      if not is_memory then
-        diff.update_baseline(buf)
-      end
+      diff.update_baseline(buf)
       tracker.without_tracking(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(
           buf,
@@ -198,9 +184,7 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
           pcall(vim.cmd, "noa silent write!")
         end)
       end)
-      if not is_memory then
-        diff.update_reference(buf)
-      end
+      diff.update_reference(buf)
 
       local edit_start = insert_line
       local edit_end = insert_line + #text_lines - 1
@@ -212,19 +196,14 @@ If you need to rewrite large portions of a file, use the write tool instead.]],
         insert_line,
         args.target_file
       )
-      local display_description
-      if not is_memory then
-        display_description = string.format(
-          "📝 Inserted %d line%s at line %d in %s",
-          #text_lines,
-          #text_lines == 1 and "" or "s",
-          insert_line,
-          vim.fn.fnamemodify(args.target_file, ":.")
-        )
-      else
-        local memory_name = utils.format_memory_name(args.target_file)
-        display_description = string.format("🧠 Updated %s", memory_name)
-      end
+      local display_description = string.format(
+        "📝 Inserted %d line%s at line %d in %s",
+        #text_lines,
+        #text_lines == 1 and "" or "s",
+        insert_line,
+        vim.fn.fnamemodify(args.target_file, ":.")
+      )
+
       callback({
         content = { success_msg },
         context = {

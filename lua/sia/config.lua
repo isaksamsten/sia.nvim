@@ -878,6 +878,7 @@ M.options = {
         websearch = require("sia.tools").websearch,
         write_todos = require("sia.tools").write_todos,
         read_todos = require("sia.tools").read_todos,
+        memory = require("sia.tools").memory,
       },
     },
     actions = {
@@ -943,6 +944,7 @@ M.options = {
           "websearch",
           "write_todos",
           "read_todos",
+          "memory",
         },
       },
     },

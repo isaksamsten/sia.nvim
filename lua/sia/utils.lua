@@ -659,37 +659,6 @@ function M.path_in_root(path, root)
   return vim.startswith(path, root)
 end
 
---- @param filename string
---- @return boolean is_memory_file
-function M.is_memory(filename)
-  local root = M.detect_project_root(filename)
-  if not M.path_in_root(filename, root) then
-    return false
-  end
-
-  local norm_filename = normalize(filename)
-  local norm_root = normalize(root)
-  local dirname = normalize(vim.fs.dirname(norm_filename))
-  local basename = vim.fs.basename(norm_filename)
-
-  if dirname == norm_root and basename == "AGENTS.md" then
-    return true
-  end
-
-  local memory_dir = normalize(vim.fs.joinpath(root, ".sia", "memory"))
-  if vim.startswith(dirname, memory_dir) then
-    return true
-  end
-
-  return false
-end
-
-function M.get_memory_root(filename)
-  local root = M.detect_project_root(filename)
-  local memory_dir = normalize(vim.fs.joinpath(root, ".sia", "memory"))
-  return memory_dir
-end
-
 --- Format memory file name in a human-friendly way
 --- @param filename string The full path to the memory file
 --- @return string friendly_name Human-readable name

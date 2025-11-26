@@ -41,37 +41,13 @@ local function validate_args(args)
   end
 end
 
---- Ensure memory directory and buffer exist
---- @param target_file string
---- @return integer|nil buf
---- @return boolean is_memory
-local function setup_target_file(target_file)
-  local is_memory = utils.is_memory(target_file)
-  if is_memory then
-    local memory_dir = utils.get_memory_root(target_file)
-    local stat = vim.uv.fs_stat(memory_dir)
-    if not stat then
-      vim.fn.mkdir(memory_dir, "p")
-    end
-  end
-
-  local buf = utils.ensure_file_is_loaded(target_file, { listed = not is_memory })
-  return buf, is_memory
-end
-
 --- Create display description for a successful edit
 --- @param target_file string
 --- @param pos [integer, integer]
 --- @param col_span table|nil
---- @param is_memory boolean
 --- @param fuzzy boolean
 --- @return string
-local function create_display_description(target_file, pos, col_span, is_memory, fuzzy)
-  if is_memory then
-    local memory_name = utils.format_memory_name(target_file)
-    return string.format("🧠 Updated %s", memory_name)
-  end
-
+local function create_display_description(target_file, pos, col_span, fuzzy)
   local fuzzy_suffix = fuzzy and " - please double-check the changes" or ""
 
   if col_span then
@@ -95,12 +71,9 @@ end
 --- @param buf integer
 --- @param match sia.matcher.Match
 --- @param new_text_lines string[]
---- @param is_memory boolean
 --- @param conversation_id integer
-local function execute_edit(buf, match, new_text_lines, is_memory, conversation_id)
-  if not is_memory then
-    diff.update_baseline(buf)
-  end
+local function execute_edit(buf, match, new_text_lines, conversation_id)
+  diff.update_baseline(buf)
 
   tracker.without_tracking(buf, conversation_id, function()
     local span = match.span
@@ -122,9 +95,7 @@ local function execute_edit(buf, match, new_text_lines, is_memory, conversation_
     end)
   end)
 
-  if not is_memory then
-    diff.update_reference(buf)
-  end
+  diff.update_reference(buf)
 end
 
 --- Extract old span lines from the buffer content
@@ -244,9 +215,6 @@ one specific change with clear, unique context.
   },
   required = { "target_file", "old_string", "new_string" },
   auto_apply = function(args, conversation)
-    if utils.is_memory(args.target_file) then
-      return 1
-    end
     return conversation.auto_confirm_tools["edit"]
   end,
 }, function(args, conversation, callback, opts)
@@ -260,7 +228,7 @@ one specific change with clear, unique context.
     return
   end
 
-  local buf, is_memory = setup_target_file(args.target_file)
+  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
@@ -306,7 +274,7 @@ one specific change with clear, unique context.
               and matching.strip_line_numbers(args.new_string)
             or vim.split(args.new_string, "\n")
 
-          execute_edit(buf, match, new_text_lines, is_memory, conversation.id)
+          execute_edit(buf, match, new_text_lines, conversation.id)
 
           local edit_start = span[1]
           local edit_end = span[1] + #new_text_lines - 1
@@ -328,13 +296,8 @@ one specific change with clear, unique context.
           table.insert(diff_lines, 1, success_msg)
 
           local pos = { edit_start, edit_end }
-          local display_description = create_display_description(
-            filename,
-            pos,
-            match.col_span,
-            is_memory,
-            result.fuzzy
-          )
+          local display_description =
+            create_display_description(filename, pos, match.col_span, result.fuzzy)
 
           callback({
             content = diff_lines,

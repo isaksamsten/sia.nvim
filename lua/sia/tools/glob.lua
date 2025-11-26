@@ -20,7 +20,7 @@ return tool_utils.new_tool({
     },
     path = {
       type = "string",
-      description = "Directory path to search within (e.g., `.sia/memory`, `src/lua`). If not provided, searches from current directory.",
+      description = "Directory path to search within (e.g., `src/lua`). If not provided, searches from current directory.",
     },
     hidden = {
       type = "boolean",
@@ -29,9 +29,6 @@ return tool_utils.new_tool({
   },
   required = {},
   auto_apply = function(args, conversation)
-    if args.path and string.match(args.path, "%.sia/memory") then
-      return 1
-    end
     return conversation.auto_confirm_tools["glob"]
   end,
   confirm = function(args)
@@ -61,7 +58,6 @@ return tool_utils.new_tool({
     on_accept = function()
       local pattern = args.pattern
       local path = args.path
-      local is_memory = path and string.match(path, "%.sia/memory")
       local cmd = { "fd", "--print0" }
 
       if pattern and pattern ~= "" then
@@ -72,7 +68,7 @@ return tool_utils.new_tool({
         table.insert(cmd, ".")
       end
 
-      if args.hidden or is_memory then
+      if args.hidden then
         table.insert(cmd, "--hidden")
       end
 
@@ -161,33 +157,26 @@ return tool_utils.new_tool({
           )
         end
 
-        local display_content
-        if not is_memory then
-          local display_line
-          if pattern and path then
-            display_content = string.format(
-              "📂 Found %d files matching `%s` in `%s`",
-              total_count,
-              pattern,
-              path
-            )
-          elseif pattern then
-            display_content =
-              string.format("📂 Found %d files matching `%s`", total_count, pattern)
-          elseif path then
-            display_content =
-              string.format("📂 Found %d files in `%s`", total_count, path)
-          else
-            display_content = string.format("📂 Found %d files", total_count)
-          end
-          display_content = { display_line }
+        local display_line
+        if pattern and path then
+          display_line = string.format(
+            "📂 Found %d files matching `%s` in `%s`",
+            total_count,
+            pattern,
+            path
+          )
+        elseif pattern then
+          display_line =
+            string.format("📂 Found %d files matching `%s`", total_count, pattern)
+        elseif path then
+          display_line = string.format("📂 Found %d files in `%s`", total_count, path)
         else
-          display_content = nil
+          display_line = string.format("📂 Found %d files", total_count)
         end
 
         callback({
           content = limited_files,
-          display_content = display_content,
+          display_content = { display_line },
         })
       end)
     end,

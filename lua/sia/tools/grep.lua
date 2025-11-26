@@ -1,4 +1,3 @@
-local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local MAX_LINE_LENGTH = 200
 local MAX_MATCHES = 100
@@ -28,9 +27,6 @@ return tool_utils.new_tool({
     },
   },
   auto_apply = function(args, conversation)
-    if utils.is_memory(args.path) then
-      return 1
-    end
     return conversation.auto_confirm_tools["grep"]
   end,
   required = { "pattern" },
@@ -117,8 +113,7 @@ return tool_utils.new_tool({
             end
           end
         end
-        local is_memory = args.path and utils.is_memory(args.path)
-        if #matches == 0 and not is_memory then
+        if #matches == 0 then
           local no_match_msg =
             string.format("🔍 No matches found for `%s`", args.pattern)
           if args.glob and args.path then
@@ -181,7 +176,7 @@ return tool_utils.new_tool({
 
         callback({
           content = output,
-          display_content = not is_memory and { display_msg } or nil,
+          display_content = { display_msg },
         })
       end)
     end,
