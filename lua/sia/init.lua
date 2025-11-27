@@ -24,6 +24,9 @@ local highlight_groups = {
   SiaTodoPending = { link = "Comment" },
   SiaTodoDone = { link = "DiagnosticOk" },
   SiaTodoSkipped = { link = "NonText" },
+  SiaTaskRunning = { link = "DiagnosticWarn" },
+  SiaTaskCompleted = { link = "DiagnosticOk" },
+  SiaTaskFailed = { link = "DiagnosticError" },
 }
 
 local function set_highlight_groups()
@@ -375,6 +378,11 @@ function M.todos(action)
       end,
     }
   )
+end
+
+--- @param action ("open"|"close"|"toggle")?
+function M.tasks(action)
+  require("sia.tasks").task_window(action)
 end
 
 --- Show contexts in quickfix list

@@ -290,7 +290,7 @@ interact with your codebase and development environment:
 
 ### Advanced Capabilities
 
-- **dispatch_agent** - Launch autonomous agents with access to read-only tools
+- **task** - Launch autonomous agents with access to read-only tools
   (glob, grep, read) for complex search tasks
 - **compact_conversation** - Intelligently summarize and compact conversation
   history when topics change
@@ -845,6 +845,76 @@ require("sia").setup({
 conversation history, or commit it if you want to share knowledge with your
 team.
 
+### Custom Agent Registry
+
+You can define custom agents that the AI can invoke using the `task` tool. Agents
+are specialized assistants with specific capabilities, tools, and system prompts
+tailored for particular tasks.
+
+**Creating Custom Agents:**
+
+1. Create a `.sia/agents/` directory in your project root
+2. Add agent definition files as markdown with JSON frontmatter
+3. Agents become automatically available to the AI assistant
+
+**Agent File Format:**
+
+```markdown
+---
+{
+  "description": "Brief description of what this agent does",
+  "tools": ["tool1", "tool2", "tool3"],
+  "model": "openai/gpt-4.1-mini",
+  "require_confirmation": false,
+}
+---
+
+System prompt for the agent goes here.
+```
+
+**Frontmatter Fields:**
+
+- **`description`** (required): A clear, concise description of the agent's purpose
+  - This is shown to the AI when it lists available agents
+  - Example: `"Searches through code to find specific patterns, functions, or implementations"`
+
+- **`tools`** (required): Array of tool names the agent can use
+  - Available tools: `glob`, `grep`, `read`, `bash`, `fetch`, etc. The tools
+    must be defined in `setup({..})`.
+  - Example: `["glob", "grep", "read"]`
+
+- **`model`** (optional): Override the model for this agent
+  - Defaults to `fast_model` if not specified
+  - Example: `"openai/gpt-4.1-mini"`
+
+- **`require_confirmation`** (optional): Whether tool operations need user approval
+  - Default: `true` (requires approval)
+  - Set to `false` for read-only agents that should work autonomously
+
+**How Agents Work:**
+
+1. The AI assistant can use the `task` tool to list available agents
+2. When it identifies a task that matches an agent's description, it launches
+   that agent
+3. The agent runs autonomously in the background with its own conversation
+4. Progress updates appear in the tasks window
+5. Results are integrated back into the main conversation
+
+**Viewing Running Agents:**
+
+You can view and track running agents in the tasks window:
+
+- **In chat:** Press `t` (or your configured binding) to toggle the tasks window
+- **Programmatically:** Call `require("sia").tasks("toggle")`
+
+**Tips:**
+
+- Keep agent system prompts focused and specific
+- Use `require_confirmation: false` for read-only agents to avoid interruptions
+- Choose appropriate tool sets for each agent's purpose
+- Name agents descriptively (e.g., `code-searcher`, `test-runner`, `doc-finder`)
+- You can organize agents in subdirectories: `.sia/agents/code/searcher.md` becomes agent name `code/searcher`
+
 ### Concurrent Conversations
 
 Sia supports running multiple conversations simultaneously, each maintaining
@@ -969,6 +1039,8 @@ keys = {
   { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
   -- toggle the todo view
   { "t", mode = "n", require("sia").todos, ft = "sia" },
+  -- toggle the tasks/agents view
+  { "a", mode = "n", require("sia").tasks, ft = "sia" },
   -- show a quickfix window with active context references
   { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
 }
@@ -1004,26 +1076,6 @@ conversation that is started.
 - `SiaAnswer preview` - Preview the pending tool operation
 
 Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
-
-**Subagent:**
-
-- `SiaAgent [query]` - Dispatches an autonomous sub-agent to handle the query
-  in the background
-- `SiaAgent -m <model> [query]` - Dispatches a sub-agent using a specific model
-  (defaults to `fast_model`)
-
-The sub-agent runs independently with its own conversation and token budget,
-performing research or analysis tasks using read-only tools. It provides
-real-time progress updates in your main chat and integrates its final response
-seamlessly into your conversation.
-
-**Common Use Cases:**
-
-- Deep file searches across large codebases
-- Web research and documentation lookups
-- Planning and summarization tasks
-- Complex exploratory tasks that require multiple tool calls
-- Background work that shouldn't consume your main conversation's tokens
 
 **Conversation Management:**
 

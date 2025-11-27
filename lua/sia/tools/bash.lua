@@ -49,7 +49,7 @@ Usage notes:
   - You can specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). If
     not specified, commands will timeout after 30 seconds.
   - VERY IMPORTANT: You MUST avoid using search commands like `find` and
-    `grep`. Instead use grep, glob, or dispatch_agent to search. You MUST avoid
+    `grep`. Instead use grep, glob, or task to search. You MUST avoid
     read tools like `cat`, `head`, `tail`, and `ls`, and use read and
     workspace to read files.
   - When issuing multiple commands, use the ';' or '&&' operator to separate

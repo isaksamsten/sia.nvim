@@ -23,13 +23,12 @@ end
 
 function HiddenStrategy:on_request_start()
   local notify = self.options.notify or default_notify
-  notify("Analyzing your request...")
+  notify("Analyzing...")
   return true
 end
 
 function HiddenStrategy:on_tools()
   local notify = self.options.notify or default_notify
-  notify("Preparing to use tools...")
   return true
 end
 
@@ -63,7 +62,6 @@ function HiddenStrategy:on_complete(control)
       end
     end,
     handle_tools_completion = function(opts)
-      notify("Analyzing your request...")
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           self.conversation:add_instruction({
@@ -80,13 +78,13 @@ function HiddenStrategy:on_complete(control)
 
       if opts.cancelled then
         control.finish()
-        self.options.callback(context, nil)
+        self.options.callback(context, nil, control.usage)
       else
         control.continue_execution()
       end
     end,
     handle_empty_toolset = function()
-      self.options.callback(context, control.content)
+      self.options.callback(context, control.content, control.usage)
       self.conversation:untrack_messages()
       vim.defer_fn(function()
         vim.cmd.echo()

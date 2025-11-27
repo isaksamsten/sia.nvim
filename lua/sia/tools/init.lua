@@ -10,7 +10,7 @@ return {
   bash = require("sia.tools.bash"),
   locations = require("sia.tools.locations"),
   workspace = require("sia.tools.workspace"),
-  agent = require("sia.tools.agent"),
+  task = require("sia.tools.agent"),
   plan = require("sia.tools.plan"),
   diagnostics = require("sia.tools.diagnostics"),
   fetch = require("sia.tools.fetch"),

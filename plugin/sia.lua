@@ -425,58 +425,6 @@ vim.api.nvim_create_user_command("SiaCompact", function()
   end
 end, {})
 
-vim.api.nvim_create_user_command("SiaAgent", function(args)
-  local model = find_and_remove_flag("-m", args.fargs)
-  if model and not require("sia.config").options.models[model] then
-    vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
-    return
-  end
-
-  local system_prompt = find_and_remove_flag("-s", args.fargs)
-
-  if #args.fargs == 0 then
-    vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
-    return
-  end
-  local ChatStrategy = require("sia.strategy").ChatStrategy
-  local current = ChatStrategy.by_buf()
-  if not current then
-    vim.api.nvim_echo({ { "Sia: No active chat.", "ErrorMsg" } }, false, {})
-    return
-  end
-  if current.is_busy then
-    vim.api.nvim_echo({ { "Sia: Active chat is busy.", "ErrorMsg" } }, false, {})
-    return
-  end
-
-  local config = require("sia.config")
-
-  local prompt = table.concat(args.fargs, " ")
-  local subagent_config = system_prompt and config.options.subagents[system_prompt]
-  require("sia.subagent").start(current, prompt, {
-    model = model or subagent_config and subagent_config.model,
-    system_prompt = subagent_config and subagent_config.prompt,
-  })
-end, {
-  range = true,
-  bang = true,
-  nargs = "*",
-  complete = function(_, CmdLine, CursorPos)
-    local config = require("sia.config")
-    local prefix = string.sub(CmdLine, 1, CursorPos)
-    local choice = match_flag(prefix, "m", config.options.models)
-    if choice then
-      return choice
-    end
-
-    choice = match_flag(prefix, "s", config.options.subagents)
-    if choice then
-      return choice
-    end
-    return {}
-  end,
-})
-
 vim.api.nvim_create_user_command("SiaClear", function(args)
   local ChatStrategy = require("sia.strategy").ChatStrategy
   local chat = ChatStrategy.by_buf()

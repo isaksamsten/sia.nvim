@@ -30,6 +30,16 @@ end
 --- @field description string
 --- @field status string
 
+--- @class sia.conversation.Task
+--- @field id integer
+--- @field status "running"|"completed"|"failed"
+--- @field progress string?
+--- @field result string[]?
+--- @field error string?
+--- @field name string
+--- @field task string
+--- @field usage sia.Usage?
+
 --- @alias sia.CacheControl {type: "ephemeral"}
 --- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
 --- @alias sia.InstructionFileContent {type: "file", file: {filename: string, file_data: string}, cache_control: sia.CacheControl?}
@@ -410,6 +420,7 @@ local CONVERSATION_ID = 1
 --- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 --- @field usage_history sia.Usage[]
+--- @field tasks table<integer, sia.conversation.Task>
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -452,6 +463,7 @@ function Conversation:new(action, context)
     items = {},
   }
   obj.usage_history = {}
+  obj.tasks = {}
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
@@ -526,6 +538,26 @@ function Conversation:clear_user_instructions()
     self.shell:close()
     self.shell = nil
   end
+end
+
+--- @param name string
+--- @param task string
+--- @return sia.conversation.Task
+function Conversation:new_task(name, task)
+  local task_id = #self.tasks + 1
+  local instance = {
+    id = task_id,
+    name = name,
+    task = task,
+    status = "running",
+  }
+  table.insert(self.tasks, instance)
+  return instance
+end
+
+--- @return sia.conversation.Task
+function Conversation:get_task(id)
+  return self.tasks[id]
 end
 
 --- Check if the new interval completely encompasses an existing interval

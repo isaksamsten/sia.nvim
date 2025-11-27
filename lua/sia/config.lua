@@ -592,7 +592,7 @@ end
 --- @field render_stats fun(win:integer, stats:sia.ConversationStats)?
 
 --- @class sia.config.Hidden
---- @field callback (fun(ctx:sia.Context?, content:string[]):nil)?
+--- @field callback fun(ctx:sia.Context?, content:string[]?, usage:sia.Usage?)?
 --- @field notify fun(string)?
 
 --- @class sia.config.Instruction
@@ -684,7 +684,6 @@ end
 --- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
 --- @field defaults sia.config.Defaults
 --- @field actions table<string, sia.config.Action>
---- @field subagents table<string, {prompt:string, model:string}>
 --- @field providers table<string, sia.config.Provider>
 M.options = {
   providers = {},
@@ -867,7 +866,7 @@ M.options = {
         glob = require("sia.tools").glob,
         diagnostics = require("sia.tools").diagnostics,
         grep = require("sia.tools").grep,
-        agent = require("sia.tools").agent,
+        task = require("sia.tools").task,
         plan = require("sia.tools").plan,
         compact = require("sia.tools").compact,
         workspace = require("sia.tools").workspace,
@@ -927,6 +926,7 @@ M.options = {
           "current_context",
         },
         tools = {
+          "task",
           "grep",
           "workspace",
           "history",
@@ -984,7 +984,6 @@ M.options = {
     commit = require("sia.actions").commit(),
     doc = require("sia.actions").doc(),
   },
-  subagents = {},
 }
 
 function M.setup(options)

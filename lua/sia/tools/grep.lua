@@ -69,7 +69,7 @@ local function handle_count_mode(lines, args, callback)
   local file_counts = {}
   for _, line in ipairs(lines) do
     local file, count
-    
+
     if is_single_file then
       count = line:match("^(%d+)$")
       if count then
@@ -78,7 +78,7 @@ local function handle_count_mode(lines, args, callback)
     else
       file, count = line:match("^([^:]+):(%d+)$")
     end
-    
+
     if file and count then
       local cnt = tonumber(count)
       table.insert(file_counts, { file = file, count = cnt })
@@ -216,7 +216,7 @@ Usage:
 - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
 - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
 - Output modes: "content" (default) shows matching lines with context, "files_with_matches" shows only file paths, "count" shows match counts per file
-- Use dispatch_agent tool for open-ended searches requiring multiple rounds
+- Use the task tool for open-ended searches requiring multiple rounds
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
   message = function(args)
