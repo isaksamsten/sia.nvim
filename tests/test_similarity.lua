@@ -226,10 +226,10 @@ T["sia.similarity async"]["find_similar basic"] = function()
       { -1, -2, -3 },
     }
 
-    similarity.find_similar(query, targets, { top_k = 3 }, function(results)
+    similarity.find_similar(query, targets, { top_k = 3, callback=function(results)
       _G.result = results
       completed = true
-    end)
+    end})
 
     vim.wait(1000, function() return completed end, 10)
     _G.completed = completed
@@ -257,10 +257,10 @@ T["sia.similarity async"]["find_similar large dataset"] = function()
     end
     targets[500] = { 0.99, 0.01, 0.01 }
 
-    similarity.find_similar(query, targets, { top_k = 5, time_budget_ms = 50 }, function(results)
+    similarity.find_similar(query, targets, { top_k = 5, time_budget_ms = 50, callback=function(results)
       _G.result = results
       completed = true
-    end)
+    end})
 
     vim.wait(5000, function() return completed end, 50)
     _G.completed = completed
@@ -397,10 +397,10 @@ T["sia.similarity async"]["results match sync version"] = function()
 
     local sync_result = similarity.find_similar(query, targets, { top_k = 5 })
 
-    similarity.find_similar(query, targets, { top_k = 5 }, function(async_result)
+    similarity.find_similar(query, targets, { top_k = 5, callback=function(async_result)
       _G.async_result = async_result
       completed = true
-    end)
+    end})
 
     vim.wait(2000, function() return completed end, 20)
     _G.completed = completed
@@ -426,10 +426,10 @@ T["sia.similarity async"]["empty query"] = function()
     local similarity = require("sia.similarity")
     local completed = false
 
-    similarity.find_similar({}, { { 1, 2, 3 } }, {}, function(results)
+    similarity.find_similar({}, { { 1, 2, 3 } }, {callback=function(results)
       _G.result = results
       completed = true
-    end)
+    end})
 
     vim.wait(1000, function() return completed end, 10)
     _G.completed = completed
@@ -448,10 +448,10 @@ T["sia.similarity async"]["empty targets"] = function()
     local similarity = require("sia.similarity")
     local completed = false
 
-    similarity.find_similar({ 1, 2, 3 }, {}, {}, function(results)
+    similarity.find_similar({ 1, 2, 3 }, {}, {callback=function(results)
       _G.result = results
       completed = true
-    end)
+    end})
 
     vim.wait(1000, function() return completed end, 10)
     _G.completed = completed

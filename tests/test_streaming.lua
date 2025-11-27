@@ -11,7 +11,7 @@ Conversation.__index = Conversation
 function Conversation:new()
   local Model = require("sia.model")
   return setmetatable({
-    _messages = { { role = "user", content = { "hi" } } },
+    _messages = { { role = "user", content = { "hi" }, meta = {} } },
     model = Model.resolve("openai/gpt-4.1-mini"),
     tool_fn = {},
   }, self)
