@@ -7,10 +7,14 @@ local MAX_FILES_SORT = 1000
 return tool_utils.new_tool({
   name = "glob",
   read_only = true,
-  system_prompt = [[- Find files matching glob patterns in the current project
-- Supports standard glob patterns like `*.lua`, `**/*.py`, `src/**`
-- Can search within specific directories using the path parameter
-- For reading files, use the read tool after finding them with glob]],
+  system_prompt = [[- Fast file pattern matching tool that works with any codebase size
+- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+- Returns matching file paths sorted by modification time
+- Use this tool when you need to find files by name patterns
+- When you are doing an open ended search that may require multiple rounds of globbing
+  and grepping, use the Agent tool instead
+- You can call multiple tools in a single response. It is always better to speculatively
+  perform multiple searches in parallel if they are potentially useful.]],
   description = "Find files matching a glob pattern in the current project",
   message = "Searching for files...",
   parameters = {
