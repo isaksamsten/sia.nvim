@@ -357,7 +357,7 @@ local function iterate_matches(needle, haystack, opts, state, should_yield)
           return a.score > b.score
         end)
 
-        if #state.top_matches > opts.limit then
+        if opts.limit and #state.top_matches > opts.limit then
           table.remove(state.top_matches)
           state.min_top_score = state.top_matches[#state.top_matches].score
         end
@@ -395,7 +395,7 @@ end
 local function _find_best_subsequence_span(needle, haystack, opts)
   opts = opts or {}
   local ignore_whitespace = opts.ignore_emptylines or false
-  opts.limit = opts.limit or 1
+  opts.limit = opts.limit
 
   local needle_len = #needle
 
@@ -436,7 +436,7 @@ local function _find_best_subsequence_span_async(
 )
   opts = opts or {}
   local ignore_whitespace = opts.ignore_emptylines or false
-  opts.limit = opts.limit or 1
+  opts.limit = opts.limit
 
   local needle_len = #needle
 
@@ -480,11 +480,12 @@ end
 
 --- @param needle string|string[]
 --- @param haystack string[]
+--- @param limit integer?
 --- @param callback fun(matches: sia.matcher.Match[], fuzzy_used: boolean)?
 --- @param time_budget_ms number?
 --- @return sia.matcher.Match[]? matches Returns nil if callback provided (async mode)
 --- @return boolean? fuzzy_used Returns nil if callback provided (async mode)
-local function _find_best_match(needle, haystack, callback, time_budget_ms)
+local function _find_best_match(needle, haystack, limit, callback, time_budget_ms)
   time_budget_ms = time_budget_ms or 200
 
   local needle_lines
@@ -510,9 +511,9 @@ local function _find_best_match(needle, haystack, callback, time_budget_ms)
   end
 
   local search_steps = {
-    { opts = { limit = 2 }, fuzzy = false },
-    { opts = { ignore_indent = true, limit = 2 }, fuzzy = true },
-    { opts = { ignore_indent = true, threshold = 0.9, limit = 2 }, fuzzy = true },
+    { opts = { limit = limit }, fuzzy = false },
+    { opts = { ignore_indent = true, limit = limit }, fuzzy = true },
+    { opts = { ignore_indent = true, threshold = 0.9, limit = limit }, fuzzy = true },
   }
 
   if not callback then
@@ -528,13 +529,13 @@ local function _find_best_match(needle, haystack, callback, time_budget_ms)
 
     if #needle_lines == 1 then
       fuzzy = false
-      matches = M.find_inline_matches(needle_lines[1], haystack, { limit = 2 })
+      matches = M.find_inline_matches(needle_lines[1], haystack, { limit = limit })
 
       if #matches == 0 then
         fuzzy = true
         matches = M.find_inline_matches(needle_lines[1], haystack, {
           ignore_case = true,
-          limit = 2,
+          limit = limit,
         })
       end
     end
@@ -548,7 +549,7 @@ local function _find_best_match(needle, haystack, callback, time_budget_ms)
     if current_step >= #search_steps then
       if #needle_lines == 1 then
         local inline_matches =
-          M.find_inline_matches(needle_lines[1], haystack, { limit = 2 })
+          M.find_inline_matches(needle_lines[1], haystack, { limit = limit })
         if #inline_matches > 0 then
           callback(inline_matches, false)
           return
@@ -556,7 +557,7 @@ local function _find_best_match(needle, haystack, callback, time_budget_ms)
 
         inline_matches = M.find_inline_matches(needle_lines[1], haystack, {
           ignore_case = true,
-          limit = 2,
+          limit = limit,
         })
         callback(inline_matches, true)
       else
@@ -629,17 +630,19 @@ end
 --- Find best match with automatic line number stripping fallback
 --- @param needle string The text to search for (can contain newlines)
 --- @param haystack string[] Array of lines to search in
+--- @param find_all boolean
 --- @param callback fun(result: sia.matcher.Result)? Optional callback for async processing
 --- @param time_budget_ms number? Time budget per batch in milliseconds (default: 200)
 --- @return sia.matcher.Result? Returns nil if callback provided (async mode)
-function M.find_best_match(needle, haystack, callback, time_budget_ms)
+function M.find_best_match(needle, haystack, find_all, callback, time_budget_ms)
+  local limit = not find_all and 2 or nil
   if not callback then
-    local matches, fuzzy = _find_best_match(needle, haystack)
+    local matches, fuzzy = _find_best_match(needle, haystack, limit)
 
     if #matches == 0 then
       local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
       if had_line_numbers then
-        matches, fuzzy = _find_best_match(stripped_needle, haystack)
+        matches, fuzzy = _find_best_match(stripped_needle, haystack, limit)
         return { matches = matches, fuzzy = true, strip_line_number = true }
       end
     end
@@ -647,11 +650,11 @@ function M.find_best_match(needle, haystack, callback, time_budget_ms)
     return { matches = matches, fuzzy = fuzzy, strip_line_number = false }
   end
 
-  _find_best_match(needle, haystack, function(matches, fuzzy)
+  _find_best_match(needle, haystack, limit, function(matches, fuzzy)
     if #matches == 0 then
       local stripped_needle, had_line_numbers = M.strip_line_numbers(needle)
       if had_line_numbers then
-        _find_best_match(stripped_needle, haystack, function(stripped_matches, _)
+        _find_best_match(stripped_needle, haystack, limit, function(stripped_matches, _)
           callback({
             matches = stripped_matches,
             fuzzy = true,

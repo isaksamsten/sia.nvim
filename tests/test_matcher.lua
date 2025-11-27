@@ -5,7 +5,7 @@ local eq = MiniTest.expect.equality
 T["sia.matcher"] = MiniTest.new_set()
 
 T["sia.matcher"]["exact inline match"] = function()
-  local match = matcher.find_best_match("isak", { "hello world isak" })
+  local match = matcher.find_best_match("isak", { "hello world isak" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -20,7 +20,7 @@ end
 T["sia.matcher"]["exact multiline match"] = function()
   local text = "function hello()\n  print('world')\nend"
   local haystack = { "function hello()", "  print('world')", "end", "other code" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -31,7 +31,7 @@ T["sia.matcher"]["exact multiline match"] = function()
 end
 
 T["sia.matcher"]["exact empty string match"] = function()
-  local match = matcher.find_best_match("", { "" })
+  local match = matcher.find_best_match("", { "" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -42,7 +42,8 @@ T["sia.matcher"]["exact empty string match"] = function()
 end
 
 T["sia.matcher"]["multiple exact inline matches"] = function()
-  local match = matcher.find_best_match("test", { "test this test", "another line" })
+  local match =
+    matcher.find_best_match("test", { "test this test", "another line" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -54,7 +55,7 @@ T["sia.matcher"]["multiple exact inline matches"] = function()
 end
 
 T["sia.matcher"]["case insensitive fuzzy match"] = function()
-  local match = matcher.find_best_match("ISAK", { "hello isak world" })
+  local match = matcher.find_best_match("ISAK", { "hello isak world" }, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -68,7 +69,7 @@ end
 T["sia.matcher"]["indentation ignored fuzzy match"] = function()
   local text = "function test()\n    return true\nend"
   local haystack = { "  function test()", "return true", "  end" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -80,7 +81,7 @@ end
 T["sia.matcher"]["similarity threshold fuzzy match"] = function()
   local text = "function hello_world()\n  print('test')\nend"
   local haystack = { "function hello_worlds()", "  print('tests')", "end" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -92,7 +93,7 @@ T["sia.matcher"]["similarity threshold fuzzy match"] = function()
 end
 
 T["sia.matcher"]["tab format line numbers"] = function()
-  local match = matcher.find_best_match("    8\thello", { "hello world" })
+  local match = matcher.find_best_match("    8\thello", { "hello world" }, false)
 
   eq(true, match.fuzzy)
   eq(true, match.strip_line_number)
@@ -104,7 +105,7 @@ T["sia.matcher"]["tab format line numbers"] = function()
 end
 
 T["sia.matcher"]["pipe format line numbers"] = function()
-  local match = matcher.find_best_match("  42 | hello", { "hello world" })
+  local match = matcher.find_best_match("  42 | hello", { "hello world" }, false)
 
   eq(true, match.fuzzy)
   eq(true, match.strip_line_number)
@@ -114,7 +115,7 @@ T["sia.matcher"]["pipe format line numbers"] = function()
 end
 
 T["sia.matcher"]["space format line numbers"] = function()
-  local match = matcher.find_best_match("  123  hello", { "hello world" })
+  local match = matcher.find_best_match("  123  hello", { "hello world" }, false)
 
   eq(true, match.fuzzy) -- line number stripping always makes it fuzzy
   eq(true, match.strip_line_number)
@@ -126,7 +127,7 @@ end
 T["sia.matcher"]["multiline with line numbers"] = function()
   local text = "    1\tfunction test()\n    2\t  return true\n    3\tend"
   local haystack = { "function test()", "  return true", "end" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(true, match.fuzzy)
   eq(true, match.strip_line_number)
@@ -138,7 +139,7 @@ end
 T["sia.matcher"]["mixed line number formats"] = function()
   local text = "    1\tfunction test()\n  2 |   return true\n  3  end"
   local haystack = { "function test()", "  return true", "end" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(true, match.fuzzy)
   eq(true, match.strip_line_number)
@@ -148,7 +149,7 @@ T["sia.matcher"]["mixed line number formats"] = function()
 end
 
 T["sia.matcher"]["no matches found"] = function()
-  local match = matcher.find_best_match("nonexistent", { "hello", "world" })
+  local match = matcher.find_best_match("nonexistent", { "hello", "world" }, false)
 
   eq(true, match.fuzzy) -- No match case sets fuzzy=true
   eq(false, match.strip_line_number)
@@ -156,7 +157,7 @@ T["sia.matcher"]["no matches found"] = function()
 end
 
 T["sia.matcher"]["empty haystack"] = function()
-  local match = matcher.find_best_match("test", {})
+  local match = matcher.find_best_match("test", {}, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -164,7 +165,7 @@ T["sia.matcher"]["empty haystack"] = function()
 end
 
 T["sia.matcher"]["empty string in empty haystack"] = function()
-  local match = matcher.find_best_match("", {})
+  local match = matcher.find_best_match("", {}, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -172,7 +173,8 @@ T["sia.matcher"]["empty string in empty haystack"] = function()
 end
 
 T["sia.matcher"]["line numbers but no match after stripping"] = function()
-  local match = matcher.find_best_match("    1\tnonexistent", { "hello", "world" })
+  local match =
+    matcher.find_best_match("    1\tnonexistent", { "hello", "world" }, false)
 
   eq(true, match.fuzzy)
   eq(true, match.strip_line_number)
@@ -182,7 +184,7 @@ end
 T["sia.matcher"]["whitespace only lines"] = function()
   local text = "test\n\n  \nend"
   local haystack = { "test", "", "   ", "end" }
-  local match = matcher.find_best_match(text, haystack)
+  local match = matcher.find_best_match(text, haystack, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -193,7 +195,7 @@ end
 
 T["sia.matcher"]["very long line"] = function()
   local long_line = string.rep("x", 1000) .. "target" .. string.rep("y", 1000)
-  local match = matcher.find_best_match("target", { long_line })
+  local match = matcher.find_best_match("target", { long_line }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -203,7 +205,8 @@ T["sia.matcher"]["very long line"] = function()
 end
 
 T["sia.matcher"]["special regex characters"] = function()
-  local match = matcher.find_best_match("test.*[abc]+", { "test.*[abc]+ pattern" })
+  local match =
+    matcher.find_best_match("test.*[abc]+", { "test.*[abc]+ pattern" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -213,7 +216,7 @@ T["sia.matcher"]["special regex characters"] = function()
 end
 
 T["sia.matcher"]["unicode characters"] = function()
-  local match = matcher.find_best_match("héllo", { "héllo world 🌍" })
+  local match = matcher.find_best_match("héllo", { "héllo world 🌍" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -272,7 +275,7 @@ end
 
 T["sia.matcher"]["multiple matches across different lines"] = function()
   local match =
-    matcher.find_best_match("hello", { "hello world", "goodbye", "hello again" })
+    matcher.find_best_match("hello", { "hello world", "goodbye", "hello again" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -288,7 +291,7 @@ T["sia.matcher"]["multiple matches across different lines"] = function()
 end
 
 T["sia.matcher"]["multiple matches same line overlapping"] = function()
-  local match = matcher.find_best_match("aa", { "aaa bbb", "other line" })
+  local match = matcher.find_best_match("aa", { "aaa bbb", "other line" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -300,7 +303,8 @@ T["sia.matcher"]["multiple matches same line overlapping"] = function()
 end
 
 T["sia.matcher"]["multiple matches with case variations"] = function()
-  local match = matcher.find_best_match("Test", { "Test this TEST", "another line" })
+  local match =
+    matcher.find_best_match("Test", { "Test this TEST", "another line" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -310,7 +314,8 @@ T["sia.matcher"]["multiple matches with case variations"] = function()
 end
 
 T["sia.matcher"]["multiple matches fuzzy case insensitive"] = function()
-  local match = matcher.find_best_match("TEST", { "Test this test", "another line" })
+  local match =
+    matcher.find_best_match("TEST", { "Test this test", "another line" }, false)
 
   eq(true, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -322,7 +327,8 @@ T["sia.matcher"]["multiple matches fuzzy case insensitive"] = function()
 end
 
 T["sia.matcher"]["multiple matches with whitespace"] = function()
-  local match = matcher.find_best_match("  test  ", { "  test  and   test  ", "other" })
+  local match =
+    matcher.find_best_match("  test  ", { "  test  and   test  ", "other" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -334,7 +340,7 @@ T["sia.matcher"]["multiple matches with whitespace"] = function()
 end
 
 T["sia.matcher"]["multiple matches empty needle"] = function()
-  local match = matcher.find_best_match("", { "", "not empty", "" })
+  local match = matcher.find_best_match("", { "", "not empty", "" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -342,7 +348,7 @@ T["sia.matcher"]["multiple matches empty needle"] = function()
 end
 
 T["sia.matcher"]["multiple matches single character"] = function()
-  local match = matcher.find_best_match("a", { "banana", "apple", "xyz" })
+  local match = matcher.find_best_match("a", { "banana", "apple", "xyz" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -350,8 +356,11 @@ T["sia.matcher"]["multiple matches single character"] = function()
 end
 
 T["sia.matcher"]["multiple matches at line boundaries"] = function()
-  local match =
-    matcher.find_best_match("end", { "at the end", "end of start", "middle", "end" })
+  local match = matcher.find_best_match(
+    "end",
+    { "at the end", "end of start", "middle", "end" },
+    false
+  )
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -364,7 +373,7 @@ end
 
 T["sia.matcher"]["multiple inline matches only"] = function()
   local match =
-    matcher.find_best_match("cat", { "catch the cat", "concatenate", "dog" })
+    matcher.find_best_match("cat", { "catch the cat", "concatenate", "dog" }, false)
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -401,8 +410,11 @@ T["sia.matcher"]["inline matches with limit parameter"] = function()
 end
 
 T["sia.matcher"]["multiple matches with special characters"] = function()
-  local match =
-    matcher.find_best_match("()", { "function() and ()", "() at start", "no match" })
+  local match = matcher.find_best_match(
+    "()",
+    { "function() and ()", "() at start", "no match" },
+    false
+  )
 
   eq(false, match.fuzzy)
   eq(false, match.strip_line_number)
@@ -433,7 +445,7 @@ T["sia.matcher async"]["basic inline match"] = function()
     local matcher = require("sia.matcher")
     local completed = false
 
-    matcher.find_best_match("isak", { "hello world isak" }, function(r)
+    matcher.find_best_match("isak", { "hello world isak" }, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -461,7 +473,7 @@ T["sia.matcher async"]["multiline exact match"] = function()
     local text = "function hello()\n  print('world')\nend"
     local haystack = { "function hello()", "  print('world')", "end", "other code" }
 
-    matcher.find_best_match(text, haystack, function(r)
+    matcher.find_best_match(text, haystack, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -493,7 +505,7 @@ T["sia.matcher async"]["large haystack with custom time budget"] = function()
     end
     table.insert(haystack, "special target line")
 
-    matcher.find_best_match("special target line", haystack, function(r)
+    matcher.find_best_match("special target line", haystack, false, function(r)
       _G.result = r
       completed = true
     end, 50) -- 50ms time budget
@@ -526,7 +538,7 @@ T["sia.matcher async"]["fuzzy match with indent differences"] = function()
       "more code"
     }
 
-    matcher.find_best_match(needle, haystack, function(r)
+    matcher.find_best_match(needle, haystack, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -551,7 +563,7 @@ T["sia.matcher async"]["no matches found"] = function()
     local matcher = require("sia.matcher")
     local completed = false
 
-    matcher.find_best_match("nonexistent", { "hello", "world" }, function(r)
+    matcher.find_best_match("nonexistent", { "hello", "world" }, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -576,7 +588,7 @@ T["sia.matcher async"]["line number stripping"] = function()
     local needle = "  200\tprint('hello')"
     local haystack = { "  123\tprint('hello')", "  456\tother line" }
 
-    matcher.find_best_match(needle, haystack, function(r)
+    matcher.find_best_match(needle, haystack, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -600,7 +612,7 @@ T["sia.matcher async"]["multiple inline matches"] = function()
     local matcher = require("sia.matcher")
     local completed = false
 
-    matcher.find_best_match("test", { "test this test", "another line" }, function(r)
+    matcher.find_best_match("test", { "test this test", "another line" }, false, function(r)
       _G.result = r
       completed = true
     end)
@@ -634,10 +646,10 @@ T["sia.matcher async"]["results match sync version"] = function()
     }
 
     -- Get sync result
-    local sync_result = matcher.find_best_match(needle, haystack)
+    local sync_result = matcher.find_best_match(needle, haystack, false)
 
     -- Get async result
-    matcher.find_best_match(needle, haystack, function(r)
+    matcher.find_best_match(needle, haystack, false, function(r)
       _G.async_result = r
       completed = true
     end)
