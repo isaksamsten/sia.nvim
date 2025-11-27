@@ -67,27 +67,43 @@ local function create_display_description(target_file, pos, col_span, fuzzy)
   return string.format("✏️ Edited %s in %s%s", edit_span, target_file, fuzzy_suffix)
 end
 
---- Execute the actual buffer edit
+--- Execute multiple edits in reverse order to maintain line numbers
 --- @param buf integer
---- @param match sia.matcher.Match
+--- @param matches sia.matcher.Match[]
 --- @param new_text_lines string[]
 --- @param conversation_id integer
-local function execute_edit(buf, match, new_text_lines, conversation_id)
+local function perform_replace_all(buf, matches, new_text_lines, conversation_id)
+  local sorted_matches = matches
+  if #matches > 1 then
+    sorted_matches = vim.deepcopy(matches)
+    table.sort(sorted_matches, function(a, b)
+      if a.span[1] ~= b.span[1] then
+        return a.span[1] > b.span[1]
+      end
+      if a.col_span and b.col_span then
+        return a.col_span[1] > b.col_span[1]
+      end
+      return false
+    end)
+  end
+
   diff.update_baseline(buf)
 
   tracker.without_tracking(buf, conversation_id, function()
-    local span = match.span
-    if match.col_span then
-      vim.api.nvim_buf_set_text(
-        buf,
-        span[1] - 1,
-        match.col_span[1] - 1,
-        span[1] - 1,
-        match.col_span[2],
-        new_text_lines
-      )
-    else
-      vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_text_lines)
+    for _, match in ipairs(sorted_matches) do
+      local span = match.span
+      if match.col_span then
+        vim.api.nvim_buf_set_text(
+          buf,
+          span[1] - 1,
+          match.col_span[1] - 1,
+          span[1] - 1,
+          match.col_span[2],
+          new_text_lines
+        )
+      else
+        vim.api.nvim_buf_set_lines(buf, span[1] - 1, span[2], false, new_text_lines)
+      end
     end
 
     vim.api.nvim_buf_call(buf, function()
@@ -146,58 +162,15 @@ return tool_utils.new_tool({
     return "Making file changes..."
   end,
   description = "Tool for editing files",
-  system_prompt = [[This is a tool for editing files.
+  system_prompt = [[Performs exact string replacements in files.
 
-Before using this tool:
-
-1. Unless the file content is available, use the read tool to understand the
-   file's contents and context
-
-To make a file edit, provide the following:
-1. file_path: The path to the file to modify
-2. old_string: The text to replace (must be unique within the file, and must
-   match the file contents exactly, including all whitespace and indentation)
-3. new_string: The edited text to replace the old_string
-
-The tool will replace ONE occurrence of old_string with new_string in the
-specified file.
-
-CRITICAL REQUIREMENTS FOR USING THIS TOOL:
-
-1. UNIQUENESS: The old_string MUST uniquely identify the specific instance you
-   want to change. This means:
-  - Include AT LEAST 3-5 lines of context BEFORE the change point
-  - Include AT LEAST 3-5 lines of context AFTER the change point
-  - Include all whitespace, indentation, and surrounding code exactly as it appears in the file
-
-2. SINGLE INSTANCE: This tool can only change ONE instance at a time. If you need to change multiple instances:
-  - Make separate calls to this tool for each instance
-  Each call must uniquely identify its specific instance using extensive context
-
-3. VERIFICATION: Before using this tool:
-  - Check how many instances of the target text exist in the file
-  - If multiple instances exist, gather enough context to uniquely identify each one
-  - Plan separate tool calls for each instance
-
-WARNING: If you do not follow these requirements:
-- The tool will fail if old_string matches multiple locations
-- The tool will fail if old_string doesn't match exactly (including whitespace)
-- You may change the wrong instance if you don't include enough context
-
-When making edits:
-- Ensure the edit results in idiomatic, correct code
-- Do not leave the code in a broken state
-
-If you want to create a new file, use:
-- A new file path, including dir name if needed
-- An empty old_string
-- The new file's contents as new_string
-
-MULTIPLE EDITS: When you need to make multiple changes to the same file, use
-multiple parallel calls to this tool in a single message. Each call should handle
-one specific change with clear, unique context.
-```
-]],
+Usage:
+- You must use your `read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
+- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: spaces + line number + tab. Everything after that tab is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
+- The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.
+- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.]],
   parameters = {
 
     target_file = {
@@ -211,6 +184,10 @@ one specific change with clear, unique context.
     new_string = {
       type = "string",
       description = "The text to replace with",
+    },
+    replace_all = {
+      type = "boolean",
+      description = "If true, replace all occurrences of old_string in the file. If false or omitted, only replace a single unique occurrence.",
     },
   },
   required = { "target_file", "old_string", "new_string" },
@@ -244,9 +221,90 @@ one specific change with clear, unique context.
   local filename = vim.fn.fnamemodify(args.target_file, ":.")
   local matching = require("sia.matcher")
   local old_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local replace_all = args.replace_all == true
 
-  matching.find_best_match(args.old_string, old_content, function(result)
-    if #result.matches == 1 then
+  matching.find_best_match(args.old_string, old_content, replace_all, function(result)
+    local num_matches = #result.matches
+
+    -- When replace_all is true, we expect to find and replace all occurrences
+    if replace_all and num_matches > 0 then
+      failed_matches[buf] = 0
+
+      local edit_description = string.format(
+        "Replace all %d occurrence%s in %s",
+        num_matches,
+        num_matches > 1 and "s" or "",
+        args.target_file
+      )
+
+      opts.user_input(edit_description, {
+        preview = function(preview_buf)
+          local all_diffs = {}
+
+          for i, match in ipairs(result.matches) do
+            if i > 1 then
+              table.insert(all_diffs, "")
+            end
+
+            local span = match.span
+            local unified_diff =
+              vim.split(utils.create_unified_diff(args.old_string, args.new_string, {
+                old_start = span[1],
+                new_start = span[1],
+              }) or "", "\n")
+
+            for _, line in ipairs(unified_diff) do
+              table.insert(all_diffs, line)
+            end
+          end
+
+          if #all_diffs == 0 then
+            return nil
+          end
+          vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, all_diffs)
+          vim.bo[preview_buf].ft = "diff"
+          return #all_diffs
+        end,
+        on_accept = function()
+          local new_text_lines = result.strip_line_number
+              and matching.strip_line_numbers(args.new_string)
+            or vim.split(args.new_string, "\n")
+
+          perform_replace_all(buf, result.matches, new_text_lines, conversation.id)
+
+          local first_match = result.matches[1]
+          local last_match = result.matches[#result.matches]
+          local pos = { first_match.span[1], last_match.span[2] }
+
+          local success_msg = string.format(
+            "Replaced all %d occurrence%s in %s",
+            num_matches,
+            num_matches > 1 and "s" or "",
+            args.target_file
+          )
+
+          local display_description = string.format(
+            "✏️ Replaced all %d occurrence%s in %s",
+            num_matches,
+            num_matches > 1 and "s" or "",
+            filename
+          )
+
+          callback({
+            content = { success_msg },
+            context = {
+              buf = buf,
+              pos = pos,
+              tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
+              outdated_message = create_outdated_message(filename, pos),
+              clear_outdated_tool_input = clear_outdated_tool_input,
+            },
+            kind = "edit",
+            display_content = { display_description },
+          })
+        end,
+      })
+    elseif num_matches == 1 and not replace_all then
       failed_matches[buf] = 0
       local match = result.matches[1]
       local span = match.span
@@ -274,7 +332,7 @@ one specific change with clear, unique context.
               and matching.strip_line_numbers(args.new_string)
             or vim.split(args.new_string, "\n")
 
-          execute_edit(buf, match, new_text_lines, conversation.id)
+          perform_replace_all(buf, { match }, new_text_lines, conversation.id)
 
           local edit_start = span[1]
           local edit_end = span[1] + #new_text_lines - 1
@@ -315,10 +373,37 @@ one specific change with clear, unique context.
       })
     else
       failed_matches[buf] = failed_matches[buf] + 1
-      local match_description = #result.matches == 0 and "no matches"
-        or "multiple matches"
+      local match_description = num_matches == 0 and "no matches" or "multiple matches"
 
-      if failed_matches[buf] >= MAX_FAILED_MATCHES then
+      if replace_all and num_matches == 0 then
+        callback({
+          kind = "failed",
+          content = {
+            string.format(
+              "Failed to edit %s with replace_all because no matches were found for old_string.",
+              args.target_file
+            ),
+          },
+          display_content = {
+            string.format(FAILED_TO_EDIT_FILE, filename),
+          },
+        })
+      elseif not replace_all and num_matches > 1 then
+        callback({
+          kind = "failed",
+          content = {
+            string.format(
+              "Failed to edit %s because %d matches were found. Either provide more context to make old_string unique, or set replace_all to true to replace all %d occurrences.",
+              args.target_file,
+              num_matches,
+              num_matches
+            ),
+          },
+          display_content = {
+            string.format(FAILED_TO_EDIT_FILE, filename),
+          },
+        })
+      elseif failed_matches[buf] >= MAX_FAILED_MATCHES then
         callback({
           kind = "failed",
           content = {

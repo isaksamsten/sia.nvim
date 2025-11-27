@@ -432,16 +432,8 @@ T["sia.tools.edit"]["multiple matches found"] = function()
   local result = child.lua_get("_G.result")
 
   eq(
-    true,
-    string.find(
-      result.content[1],
-      "Failed to edit test%.txt since I couldn't find the exact text to replace"
-    ) ~= nil
-  )
-  eq(
-    true,
-    string.find(result.content[1], "found multiple matches instead of exactly one")
-      ~= nil
+    "Failed to edit test.txt because 2 matches were found. Either provide more context to make old_string unique, or set replace_all to true to replace all 2 occurrences.",
+    result.content[1]
   )
   eq("❌ Failed to edit test.txt", result.display_content[1])
 end
@@ -498,6 +490,171 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   )
 end
 
+T["sia.tools.edit"]["replace_all with inline matches"] = function()
+  local code = [[
+    local edit_tool = require("sia.tools.edit")
+    local utils = require("sia.utils")
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+      "local x = 10",
+      "print(x)",
+      "local y = x + 5",
+      "return x"
+    })
+
+    local original_ensure_file_is_loaded = utils.ensure_file_is_loaded
+    utils.ensure_file_is_loaded = function(_) return buf end
+
+    local result = nil
+
+    edit_tool.execute({
+      target_file = "test.lua",
+      old_string = "x",
+      new_string = "foo",
+      replace_all = true,
+    }, { auto_confirm_tools = { edit = 1 } }, function(res)
+      result = {display_content=res.display_content,kind=res.kind, content=res.content}
+    end, nil)
+
+    vim.wait(2000, function() return result ~= nil end)
+
+    _G.result = result
+    _G.new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    utils.ensure_file_is_loaded = original_ensure_file_is_loaded
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+  local new_content = child.lua_get("_G.new_content")
+
+  -- Verify all occurrences were replaced
+  eq("local foo = 10", new_content[1])
+  eq("print(foo)", new_content[2])
+  eq("local y = foo + 5", new_content[3])
+  eq("return foo", new_content[4])
+
+  eq("edit", result.kind)
+  eq(true, string.find(result.content[1], "Replaced all %d+ occurrences?") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "✏️ Replaced all %d+ occurrences?")
+      ~= nil
+  )
+end
+
+T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
+  local code = [[
+    local edit_tool = require("sia.tools.edit")
+    local utils = require("sia.utils")
+
+    local buf = vim.api.nvim_create_buf(false, true)
+
+
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+      "function test()",
+      "  return true",
+      "end",
+      "",
+      "function test()",
+      "  return true",
+      "end",
+      "",
+      "function other()",
+      "  return false",
+      "end"
+    })
+
+    local original_ensure_file_is_loaded = utils.ensure_file_is_loaded
+    utils.ensure_file_is_loaded = function(_) return buf end
+
+    local result = nil
+
+    edit_tool.execute({
+      target_file = "test.lua",
+      old_string = "function test()\n  return true\nend",
+      new_string = "function test()\n  return false\nend",
+      replace_all = true,
+    }, { auto_confirm_tools = { edit = 1 } }, function(res)
+      result = {display_content=res.display_content,kind=res.kind, content=res.content}
+    end, nil)
+
+    vim.wait(2000, function() return result ~= nil end)
+
+    _G.result = result
+    _G.new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    utils.ensure_file_is_loaded = original_ensure_file_is_loaded
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+  local new_content = child.lua_get("_G.new_content")
+
+  -- Verify both function occurrences were replaced
+  eq("function test()", new_content[1])
+  eq("  return false", new_content[2])
+  eq("end", new_content[3])
+  eq("", new_content[4])
+  eq("function test()", new_content[5])
+  eq("  return false", new_content[6])
+  eq("end", new_content[7])
+  eq("", new_content[8])
+  -- Verify other function was not touched
+  eq("function other()", new_content[9])
+  eq("  return false", new_content[10])
+  eq("end", new_content[11])
+
+  eq("edit", result.kind)
+  eq(true, string.find(result.content[1], "Replaced all 2 occurrences") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "✏️ Replaced all 2 occurrences") ~= nil
+  )
+end
+
+T["sia.tools.edit"]["replace_all error when no matches"] = function()
+  local code = [[
+    local edit_tool = require("sia.tools.edit")
+    local utils = require("sia.utils")
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "hello world" })
+
+    local original_ensure_file_is_loaded = utils.ensure_file_is_loaded
+    utils.ensure_file_is_loaded = function(_) return buf end
+
+    local result = nil
+
+    edit_tool.execute({
+      target_file = "test.txt",
+      old_string = "nonexistent",
+      new_string = "updated",
+      replace_all = true,
+    }, { auto_confirm_tools = { edit = 1 } }, function(res)
+      result = {display_content=res.display_content,kind=res.kind, content=res.content}
+    end, nil)
+
+    vim.wait(2000, function() return result ~= nil end)
+
+    _G.result = result
+
+    utils.ensure_file_is_loaded = original_ensure_file_is_loaded
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+
+  eq("failed", result.kind)
+  eq(
+    true,
+    string.find(result.content[1], "with replace_all because no matches were found")
+      ~= nil
+  )
+  eq("❌ Failed to edit test.txt", result.display_content[1])
+end
+
 T["sia.tools.edit"]["tool metadata"] = function()
   local code = [[
     local edit_tool = require("sia.tools.edit")
@@ -530,6 +687,59 @@ T["sia.tools.edit"]["tool metadata"] = function()
   eq("string", parameters.target_file.type)
   eq("string", parameters.old_string.type)
   eq("string", parameters.new_string.type)
+  eq("boolean", parameters.replace_all.type)
+end
+
+T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function()
+  local code = [[
+    local edit_tool = require("sia.tools.edit")
+    local utils = require("sia.utils")
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+      "local result = x + x * x - x / 2",
+      "print(x)",
+      "return x"
+    })
+
+    local original_ensure_file_is_loaded = utils.ensure_file_is_loaded
+    utils.ensure_file_is_loaded = function(_) return buf end
+
+    local result = nil
+
+    edit_tool.execute({
+      target_file = "test.lua",
+      old_string = "x",
+      new_string = "foo",
+      replace_all = true,
+    }, { auto_confirm_tools = { edit = 1 } }, function(res)
+      result = {display_content=res.display_content,kind=res.kind, content=res.content}
+    end, nil)
+
+    vim.wait(2000, function() return result ~= nil end)
+
+    _G.result = result
+    _G.new_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    utils.ensure_file_is_loaded = original_ensure_file_is_loaded
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+  local new_content = child.lua_get("_G.new_content")
+
+  -- Verify all occurrences on the same line were replaced
+  eq("local result = foo + foo * foo - foo / 2", new_content[1])
+  eq("print(foo)", new_content[2])
+  eq("return foo", new_content[3])
+
+  eq("edit", result.kind)
+  -- Should have replaced 6 occurrences total (4 on line 1, 1 on line 2, 1 on line 3)
+  eq(true, string.find(result.content[1], "Replaced all 6 occurrences") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "✏️ Replaced all 6 occurrences") ~= nil
+  )
 end
 
 return T
