@@ -91,16 +91,8 @@ local function create_env(context, loop_vars)
   })
 end
 
---- Parse template and render with context
---- @param template string Template string
---- @param context table Variables available in the template
---- @param loop_vars table|nil Loop variables for nested contexts
---- @return string Rendered template
-function M.render(template, context, loop_vars)
-  if not template or type(template) ~= "string" then
-    return template or ""
-  end
-
+--- @return string
+local function render(template, context, loop_vars)
   local env = create_env(context, loop_vars)
   local result = {}
   local pos = 1
@@ -216,7 +208,7 @@ function M.render(template, context, loop_vars)
             end
           end
           new_loop_vars[var_name] = item
-          local rendered = M.render(loop_body, context, new_loop_vars)
+          local rendered = render(loop_body, context, new_loop_vars)
           if in_block then
             table.insert(result, rendered)
           end
@@ -262,6 +254,17 @@ function M.render(template, context, loop_vars)
   end
 
   return table.concat(result)
+end
+
+--- Parse template and render with context
+--- @param template string Template string
+--- @param context table Variables available in the template
+--- @return string Rendered template
+function M.render(template, context)
+  if not template or type(template) ~= "string" then
+    return template or ""
+  end
+  return render(template, context)
 end
 
 return M
