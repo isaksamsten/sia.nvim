@@ -129,6 +129,9 @@ local function render(template, context, loop_vars)
         table.insert(block_stack, { type = "if", any_branch_taken = value })
         in_block = value
         next_pos = ctrl_end + 1
+        if template:sub(next_pos, next_pos) == "\n" then
+          next_pos = next_pos + 1
+        end
       elseif directive:match("^elseif%s+") then
         if #block_stack == 0 or block_stack[#block_stack].type ~= "if" then
           error("elseif without matching if")
@@ -150,6 +153,9 @@ local function render(template, context, loop_vars)
           in_block = false
         end
         next_pos = ctrl_end + 1
+        if template:sub(next_pos, next_pos) == "\n" then
+          next_pos = next_pos + 1
+        end
       elseif directive == "else" then
         if #block_stack == 0 then
           error("else without matching if/for")
@@ -161,6 +167,9 @@ local function render(template, context, loop_vars)
           error("else not supported in for loops")
         end
         next_pos = ctrl_end + 1
+        if template:sub(next_pos, next_pos) == "\n" then
+          next_pos = next_pos + 1
+        end
       elseif directive:match("^for%s+") then
         local var_name, list_expr = directive:match("^for%s+(%w+)%s+in%s+(.+)$")
         if not var_name or not list_expr then
@@ -169,6 +178,9 @@ local function render(template, context, loop_vars)
 
         local loop_depth = 1
         local loop_start = ctrl_end + 1
+        if template:sub(loop_start, loop_start) == "\n" then
+          loop_start = loop_start + 1
+        end
         local loop_end_pos = loop_start
         local end_tag_end = loop_start
 
@@ -188,6 +200,9 @@ local function render(template, context, loop_vars)
             if loop_depth == 0 then
               loop_end_pos = next_ctrl_start - 1
               end_tag_end = next_ctrl_end + 1
+              if template:sub(end_tag_end, end_tag_end) == "\n" then
+                end_tag_end = end_tag_end + 1
+              end
               break
             end
           end
@@ -227,6 +242,9 @@ local function render(template, context, loop_vars)
         local block_state = table.remove(block_stack)
         in_block = true
         next_pos = ctrl_end + 1
+        if template:sub(next_pos, next_pos) == "\n" then
+          next_pos = next_pos + 1
+        end
       else
         error("Unknown template directive: " .. directive)
       end
