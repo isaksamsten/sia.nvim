@@ -149,6 +149,7 @@ function ChatStrategy:on_request_start()
   self.canvas:render_messages({ self.conversation:last_message() }, model:name())
   self.assistant_extmark = self.canvas:render_assistant_header(model:name())
   vim.bo[self.buf].modifiable = true
+  self.canvas:clear_progress()
   return true
 end
 
