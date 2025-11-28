@@ -88,8 +88,9 @@ local function parse_agent_file(filepath, name)
 end
 
 --- Load all agent definitions from .sia/agents/ directory
---- @return table<string, table> agents Map of agent name to agent definition
-function M.get_agent_definitions()
+--- @param error_report boolean?
+--- @return table<string, sia.agent_registry.AgentDef> agents Map of agent name to agent definition
+function M.get_agent_definitions(error_report)
   local project_root = vim.fs.root(0, ".sia")
   if not project_root then
     return {}
@@ -114,10 +115,12 @@ function M.get_agent_definitions()
     if agent then
       agents[agent_name] = agent
     else
-      vim.notify(
-        string.format("Failed to load agent from %s: %s", filepath, err),
-        vim.log.levels.WARN
-      )
+      if error_report ~= false then
+        vim.notify(
+          string.format("Failed to load agent from %s: %s", filepath, err),
+          vim.log.levels.WARN
+        )
+      end
     end
   end
 

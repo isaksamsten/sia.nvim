@@ -316,10 +316,10 @@ function Message:has_content()
   return self.content ~= nil or self.tool_calls ~= nil or self.meta.empty_content
 end
 
---- @param conversation sia.Conversation
 --- @param message sia.Message
+--- @param template_context table
 --- @return sia.PreparedMessage
-local function prepare_message(conversation, message)
+local function prepare_message(message, template_context)
   local hide = false
   if message.hide then
     hide = true
@@ -356,9 +356,15 @@ local function prepare_message(conversation, message)
     end
   end
   local content = get_message_content(message)
-  if message.template and conversation then
+  if message.template and template_context then
     if content ~= nil and type(content) == "string" then
-      local template_context = conversation:build_template_context(message.context)
+      template_context.filetype = (
+        message.context
+        and message.context.buf
+        and vim.api.nvim_buf_is_loaded(message.context.buf)
+      )
+          and vim.bo[message.context.buf].ft
+        or ""
       content = template.render(content, template_context)
     end
   end
@@ -667,7 +673,8 @@ end
 
 --- @return sia.PreparedMessage message
 function Conversation:last_message()
-  return prepare_message(self, self.messages[#self.messages], false)
+  local template_context = self:build_template_context()
+  return prepare_message(self.messages[#self.messages], template_context)
 end
 
 --- @param name string
@@ -754,9 +761,8 @@ function Conversation:get_cumulative_usage()
 end
 
 --- Build template context for rendering system prompts
---- @param context sia.Context?
 --- @return table Template context
-function Conversation:build_template_context(context)
+function Conversation:build_template_context()
   local tool_instructions = {}
   if vim.tbl_count(self.tools) > 0 then
     for _, tool in ipairs(self.tools) do
@@ -767,12 +773,15 @@ function Conversation:build_template_context(context)
     end
   end
 
+  local agents = require("sia.agent_registry").get_agent_definitions(false)
+  local agent_list = {}
+  for _, agent in pairs(agents) do
+    table.insert(agent_list, agent)
+  end
   return {
-    filetype = (context and context.buf and vim.api.nvim_buf_is_loaded(context.buf))
-        and vim.bo[context.buf].ft
-      or "",
     today = os.date("%Y-%m-%d"),
     tools = self.tools,
+    agents = agent_list,
     has_tools = #self.tools > 0,
     tool_count = #self.tools,
     has_tool = function(name)
@@ -783,6 +792,7 @@ end
 
 --- @return sia.PreparedMessage[]
 function Conversation:prepare_messages()
+  local template_context = self:build_template_context()
   --- @type sia.Message[]
   local messages = vim
     .iter(self.messages)
@@ -809,7 +819,7 @@ function Conversation:prepare_messages()
       if not m.status and is_outdated(m, self.id) then
         m.status = "outdated"
       end
-      return prepare_message(self, m)
+      return prepare_message(m, vim.deepcopy(template_context))
     end)
     :totable()
 
