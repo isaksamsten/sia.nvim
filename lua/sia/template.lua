@@ -59,6 +59,10 @@ local function contains_pattern(tbl, pattern)
   return false
 end
 
+local function join(tbl, delim)
+  return table.concat(tbl, delim or " ")
+end
+
 --- Create environment for template evaluation
 --- @param context table Base context
 --- @param loop_vars table|nil Additional loop variables
@@ -67,6 +71,7 @@ local function create_env(context, loop_vars)
   local env_vars = {
     contains = contains,
     contains_pattern = contains_pattern,
+    join = join,
   }
 
   if loop_vars then
