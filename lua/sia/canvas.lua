@@ -143,7 +143,7 @@ function Canvas:update_assistant_extmark(extmark_id, opts)
   end
 
   if opts.status_text then
-    table.insert(virt_text, { "  " .. opts.status_text .. "  ", "NonText" })
+    table.insert(virt_text, { "  " .. opts.status_text .. "  ", "SiaStatus" })
   end
 
   if opts.model then

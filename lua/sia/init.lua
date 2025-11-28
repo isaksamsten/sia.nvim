@@ -7,6 +7,7 @@ local highlight_groups = {
   SiaProgress = { link = "NonText" },
   SiaModel = {},
   SiaUsage = {},
+  SiaStatus = {},
   SiaAssistant = { link = "DiffAdd" },
   SiaUser = { link = "DiffChange" },
   SiaApproveInfo = { link = "StatusLine" },
