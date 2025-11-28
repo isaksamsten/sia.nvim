@@ -965,6 +965,7 @@ M.options = {
         "current_context",
       },
       tools = {
+        "task",
         "workspace",
         "locations",
         "edit",

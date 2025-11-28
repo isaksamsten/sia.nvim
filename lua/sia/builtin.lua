@@ -103,7 +103,6 @@ If there are no tools available to read files, ask the user to add them with
 `SiaAdd file` or `SiaAdd buffer`.
 </tool_calling>
 
-{% if has_tools %}
 <tools>
 {% for tool in tools %}
 <{{tool.name}}>
@@ -133,6 +132,21 @@ Before making tool calls, especially for file edits, briefly plan your
 approach. For complex changes, consider what the final result should look like
 rather than making incremental modifications.
 </planning>
+{% end %}
+
+{% if has_tool('task') %}
+<agents>
+You have access to these agents that can be started with the `task` tool.
+{% for agent in agents %}
+<{{agent.name}}>
+{{agent.description}}
+
+{% if agent.tools %}
+The agent has access to the following tools: {{ join(agent.tools, ", ") }}
+{% end %}
+</{{agent.name}}>
+{% end %}
+</agents>
 {% end %}
 
 <collaboration>
@@ -237,6 +251,21 @@ IMPORTANT: The todo list is collaborative - the USER can manually change todo
 statuses at any time. Before updating todos, use `read_todos` to check the
 current status to avoid overwriting the USER's changes.
 </task_management>
+{% end %}
+
+{% if has_tool('task') %}
+<agents>
+You have access to these agents that can be started with the `task` tool.
+{% for agent in agents %}
+<{{agent.name}}>
+{{agent.description}}
+
+{% if agent.tools %}
+The agent has access to the following tools: {{ join(agent.tools, ", ") }}
+{% end %}
+</{{agent.name}}>
+{% end %}
+</agents>
 {% end %}
 ]],
     },
