@@ -19,4 +19,5 @@ return {
   write_todos = require("sia.tools.write_todos"),
   history = require("sia.tools.history"),
   memory = require("sia.tools.memory"),
+  lsp = require("sia.tools.lsp"),
 }

@@ -878,6 +878,7 @@ M.options = {
         write_todos = require("sia.tools").write_todos,
         read_todos = require("sia.tools").read_todos,
         memory = require("sia.tools").memory,
+        lsp = require("sia.tools").lsp,
       },
     },
     actions = {
@@ -945,6 +946,7 @@ M.options = {
           "write_todos",
           "read_todos",
           "memory",
+          "lsp",
         },
       },
     },

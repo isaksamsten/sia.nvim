@@ -287,6 +287,7 @@ interact with your codebase and development environment:
   restrictions and output truncation (8000 char limit)
 - **fetch** - Retrieve and convert web content to markdown using pandoc, with
   AI-powered content analysis
+- **lsp** - Interact with Language Server Protocol servers for code intelligence
 
 ### Advanced Capabilities
 
@@ -759,8 +760,6 @@ Sia maintains persistent memory across conversations using the `.sia/memory/` di
 4. Memory files use markdown format for human readability
 
 You can safely view, edit, or delete files in `.sia/memory/` - they're meant to be human-readable and editable. The assistant will adapt to any changes you make.
-
-**Permission behavior:** Tool operations on `.sia/memory/` files never require user confirmation - they are automatically accepted. This ensures the assistant can maintain its memory efficiently without interrupting your workflow.
 
 **Note:** Add `.sia/` to your `.gitignore` if you don't want to commit memory files to version control, or commit them if you want to share context with your team.
 
