@@ -503,6 +503,54 @@ function Conversation:new(action, context)
   return obj
 end
 
+--- Create a deep copy of the conversation for branching
+--- All messages with context will be marked as outdated to avoid tick tracking issues
+--- @return sia.Conversation
+function Conversation:deep_copy()
+  local obj = setmetatable({}, getmetatable(self))
+  
+  -- Create new conversation identity
+  obj.uuid = make_uuid()
+  obj.id = CONVERSATION_ID
+  CONVERSATION_ID = CONVERSATION_ID + 1
+  
+  -- Copy basic properties
+  obj.context = self.context and vim.deepcopy(self.context) or nil
+  obj.model = self.model
+  obj.temperature = self.temperature
+  obj.mode = self.mode
+  obj.name = self.name
+  obj.enable_supersede = self.enable_supersede
+  obj.ignore_tool_confirm = self.ignore_tool_confirm
+  
+  -- Deep copy messages and mark messages with tick as outdated
+  obj.messages = {}
+  for _, message in ipairs(self.messages) do
+    local msg_copy = vim.deepcopy(message)
+    -- Mark messages with tick as outdated (these are tracked contexts)
+    if msg_copy.context and msg_copy.context.tick then
+      msg_copy.status = "outdated"
+    end
+    table.insert(obj.messages, msg_copy)
+  end
+  
+  -- Deep copy tools
+  obj.tools = vim.deepcopy(self.tools)
+  obj.tool_fn = vim.deepcopy(self.tool_fn)
+  
+  -- Reset state for new branch
+  obj.auto_confirm_tools = {}
+  obj.todos = {
+    buf = nil,
+    items = {},
+  }
+  obj.usage_history = {}
+  obj.tasks = {}
+  
+  return obj
+end
+
+
 --- @param tool string|sia.config.Tool
 function Conversation:add_tool(tool)
   if type(tool) == "string" then
