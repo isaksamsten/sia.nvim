@@ -36,22 +36,19 @@ return tool_utils.new_tool({
 This tool allows you to insert new content at a specified line number without
 needing to match existing text patterns.
 
-To use this tool, provide:
-1. target_file: The path to the file to modify
-2. line: The line number where text should be inserted (1-based)
-   - The text will be inserted BEFORE this line
-   - Use line 1 to insert at the beginning
-   - Use a line number beyond the file length to append to the end
-3. text: The text content to insert
+IMPORTANT:
+- Always read the current state of the file right before using this tool.
+  This tool is line-based, so if the file changed, your start_line/end_line
+  may be wrong and the edit will fail or affect the wrong text.
 
 Use cases:
 - Adding new imports or declarations at specific positions
 - Inserting new functions or methods at a known location
 - Adding content at the beginning or end of a file
 - Inserting text when you know the exact line number but don't want to match surrounding context
-
-Note: If you need to replace existing content, use the edit tool instead.
-If you need to rewrite large portions of a file, use the write tool instead.]],
+- For search/replace, use the edit tool.
+- For replacing regions use the replace_region.
+- For rewriting entire files, use the write tool.]],
   parameters = {
     target_file = {
       type = "string",
