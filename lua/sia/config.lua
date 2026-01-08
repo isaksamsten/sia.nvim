@@ -886,6 +886,7 @@ M.options = {
         read_todos = require("sia.tools").read_todos,
         memory = require("sia.tools").memory,
         lsp = require("sia.tools").lsp,
+        replace = require("sia.tools").replace_region,
       },
     },
     actions = {
@@ -954,6 +955,7 @@ M.options = {
           "read_todos",
           "memory",
           "lsp",
+          "replace",
         },
       },
     },
@@ -988,6 +990,7 @@ M.options = {
         "websearch",
         "read_todos",
         "write_todos",
+        "replace",
         "bash",
       },
     },

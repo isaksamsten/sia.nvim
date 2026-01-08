@@ -4,6 +4,7 @@ return {
   glob = require("sia.tools.glob"),
   edit = require("sia.tools.edit"),
   insert = require("sia.tools.insert"),
+  replace_region = require("sia.tools.replace_region"),
   write = require("sia.tools.write"),
   rename = require("sia.tools.rename"),
   remove = require("sia.tools.remove"),
