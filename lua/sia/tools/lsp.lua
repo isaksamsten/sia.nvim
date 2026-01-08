@@ -263,7 +263,7 @@ return tool_utils.new_tool({
   read_only = false,
   message = "Querying LSP...",
   description = "Use LSP server capabilities (hover, definition, references, rename, etc.)",
-  system_prompt = [[Use this tool to query the Language Server Protocol (LSP).
+  system_prompt = [[Interact with Language Server Protocol (LSP) servers to get code intelligence features.
 Supported commands:
 - hover: Get documentation for the symbol at the location.
 - definition: Find the definition of the symbol.
