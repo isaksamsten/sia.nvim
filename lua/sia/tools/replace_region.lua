@@ -115,6 +115,16 @@ Notes:
     return
   end
 
+  if not conversation:is_buf_valid(buf) then
+    callback({
+      content = {
+        "Error: the content is stale. Read the file again to ensure that it's up to date",
+      },
+      kind = "failed",
+    })
+    return
+  end
+
   local line_count = vim.api.nvim_buf_line_count(buf)
   local start_line = args.start_line
   local end_line = args.end_line

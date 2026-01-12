@@ -103,6 +103,10 @@ end
 --- @param id integer
 --- @return boolean
 local function is_outdated(message, id)
+  if message.status == "outdated" then
+    return true
+  end
+
   local has_tick = message.context ~= nil
     and message.context.buf ~= nil
     and message.context.tick ~= nil
@@ -503,17 +507,27 @@ function Conversation:new(action, context)
   return obj
 end
 
+function Conversation:is_buf_valid(buf)
+  local is_valid = false
+  for _, message in ipairs(self.messages) do
+    if message.context and message.context.buf == buf then
+      is_valid = not is_outdated(message, self.id)
+    end
+  end
+  return is_valid
+end
+
 --- Create a deep copy of the conversation for branching
 --- All messages with context will be marked as outdated to avoid tick tracking issues
 --- @return sia.Conversation
 function Conversation:deep_copy()
   local obj = setmetatable({}, getmetatable(self))
-  
+
   -- Create new conversation identity
   obj.uuid = make_uuid()
   obj.id = CONVERSATION_ID
   CONVERSATION_ID = CONVERSATION_ID + 1
-  
+
   -- Copy basic properties
   obj.context = self.context and vim.deepcopy(self.context) or nil
   obj.model = self.model
@@ -522,7 +536,7 @@ function Conversation:deep_copy()
   obj.name = self.name
   obj.enable_supersede = self.enable_supersede
   obj.ignore_tool_confirm = self.ignore_tool_confirm
-  
+
   -- Deep copy messages and mark messages with tick as outdated
   obj.messages = {}
   for _, message in ipairs(self.messages) do
@@ -533,11 +547,11 @@ function Conversation:deep_copy()
     end
     table.insert(obj.messages, msg_copy)
   end
-  
+
   -- Deep copy tools
   obj.tools = vim.deepcopy(self.tools)
   obj.tool_fn = vim.deepcopy(self.tool_fn)
-  
+
   -- Reset state for new branch
   obj.auto_confirm_tools = {}
   obj.todos = {
@@ -546,10 +560,9 @@ function Conversation:deep_copy()
   }
   obj.usage_history = {}
   obj.tasks = {}
-  
+
   return obj
 end
-
 
 --- @param tool string|sia.config.Tool
 function Conversation:add_tool(tool)
