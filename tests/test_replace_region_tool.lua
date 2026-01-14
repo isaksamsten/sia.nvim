@@ -37,7 +37,7 @@ T["sia.tools.replace_region"]["replaces a region with new text"] = function()
       start_line = 2,
       end_line = 3,
       text = "TWO\nTHREE",
-    }, { auto_confirm_tools = { replace_region = 1 } }, function(res)
+    }, { auto_confirm_tools = { replace_region = 1 }, is_buf_valid = function() return true end }, function(res)
       result = {
         kind = res.kind,
         content = res.content,
@@ -90,7 +90,7 @@ T["sia.tools.replace_region"]["deletes a region when text is empty"] = function(
       start_line = 2,
       end_line = 3,
       text = "",
-    }, { auto_confirm_tools = { replace_region = 1 } }, function(res)
+    }, { auto_confirm_tools = { replace_region = 1 }, is_buf_valid = function() return true end }, function(res)
       result = {
         kind = res.kind,
         content = res.content,
@@ -135,7 +135,7 @@ T["sia.tools.replace_region"]["fails on invalid line range"] = function()
       start_line = 0,
       end_line = 1,
       text = "X",
-    }, { auto_confirm_tools = { replace_region = 1 } }, function(res)
+    }, { auto_confirm_tools = { replace_region = 1 }, is_buf_valid = function() return true end }, function(res)
       result = { kind = res.kind, content = res.content, display_content = res.display_content }
     end, nil)
 
