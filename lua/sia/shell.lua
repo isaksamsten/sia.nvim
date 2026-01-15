@@ -23,6 +23,7 @@ local M = {}
 ---@field private is_alive boolean whether the shell process is alive
 ---@field private temp_files table<string, string> temporary files for IPC
 ---@field private shell_path string path to shell executable
+---@field private shell_args string[] arguments for the shell executable
 local Shell = {}
 Shell.__index = Shell
 
@@ -45,8 +46,9 @@ local TEMP_PREFIX = vim.fn.tempname() .. "-sia-shell-"
 
 ---Create a new shell instance
 ---@param project_root string the project root directory (security boundary)
+---@param shell_opts sia.config.Shell? shell configuration
 ---@return sia.Shell
-function M.new(project_root)
+function M.new(project_root, shell_opts)
   local self = setmetatable({}, Shell)
 
   self.project_root = vim.fn.resolve(project_root)
@@ -54,7 +56,15 @@ function M.new(project_root)
   self.command_queue = {}
   self.is_executing = false
   self.is_alive = false
-  self.shell_path = "/bin/bash"
+
+  shell_opts = shell_opts or {}
+  self.shell_path = shell_opts.command or "/bin/bash"
+
+  local args = shell_opts.args
+  if type(args) == "function" then
+    args = args()
+  end
+  self.shell_args = args or { "-s" }
 
   local id = string.format("%x", math.random(0x10000))
   self.temp_files = {
@@ -94,6 +104,7 @@ function Shell:_start_shell()
 
   self.process = vim.system({
     self.shell_path,
+    unpack(self.shell_args),
   }, {
     cwd = self.project_root,
     env = safe_env,

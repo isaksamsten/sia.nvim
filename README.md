@@ -93,6 +93,16 @@ require("sia").setup({
       clear_input = false,   -- Whether to clear tool input parameters during pruning
       keep = 20,             -- Number of recent tool calls to keep after pruning
     },
+
+    -- Shell configuration for the bash tool
+    shell = {
+      command = "/bin/bash",
+      args = { "-s" },
+      -- args can be a function returning a string[]
+      -- args = function()
+      --   return { "-lc" }
+      -- end,
+    },
   },
 
   -- Add custom actions (see Customizing Actions below)

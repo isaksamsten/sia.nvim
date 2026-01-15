@@ -157,7 +157,8 @@ git commit -m "$(cat <<'EOF'
     on_accept = function()
       if not conversation.shell then
         local Shell = require("sia.shell")
-        conversation.shell = Shell.new(project_root)
+        local config = require("sia.config")
+        conversation.shell = Shell.new(project_root, config.options.defaults.shell)
       end
 
       conversation.shell:exec(

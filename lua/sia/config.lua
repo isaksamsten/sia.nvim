@@ -659,6 +659,12 @@ end
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 --- @field ui sia.config.Defaults.Ui?
 
+--- @class sia.config.Shell
+--- @field command string?
+--- @field args string[]|fun():string[]?
+
+--- @field shell sia.config.Shell?
+
 --- @alias sia.config.Models table<string, [string, string]>
 --- @alias sia.config.Embeddings table<string, [string, string]>
 
@@ -861,6 +867,11 @@ M.options = {
         },
       },
     },
+    shell = {
+      command = "/bin/bash",
+      args = { "-s" },
+    },
+
     tools = {
       enable = true,
       choices = {
