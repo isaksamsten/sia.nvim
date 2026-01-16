@@ -1,5 +1,7 @@
 return {
   read = require("sia.tools.read"),
+  unread = require("sia.tools.unread"),
+
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),
   edit = require("sia.tools.edit"),
