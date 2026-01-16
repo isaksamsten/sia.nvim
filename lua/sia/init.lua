@@ -445,6 +445,140 @@ function M.open_reply()
   end
 end
 
+--- Open a floating prompt window to start a new conversation
+function M.prompt_window()
+  local config = require("sia.config")
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].ft = "markdown"
+
+  vim.b[buf].sia_prompt_model = nil
+
+  local width = vim.o.columns
+  local height = math.max(5, math.floor(vim.o.lines * 0.2))
+  local row = vim.o.lines - height - 2
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local function update_title(win)
+    if not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    local model = vim.b[buf].sia_prompt_model
+    local title = model and string.format(" Sia [%s] ", model) or " Sia "
+    vim.api.nvim_win_set_config(win, { title = title, title_pos = "center" })
+  end
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    focusable = true,
+    style = "minimal",
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    border = "single",
+    title = " Sia ",
+    title_pos = "center",
+    footer = " <CR>: Submit | m: Select Model | q: Close ",
+    footer_pos = "center",
+  })
+
+  vim.wo[win].wrap = true
+  vim.wo[win].linebreak = true
+
+  vim.keymap.set("n", "m", function()
+    vim.ui.input({
+      prompt = "Model: ",
+      default = vim.b[buf].sia_prompt_model or config.get_default_model("model").name,
+      completion = "customlist,v:lua.sia_model_complete",
+    }, function(input)
+      if input and input ~= "" then
+        if config.options.models[input] then
+          vim.b[buf].sia_prompt_model = input
+          update_title(win)
+        end
+      end
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+    end)
+  end, { buffer = buf, desc = "Select model for prompt" })
+
+  vim.keymap.set("n", "<CR>", function()
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local prompt = table.concat(lines, "\n"):gsub("^%s*(.-)%s*$", "%1")
+
+    if prompt == "" then
+      vim.notify("Sia: No prompt provided.", vim.log.levels.WARN)
+      return
+    end
+
+    local model_name = vim.b[buf].sia_prompt_model
+    local action = vim.tbl_deep_extend("force", {}, config.get_default_action("chat"))
+    table.insert(action.instructions, {
+      role = "user",
+      content = prompt,
+    })
+
+    if model_name then
+      action.model = model_name
+    end
+
+    local target_buf = vim.fn.bufnr("#")
+    if target_buf == -1 then
+      target_buf = vim.api.nvim_get_current_buf()
+    end
+
+    local context = {
+      buf = target_buf,
+      win = vim.fn.bufwinid(target_buf),
+      mode = "n",
+      bang = false,
+    }
+
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+
+    M.execute_action(action, {
+      context = context,
+      model = model_name,
+      named_prompt = false,
+    })
+  end, { buffer = buf, desc = "Submit prompt" })
+
+  vim.keymap.set("n", "q", function()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end, { buffer = buf, desc = "Close prompt window" })
+
+  vim.keymap.set("n", "<Esc>", function()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end, { buffer = buf, desc = "Close prompt window" })
+
+  vim.cmd("startinsert")
+end
+
+_G.sia_model_complete = function(arg_lead, cmd_line, cursor_pos)
+  local config = require("sia.config")
+  local available_models = vim.tbl_keys(config.options.models)
+  table.sort(available_models)
+
+  local matches = {}
+  for _, model in ipairs(available_models) do
+    if vim.startswith(model, arg_lead) then
+      table.insert(matches, model)
+    end
+  end
+
+  return matches
+end
+
 --- Compact a conversation by summarizing previous messages
 --- @param conversation sia.Conversation The conversation object to compact
 --- @param reason string? Optional reason for compacting (used in summary message)
