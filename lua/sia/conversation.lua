@@ -181,7 +181,7 @@ local function mark_outdated_messages(conversation)
       end
 
       if tool_call_id and tool_filter[tool_call_id] == "ephemeral" then
-        m.ephemeral = true
+        m.status = "failed"
       elseif
         (tool_call_id and tool_filter[tool_call_id] == "outdated")
         or is_outdated(m, conversation.id)
@@ -238,6 +238,7 @@ function Message:from_table(instruction, context)
   obj.role = instruction.role
   obj.kind = instruction.kind
 
+  obj.ephemeral = instruction.ephemeral
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
@@ -870,7 +871,7 @@ function Conversation:prepare_messages()
         return false
       end
 
-      if m.ephemeral then
+      if m.status == "failed" then
         return false
       end
 

@@ -613,6 +613,7 @@ end
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
 --- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.InstructionContent[])?
 --- @field kind string?
+--- @field ephemeral boolean?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- TODO: Drop tool fields from instructions...
