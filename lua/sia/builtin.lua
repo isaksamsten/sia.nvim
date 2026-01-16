@@ -318,9 +318,8 @@ of the conversation. Use the glob tool to refresh your understanding.
         local memories = vim.fn.readfile(filename)
         return string.format(
           [[Always follow the instructions stored in %s.
-Remember that you can edit this file to store memories. Before editing always
-read the latest
-version.
+Remember that you can edit this file to store user preferences. Before editing always
+read the latest version.
 ```markdown
 %s
 ```]],
