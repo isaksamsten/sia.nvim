@@ -536,11 +536,21 @@ end
 function M.get_context_config()
   local local_config = M.get_local_config()
   if local_config and local_config.context then
-    return vim.tbl_deep_extend(
+    local merged = vim.tbl_deep_extend(
       "keep",
       local_config.context or {},
       M.options.defaults.context or {}
     )
+
+    -- Special handling: merge exclude lists
+    if local_config.context.exclude and M.options.defaults.context.exclude then
+      merged.exclude = vim.list_extend(
+        vim.deepcopy(M.options.defaults.context.exclude),
+        local_config.context.exclude
+      )
+    end
+
+    return merged
   end
   return M.options.defaults.context or {}
 end
@@ -817,6 +827,7 @@ M.options = {
       max_tool = 40,
       keep = 5,
       clear_input = true,
+      exclude = { "grep", "glob", "read_todos" },
     },
     chat = {
       cmd = "botright vnew",
