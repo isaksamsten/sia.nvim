@@ -179,7 +179,7 @@ T["tool call filtering"]["should handle failed tool calls"] = function()
   conv:add_instruction(create_tool_response_message("call_2", "test_tool"))
 
   local failed_msg = create_tool_call_message("call_3", "test_tool")
-  failed_msg.kind = "failed"
+  failed_msg.ephemeral = true
   conv:add_instruction(failed_msg)
 
   conv:add_instruction(create_tool_call_message("call_4", "test_tool"))

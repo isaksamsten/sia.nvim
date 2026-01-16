@@ -67,13 +67,13 @@ they are excluded from future interactions.]],
   if updated == 0 then
     callback({
       content = { "No matching file context found to mark as outdated." },
-      kind = "failed",
+      ephemeral = true,
     })
     return
   end
 
   callback({
     content = { "Files have been marked as outdated" },
-    kind = "failed",
+    ephemeral = true,
   })
 end)

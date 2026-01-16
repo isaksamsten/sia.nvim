@@ -129,6 +129,8 @@ function InsertStrategy:on_complete(control)
               content = tool_result.result.content,
               _tool_call = tool_result.tool,
               kind = tool_result.result.kind,
+              ephemeral = tool_result.result.kind == "failed"
+                or tool_result.result.ephemeral,
             },
           }, tool_result.result.context)
           self.writer:append_newline()

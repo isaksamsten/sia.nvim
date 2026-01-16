@@ -75,6 +75,8 @@ end
 --- @field template boolean
 --- @field hide boolean?
 --- @field kind string?
+--- @field ephemeral boolean?
+
 --- @field content (string|sia.InstructionContent[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
@@ -129,15 +131,15 @@ local function mark_outdated_messages(conversation)
   local max_tool_calls = context_config.max_tool or 100
   local exclude_tool = context_config.exclude or {}
 
-  --- @type table<string, "failed"|"outdated">
+  --- @type table<string, "ephemeral"|"outdated">
   local tool_filter = {}
 
   --- @type {id:string, index:integer, name:string}[]
   local tool_calls_info = {}
   for i, m in ipairs(conversation.messages) do
     if m._tool_call and m._tool_call.id then
-      if m.kind == "failed" then
-        tool_filter[m._tool_call.id] = "failed"
+      if m.ephemeral then
+        tool_filter[m._tool_call.id] = "ephemeral"
       elseif m.status == "outdated" then
         tool_filter[m._tool_call.id] = "outdated"
       else
@@ -164,7 +166,7 @@ local function mark_outdated_messages(conversation)
   local last_message = conversation.messages[#conversation.messages]
   if
     last_message
-    and last_message.kind == "failed"
+    and last_message.ephemeral
     and last_message._tool_call
     and last_message._tool_call.id
   then
@@ -178,8 +180,8 @@ local function mark_outdated_messages(conversation)
         tool_call_id = m.tool_calls[1].id
       end
 
-      if tool_call_id and tool_filter[tool_call_id] == "failed" then
-        m.status = "failed"
+      if tool_call_id and tool_filter[tool_call_id] == "ephemeral" then
+        m.ephemeral = true
       elseif
         (tool_call_id and tool_filter[tool_call_id] == "outdated")
         or is_outdated(m, conversation.id)
@@ -868,7 +870,7 @@ function Conversation:prepare_messages()
         return false
       end
 
-      if m.status == "failed" then
+      if m.ephemeral then
         return false
       end
 
