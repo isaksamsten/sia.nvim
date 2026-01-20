@@ -600,37 +600,15 @@ function M.urlencode(str)
   return str
 end
 
--- Root detection helpers
-local default_markers = {
-  ".sia",
-  ".git",
-  ".hg",
-  ".svn",
-  "go.mod",
-  "Cargo.toml",
-  "package.json",
-  "pyproject.toml",
-  "Pipfile",
-  "poetry.lock",
-  "requirements.txt",
-  "setup.py",
-  "Makefile",
-  "pom.xml",
-  "build.gradle",
-  "mix.exs",
-}
-
 local function normalize(p)
   return vim.fn.fnamemodify(p, ":p")
 end
 
 --- Detect a project root given a path or buffer
 --- @param path_or_buf string|integer
---- @param opts { markers: string[]? }?
 --- @return string root_abs
-function M.detect_project_root(path_or_buf, opts)
-  opts = opts or {}
-  local markers = opts.markers or default_markers
+function M.detect_project_root(path_or_buf)
+  local markers = { ".sia" }
 
   local marker_root
   if type(path_or_buf) == "number" then

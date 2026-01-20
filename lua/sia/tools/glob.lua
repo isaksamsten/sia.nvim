@@ -81,7 +81,8 @@ return tool_utils.new_tool({
         table.insert(cmd, path)
       end
 
-      vim.system(cmd, { text = true }, function(obj)
+      local root = utils.detect_project_root(vim.fn.getcwd())
+      vim.system(cmd, { text = true, cwd = root }, function(obj)
         if obj.code ~= 0 then
           local msg
           if pattern and path then

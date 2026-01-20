@@ -293,10 +293,12 @@ Usage:
         table.insert(command, args.path)
       end
 
+      local root = require("sia.utils").detect_project_root(vim.fn.getcwd())
       vim.system(command, {
         text = true,
         stderr = false,
         timeout = 5000,
+        cwd = root,
       }, function(obj)
         local lines = vim.split(obj.stdout, "\n", { trimempty = true })
 
