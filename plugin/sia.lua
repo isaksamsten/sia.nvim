@@ -527,11 +527,12 @@ vim.api.nvim_create_user_command("SiaSave", function()
       vim.notify("Sia: Conversation saved", vim.log.levels.INFO)
     end,
   })
+end, {})
 
 vim.api.nvim_create_user_command("SiaBranch", function(args)
   local ChatStrategy = require("sia.strategy").ChatStrategy
   local chat = ChatStrategy.by_buf()
-  
+
   if not chat or not chat.conversation then
     vim.api.nvim_echo(
       { { "Sia: No active chat in this buffer.", "ErrorMsg" } },
@@ -540,44 +541,44 @@ vim.api.nvim_create_user_command("SiaBranch", function(args)
     )
     return
   end
-  
+
   if chat.is_busy then
     vim.notify("Sia: Current conversation is busy", vim.log.levels.WARN)
     return
   end
-  
+
   -- Parse -m flag for model override
   local model = find_and_remove_flag("-m", args.fargs)
   if model and not require("sia.config").options.models[model] then
     vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
     return
   end
-  
+
   -- Get the prompt
   local prompt = table.concat(args.fargs, " ")
   if prompt == "" then
     vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
     return
   end
-  
+
   -- Deep copy the conversation
   local branched_conversation = chat.conversation:deep_copy()
-  
+
   -- Override model if specified
   if model then
     local Model = require("sia.model")
     branched_conversation.model = Model.resolve(model)
   end
-  
+
   -- Create new chat strategy with the branched conversation
   local new_strategy = ChatStrategy:new(branched_conversation, chat.options)
-  
+
   -- Add the prompt as a new user instruction
   branched_conversation:add_instruction({
     role = "user",
     content = prompt,
   }, nil)
-  
+
   -- Execute the strategy
   require("sia.assistant").execute_strategy(new_strategy)
 end, {
@@ -586,5 +587,3 @@ end, {
     return match_any_flag(string.sub(cmd_line, 1, cursor_pos)) or {}
   end,
 })
-
-end, {})
