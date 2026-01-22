@@ -92,6 +92,12 @@ For small, targeted changes, prefer the edit tool instead.]],
       end
     end,
     on_accept = function()
+      -- Ensure parent directory exists
+      local parent_dir = vim.fn.fnamemodify(args.path, ":h")
+      if parent_dir ~= "" and parent_dir ~= "." then
+        vim.fn.mkdir(parent_dir, "p")
+      end
+
       local buf = utils.ensure_file_is_loaded(args.path, { listed = true })
       if not buf then
         callback({
