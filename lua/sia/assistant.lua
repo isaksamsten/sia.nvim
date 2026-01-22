@@ -113,7 +113,7 @@ function M.execute_strategy(strategy)
     local extra_args = provider.get_headers
       and provider.get_headers(provider.api_key(), messages)
     local first_on_stdout = true
-    local incomplete = nil
+    local pending_data = "" -- Buffer for data that spans multiple callbacks
     local error_initialize = false
 
     local stream = provider.new_stream(strategy)
@@ -156,44 +156,66 @@ function M.execute_strategy(strategy)
           end
         end
 
-        for _, resp in pairs(responses) do
+        -- Process each line from responses
+        -- Note: Neovim splits stdout by newlines, but the last element may be
+        -- incomplete (split mid-line by TCP). We need to buffer incomplete data.
+        for i, resp in ipairs(responses) do
           if resp and resp ~= "" then
-            if incomplete then
-              resp = incomplete .. resp
-              incomplete = nil
+            -- Prepend any pending data from previous callback
+            if pending_data ~= "" then
+              resp = pending_data .. resp
+              pending_data = ""
             end
-            resp = string.match(resp, "^data: (.+)$")
-            if resp and resp ~= "[DONE]" then
-              local status, obj = pcall(vim.json.decode, resp, {
-                luanil = { object = true },
-              })
-              if not status then
-                incomplete = "data: " .. resp
-              else
-                if provider.process_usage then
-                  local new_usage = provider.process_usage(obj)
-                  if new_usage and strategy.conversation.add_usage then
-                    new_usage.total_time = (vim.uv.hrtime() - start_time) / 1000000000
-                    strategy.conversation:add_usage(new_usage)
-                  end
 
-                  if not usage and new_usage then
-                    usage = vim.deepcopy(new_usage)
-                  elseif usage and new_usage then
-                    usage.total = (usage.total or 0) + (new_usage.total or 0)
-                    usage.output = (usage.output or 0) + (new_usage.output or 0)
-                    usage.input = (usage.input or 0) + (new_usage.input or 0)
-                    usage.cache_read = (usage.cache_read or 0)
-                      + (new_usage.cache_read or 0)
-                    usage.cache_write = (usage.cache_write or 0)
-                      + (new_usage.cache_write or 0)
-                    usage.total_time = (usage.total_time or 0)
-                      + (new_usage.total_time or 0)
+            -- Check if this looks like a complete SSE data line
+            local data_content = string.match(resp, "^data:%s*(.+)$")
+            if data_content then
+              if data_content ~= "[DONE]" then
+                local status, obj = pcall(vim.json.decode, data_content, {
+                  luanil = { object = true },
+                })
+                if not status then
+                  -- JSON parsing failed - this line might be incomplete
+                  -- Buffer it for next callback
+                  pending_data = resp
+                else
+                  if provider.process_usage then
+                    local new_usage = provider.process_usage(obj)
+                    if new_usage and strategy.conversation.add_usage then
+                      new_usage.total_time = (vim.uv.hrtime() - start_time) / 1000000000
+                      strategy.conversation:add_usage(new_usage)
+                    end
+
+                    if not usage and new_usage then
+                      usage = vim.deepcopy(new_usage)
+                    elseif usage and new_usage then
+                      usage.total = (usage.total or 0) + (new_usage.total or 0)
+                      usage.output = (usage.output or 0) + (new_usage.output or 0)
+                      usage.input = (usage.input or 0) + (new_usage.input or 0)
+                      usage.cache_read = (usage.cache_read or 0)
+                        + (new_usage.cache_read or 0)
+                      usage.cache_write = (usage.cache_write or 0)
+                        + (new_usage.cache_write or 0)
+                      usage.total_time = (usage.total_time or 0)
+                        + (new_usage.total_time or 0)
+                    end
+                  end
+                  if stream:process_stream_chunk(obj) then
+                    vim.fn.jobstop(job_id)
                   end
                 end
-                if stream:process_stream_chunk(obj) then
-                  vim.fn.jobstop(job_id)
-                end
+              end
+            else
+              -- Line doesn't start with "data:" - check if it's a known SSE field
+              -- that should be ignored (like "event:", "id:", "retry:")
+              if
+                not string.match(resp, "^event:")
+                and not string.match(resp, "^id:")
+                and not string.match(resp, "^retry:")
+              then
+                -- Not a known SSE field - it's likely a partial line
+                -- from TCP splitting. Buffer it for the next callback.
+                pending_data = resp
               end
             end
           end

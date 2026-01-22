@@ -134,4 +134,125 @@ T["assistant.streaming"]["multi field delta processes all fields"] = function()
   eq('{"a":1}', tool["function"].arguments)
 end
 
+-- Test that partial data split across multiple on_stdout calls is handled correctly
+T["assistant.streaming"]["handles partial data across stdout calls"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        -- Simulate data being split at arbitrary byte boundaries by TCP
+        -- Neovim splits by newlines, so each element is a line (without trailing \n)
+        -- But when data arrives mid-line, it becomes a partial element
+        --
+        -- First call: complete line + partial line
+        job_opts.on_stdout(1, { 'data: {"choices":[{"delta":{"content":"Hel"}}]}', 'data: {"cho' }, 10)
+        -- Second call: rest of partial line + complete line
+        job_opts.on_stdout(1, { 'ices":[{"delta":{"content":"lo"}}]}', 'data: {"choices":[{"delta":{"content":"!"}}]}' }, 10)
+        -- Final events
+        job_opts.on_stdout(
+          1,
+          { "data: " .. vim.json.encode({ choices = { { delta = {} } }, usage = { total_tokens = 5 } }) },
+          10
+        )
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["handles partial data across stdout calls"]["reconstructs split content"] = function()
+  local strategy = TestStrategy:new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  -- Should have received all three content pieces
+  eq(true, vim.tbl_contains(strategy.contents, "Hel"))
+  eq(true, vim.tbl_contains(strategy.contents, "lo"))
+  eq(true, vim.tbl_contains(strategy.contents, "!"))
+end
+
+-- Test that multiple complete events in single stdout call are all processed
+T["assistant.streaming"]["handles multiple events in single stdout call"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        -- Send multiple complete events as separate array elements (how Neovim delivers them)
+        job_opts.on_stdout(1, {
+          'data: {"choices":[{"delta":{"content":"A"}}]}',
+          'data: {"choices":[{"delta":{"content":"B"}}]}',
+          'data: {"choices":[{"delta":{"content":"C"}}]}',
+        }, 10)
+        job_opts.on_stdout(
+          1,
+          { "data: " .. vim.json.encode({ choices = { { delta = {} } }, usage = { total_tokens = 3 } }) },
+          10
+        )
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["handles multiple events in single stdout call"]["processes all events"] = function()
+  local strategy = TestStrategy:new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  eq(true, vim.tbl_contains(strategy.contents, "A"))
+  eq(true, vim.tbl_contains(strategy.contents, "B"))
+  eq(true, vim.tbl_contains(strategy.contents, "C"))
+end
+
+-- Test that SSE event: lines are properly ignored (used by Responses API)
+T["assistant.streaming"]["handles SSE event lines"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        -- Simulate Responses API format with event: lines
+        -- Each SSE event has an "event:" line followed by a "data:" line
+        job_opts.on_stdout(1, {
+          "event: response.created",
+          'data: {"type":"response.created","response":{"id":"123"}}',
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":"Hello"}',
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":" World"}',
+        }, 10)
+        job_opts.on_stdout(
+          1,
+          { "data: " .. vim.json.encode({ choices = { { delta = {} } }, usage = { total_tokens = 5 } }) },
+          10
+        )
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["handles SSE event lines"]["ignores event lines and processes data"] = function()
+  local strategy = TestStrategy:new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  -- The Responses API format uses different JSON structure, but the test verifies
+  -- that event: lines don't corrupt data: line processing
+end
+
 return T

@@ -12,6 +12,7 @@ function M.mock_fn_jobstart(data)
     end
 
     for _, datum in ipairs(data) do
+      -- Neovim splits by newlines, so each element is a line without trailing \n
       job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
     end
     job_opts.on_stdout(1, {
@@ -22,6 +23,12 @@ function M.mock_fn_jobstart(data)
     job_opts.on_exit(1, 0, nil)
     return 1
   end
+end
+
+--- Custom mock that takes a function to control the exact sequence of events
+--- @param fn fun(args: string[], job_opts: table): integer
+function M.mock_fn_jobstart_custom(fn)
+  vim.fn.jobstart = fn
 end
 
 function M.unmock_assistant()
