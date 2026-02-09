@@ -46,6 +46,7 @@ progress tracker that helps the USER follow along with your work.
 IMPORTANT:
 - Only call write_todos when a todo status changes (pending→active,
 active→done/skipped), or when adding/replacing todos.
+- Only call read_todos when you are unsure what the next task is.
 - Do NOT call write_todos to re-assert an unchanged status (e.g. "active"→"active").
 </task_management>
 {% end %}
@@ -112,6 +113,7 @@ If there are no tools available to read files, ask the user to add them with
 {% end %}
 </tools>
 
+{% if not (model.provider_name() == "copilot" and model.api_name():match("gemini")) %}
 <use_parallel_tool_calls>
 For maximum efficiency, whenever you perform multiple independent operations,
 invoke all relevant tools simultaneously rather than sequentially. Prioritize
@@ -127,6 +129,11 @@ use multiple parallel edit tool calls in a single message rather than trying to
 handle multiple edits in one tool call. Each edit call should handle one specific
 change with clear context.
 </use_parallel_tool_calls>
+{% else %}
+<avoid_parallel_tool_calls>
+Never use parallel tool calls
+</avoid_parallel_tool_calls>
+{% end %}
 
 <planning>
 Before making tool calls, especially for file edits, briefly plan your

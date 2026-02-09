@@ -22,4 +22,5 @@ return {
   history = require("sia.tools.history"),
   memory = require("sia.tools.memory"),
   lsp = require("sia.tools.lsp"),
+  ask_user = require("sia.tools.ask_user"),
 }

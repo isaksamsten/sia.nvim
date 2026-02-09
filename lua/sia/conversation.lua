@@ -848,6 +848,7 @@ function Conversation:build_template_context()
     agents = agent_list,
     has_tools = #self.tools > 0,
     tool_count = #self.tools,
+    model = self.model,
     has_tool = function(name)
       return self.tool_fn[name] ~= nil
     end,

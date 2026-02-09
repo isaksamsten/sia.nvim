@@ -825,8 +825,8 @@ M.options = {
     embedding_model = "openai/text-embedding-3-small",
     temperature = 0.3, -- default temperature
     context = {
-      max_tool = 40,
-      keep = 5,
+      max_tool = 200,
+      keep = 20,
       clear_input = true,
       exclude = { "grep", "glob", "read_todos" },
     },
@@ -872,6 +872,7 @@ M.options = {
     tools = {
       enable = true,
       choices = {
+        ask_user = require("sia.tools").ask_user,
         history = require("sia.tools").history,
         locations = require("sia.tools").locations,
         read = require("sia.tools").read,
@@ -943,19 +944,14 @@ M.options = {
           "current_context",
         },
         tools = {
-          "task",
+          "ask_user",
           "grep",
-          "workspace",
-          "history",
-          "locations",
           "edit",
           "write",
           "insert",
           "read",
           "glob",
           "diagnostics",
-          "rename",
-          "remove",
           "bash",
           "fetch",
           "websearch",
