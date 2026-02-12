@@ -6,8 +6,7 @@ return tool_utils.new_tool({
   message = "Reading todos...",
   system_prompt = [[Read the current list of todos for this conversation.
 
-Returns all todos with their ID, description, and status. Use the IDs when updating todos
-with the write_todos tool.]],
+Returns all todos with their ID, description, and status. Use the IDs when updating todos with the write_todos tool.]],
   description = "Get the current list of todos for this conversation",
   parameters = vim.empty_dict(),
   required = {},
