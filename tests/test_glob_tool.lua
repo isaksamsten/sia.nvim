@@ -414,4 +414,89 @@ T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
   eq("No files found matching pattern: *.lua in does/not/exist", result.content[1])
 end
 
+T["sia.tools.glob"]["pattern with path separator finds files"] = function()
+  local code = [[
+    local glob_tool = require("sia.tools.glob")
+    local result = nil
+    local callback = function(res)
+      result = res
+    end
+
+    local args = {
+      pattern = "src/lua/*.lua",
+    }
+
+    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+
+    vim.wait(1000, function()
+      return result ~= nil
+    end)
+
+    _G.result = result
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+
+  -- Should find lua files in src/lua directory using path separator in pattern
+  eq(true, contains_files(result, { "src/lua/parser.lua", "src/lua/lexer.lua" }))
+end
+
+T["sia.tools.glob"]["pattern with path separator and path arg"] = function()
+  local code = [[
+    local glob_tool = require("sia.tools.glob")
+    local result = nil
+    local callback = function(res)
+      result = res
+    end
+
+    local args = {
+      pattern = "lua/*.lua",
+      path = "src",
+    }
+
+    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+
+    vim.wait(1000, function()
+      return result ~= nil
+    end)
+
+    _G.result = result
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+
+  -- Should find lua files within src directory matching pattern with path separator
+  eq(true, contains_files(result, { "src/lua/parser.lua", "src/lua/lexer.lua" }))
+end
+
+T["sia.tools.glob"]["pattern starting with **/ and path separator"] = function()
+  local code = [[
+    local glob_tool = require("sia.tools.glob")
+    local result = nil
+    local callback = function(res)
+      result = res
+    end
+
+    local args = {
+      pattern = "**/python/*.py",
+    }
+
+    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+
+    vim.wait(1000, function()
+      return result ~= nil
+    end)
+
+    _G.result = result
+  ]]
+
+  child.lua(code)
+  local result = child.lua_get("_G.result")
+
+  -- Should find python files using **/ prefix with path separator
+  eq(true, contains_files(result, { "src/python/main.py", "src/python/utils.py" }))
+end
+
 return T

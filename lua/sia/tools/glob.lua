@@ -66,6 +66,16 @@ return tool_utils.new_tool({
 
       if pattern and pattern ~= "" then
         table.insert(cmd, "--glob")
+        -- When pattern contains a path separator, fd needs --full-path
+        -- to match against the full relative path instead of just the filename.
+        -- We also prepend **/ if not already present so it matches anywhere
+        -- in the directory tree.
+        if pattern:find("/") then
+          table.insert(cmd, "--full-path")
+          if not pattern:match("^%*%*/") and not pattern:match("^/") then
+            pattern = "**/" .. pattern
+          end
+        end
         table.insert(cmd, pattern)
       elseif path and path ~= "" then
         -- When path is provided without pattern, use match-all pattern
