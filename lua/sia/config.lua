@@ -736,7 +736,7 @@ M.options = {
       can_reason = true,
     },
     ["copilot/claude-haiku-4.5"] = { "copilot", "claude-haiku-4.5" },
-    ["copilot/claude-opus-4.5"] = { "copilot", "claude-opus-4.5" },
+    ["copilot/claude-opus-4.6"] = { "copilot", "claude-opus-4.6" },
     ["copilot/claude-sonnet-4.5"] = { "copilot", "claude-sonnet-4.5" },
     ["copilot/gemini-3-pro"] = { "copilot", "gemini-3-pro-preview" },
     ["copilot/gemini-3-flash"] = { "copilot", "gemini-3-flash-preview" },
