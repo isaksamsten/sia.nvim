@@ -934,7 +934,7 @@ M.options = {
         mode = "chat",
         temperature = 0.1,
         system = {
-          "default_system",
+          "minimal_system",
           "system_info",
           "directory_structure",
           "agents_md",
@@ -958,8 +958,6 @@ M.options = {
           "write_todos",
           "read_todos",
           "memory",
-          "lsp",
-          "replace",
         },
       },
     },
