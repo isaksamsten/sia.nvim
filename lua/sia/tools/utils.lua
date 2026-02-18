@@ -63,7 +63,7 @@ local function select(items, opts, on_choice)
       end
 
       local idx = tonumber(resp or "")
-      if resp == nil or idx < 0 or idx > #items then
+      if (resp == "" or resp == nil) or idx < 0 or idx > #items then
         on_choice(nil, nil)
       end
       on_choice(items[idx], idx)
