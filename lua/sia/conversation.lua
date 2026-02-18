@@ -624,15 +624,12 @@ function Conversation:clear_user_instructions()
     self.shell = nil
   end
 
-  -- Clean up bash process temp files
-  for _, proc in ipairs(self.bash_processes) do
-    if proc.stdout_file then
-      vim.uv.fs_unlink(proc.stdout_file)
-    end
-    if proc.stderr_file then
-      vim.uv.fs_unlink(proc.stderr_file)
-    end
-  end
+  -- These are written to /tmp and will be cleaned up automatically
+  -- local tool_utils = require("sia.tools.utils")
+  -- local output_dir = tool_utils.get_bash_output_dir(self.id)
+  -- if vim.fn.isdirectory(output_dir) == 1 then
+  --   vim.fn.delete(output_dir, "rf")
+  -- end
   self.bash_processes = {}
 end
 

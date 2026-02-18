@@ -27,6 +27,9 @@ will be truncated.]],
   },
   required = { "path" },
   auto_apply = function(args, _)
+    if args.path and tool_utils.is_bash_output_path(args.path) then
+      return 1
+    end
     return nil
   end,
 }, function(args, conversation, callback, opts)

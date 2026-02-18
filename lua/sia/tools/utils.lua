@@ -423,4 +423,30 @@ M.new_tool = function(opts, execute)
   }
 end
 
+--- Base directory for bash output temp files (includes PID to avoid collisions between
+--- Neovim instances)
+--- @type string
+local BASH_OUTPUT_DIR = vim.fs.joinpath(
+  vim.uv.os_tmpdir() or "/tmp",
+  "sia",
+  "bash",
+  tostring(vim.uv.os_getpid())
+)
+
+--- Get the bash output directory for a specific conversation
+--- @param conversation_id integer
+--- @return string
+function M.get_bash_output_dir(conversation_id)
+  return vim.fs.joinpath(BASH_OUTPUT_DIR, tostring(conversation_id))
+end
+
+--- Check if a file path is under the sia bash output directory
+--- @param path string
+--- @return boolean
+function M.is_bash_output_path(path)
+  local resolved = vim.fn.resolve(path)
+  local base = vim.fn.resolve(BASH_OUTPUT_DIR)
+  return vim.startswith(resolved, base .. "/") or resolved == base
+end
+
 return M
