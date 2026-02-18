@@ -1,4 +1,5 @@
 local common = require("sia.strategy.common")
+local winbar = require("sia.winbar")
 
 local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
@@ -6,50 +7,6 @@ local Strategy = common.Strategy
 local SUMMARIZE_PROMPT = [[Summarize the interaction. Make it suitable for a
 buffer name in neovim using three to five words separated by
 spaces. Only output the name, nothing else.]]
-
-local STATUS_ICONS = {
-  pending = " ",
-  running = " ",
-  done = " ",
-}
-
-local STATUS_HL = {
-  pending = "NonText",
-  running = "DiagnosticWarn",
-  done = "DiagnosticOk",
-}
-
---- @param win integer
---- @param stats sia.conversation.Stats
-local function default_render_stats(win, stats)
-  local win_width = vim.api.nvim_win_get_width(win)
-  local left = stats.left or ""
-  local center = ""
-  local right = stats.right or ""
-
-  if stats.bar then
-    local used_percent = stats.bar.percent or 0
-    local bar_width = math.min(20, win_width - 11)
-    local filled_bars = math.ceil(used_percent * bar_width)
-    if filled_bars > bar_width then
-      filled_bars = bar_width
-    end
-    local empty_bars = bar_width - filled_bars
-
-    local bar_hl = used_percent >= 1 and "%#DiagnosticError#"
-      or used_percent >= 0.75 and "%#DiagnosticWarn#"
-      or "%#DiagnosticOk#"
-    center = bar_hl
-      .. (stats.bar.icon and (" " .. stats.bar.icon) or "")
-      .. string.rep("■", filled_bars)
-      .. string.rep("━", empty_bars)
-      .. (stats.bar.text and (" " .. stats.bar.text) or "")
-      .. bar_hl
-  end
-
-  vim.wo[win].winbar =
-    string.format("%%#Normal#%s%%=%s%%#Normal#%%=%s%%#Normal#", left, center, right)
-end
 
 --- @class sia.ToolCall
 --- @field id string
@@ -122,6 +79,11 @@ function ChatStrategy:new(conversation, options)
       ChatStrategy.remove(args.buf)
     end,
   })
+
+  if options.winbar then
+    winbar.attach(buf, conversation, obj)
+  end
+
   return obj
 end
 
@@ -299,33 +261,10 @@ function ChatStrategy:on_complete(control)
     else
       control.finish()
     end
-    if self.options.show_stats then
-      local provider = self.conversation.model:get_provider()
-      if provider.get_stats then
-        provider.get_stats(function(stats)
-          if stats then
-            local render_stats = self.options.render_stats or default_render_stats
-            local win = self:get_win()
-            render_stats(win, stats)
-          end
-        end, self.conversation)
-      end
-    end
   end
 
   self:execute_tools({
     cancellable = self.cancellable,
-    handle_status_updates = function(statuses)
-      -- local lines = {}
-      -- for _, s in ipairs(statuses) do
-      --   local icon = STATUS_ICONS[s.status] or ""
-      --   local friendly_message = s.tool.message
-      --   local label = friendly_message or (s.tool.name or "tool")
-      --   local hl = STATUS_HL[s.status] or "NonText"
-      --   table.insert(lines, { { icon, hl }, { label, "NonText" } })
-      -- end
-      -- self.canvas:update_tool_progress(lines)
-    end,
     handle_tools_completion = function(opts)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -421,6 +360,7 @@ function ChatStrategy.remove(buf)
     return
   end
 
+  winbar.detach(buf)
   strategy.conversation:untrack_messages()
   ChatStrategy._buffers[buf] = nil
   for i, b in ipairs(ChatStrategy._order) do

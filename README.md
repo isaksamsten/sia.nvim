@@ -179,21 +179,35 @@ Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier`
 in the model configuration.
 
-Enable by setting `defaults.chat.show_stats = true`.
+Enable by setting the `defaults.chat.winbar` option.
 
-### Customizing Stats Display
+### Customizing Winbar Display
+
+The winbar is rendered by calling three functions: `left`, `center`, and `right`. Each
+function receives a `data` table with the current conversation state.
 
 ```lua
 require("sia").setup({
   defaults = {
     chat = {
-      show_stats = true,
-      render_stats = function(win, stats)
-        -- stats table contains:
-        -- - left: string (optional, e.g., "7d" for Copilot days remaining)
-        -- - bar: { percent: number, icon: string, text: string } (optional)
-        -- - right: string (optional, e.g., token count)
-      end
+      winbar = {
+        left = function(data)
+          -- data.conversation: the current conversation
+          -- data.is_busy: whether the strategy is currently running
+          -- data.win: the current window
+          -- data.buf: the buffer
+          -- Return a string with optional highlight groups
+          return ""
+        end,
+        center = function(data)
+          -- Default: cost tracking progress bar
+          return ""
+        end,
+        right = function(data)
+          -- Default: token count display
+          return ""
+        end,
+      }
     }
   }
 })

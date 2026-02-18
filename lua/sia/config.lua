@@ -595,11 +595,15 @@ end
 --- @field wo [string]?
 --- @field cmd string?
 
+--- @class sia.config.Winbar
+--- @field left (fun(data: sia.WinbarData):string)?
+--- @field center (fun(data: sia.WinbarData):string)?
+--- @field right (fun(data: sia.WinbarData):string)?
+
 --- @class sia.config.Chat
 --- @field cmd string?
 --- @field wo table<string, any>?
---- @field show_stats boolean?
---- @field render_stats fun(win:integer, stats:sia.ConversationStats)?
+--- @field winbar sia.config.Winbar?
 
 --- @class sia.config.Hidden
 --- @field callback fun(ctx:sia.Context?, content:string[]?, usage:sia.Usage?)?
@@ -833,7 +837,11 @@ M.options = {
     chat = {
       cmd = "botright vnew",
       wo = { wrap = true },
-      show_stats = true,
+      winbar = {
+        left = require("sia.winbar").default_left,
+        center = require("sia.winbar").default_center,
+        right = require("sia.winbar").default_right,
+      },
     },
     hidden = {
       messages = {},
