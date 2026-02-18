@@ -524,6 +524,12 @@ function Conversation:new(action, context)
   return obj
 end
 
+--- @param name string
+--- @return boolean
+function Conversation:has_tool(name)
+  return self.tool_fn[name] ~= nil
+end
+
 function Conversation:is_buf_valid(buf)
   local is_valid = false
   for _, message in ipairs(self.messages) do

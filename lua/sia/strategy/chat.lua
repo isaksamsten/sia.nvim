@@ -265,7 +265,20 @@ function ChatStrategy:on_complete(control)
 
   self:execute_tools({
     cancellable = self.cancellable,
+    handle_status_updates = function(statuses)
+      --- @type sia.WinbarToolStatus[]
+      local tool_statuses = {}
+      for _, s in ipairs(statuses) do
+        table.insert(tool_statuses, {
+          name = s.tool.name,
+          message = s.tool.message,
+          status = s.status,
+        })
+      end
+      winbar.update_tool_status(self.buf, tool_statuses)
+    end,
     handle_tools_completion = function(opts)
+      winbar.update_tool_status(self.buf, nil)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           if tool_result.result.display_content then

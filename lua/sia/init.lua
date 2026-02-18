@@ -25,7 +25,7 @@ local highlight_groups = {
   SiaTodoPending = { link = "Comment" },
   SiaTodoDone = { link = "DiagnosticOk" },
   SiaTodoSkipped = { link = "NonText" },
-  SiaTaskRunning = { link = "DiagnosticWarn" },
+  SiaTaskRunning = { link = "DiagnosticHint" },
   SiaTaskCompleted = { link = "DiagnosticOk" },
   SiaTaskFailed = { link = "DiagnosticError" },
 }

@@ -340,6 +340,7 @@ function Strategy:execute_tools(opts)
           end
         end
       end
+      ---@type sia.ParsedTool
       local parsed_tool = {
         index = index,
         message = tool_message,

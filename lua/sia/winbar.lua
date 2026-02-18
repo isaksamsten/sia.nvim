@@ -1,14 +1,26 @@
 local M = {}
 local common = require("sia.provider.common")
 
+local ICONS = {
+  bash = " ",
+  agents = " ",
+  tool = " ",
+}
+
+--- @class sia.WinbarToolStatus
+--- @field name string?
+--- @field message string?
+--- @field status "pending"|"running"|"done"
+
 --- @class sia.WinbarData
 --- @field conversation sia.Conversation?
 --- @field is_busy boolean
 --- @field stats sia.conversation.Stats?
+--- @field tool_status sia.WinbarToolStatus[]?
 --- @field win integer
 --- @field buf integer
 
---- Default left section: shows counts of running agents and bash processes
+--- Default left section: shows running tools, agents, and bash processes
 --- @param data sia.WinbarData
 --- @return string
 function M.default_left(data)
@@ -16,31 +28,66 @@ function M.default_left(data)
     return ""
   end
 
-  local running_agents = 0
-  for _, task in ipairs(data.conversation.tasks) do
-    if task.status == "running" then
-      running_agents = running_agents + 1
+  local parts = {}
+
+  if data.tool_status then
+    local running_names = {}
+    local pending_count = 0
+    for _, ts in ipairs(data.tool_status) do
+      if ts.status == "running" then
+        table.insert(running_names, ts.name or "tool")
+      elseif ts.status == "pending" then
+        pending_count = pending_count + 1
+      end
+    end
+    if #running_names > 0 then
+      local label = table.concat(running_names, ", ")
+      if pending_count > 0 then
+        label = label .. " (+" .. pending_count .. ")"
+      end
+      table.insert(parts, "%#SiaTaskRunning#" .. ICONS.tool .. " " .. label)
     end
   end
 
-  local running_bash = 0
-  for _, proc in ipairs(data.conversation.bash_processes) do
-    if proc.status == "running" then
-      running_bash = running_bash + 1
+  if data.conversation:has_tool("agents") then
+    local running_agents = 0
+    for _, task in ipairs(data.conversation.tasks) do
+      if task.status == "running" then
+        running_agents = running_agents + 1
+      end
     end
+    table.insert(
+      parts,
+      "%#"
+        .. (running_agents > 0 and "SiaTaskRunning" or "NonText")
+        .. "#"
+        .. ICONS.agents
+        .. running_agents
+    )
   end
 
-  local agent_hl = running_agents > 0 and "%#DiagnosticWarn#" or "%#NonText#"
-  local bash_hl = running_bash > 0 and "%#DiagnosticInfo#" or "%#NonText#"
+  if data.conversation:has_tool("bash") then
+    local running_bash = 0
+    for _, proc in ipairs(data.conversation.bash_processes) do
+      if proc.status == "running" then
+        running_bash = running_bash + 1
+      end
+    end
+    table.insert(
+      parts,
+      "%#"
+        .. (running_bash > 0 and "SiaTaskRunning" or "NonText")
+        .. "#"
+        .. ICONS.bash
+        .. running_bash
+    )
+  end
 
-  return agent_hl
-    .. " "
-    .. running_agents
-    .. "%#NonText# "
-    .. bash_hl
-    .. " "
-    .. running_bash
-    .. "%#NonText#"
+  if #parts == 0 then
+    return ""
+  end
+
+  return table.concat(parts, "%#NonText# ") .. "%#NonText#"
 end
 
 --- Default center section: shows cost tracking bar from provider stats
@@ -100,6 +147,7 @@ end
 --- @field stats sia.conversation.Stats?
 --- @field stats_pending boolean
 --- @field last_usage_total integer
+--- @field tool_status sia.WinbarToolStatus[]?
 
 --- @type table<integer, sia.WinbarEntry>
 local entries = {}
@@ -127,6 +175,7 @@ local function render_one(buf, entry)
     conversation = entry.conversation,
     is_busy = entry.strategy.is_busy or false,
     stats = entry.stats,
+    tool_status = entry.tool_status,
     win = win,
     buf = buf,
   }
@@ -222,8 +271,19 @@ function M.attach(buf, conversation, strategy)
     stats = nil,
     stats_pending = false,
     last_usage_total = 0,
+    tool_status = nil,
   }
   ensure_timer()
+end
+
+--- Update tool execution status for a chat buffer
+--- @param buf integer
+--- @param statuses sia.WinbarToolStatus[]?
+function M.update_tool_status(buf, statuses)
+  local entry = entries[buf]
+  if entry then
+    entry.tool_status = statuses
+  end
 end
 
 --- Unregister a chat buffer
