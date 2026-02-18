@@ -40,6 +40,18 @@ end
 --- @field task string
 --- @field usage sia.Usage?
 
+--- @class sia.conversation.BashProcess
+--- @field id integer
+--- @field command string
+--- @field description string?
+--- @field status "running"|"completed"|"failed"|"timed_out"
+--- @field code integer?
+--- @field stdout_file string? temp file path with full stdout
+--- @field stderr_file string? temp file path with full stderr
+--- @field interrupted boolean?
+--- @field started_at number
+--- @field completed_at number?
+
 --- @alias sia.CacheControl {type: "ephemeral"}
 --- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
 --- @alias sia.InstructionFileContent {type: "file", file: {filename: string, file_data: string}, cache_control: sia.CacheControl?}
@@ -434,6 +446,7 @@ local CONVERSATION_ID = 1
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 --- @field usage_history sia.Usage[]
 --- @field tasks table<integer, sia.conversation.Task>
+--- @field bash_processes table<integer, sia.conversation.BashProcess>
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -477,6 +490,7 @@ function Conversation:new(action, context)
   }
   obj.usage_history = {}
   obj.tasks = {}
+  obj.bash_processes = {}
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
@@ -563,6 +577,7 @@ function Conversation:deep_copy()
   }
   obj.usage_history = {}
   obj.tasks = {}
+  obj.bash_processes = {}
 
   return obj
 end
@@ -608,6 +623,17 @@ function Conversation:clear_user_instructions()
     self.shell:close()
     self.shell = nil
   end
+
+  -- Clean up bash process temp files
+  for _, proc in ipairs(self.bash_processes) do
+    if proc.stdout_file then
+      vim.uv.fs_unlink(proc.stdout_file)
+    end
+    if proc.stderr_file then
+      vim.uv.fs_unlink(proc.stderr_file)
+    end
+  end
+  self.bash_processes = {}
 end
 
 --- @param name string
@@ -628,6 +654,28 @@ end
 --- @return sia.conversation.Task
 function Conversation:get_task(id)
   return self.tasks[id]
+end
+
+--- @param command string
+--- @param description string?
+--- @return sia.conversation.BashProcess
+function Conversation:new_bash_process(command, description)
+  local proc_id = #self.bash_processes + 1
+  local instance = {
+    id = proc_id,
+    command = command,
+    description = description,
+    status = "running",
+    started_at = vim.uv.hrtime() / 1e9,
+  }
+  table.insert(self.bash_processes, instance)
+  return instance
+end
+
+--- @param id integer
+--- @return sia.conversation.BashProcess?
+function Conversation:get_bash_process(id)
+  return self.bash_processes[id]
 end
 
 --- Check if the new interval completely encompasses an existing interval

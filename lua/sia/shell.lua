@@ -1,18 +1,18 @@
 local M = {}
 
--- TODO: Fix potential memory/disk issues with large output from long-running commands:
--- 1. Unbounded temp file growth - stdout is redirected to temp files with no size limit
--- 2. Memory exhaustion - entire temp file is loaded into memory before truncation
--- 3. Late truncation - output is truncated AFTER being fully loaded (lines 288-291)
--- 4. Disk space issues - long-running programs could fill up /tmp
--- 5. UI freeze - loading huge files could make Neovim unresponsive
---
--- Potential solutions:
--- - Stream processing: read files in chunks rather than all at once
--- - Early truncation: monitor file size during execution and truncate temp file itself
--- - Size limits: set maximum file size limits on redirected output
--- - Tail-only reading: for very large files, only read the last N lines
--- - Check file size before reading with vim.fn.getfsize()
+--- Strip ANSI escape sequences (colors, cursor movement, etc.) from a string
+--- @param s string
+--- @return string
+local function strip_ansi(s)
+  s = s:gsub("\27%[%d*;?%d*;?%d*[A-Za-z]", "")
+  s = s:gsub("\27%[[%d;]*m", "")
+  s = s:gsub("\27%][^\a\27]*[\a]", "")
+  s = s:gsub("\27%][^\a\27]*\27\\", "")
+  s = s:gsub("\27[%(%)][AB012]", "")
+  s = s:gsub("\r\n", "\n")
+  s = s:gsub("\r", "")
+  return s
+end
 
 ---@class sia.Shell
 ---@field private process vim.SystemObj? vim.system process handle
@@ -35,8 +35,10 @@ Shell.__index = Shell
 ---@field cancel_timer userdata? timer for polling cancellation status
 
 ---@class sia.ShellResult
----@field stdout string command output
----@field stderr string command errors
+---@field stdout string command output (may be truncated for large outputs)
+---@field stderr string command errors (may be truncated for large outputs)
+---@field stdout_file string? persistent temp file with full stdout
+---@field stderr_file string? persistent temp file with full stderr
 ---@field code number exit code
 ---@field interrupted boolean whether command was interrupted
 
@@ -291,11 +293,13 @@ echo $EXEC_EXIT_CODE > %s
         }
 
         if vim.fn.filereadable(self.temp_files.stdout) == 1 then
-          result.stdout = table.concat(vim.fn.readfile(self.temp_files.stdout), "\n")
+          result.stdout =
+            strip_ansi(table.concat(vim.fn.readfile(self.temp_files.stdout), "\n"))
         end
 
         if vim.fn.filereadable(self.temp_files.stderr) == 1 then
-          result.stderr = table.concat(vim.fn.readfile(self.temp_files.stderr), "\n")
+          result.stderr =
+            strip_ansi(table.concat(vim.fn.readfile(self.temp_files.stderr), "\n"))
         end
 
         if completed then
@@ -310,15 +314,6 @@ echo $EXEC_EXIT_CODE > %s
           result.code = 143 -- SIGTERM
           result.stderr = (result.stderr ~= "" and result.stderr .. "\n" or "")
             .. "Command execution timed out"
-        end
-
-        local max_output = 8000
-        if #result.stdout > max_output then
-          result.stdout = result.stdout:sub(1, max_output) .. "\n... (output truncated)"
-        end
-        if #result.stderr > max_output then
-          result.stderr = result.stderr:sub(1, max_output)
-            .. "\n... (error output truncated)"
         end
 
         callback(result)
