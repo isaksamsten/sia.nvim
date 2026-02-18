@@ -140,6 +140,7 @@ end
 --- @class sia.NewToolExecuteUserChoiceOpts
 --- @field choices string[]
 --- @field on_accept fun(choice:integer):nil
+--- @field on_cancel fun()?
 --- @field level sia.RiskLevel?
 
 --- @class sia.NewToolExecuteUserInputOpts
@@ -308,11 +309,15 @@ local function create_user_choice_handler(
         if idx then
           choice_args.on_accept(idx)
         else
-          callback({
-            content = cancellation_message(tool_name),
-            kind = "user_cancelled",
-            cancelled = true,
-          })
+          if choice_args.on_cancel then
+            choice_args.on_cancel()
+          else
+            callback({
+              content = cancellation_message(tool_name),
+              kind = "user_cancelled",
+              cancelled = true,
+            })
+          end
         end
       end)
     end

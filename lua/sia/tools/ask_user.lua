@@ -48,37 +48,34 @@ return tool_utils.new_tool({
   end
   table.insert(display_options, "Do something else (type your answer)")
 
-  opts.user_choice(prompt, {
-    choices = display_options,
-    on_accept = function(choice)
-      if not choice then
-        vim.ui.input({
-          prompt = "Your answer: ",
-        }, function(custom_answer)
-          if custom_answer and custom_answer ~= "" then
-            callback({
-              content = {
-                string.format("USER's response to: %s", prompt),
-                "",
-                string.format('Custom answer: "%s"', custom_answer),
-              },
-            })
-          else
-            callback({
-              content = {
-                "USER CANCELLED",
-                "",
-                "The USER cancelled the custom input prompt without providing an answer.",
-                "",
-                "Please ask the USER how they would like to proceed.",
-              },
-              cancelled = true,
-              kind = "user_cancelled",
-            })
-          end
-        end)
-      end
-
+  local use_choice = function(choice)
+    if choice == #display_options then
+      vim.ui.input({
+        prompt = "Your answer: ",
+      }, function(custom_answer)
+        if custom_answer and custom_answer ~= "" then
+          callback({
+            content = {
+              string.format("USER's response to: %s", prompt),
+              "",
+              string.format('Custom answer: "%s"', custom_answer),
+            },
+          })
+        else
+          callback({
+            content = {
+              "USER CANCELLED",
+              "",
+              "The USER cancelled the custom input prompt without providing an answer.",
+              "",
+              "Please ask the USER how they would like to proceed.",
+            },
+            cancelled = true,
+            kind = "user_cancelled",
+          })
+        end
+      end)
+    else
       callback({
         content = {
           string.format("USER's response to: %s", prompt),
@@ -86,6 +83,16 @@ return tool_utils.new_tool({
           string.format("Selected option: %s", choice),
         },
       })
+    end
+  end
+
+  opts.user_choice(prompt, {
+    choices = display_options,
+    on_cancel = function()
+      use_choice(default_idx)
+    end,
+    on_accept = function(choice)
+      use_choice(choice)
     end,
   })
 end)
