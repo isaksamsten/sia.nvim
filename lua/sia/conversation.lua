@@ -618,26 +618,29 @@ function Conversation:untrack_messages()
 end
 
 function Conversation:clear_user_instructions()
-  self:untrack_messages()
-
+  self:destroy()
   self.messages = vim
     .iter(self.messages)
     :filter(function(m)
       return m.role == "system"
     end)
     :totable()
+end
+
+--- Clean up all conversation resources (shell, processes)
+function Conversation:destroy()
+  self:untrack_messages()
+  for _, proc in ipairs(self.bash_processes) do
+    if proc.status == "running" and proc.detached_handle then
+      proc.detached_handle.kill()
+    end
+  end
 
   if self.shell then
     self.shell:close()
     self.shell = nil
   end
 
-  -- These are written to /tmp and will be cleaned up automatically
-  -- local tool_utils = require("sia.tools.utils")
-  -- local output_dir = tool_utils.get_bash_output_dir(self.id)
-  -- if vim.fn.isdirectory(output_dir) == 1 then
-  --   vim.fn.delete(output_dir, "rf")
-  -- end
   self.bash_processes = {}
 end
 

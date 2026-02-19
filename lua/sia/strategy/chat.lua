@@ -374,7 +374,7 @@ function ChatStrategy.remove(buf)
   end
 
   winbar.detach(buf)
-  strategy.conversation:untrack_messages()
+  strategy.conversation:destroy()
   ChatStrategy._buffers[buf] = nil
   for i, b in ipairs(ChatStrategy._order) do
     if b == buf then
