@@ -80,6 +80,24 @@ function M.new(project_root, shell_opts)
   return self
 end
 
+---Build the safe environment table for shell processes
+---@private
+---@param cwd string? working directory to set as PWD (defaults to project_root)
+---@return table<string, string>
+function Shell:_build_env(cwd)
+  return {
+    PATH = vim.env.PATH,
+    HOME = vim.env.HOME,
+    USER = vim.env.USER,
+    SHELL = vim.env.SHELL,
+    TERM = vim.env.TERM,
+    PWD = cwd or self.project_root,
+    LANG = vim.env.LANG,
+    LC_ALL = vim.env.LC_ALL,
+    GIT_EDITOR = "true",
+  }
+end
+
 ---@private
 function Shell:_start_shell()
   if self.is_alive then
@@ -92,24 +110,12 @@ function Shell:_start_shell()
 
   vim.fn.writefile({ self.project_root }, self.temp_files.cwd)
 
-  local safe_env = {
-    PATH = vim.env.PATH,
-    HOME = vim.env.HOME,
-    USER = vim.env.USER,
-    SHELL = vim.env.SHELL,
-    TERM = vim.env.TERM,
-    PWD = self.project_root,
-    LANG = vim.env.LANG,
-    LC_ALL = vim.env.LC_ALL,
-    GIT_EDITOR = "true",
-  }
-
   self.process = vim.system({
     self.shell_path,
     unpack(self.shell_args),
   }, {
     cwd = self.project_root,
-    env = safe_env,
+    env = self:_build_env(),
     stdin = true,
     stdout = false,
     stderr = false,
@@ -373,6 +379,126 @@ function Shell:_cleanup_temp_files()
   for _, file in pairs(self.temp_files) do
     vim.uv.fs_unlink(file)
   end
+end
+
+---@class sia.DetachedProcess
+---@field process vim.SystemObj
+---@field kill fun()
+---@field is_done fun(): boolean
+---@field get_output fun(): {stdout: string, stderr: string}
+
+---Spawn an independent process that does not block the main shell queue.
+---Inherits the current working directory but not shell-specific state (exports, aliases).
+---The returned handle can be killed or polled for completion.
+---@param command string the command to execute
+---@param timeout number? timeout in milliseconds (nil = no timeout, capped at MAX_TIMEOUT if set)
+---@param cancellable sia.Cancellable? cancellation token
+---@param callback fun(result: sia.ShellResult) called when the process finishes
+---@return sia.DetachedProcess
+function Shell:spawn_detached(command, timeout, cancellable, callback)
+  local cwd = self:pwd()
+  -- Security: ensure cwd is within project root
+  local resolved_cwd = vim.fn.resolve(cwd)
+  local resolved_root = vim.fn.resolve(self.project_root)
+  if not vim.startswith(resolved_cwd, resolved_root) then
+    cwd = self.project_root
+  end
+
+  local stdout_chunks = {}
+  local stderr_chunks = {}
+  local done = false
+  local timed_out = false
+
+  local proc = vim.system({
+    self.shell_path,
+    "-c",
+    command,
+  }, {
+    cwd = cwd,
+    env = self:_build_env(cwd),
+    stdin = false,
+    stdout = function(_, data)
+      if data then
+        table.insert(stdout_chunks, data)
+      end
+    end,
+    stderr = function(_, data)
+      if data then
+        table.insert(stderr_chunks, data)
+      end
+    end,
+    text = true,
+  }, function(obj)
+    done = true
+    local stdout = strip_ansi(table.concat(stdout_chunks))
+    local stderr = strip_ansi(table.concat(stderr_chunks))
+
+    if timed_out then
+      stderr = (stderr ~= "" and stderr .. "\n" or "") .. "Command execution timed out"
+    end
+
+    vim.schedule(function()
+      callback({
+        stdout = stdout,
+        stderr = stderr,
+        code = timed_out and 143 or (obj.code or 0),
+        interrupted = timed_out,
+      })
+    end)
+  end)
+
+  -- Timeout timer (only if timeout is specified)
+  local timeout_timer
+  if timeout then
+    timeout_timer = vim.uv.new_timer()
+    timeout_timer:start(timeout, 0, function()
+      if not done then
+        timed_out = true
+        proc:kill(15) -- SIGTERM
+      end
+      pcall(timeout_timer.stop, timeout_timer)
+      pcall(timeout_timer.close, timeout_timer)
+    end)
+  end
+
+  -- Cancellation polling
+  local cancel_timer
+  if cancellable then
+    cancel_timer = vim.uv.new_timer()
+    cancel_timer:start(0, 100, function()
+      if cancellable.is_cancelled and not done then
+        timed_out = true
+        proc:kill(15)
+        pcall(cancel_timer.stop, cancel_timer)
+        pcall(cancel_timer.close, cancel_timer)
+      elseif done then
+        pcall(cancel_timer.stop, cancel_timer)
+        pcall(cancel_timer.close, cancel_timer)
+      end
+    end)
+  end
+
+  return {
+    process = proc,
+    kill = function()
+      if not done then
+        timed_out = true
+        proc:kill(15)
+      end
+    end,
+    is_done = function()
+      return done
+    end,
+    get_output = function()
+      -- Pump pending I/O so libuv delivers any buffered stdout/stderr
+      -- data to our callbacks before we read the chunks
+      vim.uv.run("nowait")
+      return {
+        stdout = strip_ansi(table.concat(stdout_chunks)),
+        stderr = strip_ansi(table.concat(stderr_chunks)),
+      }
+    end,
+  }
 end
 
 ---Close the shell

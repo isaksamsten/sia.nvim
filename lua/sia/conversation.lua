@@ -51,6 +51,7 @@ end
 --- @field interrupted boolean?
 --- @field started_at number
 --- @field completed_at number?
+--- @field detached_handle sia.DetachedProcess? handle for async/detached processes
 
 --- @alias sia.CacheControl {type: "ephemeral"}
 --- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}

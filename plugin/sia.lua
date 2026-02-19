@@ -587,3 +587,199 @@ end, {
     return match_any_flag(string.sub(cmd_line, 1, cursor_pos)) or {}
   end,
 })
+
+vim.api.nvim_create_user_command("SiaShell", function(args)
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+
+  -- Find the chat — prefer current buffer, fall back to visible chats
+  local chat = ChatStrategy.by_buf()
+  if not chat then
+    -- Try to find any visible chat
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local buf = vim.api.nvim_win_get_buf(win)
+      local c = ChatStrategy.by_buf(buf)
+      if c then
+        chat = c
+        break
+      end
+    end
+  end
+
+  if not chat or not chat.conversation then
+    vim.api.nvim_echo({ { "SiaShell: No active chat found.", "ErrorMsg" } }, false, {})
+    return
+  end
+
+  local subcommand = args.fargs[1]
+
+  if subcommand == "stop" then
+    local id = tonumber(args.fargs[2])
+    if not id then
+      vim.api.nvim_echo(
+        { { "SiaShell: Process ID required. Usage: SiaShell stop <id>", "ErrorMsg" } },
+        false,
+        {}
+      )
+      return
+    end
+
+    local proc = chat.conversation:get_bash_process(id)
+    if not proc then
+      vim.api.nvim_echo(
+        { { string.format("SiaShell: No process with ID %d", id), "ErrorMsg" } },
+        false,
+        {}
+      )
+      return
+    end
+
+    if proc.status ~= "running" then
+      vim.api.nvim_echo(
+        {
+          {
+            string.format("SiaShell: Process %d is already %s", id, proc.status),
+            "WarningMsg",
+          },
+        },
+        false,
+        {}
+      )
+      return
+    end
+
+    if proc.detached_handle then
+      proc.detached_handle.kill()
+      vim.api.nvim_echo(
+        {
+          {
+            string.format(
+              "SiaShell: Sent SIGTERM to process %d (%s)",
+              id,
+              proc.command
+            ),
+            "Normal",
+          },
+        },
+        false,
+        {}
+      )
+    else
+      vim.api.nvim_echo(
+        {
+          {
+            string.format(
+              "SiaShell: Process %d is synchronous and cannot be stopped",
+              id
+            ),
+            "WarningMsg",
+          },
+        },
+        false,
+        {}
+      )
+    end
+  elseif subcommand == "list" or subcommand == nil then
+    local procs = chat.conversation.bash_processes
+    if #procs == 0 then
+      vim.api.nvim_echo({ { "SiaShell: No processes.", "Normal" } }, false, {})
+      return
+    end
+
+    local lines = {}
+    for _, proc in ipairs(procs) do
+      local status_icon = ({
+        running = "●",
+        completed = "✓",
+        failed = "✗",
+        timed_out = "⏱",
+      })[proc.status] or "?"
+
+      local elapsed
+      if proc.completed_at then
+        elapsed = string.format("%.1fs", proc.completed_at - proc.started_at)
+      else
+        elapsed =
+          string.format("%.1fs (running)", (vim.uv.hrtime() / 1e9) - proc.started_at)
+      end
+
+      table.insert(
+        lines,
+        string.format(
+          "  %s [%d] %s (%s) %s",
+          status_icon,
+          proc.id,
+          proc.command,
+          elapsed,
+          proc.status
+        )
+      )
+    end
+
+    vim.api.nvim_echo(
+      { { "SiaShell processes:\n" .. table.concat(lines, "\n"), "Normal" } },
+      false,
+      {}
+    )
+  else
+    vim.api.nvim_echo(
+      {
+        {
+          "SiaShell: Unknown subcommand '"
+            .. subcommand
+            .. "'. Use 'list' or 'stop <id>'.",
+          "ErrorMsg",
+        },
+      },
+      false,
+      {}
+    )
+  end
+end, {
+  nargs = "*",
+  complete = function(arg_lead, cmd_line, cursor_pos)
+    local prefix = string.sub(cmd_line, 1, cursor_pos)
+
+    -- Complete subcommands
+    if prefix:match("SiaShell%s%w*$") then
+      local subcommands = { "list", "stop" }
+      local result = {}
+      for _, cmd in ipairs(subcommands) do
+        if vim.startswith(cmd, arg_lead) then
+          table.insert(result, cmd)
+        end
+      end
+      return result
+    end
+
+    -- Complete process IDs for "stop"
+    if prefix:match("SiaShell%s+stop%s") then
+      local ChatStrategy = require("sia.strategy").ChatStrategy
+      local chat = ChatStrategy.by_buf()
+      if not chat then
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local buf = vim.api.nvim_win_get_buf(win)
+          local c = ChatStrategy.by_buf(buf)
+          if c then
+            chat = c
+            break
+          end
+        end
+      end
+
+      if chat and chat.conversation then
+        local ids = {}
+        for _, proc in ipairs(chat.conversation.bash_processes) do
+          if proc.status == "running" then
+            local id_str = tostring(proc.id)
+            if vim.startswith(id_str, arg_lead) then
+              table.insert(ids, id_str)
+            end
+          end
+        end
+        return ids
+      end
+    end
+
+    return {}
+  end,
+})
