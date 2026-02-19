@@ -473,7 +473,7 @@ git commit -m "$(cat <<'EOF'
     command = {
       type = "string",
       enum = { "start", "status", "wait", "kill" },
-      description = "The command to execute: start (launch new process), status (check process status + partial output), wait (wait for process completion), kill (terminate a running process)",
+      description = "The command to execute: start (launch new process), status (check process status + partial output if async), wait (wait for process completion), kill (terminate a running process)",
     },
     bash_command = {
       type = "string",
