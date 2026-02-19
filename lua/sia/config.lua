@@ -259,6 +259,35 @@ local function validate_context(context)
   return true
 end
 
+local function validate_skills(json)
+  if json.skills ~= nil then
+    if type(json.skills) ~= "table" then
+      return false, "'skills' must be an array of strings, got " .. type(json.skills)
+    end
+    for i, item in ipairs(json.skills) do
+      if type(item) ~= "string" then
+        return false,
+          "skills[" .. i .. "] must be a string, got " .. type(item)
+      end
+    end
+  end
+
+  if json.skills_extras ~= nil then
+    if type(json.skills_extras) ~= "table" then
+      return false,
+        "'skills_extras' must be an array of strings, got " .. type(json.skills_extras)
+    end
+    for i, item in ipairs(json.skills_extras) do
+      if type(item) ~= "string" then
+        return false,
+          "skills_extras[" .. i .. "] must be a string, got " .. type(item)
+      end
+    end
+  end
+
+  return true
+end
+
 local function validate_action(action)
   if not action then
     return true
@@ -410,6 +439,8 @@ end
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
+--- @field skills string[]?
+--- @field skills_extras string[]?
 
 --- @return sia.LocalConfig?
 function M.get_local_config()
@@ -482,6 +513,7 @@ function M.get_local_config()
   validate(validate_context, json.context)
   validate(validate_action, json.action)
   validate(validate_models_overrides, json.models)
+  validate(validate_skills, json)
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
   validate(validate_model_field, json, "plan_model")

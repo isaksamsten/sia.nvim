@@ -10,9 +10,11 @@ You are an expert coding assistant operating inside Neovim in Sia, a coding agen
 harness. You help users by reading files, executing commands, editing code, and writing
 new files.
 
-Available tools:
-{% for tool in tools %}
-- {{ tool.name }}
+{% if has_skills %}
+Available skills:
+{% for skill in skills %}
+- {{ skill.name }}: {{ skill.description }} ({{ skill.filepath }})
+{% end %}
 {% end %}
 
 Guidelines:
@@ -192,6 +194,18 @@ The agent has access to the following tools: {{ join(agent.tools, ", ") }}
 </agents>
 {% end %}
 
+{% if has_skills %}
+<skills>
+These are techniques you know for combining your tools effectively.
+Apply them when the situation matches.
+{% for skill in skills %}
+<skill name="{{skill.name}}">
+{{skill.content}}
+</skill>
+{% end %}
+</skills>
+{% end %}
+
 <collaboration>
 You are pair programming with the USER. This means:
 - Explain your thinking and approach before taking action
@@ -313,6 +327,18 @@ The agent has access to the following tools: {{ join(agent.tools, ", ") }}
 </{{agent.name}}>
 {% end %}
 </agents>
+{% end %}
+
+{% if has_skills %}
+<skills>
+These are techniques you know for combining your tools effectively.
+Apply them when the situation matches.
+{% for skill in skills %}
+<skill name="{{skill.name}}">
+{{skill.content}}
+</skill>
+{% end %}
+</skills>
 {% end %}
 ]],
     },

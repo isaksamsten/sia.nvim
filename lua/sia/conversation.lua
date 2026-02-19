@@ -578,6 +578,7 @@ function Conversation:deep_copy()
 
   -- Reset state for new branch
   obj.auto_confirm_tools = {}
+  obj._template_context = nil
   obj.todos = {
     buf = nil,
     items = {},
@@ -876,9 +877,16 @@ function Conversation:get_cumulative_usage()
   return cumulative
 end
 
---- Build template context for rendering system prompts
+--- Build template context for rendering system prompts.
+--- The result is cached on the conversation since all inputs (tools, agents, skills, model)
+--- are stable for the lifetime of a conversation.
 --- @return table Template context
 function Conversation:build_template_context()
+  if self._template_context then
+    self._template_context.today = os.date("%Y-%m-%d")
+    return self._template_context
+  end
+
   local tool_instructions = {}
   if vim.tbl_count(self.tools) > 0 then
     for _, tool in ipairs(self.tools) do
@@ -894,17 +902,32 @@ function Conversation:build_template_context()
   for _, agent in pairs(agents) do
     table.insert(agent_list, agent)
   end
-  return {
+
+  local skills = require("sia.skill_registry").get_skills(self.tool_fn, false)
+  local skill_list = {}
+  for _, skill in ipairs(skills) do
+    table.insert(skill_list, {
+      name = skill.name,
+      description = skill.description,
+      content = table.concat(skill.content, "\n"),
+      filepath = skill.filepath,
+    })
+  end
+
+  self._template_context = {
     today = os.date("%Y-%m-%d"),
     tools = self.tools,
     agents = agent_list,
     has_tools = #self.tools > 0,
     tool_count = #self.tools,
     model = self.model,
+    skills = skill_list,
+    has_skills = #skill_list > 0,
     has_tool = function(name)
       return self.tool_fn[name] ~= nil
     end,
   }
+  return self._template_context
 end
 
 --- @return sia.PreparedMessage[]
