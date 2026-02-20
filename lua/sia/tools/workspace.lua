@@ -1,5 +1,6 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 return tool_utils.new_tool({
   name = "workspace",
@@ -139,6 +140,6 @@ Do not guess which file the user means—always check the workspace first.]],
 
   callback({
     content = content,
-    display_content = { "👁️ Read current workspace" },
+    display_content = { icons.view .. " Read current workspace" },
   })
 end)

@@ -1,7 +1,11 @@
 local tracker = require("sia.tracker")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local FAILED_TO_GET_DIAGNOSTICS = "❌ Failed to read diagnostics"
+local icons = require("sia.icons").get()
+
+local function failed_to_get_diagnostics()
+  return icons.error .. " Failed to read diagnostics"
+end
 
 return tool_utils.new_tool({
   name = "get_diagnostics",
@@ -31,7 +35,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not args.file then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      display_content = { failed_to_get_diagnostics() },
       kind = "failed",
     })
     return
@@ -40,7 +44,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if vim.fn.filereadable(args.file) == 0 then
     callback({
       content = { "Error: File cannot be found or is not readable" },
-      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      display_content = { failed_to_get_diagnostics() },
       kind = "failed",
     })
     return
@@ -52,7 +56,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not buf then
     callback({
       content = { "Error: Cannot load file into buffer" },
-      display_content = { FAILED_TO_GET_DIAGNOSTICS },
+      display_content = { failed_to_get_diagnostics() },
       kind = "failed",
     })
     return
@@ -61,7 +65,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
-      display_content = { string.format("🩺 No diagnostics found for %s", args.file) },
+      display_content = { string.format("%s No diagnostics found for %s", icons.diagnostics, args.file) },
       content = { string.format("No diagnostics found for %s", args.file) },
       context = {
         buf = buf,
@@ -104,6 +108,6 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
     content = content,
     context = { buf = buf, tick = tracker.ensure_tracked(buf, { id = conversation.id }) },
     kind = "diagnostics",
-    display_content = { string.format("🩺 Found %d diagnostics", #diagnostics) },
+    display_content = { string.format("%s Found %d diagnostics", icons.diagnostics, #diagnostics) },
   })
 end)

@@ -1,4 +1,5 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 local MAX_FILE_SIZE = 5 * 1024 * 1024
 local SUB_AGENT_PROMPT = [[Analyze webpage content and provide:
@@ -110,14 +111,14 @@ Usage notes:
   if not (vim.fn.executable("curl") or vim.fn.executable("pandoc")) then
     callback({
       content = { "Error: curl and pandoc are not installed. Don't try again." },
-      display_content = { "❌ Failed to fetch URL" },
+      display_content = { icons.error .. " Failed to fetch URL" },
     })
   end
 
   if not args.url or args.url:match("^%s*$") then
     callback({
       content = { "Error: No URL specified" },
-      display_content = { "❌ Failed to fetch URL" },
+      display_content = { icons.error .. " Failed to fetch URL" },
     })
     return
   end
@@ -125,7 +126,7 @@ Usage notes:
   if not args.url:match("^https?://") then
     callback({
       content = { "Error: URL must start with http:// or https://" },
-      display_content = { "❌ Invalid URL format" },
+      display_content = { icons.error .. " Invalid URL format" },
     })
     return
   end
@@ -162,7 +163,7 @@ Usage notes:
               or string.format("curl failed with exit code: %d", result.code)
             callback({
               content = { string.format("Error: Failed to fetch URL - %s", error_msg) },
-              display_content = { "❌ Failed to fetch URL" },
+              display_content = { icons.error .. " Failed to fetch URL" },
             })
             return
           end
@@ -171,7 +172,7 @@ Usage notes:
           if not raw_content or raw_content:match("^%s*$") then
             callback({
               content = { "Error: No content received from URL" },
-              display_content = { "❌ No content received" },
+              display_content = { icons.error .. " No content received" },
             })
             return
           end
@@ -190,7 +191,7 @@ Usage notes:
                 content = {
                   "Error: Could not determine content type. Only text-based content is supported.",
                 },
-                display_content = { "❌ Unknown content type" },
+                display_content = { icons.error .. " Unknown content type" },
               })
               return
             end
@@ -217,7 +218,7 @@ Usage notes:
                     content_type
                   ),
                 },
-                display_content = { "❌ Binary content not supported" },
+                display_content = { icons.error .. " Binary content not supported" },
               })
               return
             end
@@ -244,13 +245,13 @@ Usage notes:
               require("sia.assistant").fetch_response(conversation, function(response)
                 callback({
                   content = vim.split(response, "\n", { trimempty = true }),
-                  display_content = { string.format("📄 Fetched %s", args.url) },
+                  display_content = { string.format("%s Fetched %s", icons.fetch, args.url) },
                 })
               end)
             else
               callback({
                 content = vim.split(final_content, "\n", { trimempty = true }),
-                display_content = { string.format("📄 Fetched %s", args.url) },
+                display_content = { string.format("%s Fetched %s", icons.fetch, args.url) },
               })
             end
           end)

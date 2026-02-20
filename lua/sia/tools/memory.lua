@@ -1,4 +1,5 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 return tool_utils.new_tool({
   name = "memory",
@@ -115,7 +116,7 @@ All paths MUST start with `/memories/`.
       end
       callback({
         content = output,
-        display_content = { "📂 Viewed directory " .. (args.path or "/memories") },
+        display_content = { icons.directory .. " Viewed directory " .. (args.path or "/memories") },
       })
     else
       -- Read file
@@ -133,7 +134,7 @@ All paths MUST start with `/memories/`.
         table.insert(content, lines[i])
       end
 
-      local display_info = string.format("📖 Viewed %s", args.path)
+      local display_info = string.format("%s Viewed %s", icons.read, args.path)
       if args.view_range then
         display_info = display_info
           .. string.format(" (lines %d-%d)", start_line, end_line)
@@ -157,7 +158,7 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = { "Successfully created " .. args.path },
-      display_content = { "💾 Created memory " .. args.path },
+      display_content = { icons.save .. " Created memory " .. args.path },
     })
   elseif args.command == "str_replace" then
     if not args.old_str or not args.new_str then
@@ -216,7 +217,7 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = { "Successfully replaced text in " .. args.path },
-      display_content = { "✏️ Edited memory " .. args.path },
+      display_content = { icons.edit .. " Edited memory " .. args.path },
     })
   elseif args.command == "insert" then
     if not args.insert_line or not args.insert_text then
@@ -242,13 +243,13 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = { "Successfully inserted text at line " .. idx },
-      display_content = { "✏️ Inserted into memory " .. args.path },
+      display_content = { icons.edit .. " Inserted into memory " .. args.path },
     })
   elseif args.command == "delete" then
     if vim.fn.delete(path, "rf") == 0 then
       callback({
         content = { "Successfully deleted " .. args.path },
-        display_content = { "🗑️ Deleted memory " .. args.path },
+        display_content = { icons.delete .. " Deleted memory " .. args.path },
       })
     else
       callback({ content = { "Failed to delete " .. args.path }, kind = "failed" })

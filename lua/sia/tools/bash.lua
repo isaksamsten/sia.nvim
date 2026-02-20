@@ -1,6 +1,11 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local FAILED_TO_EXECUTE = "❌ Failed to execute command"
+local icons = require("sia.icons").get()
+
+local function failed_to_execute()
+  return icons.error .. " Failed to execute command"
+end
+
 local STATUS_OUTPUT_TAIL_LINES = 20
 
 local ASYNC_START_REPLY = [[
@@ -185,21 +190,23 @@ end
 --- @return string
 local function build_display_message(proc)
   local desc = proc.description or proc.command
+  local icon = icons.bash_exec
   if proc.status == "completed" then
     if proc.code == 0 then
-      return string.format("⚡ %s: `%s`", desc, proc.command)
+      return string.format("%s %s: `%s`", icon, desc, proc.command)
     else
       return string.format(
-        "⚡ %s: `%s` (exit code %d)",
+        "%s %s: `%s` (exit code %d)",
+        icon,
         desc,
         proc.command,
         proc.code or -1
       )
     end
   elseif proc.status == "timed_out" or proc.interrupted then
-    return string.format("⚡ Stopped %s: `%s`", desc, proc.command)
+    return string.format("%s Stopped %s: `%s`", icon, desc, proc.command)
   else
-    return string.format("⚡ %s: `%s` (failed)", desc, proc.command)
+    return string.format("%s %s: `%s` (failed)", icon, desc, proc.command)
   end
 end
 
@@ -505,7 +512,7 @@ git commit -m "$(cat <<'EOF'
   if not args.command then
     callback({
       content = { "Error: 'command' parameter is required" },
-      display_content = { FAILED_TO_EXECUTE },
+      display_content = { failed_to_execute() },
       kind = "failed",
     })
     return
@@ -515,7 +522,7 @@ git commit -m "$(cat <<'EOF'
     if not args.bash_command or args.bash_command:match("^%s*$") then
       callback({
         content = { "Error: 'bash_command' parameter is required for 'start'" },
-        display_content = { FAILED_TO_EXECUTE },
+        display_content = { failed_to_execute() },
         kind = "failed",
       })
       return
@@ -527,7 +534,7 @@ git commit -m "$(cat <<'EOF'
         if err then
           callback({
             content = { err },
-            display_content = { FAILED_TO_EXECUTE },
+            display_content = { failed_to_execute() },
             kind = "failed",
           })
           return
@@ -536,7 +543,8 @@ git commit -m "$(cat <<'EOF'
           content = vim.split(string.format(ASYNC_START_REPLY, proc.id), "\n"),
           display_content = {
             string.format(
-              "🚀 Started `%s` (process %d)",
+              "%s Started `%s` (process %d)",
+              icons.started,
               args.description or args.bash_command,
               proc.id
             ),
@@ -549,7 +557,7 @@ git commit -m "$(cat <<'EOF'
         if err then
           callback({
             content = { err },
-            display_content = { FAILED_TO_EXECUTE },
+            display_content = { failed_to_execute() },
             kind = "failed",
           })
         end
@@ -565,7 +573,7 @@ git commit -m "$(cat <<'EOF'
     if not args.id then
       callback({
         content = { "Error: 'id' parameter is required for 'status'" },
-        display_content = { "❌ Missing id parameter" },
+        display_content = { icons.error .. " Missing id parameter" },
       })
       return
     end
@@ -683,7 +691,7 @@ git commit -m "$(cat <<'EOF'
     if not args.id then
       callback({
         content = { "Error: 'id' parameter is required for 'kill'" },
-        display_content = { FAILED_TO_EXECUTE },
+        display_content = { failed_to_execute() },
         kind = "failed",
       })
       return
@@ -693,7 +701,7 @@ git commit -m "$(cat <<'EOF'
     if not proc then
       callback({
         content = { string.format("Error: No process with ID %d found", args.id) },
-        display_content = { FAILED_TO_EXECUTE },
+        display_content = { failed_to_execute() },
         kind = "failed",
       })
       return
@@ -765,7 +773,7 @@ git commit -m "$(cat <<'EOF'
       callback({
         content = content,
         display_content = {
-          string.format("⊘ Killed process %d: %s", args.id, proc.command),
+          string.format("%s Killed process %d: %s", icons.bash_kill, args.id, proc.command),
         },
       })
     else
@@ -777,7 +785,7 @@ git commit -m "$(cat <<'EOF'
             args.id
           ),
         },
-        display_content = { FAILED_TO_EXECUTE },
+        display_content = { failed_to_execute() },
         kind = "failed",
       })
     end

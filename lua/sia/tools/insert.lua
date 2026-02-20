@@ -2,8 +2,11 @@ local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
-local FAILED_TO_INSERT = "❌ Failed to insert"
+local function failed_to_insert()
+  return icons.error .. " Failed to insert"
+end
 
 local clear_outdated_tool_input = tool_utils.gen_clear_outdated_tool_input({ "text" })
 
@@ -71,7 +74,7 @@ Use cases:
   if not args.target_file then
     callback({
       content = { "Error: No target_file was provided" },
-      display_content = { FAILED_TO_INSERT },
+      display_content = { failed_to_insert() },
       kind = "failed",
     })
     return
@@ -80,7 +83,7 @@ Use cases:
   if not args.line then
     callback({
       content = { "Error: No line number was provided" },
-      display_content = { FAILED_TO_INSERT },
+      display_content = { failed_to_insert() },
       kind = "failed",
     })
     return
@@ -89,7 +92,7 @@ Use cases:
   if not args.text then
     callback({
       content = { "Error: No text was provided" },
-      display_content = { FAILED_TO_INSERT },
+      display_content = { failed_to_insert() },
       kind = "failed",
     })
     return
@@ -98,7 +101,7 @@ Use cases:
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
-      display_content = { FAILED_TO_INSERT },
+      display_content = { failed_to_insert() },
       kind = "failed",
     })
     return
@@ -122,7 +125,7 @@ Use cases:
       content = {
         string.format("Error: Line number must be >= 1, got %d", insert_line),
       },
-      display_content = { FAILED_TO_INSERT },
+      display_content = { failed_to_insert() },
       kind = "failed",
     })
     return
@@ -204,7 +207,8 @@ Use cases:
         args.target_file
       )
       local display_description = string.format(
-        "📝 Inserted %d line%s at line %d in %s",
+        "%s Inserted %d line%s at line %d in %s",
+        icons.insert,
         #text_lines,
         #text_lines == 1 and "" or "s",
         insert_line,

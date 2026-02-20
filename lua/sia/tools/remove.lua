@@ -1,7 +1,10 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
-local FAILED_TO_REMOVE = "❌ Failed to remove file"
+local function failed_to_remove()
+  return icons.error .. " Failed to remove file"
+end
 
 local function rel(path)
   return vim.fn.fnamemodify(path, ":.")
@@ -45,7 +48,7 @@ return tool_utils.new_tool({
   if not args.path then
     callback({
       content = { "Error: path is required" },
-      display_content = { FAILED_TO_REMOVE },
+      display_content = { failed_to_remove() },
       kind = "failed",
     })
     return
@@ -58,7 +61,7 @@ return tool_utils.new_tool({
       content = {
         string.format("Error: Operation must stay within project root: %s", root),
       },
-      display_content = { FAILED_TO_REMOVE },
+      display_content = { failed_to_remove() },
       kind = "failed",
     })
     return
@@ -68,7 +71,7 @@ return tool_utils.new_tool({
   if not st then
     callback({
       content = { string.format("Error: Path not found: %s", args.path) },
-      display_content = { FAILED_TO_REMOVE },
+      display_content = { failed_to_remove() },
       kind = "failed",
     })
     return
@@ -76,7 +79,7 @@ return tool_utils.new_tool({
   if st.type == "directory" then
     callback({
       content = { "Error: Directory removal is disabled by config" },
-      display_content = { FAILED_TO_REMOVE },
+      display_content = { failed_to_remove() },
       kind = "failed",
     })
     return
@@ -119,7 +122,7 @@ return tool_utils.new_tool({
             string.format("Moved %s to trash at %s", rel(target_abs), rel(trash_dest)),
           },
           display_content = {
-            string.format("🗑️ Moved %s to trash", rel(target_abs)),
+            string.format("%s Moved %s to trash", icons.delete, rel(target_abs)),
           },
         })
         return
@@ -131,7 +134,7 @@ return tool_utils.new_tool({
         if ok ~= 0 then
           callback({
             content = { string.format("Error: Failed to delete %s", args.path) },
-            display_content = { FAILED_TO_REMOVE },
+            display_content = { failed_to_remove() },
             kind = "failed",
           })
           return
@@ -140,7 +143,7 @@ return tool_utils.new_tool({
         callback({
           content = { string.format("Deleted %s", rel(target_abs)) },
           display_content = {
-            string.format("🗑️ Deleted %s", rel(target_abs)),
+            string.format("%s Deleted %s", icons.delete, rel(target_abs)),
           },
         })
         return

@@ -696,6 +696,7 @@ end
 --- @field plan_model string
 --- @field embedding_model string?
 --- @field temperature number
+--- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
@@ -859,6 +860,7 @@ M.options = {
     fast_model = "openai/gpt-4.1-mini",
     plan_model = "openai/o3-mini",
     embedding_model = "openai/text-embedding-3-small",
+    icons = "emoji",
     temperature = 0.3, -- default temperature
     context = {
       max_tool = 200,

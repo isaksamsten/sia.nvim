@@ -1,4 +1,5 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 return tool_utils.new_tool({
   name = "plan",
@@ -72,12 +73,12 @@ Make your plan concrete and actionable - each step should be specific enough tha
           if reply then
             callback({
               content = reply,
-              display_content = { "📋 Planning agent completed analysis" },
+              display_content = { icons.plan .. " Planning agent completed analysis" },
             })
           else
             callback({
               content = { "Planning failed" },
-              display_content = { "📋 Planning agent completed analysis" },
+              display_content = { icons.plan .. " Planning agent completed analysis" },
             })
           end
         end,

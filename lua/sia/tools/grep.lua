@@ -1,4 +1,5 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 local MAX_LINE_LENGTH = 200
 local MAX_MATCHES = 100
 
@@ -17,7 +18,8 @@ end
 local function handle_files_with_matches_mode(lines, args, callback)
   if #lines == 0 then
     local no_match_msg = string.format(
-      "🔍 No files found matching `%s`",
+      "%s No files found matching `%s`",
+      icons.search,
       args.pattern
     ) .. format_no_match_context(args)
 
@@ -36,7 +38,8 @@ local function handle_files_with_matches_mode(lines, args, callback)
   end
 
   local display_msg = string.format(
-    "🔍 Found %d files matching `%s`",
+    "%s Found %d files matching `%s`",
+    icons.search,
     #lines,
     args.pattern
   ) .. format_no_match_context(args)
@@ -49,7 +52,7 @@ end
 
 local function handle_count_mode(lines, args, callback)
   if #lines == 0 then
-    local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
+    local no_match_msg = string.format("%s No matches found for `%s`", icons.search, args.pattern)
       .. format_no_match_context(args)
 
     callback({
@@ -102,7 +105,8 @@ local function handle_count_mode(lines, args, callback)
   end
 
   local display_msg = string.format(
-    "🔍 Found %d matches in %d files for `%s`",
+    "%s Found %d matches in %d files for `%s`",
+    icons.search,
     total_count,
     #file_counts,
     args.pattern
@@ -159,7 +163,7 @@ local function handle_content_mode(lines, args, callback)
   end
 
   if #matches == 0 then
-    local no_match_msg = string.format("🔍 No matches found for `%s`", args.pattern)
+    local no_match_msg = string.format("%s No matches found for `%s`", icons.search, args.pattern)
       .. format_no_match_context(args)
 
     callback({
@@ -197,7 +201,7 @@ local function handle_content_mode(lines, args, callback)
     table.insert(output, matches[i].text)
   end
 
-  local display_msg = string.format("🔍 Found matches for `%s`", args.pattern)
+  local display_msg = string.format("%s Found matches for `%s`", icons.search, args.pattern)
     .. format_no_match_context(args)
 
   callback({

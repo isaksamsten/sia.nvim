@@ -1,4 +1,8 @@
-local FAILED_TO_WRITE = "❌ Failed to write file"
+local icons = require("sia.icons").get()
+
+local function failed_to_write()
+  return icons.error .. " Failed to write file"
+end
 
 local diff = require("sia.diff")
 local utils = require("sia.utils")
@@ -42,7 +46,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.path then
     callback({
       content = { "Error: No file path provided" },
-      display_content = { FAILED_TO_WRITE },
+      display_content = { failed_to_write() },
       kind = "failed",
     })
     return
@@ -51,7 +55,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.content then
     callback({
       content = { "Error: No content provided" },
-      display_content = { FAILED_TO_WRITE },
+      display_content = { failed_to_write() },
       kind = "failed",
     })
     return
@@ -120,7 +124,8 @@ For small, targeted changes, prefer the edit tool instead.]],
 
       local action = file_exists and "overwritten" or "created"
       local display_text = string.format(
-        "💾 %s %s (%d lines)",
+        "%s %s %s (%d lines)",
+        icons.save,
         file_exists and "Overwrote" or "Created",
         vim.fn.fnamemodify(args.path, ":."),
         #lines

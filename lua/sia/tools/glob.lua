@@ -1,5 +1,6 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 local MAX_FILES_RESULT = 100
 local MAX_FILES_SORT = 1000
@@ -175,18 +176,19 @@ return tool_utils.new_tool({
         local display_line
         if pattern and path then
           display_line = string.format(
-            "📂 Found %d files matching `%s` in `%s`",
+            "%s Found %d files matching `%s` in `%s`",
+            icons.directory,
             total_count,
             pattern,
             path
           )
         elseif pattern then
           display_line =
-            string.format("📂 Found %d files matching `%s`", total_count, pattern)
+            string.format("%s Found %d files matching `%s`", icons.directory, total_count, pattern)
         elseif path then
-          display_line = string.format("📂 Found %d files in `%s`", total_count, path)
+          display_line = string.format("%s Found %d files in `%s`", icons.directory, total_count, path)
         else
-          display_line = string.format("📂 Found %d files", total_count)
+          display_line = string.format("%s Found %d files", icons.directory, total_count)
         end
 
         callback({

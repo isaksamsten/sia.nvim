@@ -1,7 +1,13 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
-local FAILED_FETCH = "❌ Failed to fetch paper"
-local FAILED_TO_ACCESS = "❌ Failed to access CORE API"
+local function failed_fetch()
+  return icons.error .. " Failed to fetch paper"
+end
+
+local function failed_to_access()
+  return icons.error .. " Failed to access CORE API"
+end
 
 return tool_utils.new_tool({
   name = "paper",
@@ -47,7 +53,7 @@ Usage notes:
   if not args.id or args.id == "" then
     callback({
       content = { "Error: Paper ID is required" },
-      display_content = { "❌ Error: Paper ID is required" },
+      display_content = { icons.error .. " Error: Paper ID is required" },
     })
     return
   end
@@ -76,8 +82,8 @@ Usage notes:
           result.stderr or "Unknown error"
         )
         callback({
-          content = { FAILED_TO_ACCESS .. ": " .. error_msg },
-          display_content = { FAILED_TO_ACCESS },
+          content = { failed_to_access() .. ": " .. error_msg },
+          display_content = { failed_to_access() },
         })
         return
       end
@@ -87,8 +93,8 @@ Usage notes:
         pcall(vim.json.decode, result.stdout, { luanil = { object = true } })
       if not ok then
         callback({
-          content = { FAILED_FETCH .. ": Failed to parse API response - " },
-          display_content = { FAILED_FETCH },
+          content = { failed_fetch() .. ": Failed to parse API response - " },
+          display_content = { failed_fetch() },
         })
         return
       end
@@ -100,7 +106,7 @@ Usage notes:
         end
         callback({
           content = { error_msg },
-          display_content = { "❌ " .. error_msg },
+          display_content = { icons.error .. " " .. error_msg },
         })
         return
       end
@@ -111,7 +117,7 @@ Usage notes:
       local title = json.title and string.gsub(json.title, "\n", " "):gsub("%s+", " ")
         or "Untitled"
       table.insert(content, "# " .. title)
-      table.insert(display_content, "📄 Read '" .. title .. "'")
+      table.insert(display_content, icons.fetch .. " Read '" .. title .. "'")
 
       table.insert(content, string.format("**CORE ID:** %s", args.id))
       if json.authors and #json.authors > 0 then

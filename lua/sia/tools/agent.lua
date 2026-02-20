@@ -1,4 +1,5 @@
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 local START_REPLY = [[
 Async agent launched successfully.
@@ -118,7 +119,7 @@ Usage notes:
     if not args.agent then
       callback({
         content = { "Error: 'agent' parameter is required for 'start' command" },
-        display_content = { "❌ Missing agent parameter" },
+        display_content = { icons.error .. " Missing agent parameter" },
       })
       return
     end
@@ -126,7 +127,7 @@ Usage notes:
     if not args.task then
       callback({
         content = { "Error: 'task' parameter is required for 'start' command" },
-        display_content = { "❌ Missing task parameter" },
+        display_content = { icons.error .. " Missing task parameter" },
       })
       return
     end
@@ -141,7 +142,7 @@ Usage notes:
             args.agent
           ),
         },
-        display_content = { string.format("❌ Agent '%s' not found", args.agent) },
+        display_content = { string.format("%s Agent '%s' not found", icons.error, args.agent) },
       })
       return
     end
@@ -197,7 +198,7 @@ Usage notes:
         callback({
           content = vim.split(string.format(START_REPLY, task.id), "\n"),
           display_content = {
-            string.format("🚀 Started agent '%s'", args.agent),
+            string.format("%s Started agent '%s'", icons.started, args.agent),
           },
         })
       end,
@@ -206,7 +207,7 @@ Usage notes:
     if not args.id then
       callback({
         content = { "Error: 'id' parameter is required for 'status' command" },
-        display_content = { "❌ Missing id parameter" },
+        display_content = { icons.error .. " Missing id parameter" },
       })
       return
     end
@@ -285,7 +286,7 @@ Usage notes:
         callback({
           content = content,
           display_content = {
-            string.format("✅ Agent %s completed", task.name),
+            string.format("%s Agent %s completed", icons.success, task.name),
           },
         })
       elseif current_agent.status == "failed" then
@@ -295,7 +296,7 @@ Usage notes:
             "",
             string.format("Error: %s", current_agent.error or "Unknown error"),
           },
-          display_content = { string.format("❌ Agent %d failed", args.id) },
+          display_content = { string.format("%s Agent %d failed", icons.error, args.id) },
         })
       else
         vim.defer_fn(poll, 500)

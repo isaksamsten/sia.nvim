@@ -1,6 +1,13 @@
 local tool_utils = require("sia.tools.utils")
-local FAILED_FETCH = "❌ Failed to fetch search results"
-local FAILED_TO_ACCESS = "❌ Failed to access search"
+local icons = require("sia.icons").get()
+
+local function failed_fetch()
+  return icons.error .. " Failed to fetch search results"
+end
+
+local function failed_to_access()
+  return icons.error .. " Failed to access search"
+end
 
 return tool_utils.new_tool({
   name = "websearch",
@@ -39,7 +46,7 @@ Usage notes:
   if not vim.fn.executable("curl") then
     callback({
       content = { "Error: curl is not installed. Don't try again." },
-      display_content = { FAILED_TO_ACCESS },
+      display_content = { failed_to_access() },
     })
     return
   end
@@ -48,7 +55,7 @@ Usage notes:
       content = {
         "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
       },
-      display_content = { FAILED_TO_ACCESS },
+      display_content = { failed_to_access() },
     })
     return
   end
@@ -57,7 +64,7 @@ Usage notes:
       content = {
         "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
       },
-      display_content = { FAILED_TO_ACCESS },
+      display_content = { failed_to_access() },
     })
     return
   end
@@ -87,7 +94,7 @@ Usage notes:
               content = {
                 string.format("Error: Failed to fetch search results - %s", error_msg),
               },
-              display_content = { FAILED_FETCH },
+              display_content = { failed_fetch() },
             })
             return
           end
@@ -130,8 +137,8 @@ Usage notes:
             end
 
             local display_content = args.description
-                and string.format("🔍 %s", args.description)
-              or string.format("🔍 Search results for: %s", args.query)
+                and string.format("%s %s", icons.search, args.description)
+              or string.format("%s Search results for: %s", icons.search, args.query)
             callback({
               content = content,
               display_content = { display_content },
@@ -139,7 +146,7 @@ Usage notes:
           else
             callback({
               content = { "Error: Failed to parse json response from search" },
-              display_content = { FAILED_FETCH },
+              display_content = { failed_fetch() },
             })
           end
         end)

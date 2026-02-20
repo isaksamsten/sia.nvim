@@ -1,8 +1,11 @@
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
-local FAILED_TO_READ = "❌ Failed to read"
+local function failed_to_read()
+  return icons.error .. " Failed to read"
+end
 
 --- Determine the kind of read and return display helpers
 --- @param path string
@@ -10,7 +13,7 @@ local FAILED_TO_READ = "❌ Failed to read"
 local function read_display(path)
   if tool_utils.is_bash_output_path(path) then
     return {
-      icon = "🖥️",
+      icon = icons.read_bash,
       label = function()
         return "bash output"
       end,
@@ -19,7 +22,7 @@ local function read_display(path)
 
   if require("sia.skill_registry").is_skill_path(path) then
     return {
-      icon = "🧩",
+      icon = icons.read_skill,
       label = function(p)
         return "skill " .. vim.fn.fnamemodify(p, ":h:t")
       end,
@@ -27,7 +30,7 @@ local function read_display(path)
   end
 
   return {
-    icon = "📖",
+    icon = icons.read,
     label = function(p)
       return vim.fn.fnamemodify(p, ":.")
     end,
@@ -71,7 +74,7 @@ will be truncated.]],
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = { FAILED_TO_READ },
+      display_content = { failed_to_read() },
       kind = "failed",
     })
     return
@@ -80,7 +83,7 @@ will be truncated.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = { "Error: File cannot be found" },
-      display_content = { FAILED_TO_READ },
+      display_content = { failed_to_read() },
       kind = "failed",
     })
     return
@@ -110,7 +113,7 @@ will be truncated.]],
       if not buf then
         callback({
           content = { "Error: Cannot load " .. args.path },
-          display_content = { FAILED_TO_READ },
+          display_content = { failed_to_read() },
           kind = "failed",
         })
         return
@@ -126,7 +129,7 @@ will be truncated.]],
               total_lines
             ),
           },
-          display_content = { FAILED_TO_READ },
+          display_content = { failed_to_read() },
           kind = "failed",
         })
         return

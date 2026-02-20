@@ -2,11 +2,18 @@ local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
 local failed_matches = {}
 local MAX_FAILED_MATCHES = 3
-local FAILED_TO_EDIT = "❌ Failed to edit"
-local FAILED_TO_EDIT_FILE = "❌ Failed to edit %s"
+
+local function failed_to_edit()
+  return icons.error .. " Failed to edit"
+end
+
+local function failed_to_edit_file(filename)
+  return icons.error .. " Failed to edit " .. filename
+end
 
 local clear_outdated_tool_input =
   tool_utils.gen_clear_outdated_tool_input({ "old_string", "new_string" })
@@ -49,10 +56,12 @@ end
 --- @return string
 local function create_display_description(target_file, pos, col_span, fuzzy)
   local fuzzy_suffix = fuzzy and " - please double-check the changes" or ""
+  local icon = icons.edit
 
   if col_span then
     return string.format(
-      "✏️ Edited line %d (columns %d-%d) in %s%s",
+      "%s Edited line %d (columns %d-%d) in %s%s",
+      icon,
       pos[1],
       col_span[1],
       col_span[2],
@@ -64,7 +73,7 @@ local function create_display_description(target_file, pos, col_span, fuzzy)
   local edit_span = pos[1] ~= pos[2] and string.format("lines %d-%d", pos[1], pos[2])
     or string.format("line %d", pos[1])
 
-  return string.format("✏️ Edited %s in %s%s", edit_span, target_file, fuzzy_suffix)
+  return string.format("%s Edited %s in %s%s", icon, edit_span, target_file, fuzzy_suffix)
 end
 
 --- Execute multiple edits in reverse order to maintain line numbers
@@ -199,7 +208,7 @@ Usage:
   if validation_message then
     callback({
       content = { validation_message },
-      display_content = { FAILED_TO_EDIT },
+      display_content = { failed_to_edit() },
       kind = "failed",
     })
     return
@@ -209,7 +218,7 @@ Usage:
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
-      display_content = { FAILED_TO_EDIT },
+      display_content = { failed_to_edit() },
       kind = "failed",
     })
     return
@@ -284,7 +293,8 @@ Usage:
           )
 
           local display_description = string.format(
-            "✏️ Replaced all %d occurrence%s in %s",
+            "%s Replaced all %d occurrence%s in %s",
+            icons.edit,
             num_matches,
             num_matches > 1 and "s" or "",
             filename
@@ -385,7 +395,7 @@ Usage:
             ),
           },
           display_content = {
-            string.format(FAILED_TO_EDIT_FILE, filename),
+            failed_to_edit_file(filename),
           },
         })
       elseif not replace_all and num_matches > 1 then
@@ -400,7 +410,7 @@ Usage:
             ),
           },
           display_content = {
-            string.format(FAILED_TO_EDIT_FILE, filename),
+            failed_to_edit_file(filename),
           },
         })
       elseif failed_matches[buf] >= MAX_FAILED_MATCHES then
@@ -414,7 +424,7 @@ Usage:
             ),
           },
           display_content = {
-            string.format(FAILED_TO_EDIT_FILE, filename),
+            failed_to_edit_file(filename),
           },
         })
       else
@@ -429,7 +439,7 @@ Usage:
             ),
           },
           display_content = {
-            string.format(FAILED_TO_EDIT_FILE, filename),
+            failed_to_edit_file(filename),
           },
         })
       end

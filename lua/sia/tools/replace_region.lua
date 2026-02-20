@@ -2,8 +2,11 @@ local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
+local icons = require("sia.icons").get()
 
-local FAILED_TO_REPLACE = "❌ Failed to replace region"
+local function failed_to_replace()
+  return icons.error .. " Failed to replace region"
+end
 
 local clear_outdated_tool_input =
   tool_utils.gen_clear_outdated_tool_input({ "text", "start_line", "end_line" })
@@ -72,7 +75,7 @@ Notes:
   if not args.target_file then
     callback({
       content = { "Error: No target_file was provided" },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -81,7 +84,7 @@ Notes:
   if args.start_line == nil then
     callback({
       content = { "Error: No start_line was provided" },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -90,7 +93,7 @@ Notes:
   if args.end_line == nil then
     callback({
       content = { "Error: No end_line was provided" },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -99,7 +102,7 @@ Notes:
   if args.text == nil then
     callback({
       content = { "Error: No text was provided" },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -109,7 +112,7 @@ Notes:
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -132,7 +135,7 @@ Notes:
   if start_line < 1 then
     callback({
       content = { string.format("Error: start_line must be >= 1, got %d", start_line) },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -147,7 +150,7 @@ Notes:
           end_line
         ),
       },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -162,7 +165,7 @@ Notes:
           start_line
         ),
       },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -177,7 +180,7 @@ Notes:
           end_line
         ),
       },
-      display_content = { FAILED_TO_REPLACE },
+      display_content = { failed_to_replace() },
       kind = "failed",
     })
     return
@@ -255,7 +258,8 @@ Notes:
       )
 
       local display_description = string.format(
-        "✂️ Replaced lines %d-%d in %s",
+        "%s Replaced lines %d-%d in %s",
+        icons.replace,
         start_line,
         end_line,
         filename
