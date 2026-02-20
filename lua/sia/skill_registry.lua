@@ -277,6 +277,41 @@ function M.get_skill(name)
   return nil
 end
 
+--- Check if a file path is inside any enabled skill directory
+--- @param path string The file path to check
+--- @return boolean
+function M.is_skill_path(path)
+  local resolved = vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+
+  local enabled_names, extra_paths = get_skills_config()
+  if #enabled_names == 0 then
+    return false
+  end
+
+  --- @param base_dir string
+  --- @param name string
+  --- @return boolean
+  local function check_skill_dir(base_dir, name)
+    local skill_dir = vim.fn.resolve(vim.fs.joinpath(base_dir, name))
+    return vim.startswith(resolved, skill_dir .. "/") or resolved == skill_dir
+  end
+
+  -- Check each enabled skill name against search paths
+  local default_dir = get_default_skills_dir()
+  for _, name in ipairs(enabled_names) do
+    if check_skill_dir(default_dir, name) then
+      return true
+    end
+    for _, extra_dir in ipairs(extra_paths) do
+      if check_skill_dir(vim.fn.expand(extra_dir), name) then
+        return true
+      end
+    end
+  end
+
+  return false
+end
+
 -- Expose for testing
 M._parse_skill_file = parse_skill_file
 

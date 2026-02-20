@@ -4,6 +4,36 @@ local tool_utils = require("sia.tools.utils")
 
 local FAILED_TO_READ = "❌ Failed to read"
 
+--- Determine the kind of read and return display helpers
+--- @param path string
+--- @return { icon: string, label: fun(path: string): string }
+local function read_display(path)
+  if tool_utils.is_bash_output_path(path) then
+    return {
+      icon = "🖥️",
+      label = function()
+        return "bash output"
+      end,
+    }
+  end
+
+  if require("sia.skill_registry").is_skill_path(path) then
+    return {
+      icon = "🧩",
+      label = function(p)
+        return "skill " .. vim.fn.fnamemodify(p, ":h:t")
+      end,
+    }
+  end
+
+  return {
+    icon = "📖",
+    label = function(p)
+      return vim.fn.fnamemodify(p, ":.")
+    end,
+  }
+end
+
 return tool_utils.new_tool({
   name = "read",
   read_only = true,
@@ -27,8 +57,13 @@ will be truncated.]],
   },
   required = { "path" },
   auto_apply = function(args, _)
-    if args.path and tool_utils.is_bash_output_path(args.path) then
-      return 1
+    if args.path then
+      if tool_utils.is_bash_output_path(args.path) then
+        return 1
+      end
+      if require("sia.skill_registry").is_skill_path(args.path) then
+        return 1
+      end
     end
     return nil
   end,
@@ -97,7 +132,6 @@ will be truncated.]],
         return
       end
 
-      -- Calculate actual range
       local start_line = math.max(1, offset)
       local end_line = math.min(total_lines, start_line + limit - 1)
 
@@ -113,20 +147,21 @@ will be truncated.]],
         pos = { offset, offset + #content - 1 }
       end
 
+      local display = read_display(args.path)
+      local name = display.label(args.path)
+
       local display_content
       if args.offset or args.limit then
         display_content = string.format(
-          "📖 Read lines %d-%d from %s",
+          "%s Read lines %d-%d from %s",
+          display.icon,
           start_line,
           end_line,
-          vim.fn.fnamemodify(args.path, ":.")
+          name
         )
       else
-        display_content = string.format(
-          "📖 Read %s (%d lines)",
-          vim.fn.fnamemodify(args.path, ":."),
-          #content
-        )
+        display_content =
+          string.format("%s Read %s (%d lines)", display.icon, name, #content)
       end
 
       local outdated_message
