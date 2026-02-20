@@ -1,9 +1,11 @@
 local openai = require("sia.provider.openai")
 local copilot = require("sia.provider.copilot")
+local codex = require("sia.provider.codex")
 
 return {
   openai_responses = openai.responses,
   copilot_responses = copilot.responses,
+  codex = codex.responses,
   openai = openai.completion,
   copilot = copilot.completion,
   gemini = openai.completion_compatible(

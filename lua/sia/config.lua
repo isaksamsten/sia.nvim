@@ -266,8 +266,7 @@ local function validate_skills(json)
     end
     for i, item in ipairs(json.skills) do
       if type(item) ~= "string" then
-        return false,
-          "skills[" .. i .. "] must be a string, got " .. type(item)
+        return false, "skills[" .. i .. "] must be a string, got " .. type(item)
       end
     end
   end
@@ -279,8 +278,7 @@ local function validate_skills(json)
     end
     for i, item in ipairs(json.skills_extras) do
       if type(item) ~= "string" then
-        return false,
-          "skills_extras[" .. i .. "] must be a string, got " .. type(item)
+        return false, "skills_extras[" .. i .. "] must be a string, got " .. type(item)
       end
     end
   end
@@ -756,6 +754,11 @@ M.options = {
       "gpt-5.1-codex",
       can_reason = true,
     },
+    ["codex/gpt-5.3-codex"] = { "codex", "gpt-5.3-codex", can_reason = true },
+    ["codex/gpt-5.2-codex"] = { "codex", "gpt-5.2-codex", can_reason = true },
+    ["codex/gpt-5.2"] = { "codex", "gpt-5.2", can_reason = true },
+    ["codex/gpt-5.1-codex"] = { "codex", "gpt-5.1-codex", can_reason = true },
+    ["codex/gpt-5.1-codex-mini"] = { "codex", "gpt-5.1-codex-mini", can_reason = true },
     ["openai/gpt-5"] = { "openai_responses", "gpt-5" },
     ["openai/gpt-5-codex"] = { "openai_responses", "gpt-5-codex" },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },

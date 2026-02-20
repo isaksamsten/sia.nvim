@@ -634,49 +634,33 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
     end
 
     if proc.status ~= "running" then
-      vim.api.nvim_echo(
+      vim.api.nvim_echo({
         {
-          {
-            string.format("SiaShell: Process %d is already %s", id, proc.status),
-            "WarningMsg",
-          },
+          string.format("SiaShell: Process %d is already %s", id, proc.status),
+          "WarningMsg",
         },
-        false,
-        {}
-      )
+      }, false, {})
       return
     end
 
     if proc.detached_handle then
       proc.detached_handle.kill()
-      vim.api.nvim_echo(
+      vim.api.nvim_echo({
         {
-          {
-            string.format(
-              "SiaShell: Sent SIGTERM to process %d (%s)",
-              id,
-              proc.command
-            ),
-            "Normal",
-          },
+          string.format("SiaShell: Sent SIGTERM to process %d (%s)", id, proc.command),
+          "Normal",
         },
-        false,
-        {}
-      )
+      }, false, {})
     else
-      vim.api.nvim_echo(
+      vim.api.nvim_echo({
         {
-          {
-            string.format(
-              "SiaShell: Process %d is synchronous and cannot be stopped",
-              id
-            ),
-            "WarningMsg",
-          },
+          string.format(
+            "SiaShell: Process %d is synchronous and cannot be stopped",
+            id
+          ),
+          "WarningMsg",
         },
-        false,
-        {}
-      )
+      }, false, {})
     end
   elseif subcommand == "list" or subcommand == nil then
     local procs = chat.conversation.bash_processes
@@ -721,25 +705,20 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
       {}
     )
   else
-    vim.api.nvim_echo(
+    vim.api.nvim_echo({
       {
-        {
-          "SiaShell: Unknown subcommand '"
-            .. subcommand
-            .. "'. Use 'list' or 'stop <id>'.",
-          "ErrorMsg",
-        },
+        "SiaShell: Unknown subcommand '"
+          .. subcommand
+          .. "'. Use 'list' or 'stop <id>'.",
+        "ErrorMsg",
       },
-      false,
-      {}
-    )
+    }, false, {})
   end
 end, {
   nargs = "*",
   complete = function(arg_lead, cmd_line, cursor_pos)
     local prefix = string.sub(cmd_line, 1, cursor_pos)
 
-    -- Complete subcommands
     if prefix:match("SiaShell%s%w*$") then
       local subcommands = { "list", "stop" }
       local result = {}
@@ -751,7 +730,6 @@ end, {
       return result
     end
 
-    -- Complete process IDs for "stop"
     if prefix:match("SiaShell%s+stop%s") then
       local ChatStrategy = require("sia.strategy").ChatStrategy
       local chat = ChatStrategy.by_buf()
@@ -781,5 +759,60 @@ end, {
     end
 
     return {}
+  end,
+})
+
+--- @type table<string, { authorize: fun(callback: fun(data: any?)), label: string }>
+local SIA_AUTH_PROVIDERS = {
+  codex = {
+    label = "Codex",
+    authorize = function(callback)
+      require("sia.provider.codex").authorize(function(token_data)
+        if token_data then
+          vim.notify("Sia Codex: Ready to use codex/ models.", vim.log.levels.INFO)
+        else
+          vim.notify("Sia Codex: Authorization failed.", vim.log.levels.ERROR)
+        end
+        if callback then
+          callback(token_data)
+        end
+      end)
+    end,
+  },
+}
+
+vim.api.nvim_create_user_command("SiaAuth", function(args)
+  local provider_name = args.fargs[1]
+  if not provider_name then
+    vim.api.nvim_echo({ { "SiaAuth: Provider name required.", "ErrorMsg" } }, false, {})
+    return
+  end
+
+  local provider = SIA_AUTH_PROVIDERS[provider_name]
+  if not provider then
+    vim.api.nvim_echo({
+      {
+        string.format(
+          "SiaAuth: Unknown provider '%s'. Available: %s",
+          provider_name,
+          table.concat(vim.tbl_keys(SIA_AUTH_PROVIDERS), ", ")
+        ),
+        "ErrorMsg",
+      },
+    }, false, {})
+    return
+  end
+
+  provider.authorize()
+end, {
+  nargs = 1,
+  complete = function(arg_lead)
+    local completions = {}
+    for name, _ in pairs(SIA_AUTH_PROVIDERS) do
+      if vim.startswith(name, arg_lead) then
+        table.insert(completions, name)
+      end
+    end
+    return completions
   end,
 })
