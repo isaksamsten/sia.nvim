@@ -121,7 +121,7 @@ function ChatStrategy:on_round_start()
   end
   self.canvas:update_assistant_extmark(
     self.assistant_extmark,
-    { status_text = "Analyzing...", model = self.conversation.model:name() }
+    { model = self.conversation.model:name() }
   )
 end
 
@@ -179,7 +179,7 @@ function ChatStrategy:on_tools()
   if self.assistant_extmark then
     self.canvas:update_assistant_extmark(
       self.assistant_extmark,
-      { status_text = "Calling tools...", model = self.conversation.model:name() }
+      { model = self.conversation.model:name() }
     )
   end
   return true

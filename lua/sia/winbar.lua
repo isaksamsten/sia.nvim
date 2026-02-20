@@ -7,6 +7,8 @@ local ICONS = {
   tool = " ",
 }
 
+local SPINNER_FRAMES = { "", "", "", "", "", "" }
+
 --- @class sia.WinbarToolStatus
 --- @field name string?
 --- @field message string?
@@ -17,6 +19,7 @@ local ICONS = {
 --- @field is_busy boolean
 --- @field stats sia.conversation.Stats?
 --- @field tool_status sia.WinbarToolStatus[]?
+--- @field spinner string?
 --- @field win integer
 --- @field buf integer
 
@@ -30,6 +33,9 @@ function M.default_left(data)
 
   local parts = {}
 
+  if data.spinner and data.is_busy then
+    table.insert(parts, "%#SiaTaskRunning#" .. data.spinner .. "  ")
+  end
   if data.tool_status then
     local running_names = {}
     local pending_count = 0
@@ -148,6 +154,7 @@ end
 --- @field stats_pending boolean
 --- @field last_usage_total integer
 --- @field tool_status sia.WinbarToolStatus[]?
+--- @field spinner_frame integer
 
 --- @type table<integer, sia.WinbarEntry>
 local entries = {}
@@ -176,6 +183,7 @@ local function render_one(buf, entry)
     is_busy = entry.strategy.is_busy or false,
     stats = entry.stats,
     tool_status = entry.tool_status,
+    spinner = SPINNER_FRAMES[entry.spinner_frame],
     win = win,
     buf = buf,
   }
@@ -229,6 +237,11 @@ local function tick()
     if not vim.api.nvim_buf_is_loaded(buf) then
       table.insert(dead, buf)
     else
+      if entry.strategy.is_busy then
+        entry.spinner_frame = (entry.spinner_frame % #SPINNER_FRAMES) + 1
+      else
+        entry.spinner_frame = 1
+      end
       maybe_refresh_stats(buf, entry)
       render_one(buf, entry)
     end
@@ -255,7 +268,7 @@ local function ensure_timer()
   end
   timer = vim.uv.new_timer()
   if timer then
-    timer:start(100, 1000, vim.schedule_wrap(tick))
+    timer:start(100, 300, vim.schedule_wrap(tick))
   end
 end
 
@@ -268,10 +281,12 @@ function M.attach(buf, conversation, strategy)
   entries[buf] = {
     conversation = conversation,
     strategy = strategy,
+    activity = nil,
     stats = nil,
     stats_pending = false,
     last_usage_total = 0,
     tool_status = nil,
+    spinner_frame = 1,
   }
   ensure_timer()
 end
@@ -283,6 +298,16 @@ function M.update_tool_status(buf, statuses)
   local entry = entries[buf]
   if entry then
     entry.tool_status = statuses
+  end
+end
+
+--- Update activity status for a chat buffer
+--- @param buf integer
+--- @param activity string?
+function M.update_activity(buf, activity)
+  local entry = entries[buf]
+  if entry then
+    entry.activity = activity
   end
 end
 
