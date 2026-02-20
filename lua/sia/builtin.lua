@@ -14,7 +14,7 @@ new files.
 These are techniques you know for combining your tools effectively.
 Apply them when the situation matches.
 {% for skill in skills %}
-- {{ skill.name }}: {{ skill.description }} ({{ skill.filepath }})
+- {{ skill.name }}: {{ skill.description }} (basedir: {{ skill.dir }}, file: SKILL.md)
 {% end %}
 {% end %}
 

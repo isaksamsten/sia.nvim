@@ -904,6 +904,7 @@ function Conversation:build_template_context()
       description = skill.description,
       content = table.concat(skill.content, "\n"),
       filepath = skill.filepath,
+      dir = skill.dir,
     })
   end
 
