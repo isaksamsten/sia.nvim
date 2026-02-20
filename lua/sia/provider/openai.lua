@@ -258,7 +258,7 @@ function OpenAIResponsesStream:finalize()
     hide = true,
     role = "assistant",
     content = content,
-  }, nil, { meta = { reasoning = reasoning } })
+  }, nil, { meta = { reasoning = reasoning, empty_content = reasoning ~= nil } })
 
   return content
 end
@@ -487,10 +487,11 @@ local M = {
           if reasoning then
             local item = { type = "reasoning" }
             if reasoning.summary then
-              item.summary = { type = "summary_text", text = reasoning.summary }
+              item.summary = { { type = "summary_text", text = reasoning.summary } }
             end
             if reasoning.encrypted_content then
-              item.encrypted_content = reasoning.encrypted_content
+              item.id = reasoning.encrypted_content.id
+              item.encrypted_content = reasoning.encrypted_content.encrypted_content
             end
             table.insert(input, item)
           else
