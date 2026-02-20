@@ -890,16 +890,6 @@ function Conversation:build_template_context()
     return self._template_context
   end
 
-  local tool_instructions = {}
-  if vim.tbl_count(self.tools) > 0 then
-    for _, tool in ipairs(self.tools) do
-      if tool.system_prompt then
-        tool_instructions[#tool_instructions + 1] =
-          string.format("<%s>\n%s\n</%s>", tool.name, tool.system_prompt, tool.name)
-      end
-    end
-  end
-
   local agents = require("sia.agent_registry").get_agent_definitions(false)
   local agent_list = {}
   for _, agent in pairs(agents) do
