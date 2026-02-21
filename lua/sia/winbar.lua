@@ -5,155 +5,271 @@ local ICONS = {
   bash = " ",
   agents = " ",
   tool = " ",
+  queue = " ",
 }
 
 local SPINNER_FRAMES = { "", "", "", "", "", "" }
+
+local STATUS_PREFIX = {
+  error = " ",
+  warning = " ",
+  info = " ",
+}
+
+local STATUS_HL = {
+  error = "DiagnosticError",
+  warning = "DiagnosticWarn",
+  info = "DiagnosticInfo",
+}
+
+local SECTION_SEPARATOR = "%#NonText# · "
+
+--- @param items string[]
+--- @param max_visible integer
+--- @param extra_count integer
+--- @return string
+local function compact_list(items, max_visible, extra_count)
+  if #items == 0 and extra_count <= 0 then
+    return ""
+  end
+
+  local visible = vim.list_slice(items, 1, max_visible)
+  local hidden = math.max(#items - #visible, 0) + extra_count
+  local text = table.concat(visible, ", ")
+  if hidden > 0 then
+    text = text == "" and ("+" .. hidden) or (text .. " +" .. hidden)
+  end
+  return text
+end
+
+--- @param hl string
+--- @param text string
+--- @return string
+local function section(hl, text)
+  return "%#" .. hl .. "#" .. text
+end
+
+--- @param text string
+--- @param max_len integer
+--- @return string
+local function truncate_middle(text, max_len)
+  if #text <= max_len then
+    return text
+  end
+  if max_len <= 1 then
+    return "…"
+  end
+  return text:sub(1, max_len - 1) .. "…"
+end
+
+--- @param status sia.WinbarStatus
+--- @return string
+local function status_section(status)
+  local hl = status.status and STATUS_HL[status.status] or "NonText"
+  local prefix = status.status and STATUS_PREFIX[status.status] or ""
+  local message = truncate_middle(vim.trim(status.message or ""), 64)
+  return section(hl, prefix .. message)
+end
+
+--- @param data sia.WinbarData
+--- @return string
+local function tool_section(data)
+  if not data.tool_status then
+    return ""
+  end
+
+  local running_names = {}
+  local pending_count = 0
+  for _, ts in ipairs(data.tool_status) do
+    if ts.status == "running" then
+      table.insert(running_names, ts.name or "tool")
+    elseif ts.status == "pending" then
+      pending_count = pending_count + 1
+    end
+  end
+
+  local label = compact_list(running_names, 1, pending_count)
+  if label == "" then
+    return ""
+  end
+
+  return section("SiaTaskRunning", string.format("%s%s", ICONS.tool, label))
+end
+
+--- @param conversation sia.Conversation
+--- @return string
+local function agents_section(conversation)
+  if not conversation:has_tool("agents") then
+    return ""
+  end
+
+  local running_agents = 0
+  for _, task in ipairs(conversation.tasks) do
+    if task.status == "running" then
+      running_agents = running_agents + 1
+    end
+  end
+
+  local hl = running_agents > 0 and "SiaTaskRunning" or "NonText"
+  return section(hl, string.format("%s %d", ICONS.agents, running_agents))
+end
+
+--- @param conversation sia.Conversation
+--- @return string
+local function bash_section(conversation)
+  if not conversation:has_tool("bash") then
+    return ""
+  end
+
+  local running_bash = 0
+  for _, proc in ipairs(conversation.bash_processes) do
+    if proc.status == "running" then
+      running_bash = running_bash + 1
+    end
+  end
+
+  local hl = running_bash > 0 and "SiaTaskRunning" or "NonText"
+  return section(hl, string.format("%s%d", ICONS.bash, running_bash))
+end
+
+--- @param data sia.WinbarData
+--- @return string
+local function queue_section(data)
+  local size = data.strategy:queue_size()
+  if size <= 0 then
+    return ""
+  end
+  return section("NonText", string.format("%s%d", ICONS.queue, size))
+end
+
+--- @param data sia.WinbarData
+--- @return string
+local function spinner_section(data)
+  if data.strategy.is_busy then
+    return ""
+  end
+  return section("SiaTaskRunning", data.spinner)
+end
+
+--- @param data sia.WinbarData
+--- @return string
+local function format_right_metric(data)
+  local bar = data.stats and data.stats.bar
+  if bar then
+    local cost = bar.text
+    if cost and cost ~= "" then
+      return "%#NonText#$%#Normal#" .. cost
+    end
+
+    if bar.percent then
+      local pct = math.floor((bar.percent * 100) + 0.5)
+      return "%#NonText#" .. pct .. "%"
+    end
+  end
+
+  local value = nil
+  if data.stats and data.stats.right then
+    value = data.stats.right
+  elseif data.conversation then
+    local usage = data.conversation:get_cumulative_usage()
+    if usage and usage.total > 0 then
+      value = common.format_token_count(usage.total)
+    end
+  end
+
+  if not value or value == "" then
+    return ""
+  end
+
+  return "%#NonText#" .. value .. " tok"
+end
+
+local function format_left(parts)
+  if #parts == 0 then
+    return ""
+  end
+  return table.concat(parts, SECTION_SEPARATOR) .. "%#NonText#"
+end
+
+local function push_part(parts, value)
+  if value ~= "" then
+    table.insert(parts, value)
+  end
+end
+
+local function default_left_sections(data)
+  local parts = {}
+  push_part(parts, spinner_section(data))
+  push_part(parts, queue_section(data))
+  push_part(parts, tool_section(data))
+  push_part(parts, agents_section(data.conversation))
+  push_part(parts, bash_section(data.conversation))
+  return format_left(parts)
+end
+
+local function default_center_status(data)
+  if not data.status then
+    return ""
+  end
+  return status_section(data.status)
+end
+
+local function default_right_metric(data)
+  return format_right_metric(data)
+end
 
 --- @class sia.WinbarToolStatus
 --- @field name string?
 --- @field message string?
 --- @field status "pending"|"running"|"done"
 
+--- @class sia.WinbarStatus
+--- @field message string
+--- @field status "warning"|"error"|"info"|nil
+
 --- @class sia.WinbarData
---- @field conversation sia.Conversation?
---- @field is_busy boolean
+--- @field conversation sia.Conversation
+--- @field strategy sia.ChatStrategy
 --- @field stats sia.conversation.Stats?
 --- @field tool_status sia.WinbarToolStatus[]?
+--- @field status sia.WinbarStatus?
 --- @field spinner string?
 --- @field win integer
 --- @field buf integer
 
---- Default left section: shows running tools, agents, and bash processes
+--- Default left section: shows activity in structured segments
 --- @param data sia.WinbarData
 --- @return string
 function M.default_left(data)
   if not data.conversation then
     return ""
   end
-
-  local parts = {}
-
-  if data.spinner and data.is_busy then
-    table.insert(parts, "%#SiaTaskRunning#" .. data.spinner .. "  ")
-  end
-  if data.tool_status then
-    local running_names = {}
-    local pending_count = 0
-    for _, ts in ipairs(data.tool_status) do
-      if ts.status == "running" then
-        table.insert(running_names, ts.name or "tool")
-      elseif ts.status == "pending" then
-        pending_count = pending_count + 1
-      end
-    end
-    if #running_names > 0 then
-      local label = table.concat(running_names, ", ")
-      if pending_count > 0 then
-        label = label .. " (+" .. pending_count .. ")"
-      end
-      table.insert(parts, "%#SiaTaskRunning#" .. ICONS.tool .. " " .. label)
-    end
-  end
-
-  if data.conversation:has_tool("agents") then
-    local running_agents = 0
-    for _, task in ipairs(data.conversation.tasks) do
-      if task.status == "running" then
-        running_agents = running_agents + 1
-      end
-    end
-    table.insert(
-      parts,
-      "%#"
-        .. (running_agents > 0 and "SiaTaskRunning" or "NonText")
-        .. "#"
-        .. ICONS.agents
-        .. running_agents
-    )
-  end
-
-  if data.conversation:has_tool("bash") then
-    local running_bash = 0
-    for _, proc in ipairs(data.conversation.bash_processes) do
-      if proc.status == "running" then
-        running_bash = running_bash + 1
-      end
-    end
-    table.insert(
-      parts,
-      "%#"
-        .. (running_bash > 0 and "SiaTaskRunning" or "NonText")
-        .. "#"
-        .. ICONS.bash
-        .. running_bash
-    )
-  end
-
-  if #parts == 0 then
-    return ""
-  end
-
-  return table.concat(parts, "%#NonText# ") .. "%#NonText#"
+  return default_left_sections(data)
 end
 
---- Default center section: shows cost tracking bar from provider stats
+--- Default center section: status (with severity) or cost tracking bar
 --- @param data sia.WinbarData
 --- @return string
 function M.default_center(data)
-  local bar = data.stats and data.stats.bar
-  if not bar then
-    return ""
-  end
-
-  local used_percent = bar.percent or 0
-  local win_width = vim.api.nvim_win_get_width(data.win)
-  local bar_width = math.min(20, win_width - 11)
-  if bar_width < 3 then
-    return ""
-  end
-
-  local filled_bars = math.ceil(used_percent * bar_width)
-  if filled_bars > bar_width then
-    filled_bars = bar_width
-  end
-  local empty_bars = bar_width - filled_bars
-
-  local bar_hl = used_percent >= 1 and "%#DiagnosticError#"
-    or used_percent >= 0.75 and "%#DiagnosticWarn#"
-    or "%#DiagnosticOk#"
-
-  return bar_hl
-    .. (bar.icon and (" " .. bar.icon) or "")
-    .. string.rep("■", filled_bars)
-    .. string.rep("━", empty_bars)
-    .. (bar.text and (" " .. bar.text) or "")
-    .. bar_hl
+  local status = default_center_status(data)
+  return status
 end
 
---- Default right section: shows token count
+--- Default right section: labels usage metric
 --- @param data sia.WinbarData
 --- @return string
 function M.default_right(data)
-  if data.stats and data.stats.right then
-    return data.stats.right
-  end
-  if not data.conversation then
-    return ""
-  end
-  local usage = data.conversation:get_cumulative_usage()
-  if not usage or usage.total == 0 then
-    return ""
-  end
-  return common.format_token_count(usage.total)
+  return default_right_metric(data)
 end
 
 --- @class sia.WinbarEntry
 --- @field conversation sia.Conversation
---- @field strategy sia.Strategy
+--- @field strategy sia.ChatStrategy
 --- @field stats sia.conversation.Stats?
 --- @field stats_pending boolean
 --- @field last_usage_total integer
 --- @field tool_status sia.WinbarToolStatus[]?
+--- @field status sia.WinbarStatus?
 --- @field spinner_frame integer
 
 --- @type table<integer, sia.WinbarEntry>
@@ -180,8 +296,9 @@ local function render_one(buf, entry)
   --- @type sia.WinbarData
   local data = {
     conversation = entry.conversation,
-    is_busy = entry.strategy.is_busy or false,
+    strategy = entry.strategy,
     stats = entry.stats,
+    status = entry.status,
     tool_status = entry.tool_status,
     spinner = SPINNER_FRAMES[entry.spinner_frame],
     win = win,
@@ -275,13 +392,12 @@ end
 --- Register a chat buffer for winbar updates
 --- @param buf integer
 --- @param conversation sia.Conversation
---- @param strategy sia.Strategy
+--- @param strategy sia.ChatStrategy
 function M.attach(buf, conversation, strategy)
   M.detach(buf)
   entries[buf] = {
     conversation = conversation,
     strategy = strategy,
-    activity = nil,
     stats = nil,
     stats_pending = false,
     last_usage_total = 0,
@@ -301,13 +417,13 @@ function M.update_tool_status(buf, statuses)
   end
 end
 
---- Update activity status for a chat buffer
+--- Update tool execution status for a chat buffer
 --- @param buf integer
---- @param activity string?
-function M.update_activity(buf, activity)
+--- @param status sia.WinbarStatus?
+function M.update_status(buf, status)
   local entry = entries[buf]
   if entry then
-    entry.activity = activity
+    entry.status = status
   end
 end
 
