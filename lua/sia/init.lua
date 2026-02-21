@@ -715,20 +715,19 @@ function M.execute_action(action, opts)
   local context = opts.context
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
+    local should_execute = true
     if not opts.named_prompt and (vim.bo[context.buf].filetype == "sia") then
       strategy = require("sia.strategy").ChatStrategy.by_buf(context.buf)
 
-      if strategy and not strategy.is_busy then
+      if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-        strategy.conversation:add_instruction(last_instruction, nil)
 
-        -- The user might have explicitly changed the model with -m
-        if opts.model then
-          local Model = require("sia.model")
-          strategy.conversation.model = Model.resolve(opts.model)
+        if strategy.is_busy then
+          strategy:queue_instruction(last_instruction, nil)
+          should_execute = false
+        else
+          strategy.conversation:add_instruction(last_instruction, nil)
         end
-      else
-        vim.notify("Sia: conversation is busy")
       end
     else
       if opts.model then
@@ -767,8 +766,10 @@ function M.execute_action(action, opts)
       end
     end
 
-    --- @cast strategy sia.Strategy
-    require("sia.assistant").execute_strategy(strategy)
+    if strategy and should_execute then
+      --- @cast strategy sia.Strategy
+      require("sia.assistant").execute_strategy(strategy)
+    end
   end
 end
 

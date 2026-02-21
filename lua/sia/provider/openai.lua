@@ -185,8 +185,8 @@ function OpenAIResponsesStream:process_stream_chunk(json)
   if json.type == "response.created" then
     self.response_id = json.response.id
   end
-  if json.type == "response.reasoning_summary_text.delta" then
-    if not self:on_content({ reasoning = { content = json.delta } }) then
+  if json.type == "response.reasoning_summary_text.done" then
+    if not self:on_content({ reasoning = { content = json.text } }) then
       return true
     end
   elseif json.type == "response.output_text.delta" then
@@ -527,7 +527,7 @@ local M = {
       end
 
       if data.reasoning_effort then
-        data.reasoning = { effort = data.reasoning_effort }
+        data.reasoning = { effort = data.reasoning_effort, summary = "concise" }
         data.reasoning_effort = nil
       end
       data.store = false

@@ -25,6 +25,7 @@ spaces. Only output the name, nothing else.]]
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private writer sia.StreamRenderer?
+--- @field private queued_instructions {instruction: sia.config.Instruction|string|sia.config.Instruction[], context: sia.Context?}[]
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -54,6 +55,7 @@ function ChatStrategy:new(conversation, options)
   obj.buf = buf
   obj.writer = nil
   obj.options = options
+  obj.queued_instructions = {}
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -102,6 +104,40 @@ function ChatStrategy:redraw()
   )
 end
 
+function ChatStrategy:queue_size()
+  return #self.queued_instructions
+end
+
+--- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
+--- @param context sia.Context?
+function ChatStrategy:queue_instruction(instruction, context)
+  table.insert(self.queued_instructions, {
+    instruction = instruction,
+    context = context,
+  })
+end
+
+--- @return boolean flushed
+function ChatStrategy:flush_queued_instructions()
+  if vim.tbl_isempty(self.queued_instructions) then
+    return false
+  end
+
+  local before_count = #self.conversation:prepare_messages()
+  for _, queued in ipairs(self.queued_instructions) do
+    self.conversation:add_instruction(queued.instruction, queued.context)
+  end
+
+  if self:buf_is_loaded() then
+    local prepared = self.conversation:prepare_messages()
+    local new_messages = vim.list_slice(prepared, before_count + 1)
+    self.canvas:render_messages(new_messages, self.conversation.model:name())
+  end
+
+  self.queued_instructions = {}
+  return true
+end
+
 function ChatStrategy:on_request_start()
   self.cancellable.is_cancelled = false
   if not self:buf_is_loaded() then
@@ -112,6 +148,7 @@ function ChatStrategy:on_request_start()
   self.assistant_extmark = self.canvas:render_assistant_header(model:name())
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
+  winbar.update_status(self.buf, nil)
   return true
 end
 
@@ -119,6 +156,7 @@ function ChatStrategy:on_round_start()
   if not self:buf_is_loaded() then
     return false
   end
+
   self.canvas:update_assistant_extmark(
     self.assistant_extmark,
     { model = self.conversation.model:name() }
@@ -129,9 +167,7 @@ function ChatStrategy:on_error()
   if not self:buf_is_loaded() then
     return
   end
-  self.canvas:update_progress({
-    { "Something went wrong. Please try again.", "Error" },
-  })
+  winbar.update_status(self.buf, { message = "Internal error", status = "error" })
 end
 
 function ChatStrategy:on_stream_start()
@@ -161,7 +197,7 @@ function ChatStrategy:on_content(input)
     local header = first_line and first_line:match("^%*%*(.*)%*%*$")
 
     if header then
-      self.canvas:update_progress({ { header, "NonText" } })
+      winbar.update_status(self.buf, { message = header })
     else
       self.writer:append(content, true)
     end
@@ -193,11 +229,9 @@ function ChatStrategy:on_cancel()
   if not self:buf_is_loaded() then
     return false
   end
-  self.canvas:update_progress({
-    {
-      "Operation cancelled. Waiting for user...",
-      "DiagnosticWarn",
-    },
+  winbar.update_status(self.buf, {
+    message = "Operation cancelled",
+    status = "warning",
   })
 end
 
@@ -223,6 +257,7 @@ function ChatStrategy:on_complete(control)
     self:del_abort_keymap(self.buf)
     self.canvas:clear_temporary_text()
     self.canvas:clear_progress()
+    winbar.update_status(self.buf, nil)
     if control.usage then
       self.canvas:update_assistant_extmark(
         self.assistant_extmark,
@@ -230,6 +265,15 @@ function ChatStrategy:on_complete(control)
       )
     end
     vim.bo[self.buf].modifiable = false
+
+    local has_flushed = self:flush_queued_instructions()
+    if has_flushed then
+      self.assistant_extmark =
+        self.canvas:render_assistant_header(self.conversation.model:name())
+      control.continue_execution()
+      return
+    end
+
     if not self.has_generated_name then
       local name_conv = require("sia.conversation").Conversation:new({
         model = require("sia.config").get_default_model("fast_model"),
@@ -307,13 +351,28 @@ function ChatStrategy:on_complete(control)
 
       if opts.cancelled then
         self:confirm_continue_after_cancelled_tool({
-          continue_execution = control.continue_execution,
+          continue_execution = function()
+            local has_flushed = self:flush_queued_instructions()
+            if has_flushed then
+              self.assistant_extmark =
+                self.canvas:render_assistant_header(self.conversation.model:name())
+            end
+            control.continue_execution()
+          end,
           finish = function()
             handle_cleanup()
-            self.canvas:update_progress({ { "Waiting for user...", "NonText" } })
+            winbar.update_status(
+              self.buf,
+              { message = "Paused by user", status = "info" }
+            )
           end,
         })
       else
+        local has_flushed = self:flush_queued_instructions()
+        if has_flushed then
+          self.assistant_extmark =
+            self.canvas:render_assistant_header(self.conversation.model:name())
+        end
         control.continue_execution()
       end
     end,

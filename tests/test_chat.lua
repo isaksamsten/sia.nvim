@@ -222,4 +222,28 @@ T["strategy.chat"]["is_busy flag management"]["prevents concurrent execution"] =
   strategy.is_busy = false
 end
 
+T["strategy.chat"]["queued instructions"] = MiniTest.new_set()
+
+T["strategy.chat"]["queued instructions"]["are flushed between rounds"] = function()
+  local conversation = Conversation:new({
+    instructions = {
+      { role = "system", content = "Ok" },
+    },
+  }, nil)
+  local strategy = ChatStrategy:new(conversation, { cmd = "split" })
+
+  strategy:queue_instruction({ role = "user", content = "Queued follow-up" }, nil)
+
+  eq(#strategy.queued_instructions, 1)
+
+  local flushed = strategy:flush_queued_instructions()
+
+  eq(flushed, true)
+  eq(#strategy.queued_instructions, 0)
+  eq(
+    strategy.conversation.messages[#strategy.conversation.messages].content,
+    "Queued follow-up"
+  )
+end
+
 return T

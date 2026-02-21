@@ -102,13 +102,12 @@ function M.execute_strategy(strategy)
       stream = true,
     }
 
-    local messages = strategy.conversation:prepare_messages()
-    provider.prepare_tools(data, strategy.conversation.tools)
-    provider.prepare_messages(data, model:api_name(), messages)
-
     if provider.prepare_parameters then
       provider.prepare_parameters(data, model)
     end
+    local messages = strategy.conversation:prepare_messages()
+    provider.prepare_tools(data, strategy.conversation.tools)
+    provider.prepare_messages(data, model:api_name(), messages)
 
     local extra_args = provider.get_headers
       and provider.get_headers(provider.api_key(), messages)
