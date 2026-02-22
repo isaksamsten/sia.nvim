@@ -145,43 +145,56 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function spinner_section(data)
-  if data.strategy.is_busy then
+  if not data.strategy.is_busy then
     return ""
   end
   return section("SiaTaskRunning", data.spinner)
 end
 
+--- Render a visual bar from a percentage (0..1).
+--- @param percent number 0..1
+--- @param width integer number of bar segments (default 5)
+--- @return string
+local function render_bar(percent, width)
+  width = width or 5
+  local filled = math.floor(percent * width + 0.5)
+  local empty = width - filled
+  return string.rep("▰", filled) .. string.rep("▱", empty)
+end
+
 --- @param data sia.WinbarData
 --- @return string
 local function format_right_metric(data)
-  local bar = data.stats and data.stats.bar
-  if bar then
-    local cost = bar.text
-    if cost and cost ~= "" then
-      return "%#NonText#$%#Normal#" .. cost
-    end
-
-    if bar.percent then
-      local pct = math.floor((bar.percent * 100) + 0.5)
-      return "%#NonText#" .. pct .. "%"
-    end
-  end
-
-  local value = nil
+  local tokens = nil
   if data.stats and data.stats.right then
-    value = data.stats.right
+    tokens = data.stats.right
   elseif data.conversation then
     local usage = data.conversation:get_cumulative_usage()
     if usage and usage.total > 0 then
-      value = common.format_token_count(usage.total)
+      tokens = common.format_token_count(usage.total)
     end
   end
 
-  if not value or value == "" then
-    return ""
+  local bar = data.stats and data.stats.bar
+  local parts = {}
+
+  if tokens and tokens ~= "" then
+    table.insert(parts, "%#NonText# %#Normal#" .. tokens)
   end
 
-  return "%#NonText#" .. value .. " tok"
+  if bar and bar.text and vim.startswith(vim.trim(bar.text), "$") then
+    table.insert(parts, "%#NonText# %#Normal#" .. vim.trim(bar.text))
+  elseif bar and bar.percent then
+    local pct = math.floor(bar.percent * 100 + 0.5)
+    local visual = render_bar(bar.percent, 2)
+    table.insert(parts, "%#NonText#" .. visual .. " " .. pct .. "%%")
+  end
+
+  if #parts > 0 then
+    return table.concat(parts, "%#NonText# · ")
+  end
+
+  return ""
 end
 
 local function format_left(parts)
@@ -275,8 +288,16 @@ end
 --- @type table<integer, sia.WinbarEntry>
 local entries = {}
 
+local BUSY_INTERVAL = 300
+local IDLE_INTERVAL = 5000
+
 --- @type uv_timer_t?
 local timer = nil
+--- Current timer repeat interval (to detect when it needs changing)
+--- @type integer
+local timer_interval = 0
+--- Whether a render is already scheduled for this event loop iteration
+local render_scheduled = false
 
 --- Render the winbar for a single buffer entry
 --- @param buf integer
@@ -343,21 +364,21 @@ local function maybe_refresh_stats(buf, entry)
     if e then
       e.stats = stats
       e.stats_pending = false
+      M.schedule_render()
     end
   end, entry.conversation)
 end
 
---- Single tick that renders all attached winbars
-local function tick()
+--- Render all attached winbars and clean up dead buffers
+local function render_all()
   local dead = {}
+  local any_busy = false
   for buf, entry in pairs(entries) do
     if not vim.api.nvim_buf_is_loaded(buf) then
       table.insert(dead, buf)
     else
       if entry.strategy.is_busy then
-        entry.spinner_frame = (entry.spinner_frame % #SPINNER_FRAMES) + 1
-      else
-        entry.spinner_frame = 1
+        any_busy = true
       end
       maybe_refresh_stats(buf, entry)
       render_one(buf, entry)
@@ -368,7 +389,20 @@ local function tick()
   end
   if vim.tbl_isempty(entries) then
     M._stop_timer()
+  else
+    M._adjust_interval(any_busy and BUSY_INTERVAL or IDLE_INTERVAL)
   end
+end
+
+local function tick()
+  for _, entry in pairs(entries) do
+    if entry.strategy.is_busy then
+      entry.spinner_frame = (entry.spinner_frame % #SPINNER_FRAMES) + 1
+    else
+      entry.spinner_frame = 1
+    end
+  end
+  render_all()
 end
 
 function M._stop_timer()
@@ -376,7 +410,19 @@ function M._stop_timer()
     timer:stop()
     timer:close()
     timer = nil
+    timer_interval = 0
   end
+end
+
+--- Adjust the timer repeat interval if it changed
+--- @param interval integer
+function M._adjust_interval(interval)
+  if not timer or timer_interval == interval then
+    return
+  end
+  timer_interval = interval
+  timer:set_repeat(interval)
+  timer:again()
 end
 
 local function ensure_timer()
@@ -385,8 +431,21 @@ local function ensure_timer()
   end
   timer = vim.uv.new_timer()
   if timer then
-    timer:start(100, 300, vim.schedule_wrap(tick))
+    timer_interval = IDLE_INTERVAL
+    timer:start(100, IDLE_INTERVAL, vim.schedule_wrap(tick))
   end
+end
+
+--- Schedule an immediate render pass (coalesced within the current event loop)
+function M.schedule_render()
+  if render_scheduled then
+    return
+  end
+  render_scheduled = true
+  vim.schedule(function()
+    render_scheduled = false
+    render_all()
+  end)
 end
 
 --- Register a chat buffer for winbar updates
@@ -405,6 +464,7 @@ function M.attach(buf, conversation, strategy)
     spinner_frame = 1,
   }
   ensure_timer()
+  M.schedule_render()
 end
 
 --- Update tool execution status for a chat buffer
@@ -414,16 +474,18 @@ function M.update_tool_status(buf, statuses)
   local entry = entries[buf]
   if entry then
     entry.tool_status = statuses
+    M.schedule_render()
   end
 end
 
---- Update tool execution status for a chat buffer
+--- Update status message for a chat buffer
 --- @param buf integer
 --- @param status sia.WinbarStatus?
 function M.update_status(buf, status)
   local entry = entries[buf]
   if entry then
     entry.status = status
+    M.schedule_render()
   end
 end
 
