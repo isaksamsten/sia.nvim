@@ -92,8 +92,7 @@ return tool_utils.new_tool({
         table.insert(cmd, path)
       end
 
-      local root = utils.detect_project_root(vim.fn.getcwd())
-      vim.system(cmd, { text = true, cwd = root }, function(obj)
+      vim.system(cmd, { text = true, cwd = vim.fn.getcwd() }, function(obj)
         if obj.code ~= 0 then
           local msg
           if pattern and path then
@@ -183,12 +182,22 @@ return tool_utils.new_tool({
             path
           )
         elseif pattern then
-          display_line =
-            string.format("%s Found %d files matching `%s`", icons.directory, total_count, pattern)
+          display_line = string.format(
+            "%s Found %d files matching `%s`",
+            icons.directory,
+            total_count,
+            pattern
+          )
         elseif path then
-          display_line = string.format("%s Found %d files in `%s`", icons.directory, total_count, path)
+          display_line = string.format(
+            "%s Found %d files in `%s`",
+            icons.directory,
+            total_count,
+            path
+          )
         else
-          display_line = string.format("%s Found %d files", icons.directory, total_count)
+          display_line =
+            string.format("%s Found %d files", icons.directory, total_count)
         end
 
         callback({
