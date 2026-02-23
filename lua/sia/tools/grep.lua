@@ -52,8 +52,11 @@ end
 
 local function handle_count_mode(lines, args, callback)
   if #lines == 0 then
-    local no_match_msg = string.format("%s No matches found for `%s`", icons.search, args.pattern)
-      .. format_no_match_context(args)
+    local no_match_msg = string.format(
+      "%s No matches found for `%s`",
+      icons.search,
+      args.pattern
+    ) .. format_no_match_context(args)
 
     callback({
       content = { "No matches found." },
@@ -163,8 +166,11 @@ local function handle_content_mode(lines, args, callback)
   end
 
   if #matches == 0 then
-    local no_match_msg = string.format("%s No matches found for `%s`", icons.search, args.pattern)
-      .. format_no_match_context(args)
+    local no_match_msg = string.format(
+      "%s No matches found for `%s`",
+      icons.search,
+      args.pattern
+    ) .. format_no_match_context(args)
 
     callback({
       content = { "No matches found." },
@@ -201,8 +207,11 @@ local function handle_content_mode(lines, args, callback)
     table.insert(output, matches[i].text)
   end
 
-  local display_msg = string.format("%s Found matches for `%s`", icons.search, args.pattern)
-    .. format_no_match_context(args)
+  local display_msg = string.format(
+    "%s Found matches for `%s`",
+    icons.search,
+    args.pattern
+  ) .. format_no_match_context(args)
 
   callback({
     content = output,
@@ -300,12 +309,11 @@ Usage:
         table.insert(command, args.path)
       end
 
-      local root = require("sia.utils").detect_project_root(vim.fn.getcwd())
       vim.system(command, {
         text = true,
         stderr = false,
         timeout = 5000,
-        cwd = root,
+        cwd = vim.fn.getcwd(),
       }, function(obj)
         local lines = vim.split(obj.stdout, "\n", { trimempty = true })
 
