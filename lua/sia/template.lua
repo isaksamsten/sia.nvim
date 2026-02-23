@@ -126,8 +126,8 @@ local function render(template, context, loop_vars)
         if not ok then
           value = false
         end
-        table.insert(block_stack, { type = "if", any_branch_taken = value })
-        in_block = value
+        table.insert(block_stack, { type = "if", any_branch_taken = value, parent_active = in_block })
+        in_block = in_block and value
         next_pos = ctrl_end + 1
         if template:sub(next_pos, next_pos) == "\n" then
           next_pos = next_pos + 1
@@ -137,7 +137,7 @@ local function render(template, context, loop_vars)
           error("elseif without matching if")
         end
         local block_state = block_stack[#block_stack]
-        if not block_state.any_branch_taken then
+        if block_state.parent_active and not block_state.any_branch_taken then
           local condition = directive:match("^elseif%s+(.+)$")
           local fn = load("return " .. condition, "template", "t", env)
           if fn then
@@ -162,7 +162,7 @@ local function render(template, context, loop_vars)
         end
         local block_state = block_stack[#block_stack]
         if block_state.type == "if" then
-          in_block = not block_state.any_branch_taken
+          in_block = block_state.parent_active and not block_state.any_branch_taken
         else
           error("else not supported in for loops")
         end
@@ -240,7 +240,7 @@ local function render(template, context, loop_vars)
           error("end without matching if/for")
         end
         local block_state = table.remove(block_stack)
-        in_block = true
+        in_block = block_state.parent_active
         next_pos = ctrl_end + 1
         if template:sub(next_pos, next_pos) == "\n" then
           next_pos = next_pos + 1

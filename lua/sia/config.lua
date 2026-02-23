@@ -733,7 +733,7 @@ end
 --- @field system (string|sia.config.Instruction)[]?
 --- @field instructions (string|sia.config.Instruction)[]
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
---- @field tools (sia.config.Tool|string)[]?
+--- @field tools (fun(model: sia.Model):sia.config.Tool[])?
 --- @field ignore_tool_confirm boolean?
 --- @field model (string|{name: string})?
 --- @field temperature number?
@@ -766,7 +766,6 @@ end
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
---- @field tools { enable: boolean, choices: table<string, sia.config.Tool[]?>}
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 --- @field ui sia.config.Defaults.Ui?
 --- @field shell sia.config.Shell?
@@ -979,35 +978,6 @@ M.options = {
       args = { "-s" },
     },
 
-    tools = {
-      enable = true,
-      choices = {
-        ask_user = require("sia.tools").ask_user,
-        history = require("sia.tools").history,
-        locations = require("sia.tools").locations,
-        read = require("sia.tools").read,
-        edit = require("sia.tools").edit,
-        insert = require("sia.tools").insert,
-        write = require("sia.tools").write,
-        glob = require("sia.tools").glob,
-        diagnostics = require("sia.tools").diagnostics,
-        grep = require("sia.tools").grep,
-        task = require("sia.tools").task,
-        plan = require("sia.tools").plan,
-        compact = require("sia.tools").compact,
-        workspace = require("sia.tools").workspace,
-        rename = require("sia.tools").rename,
-        remove = require("sia.tools").remove,
-        bash = require("sia.tools").bash,
-        fetch = require("sia.tools").fetch,
-        websearch = require("sia.tools").websearch,
-        write_todos = require("sia.tools").write_todos,
-        read_todos = require("sia.tools").read_todos,
-        memory = require("sia.tools").memory,
-        lsp = require("sia.tools").lsp,
-        replace = require("sia.tools").replace_region,
-      },
-    },
     actions = {
       insert = {
         mode = "insert",
@@ -1020,7 +990,10 @@ M.options = {
             include_cursor = true,
           }),
         },
-        tools = { "grep", "read", "glob" },
+        tools = function()
+          local tools = require("sia.tools")
+          return { tools.grep, tools.read, tools.glob }
+        end,
       },
       diff = {
         mode = "diff",
@@ -1037,14 +1010,17 @@ M.options = {
             fences = false,
           }),
         },
-        tools = { "grep", "read", "glob" },
+        tools = function()
+          local tools = require("sia.tools")
+          return { tools.grep, tools.read, tools.glob }
+        end,
       },
       --- @type sia.config.Action
       chat = {
         mode = "chat",
         temperature = 0.1,
         system = {
-          "minimal_system",
+          "model_system",
           "system_info",
           "directory_structure",
           "agents_md",
@@ -1053,23 +1029,28 @@ M.options = {
           "visible_buffers",
           "current_context",
         },
-        tools = {
-          "ask_user",
-          require("sia.tools").apply_diff,
-          "grep",
-          "edit",
-          "write",
-          "insert",
-          "read",
-          "glob",
-          "diagnostics",
-          "bash",
-          "fetch",
-          "websearch",
-          "write_todos",
-          "read_todos",
-          "memory",
-        },
+        tools = function(model)
+          local tools = require("sia.tools")
+          local all = {
+            tools.ask_user,
+            tools.grep,
+            tools.edit,
+            tools.write,
+            tools.insert,
+            tools.read,
+            tools.glob,
+            tools.diagnostics,
+            tools.bash,
+            tools.websearch,
+            tools.write_todos,
+            tools.read_todos,
+            tools.memory,
+          }
+          if model:api_name():match("gpt%-5") then
+            table.insert(all, tools.apply_diff)
+          end
+          return all
+        end,
       },
     },
   },
@@ -1088,24 +1069,27 @@ M.options = {
         "visible_buffers",
         "current_context",
       },
-      tools = {
-        "task",
-        "workspace",
-        "locations",
-        "edit",
-        "write",
-        "read",
-        "glob",
-        "grep",
-        "rename",
-        "remove",
-        "fetch",
-        "websearch",
-        "read_todos",
-        "write_todos",
-        "replace",
-        "bash",
-      },
+      tools = function(model)
+        local tools = require("sia.tools")
+        local all = {
+          tools.ask_user,
+          tools.grep,
+          tools.edit,
+          tools.write,
+          tools.insert,
+          tools.read,
+          tools.glob,
+          tools.diagnostics,
+          tools.bash,
+          tools.websearch,
+          tools.write_todos,
+          tools.read_todos,
+          tools.memory,
+        }
+        if model:api_name():match("gpt%-5") then
+          table.insert(all, tools.apply_diff)
+        end
+      end,
     },
     commit = require("sia.actions").commit(),
     doc = require("sia.actions").doc(),

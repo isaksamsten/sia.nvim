@@ -516,8 +516,22 @@ function Conversation:new(action, context)
 
   obj.tools = {}
   obj.tool_fn = {}
-  for _, tool in ipairs(action.tools or {}) do
-    obj:add_tool(tool)
+  if action.tools then
+    local tools = action.tools(obj.model)
+    for _, tool in ipairs(tools) do
+      if
+        tool ~= nil
+        and obj.tool_fn[tool.name] == nil
+        and (tool.is_available == nil or tool.is_available())
+      then
+        obj.tool_fn[tool.name] = {
+          message = tool.message,
+          action = tool.execute,
+          allow_parallel = tool.allow_parallel,
+        }
+        table.insert(obj.tools, tool)
+      end
+    end
   end
 
   return obj
@@ -588,24 +602,8 @@ function Conversation:deep_copy()
   return obj
 end
 
---- @param tool string|sia.config.Tool
-function Conversation:add_tool(tool)
-  if type(tool) == "string" then
-    tool = require("sia.config").options.defaults.tools.choices[tool]
-  end
-  if
-    tool ~= nil
-    and self.tool_fn[tool.name] == nil
-    and (tool.is_available == nil or tool.is_available())
-  then
-    self.tool_fn[tool.name] = {
-      message = tool.message,
-      action = tool.execute,
-      allow_parallel = tool.allow_parallel,
-    }
-    table.insert(self.tools, tool)
-  end
-end
+--- @param tool sia.config.Tool
+function Conversation:add_tool(tool) end
 
 function Conversation:untrack_messages()
   for _, message in ipairs(self.messages) do
