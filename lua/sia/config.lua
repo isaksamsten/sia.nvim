@@ -335,10 +335,11 @@ local function validate_model_field(json, field)
         )
     end
 
-    if not M.options.models[model_name] then
+    local aliases = json.aliases or {}
+    if not M.options.models[model_name] and not aliases[model_name] then
       return false,
         string.format(
-          "'%s' must be one of the allowed models, got '%s'",
+          "'%s' must be one of the allowed models or aliases, got '%s'",
           field,
           tostring(model_name)
         )
@@ -383,6 +384,50 @@ local function validate_models_overrides(models)
   return true
 end
 
+local function validate_aliases(aliases)
+  if not aliases then
+    return true
+  end
+
+  if type(aliases) ~= "table" then
+    return false, "'aliases' must be an object, got " .. type(aliases)
+  end
+
+  for alias_name, alias_def in pairs(aliases) do
+    if type(alias_name) ~= "string" then
+      return false, "aliases keys must be strings"
+    end
+
+    if type(alias_def) ~= "table" then
+      return false,
+        string.format(
+          "aliases.%s must be an object with at least a 'name' field, got %s",
+          alias_name,
+          type(alias_def)
+        )
+    end
+
+    if type(alias_def.name) ~= "string" then
+      return false,
+        string.format(
+          "aliases.%s must have a 'name' field pointing to a valid model",
+          alias_name
+        )
+    end
+
+    if not M.options.models[alias_def.name] then
+      return false,
+        string.format(
+          "aliases.%s: '%s' is not a valid model name",
+          alias_name,
+          alias_def.name
+        )
+    end
+  end
+
+  return true
+end
+
 --- Normalize model config to a consistent table format
 --- @param model_value string|table|nil
 --- @return {name:string}?
@@ -417,6 +462,18 @@ end
 --- @return table
 function M.resolve_model_config(model_spec)
   local name = model_spec.name
+
+  -- Resolve alias: if the name matches a local config alias, expand it
+  local lc = M.get_local_config()
+  if lc and lc.aliases and lc.aliases[name] then
+    local alias = lc.aliases[name]
+    -- Merge: alias provides defaults, original model_spec overrides on top
+    model_spec = vim.tbl_extend("force", alias, model_spec)
+    -- The alias's name is the real model name
+    name = alias.name
+    model_spec.name = name
+  end
+
   local overrides = M.get_model_overrides(name)
   if overrides then
     model_spec = vim.tbl_extend("force", overrides, model_spec)
@@ -434,6 +491,7 @@ end
 --- @field fast_model table?
 --- @field plan_model table?
 --- @field models table<string, table>?
+--- @field aliases table<string, {name: string}>?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
@@ -511,6 +569,8 @@ function M.get_local_config()
   validate(validate_context, json.context)
   validate(validate_action, json.action)
   validate(validate_models_overrides, json.models)
+  validate(validate_aliases, json.aliases)
+
   validate(validate_skills, json)
   validate(validate_model_field, json, "model")
   validate(validate_model_field, json, "fast_model")
@@ -873,7 +933,7 @@ M.options = {
     },
     chat = {
       cmd = "botright vnew",
-      wo = { wrap = true },
+      wo = { wrap = true, spell = false },
       winbar = {
         left = require("sia.winbar").default_left,
         center = require("sia.winbar").default_center,
