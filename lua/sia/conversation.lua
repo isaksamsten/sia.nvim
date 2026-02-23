@@ -156,10 +156,12 @@ local function mark_outdated_messages(conversation)
       elseif m.status == "outdated" then
         tool_filter[m._tool_call.id] = "outdated"
       else
-        table.insert(
-          tool_calls_info,
-          { id = m._tool_call.id, index = i, name = m._tool_call["function"] and m._tool_call["function"].name or m._tool_call["custom"] and m._tool_call["custom"].name }
-        )
+        table.insert(tool_calls_info, {
+          id = m._tool_call.id,
+          index = i,
+          name = m._tool_call["function"] and m._tool_call["function"].name
+            or m._tool_call["custom"] and m._tool_call["custom"].name,
+        })
       end
     end
   end
@@ -457,7 +459,6 @@ local Conversation = {}
 
 Conversation.__index = Conversation
 Conversation.pending_messages = {}
-Conversation.pending_tools = {}
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param args sia.Context?
@@ -466,10 +467,6 @@ function Conversation.add_pending_instruction(instruction, context)
   for _, message in ipairs(Message:new(instruction, context) or {}) do
     table.insert(Conversation.pending_messages, message)
   end
-end
-
-function Conversation.add_pending_tool(tool)
-  table.insert(Conversation.pending_tools, tool)
 end
 
 --- @param action sia.config.Action
@@ -522,10 +519,6 @@ function Conversation:new(action, context)
   for _, tool in ipairs(action.tools or {}) do
     obj:add_tool(tool)
   end
-  for _, tool in ipairs(Conversation.pending_tools) do
-    obj:add_tool(tool)
-  end
-  Conversation.pending_tools = {}
 
   return obj
 end
