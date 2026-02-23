@@ -251,7 +251,12 @@ Use this tool to:
             callback({
               content = output,
               display_content = {
-                string.format("%s Found %d match(es) for '%s'", icons.search, #results, args.query),
+                string.format(
+                  "%s Found %d match(es) for '%s'",
+                  icons.search,
+                  #results,
+                  args.query
+                ),
               },
             })
           end,

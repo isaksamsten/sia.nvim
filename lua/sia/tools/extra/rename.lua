@@ -155,7 +155,12 @@ Notes:
           string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
         display_content = {
-          string.format("%s Renamed %s → %s", icons.rename, rel(src_abs), rel(dest_abs)),
+          string.format(
+            "%s Renamed %s → %s",
+            icons.rename,
+            rel(src_abs),
+            rel(dest_abs)
+          ),
         },
       })
     end,
