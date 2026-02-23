@@ -158,7 +158,7 @@ local function mark_outdated_messages(conversation)
       else
         table.insert(
           tool_calls_info,
-          { id = m._tool_call.id, index = i, name = m._tool_call["function"].name }
+          { id = m._tool_call.id, index = i, name = m._tool_call["function"] and m._tool_call["function"].name or m._tool_call["custom"] and m._tool_call["custom"].name }
         )
       end
     end
@@ -362,7 +362,7 @@ local function prepare_message(message, template_context)
   if message.tool_calls then
     tool_calls = vim.deepcopy(message.tool_calls)
     for i, tool_call in ipairs(message.tool_calls) do
-      if tool_call.type == "function" then
+      if tool_call.type == "function" or tool_call.type == "custom" then
         if
           context_conf.clear_input
           and message.context
@@ -405,7 +405,9 @@ end
 function Message:get_description()
   if self.role == "tool" and self._tool_call then
     local f = self._tool_call["function"]
-    return self.role .. ": result from " .. f.name
+    local c = self._tool_call["custom"]
+    local name = (f and f.name) or (c and c.name) or "unknown"
+    return self.role .. ": result from " .. name
   end
   local description = self.description
   --- @cast description string?
@@ -418,8 +420,11 @@ function Message:get_description()
     return self.role .. ": " .. string.sub(content:gsub("\n", " "), 1, 40)
   elseif self.tool_calls then
     local name = "unknown"
-    if self.tool_calls[1] and self.tool_calls[1]["function"] then
-      name = self.tool_calls[1]["function"].name
+    local tc = self.tool_calls[1]
+    if tc and tc["function"] then
+      name = tc["function"].name
+    elseif tc and tc["custom"] then
+      name = tc["custom"].name
     end
     return self.role .. ": calling " .. name
   end

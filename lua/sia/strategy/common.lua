@@ -315,7 +315,23 @@ function Strategy:execute_tools(opts)
       local tool_message = nil
       local is_parallel = false
       local fun = tool["function"]
-      if fun then
+      local custom = tool["custom"]
+      if custom then
+        tool_name = custom.name
+        tool_args = { _raw_input = custom.input }
+        local tool_fn = self.conversation.tool_fn[custom.name]
+        if tool_fn then
+          if tool_fn.message ~= nil then
+            if type(tool_fn.message) == "string" then
+              tool_message = tool_fn.message
+            else
+              tool_message = tool_fn.message(tool_args)
+            end
+          end
+          is_parallel = tool_fn.allow_parallel ~= nil
+            and tool_fn.allow_parallel(self.conversation, tool_args)
+        end
+      elseif fun then
         tool_name = fun.name
         local status, args
         if fun.arguments and fun.arguments:match("%S") then

@@ -23,4 +23,5 @@ return {
   memory = require("sia.tools.memory"),
   lsp = require("sia.tools.lsp"),
   ask_user = require("sia.tools.ask_user"),
+  apply_diff = require("sia.tools.apply_diff"),
 }

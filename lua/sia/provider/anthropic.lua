@@ -136,6 +136,9 @@ return {
       data.tools = vim
         .iter(tools)
         --- @param tool sia.config.Tool
+        :filter(function(tool)
+          return not tool.custom
+        end)
         :map(function(tool)
           return {
             name = tool.name,

@@ -6,6 +6,19 @@ local M = {}
 --- @return fun(t:sia.ToolCall):sia.ToolCall
 function M.gen_clear_outdated_tool_input(clear_args)
   local function clear_outdated_tool_input(tool)
+    -- For custom (freeform) tools, prune the raw input
+    if tool.type == "custom" and tool.custom then
+      return {
+        id = tool.id,
+        call_id = tool.call_id,
+        type = tool.type,
+        ["custom"] = {
+          name = tool.custom.name,
+          input = "content has been pruned",
+        },
+      }
+    end
+
     local f = tool["function"]
     if f then
       local new_func = { name = f.name, arguments = f.arguments }
@@ -134,8 +147,9 @@ end
 ---@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
----@field required string[]
----@field parameters table
+---@field required string[]?
+---@field parameters table?
+---@field custom sia.config.ToolCustom?
 
 --- @class sia.NewToolExecuteUserChoiceOpts
 --- @field choices string[]
@@ -367,6 +381,7 @@ M.new_tool = function(opts, execute)
     name = opts.name,
     message = opts.message,
     parameters = opts.parameters,
+    custom = opts.custom,
     system_prompt = opts.system_prompt,
     allow_parallel = function(conversation, args)
       if conversation.ignore_tool_confirm and opts.read_only then

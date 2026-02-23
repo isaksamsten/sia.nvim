@@ -719,10 +719,15 @@ end
 --- @field system_prompt string?
 --- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
 --- @field message string|(fun(args:table):string)?
---- @field parameters table<string, sia.ToolParameter>
+--- @field parameters table<string, sia.ToolParameter>?
 --- @field is_available (fun():boolean)?
 --- @field required string[]?
 --- @field execute sia.config.ToolExecute
+--- @field custom sia.config.ToolCustom? if set, this is a custom tool with non-JSON output
+
+--- Custom tool format definition (e.g. grammar-constrained output)
+--- @class sia.config.ToolCustom
+--- @field format { type: string, syntax: string?, definition: string? }?
 
 --- @class sia.config.Action
 --- @field system (string|sia.config.Instruction)[]?
@@ -1050,6 +1055,7 @@ M.options = {
         },
         tools = {
           "ask_user",
+          require("sia.tools").apply_diff,
           "grep",
           "edit",
           "write",

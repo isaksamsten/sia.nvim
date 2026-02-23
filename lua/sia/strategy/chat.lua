@@ -10,8 +10,10 @@ spaces. Only output the name, nothing else.]]
 
 --- @class sia.ToolCall
 --- @field id string
---- @field type string
---- @field function { arguments: string, name: string }
+--- @field type "function"|"custom"
+--- @field call_id string?
+--- @field function { arguments: string, name: string }? set for function tool calls
+--- @field custom { name: string, input: string }? set for custom (freeform) tool calls
 
 --- @class sia.Cancellable
 --- @field is_cancelled boolean

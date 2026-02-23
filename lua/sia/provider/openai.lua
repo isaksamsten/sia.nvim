@@ -201,6 +201,11 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     self.strategy:on_tools()
     self.tool_call_detected = true
   elseif
+    json.type == "response.custom_tool_call.delta" and not self.tool_call_detected
+  then
+    self.strategy:on_tools()
+    self.tool_call_detected = true
+  elseif
     json.type == "response.completed"
     and json.response
     and json.response.output
@@ -214,6 +219,16 @@ function OpenAIResponsesStream:process_stream_chunk(json)
           ["function"] = {
             name = item.name,
             arguments = item.arguments or "",
+          },
+        })
+      elseif item.type == "custom_tool_call" then
+        table.insert(self.pending_tool_calls, {
+          id = item.id,
+          call_id = item.call_id,
+          type = "custom",
+          ["custom"] = {
+            name = item.name,
+            input = item.input or "",
           },
         })
       elseif item.type == "reasoning" then
@@ -319,6 +334,10 @@ local M = {
         data.tools = vim
           .iter(tools)
           --- @param tool sia.config.Tool
+          :filter(function(tool)
+            -- Completion API doesn't support custom tools
+            return not tool.custom
+          end)
           :map(function(tool)
             return {
               type = "function",
@@ -349,11 +368,13 @@ local M = {
           if m.tool_calls then
             message.tool_calls = {}
             for _, tool_call in ipairs(m.tool_calls) do
-              table.insert(message.tool_calls, {
-                ["function"] = tool_call["function"],
-                id = tool_call.id,
-                type = tool_call.type,
-              })
+              if tool_call["function"] then
+                table.insert(message.tool_calls, {
+                  ["function"] = tool_call["function"],
+                  id = tool_call.id,
+                  type = tool_call.type,
+                })
+              end
             end
           end
           if m.meta.reasoning_opaque then
@@ -467,20 +488,38 @@ local M = {
       while i <= #messages do
         local m = messages[i]
         if m.role == "tool" then
-          table.insert(input, {
-            type = "function_call_output",
-            call_id = m._tool_call.call_id,
-            output = m.content,
-          })
+          if m._tool_call.type == "custom" then
+            table.insert(input, {
+              type = "custom_tool_call_output",
+              call_id = m._tool_call.call_id,
+              output = m.content,
+            })
+          else
+            table.insert(input, {
+              type = "function_call_output",
+              call_id = m._tool_call.call_id,
+              output = m.content,
+            })
+          end
         elseif m.tool_calls then
           for _, tool_call in ipairs(m.tool_calls) do
-            table.insert(input, {
-              type = "function_call",
-              id = tool_call.id,
-              call_id = tool_call.call_id,
-              name = tool_call["function"].name,
-              arguments = tool_call["function"].arguments,
-            })
+            if tool_call.custom then
+              table.insert(input, {
+                type = "custom_tool_call",
+                id = tool_call.id,
+                call_id = tool_call.call_id,
+                name = tool_call.custom.name,
+                input = tool_call.custom.input,
+              })
+            else
+              table.insert(input, {
+                type = "function_call",
+                id = tool_call.id,
+                call_id = tool_call.call_id,
+                name = tool_call["function"].name,
+                arguments = tool_call["function"].arguments,
+              })
+            end
           end
         elseif m.role ~= "system" then
           local reasoning = m.meta.reasoning
@@ -544,6 +583,14 @@ local M = {
         .iter(tools)
         --- @param tool sia.config.Tool
         :map(function(tool)
+          if tool.custom then
+            return {
+              type = "custom",
+              name = tool.name,
+              description = tool.description,
+              format = tool.custom.format,
+            }
+          end
           return {
             type = "function",
             name = tool.name,
