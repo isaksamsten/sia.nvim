@@ -72,7 +72,7 @@ local function open_url(url)
     open_cmd = "start"
   end
 
-  if open_cmd and vim.fn.executable(open_cmd) then
+  if open_cmd and vim.fn.executable(open_cmd) == 1 then
     vim.fn.jobstart({ open_cmd, url }, { detach = true })
     vim.notify("Sia Copilot: Opening browser for authorization...", vim.log.levels.INFO)
   else
