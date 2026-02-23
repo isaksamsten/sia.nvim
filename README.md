@@ -45,7 +45,85 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 }
 ```
 
-2. [get an OpenAI API key](https://platform.openai.com/docs/api-reference/introduction) and add it to your environment as `OPENAI_API_KEY`, enable Copilot (use the vim plugin to set it up) or add Gemini API key to your environment as `GEMINI_API_KEY`.
+2. Set up authentication for your provider (see
+   [Authentication](#authentication) below).
+
+## Authentication
+
+### OpenAI
+
+[Get an OpenAI API
+key](https://platform.openai.com/docs/api-reference/introduction) and add it to
+your environment:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+#### Codex (ChatGPT Pro/Plus)
+
+Sia authenticates with Codex using a your browser. Run the following command in
+Neovim:
+
+```vim
+:SiaAuth codex
+```
+
+This will:
+
+1. Open your browser to the OpenAI authorization page
+2. After login, redirect back to the local server to complete the flow
+
+The token is cached in `~/.cache/nvim/sia/` and automatically refreshed when it
+expires. You only need to run `:SiaAuth codex` once.
+
+**Note:** Requires a ChatGPT Pro or Plus subscription.
+
+### GitHub Copilot
+
+Sia authenticates with GitHub Copilot using the GitHub device flow. Run the
+following command in Neovim:
+
+```vim
+:SiaAuth copilot
+```
+
+This will:
+
+1. Open your browser to GitHub's device authorization page
+2. Display a one-time code to enter in the browser
+3. After authorization, cache the OAuth token locally
+
+The token is cached in `~/.cache/nvim/sia/` and reused across sessions. You
+only need to run `:SiaAuth copilot` once (or again if the token expires).
+
+**Note:** Sia uses the official GitHub Copilot App for authentication, which
+gives access to all available Copilot models (Claude, GPT-4.1, GPT-5, Gemini,
+etc.). A GitHub Copilot subscription is required.
+
+### Anthropic
+
+Add your Anthropic API key to your environment:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### Gemini
+
+Add your Gemini API key to your environment:
+
+```bash
+export GEMINI_API_KEY="..."
+```
+
+### OpenRouter
+
+Add your OpenRouter API key to your environment:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+```
 
 ## Configuration
 
@@ -192,11 +270,7 @@ require("sia").setup({
     chat = {
       winbar = {
         left = function(data)
-          -- data.conversation: the current conversation
-          -- data.is_busy: whether the strategy is currently running
-          -- data.win: the current window
-          -- data.buf: the buffer
-          -- Return a string with optional highlight groups
+          -- Default: active spinner + bash + agents
           return ""
         end,
         center = function(data)
@@ -563,6 +637,9 @@ specific project:
   as `model`.
 - **`models`**: Override parameters for specific models by name (e.g.,
   `{ "openai/gpt-5.1": { "reasoning_effort": "medium" } }`).
+- **`aliases`**: Rename model with different parameters e.g.,
+  `{ "codex-high": { "name": "codex/gpt-5.3-codex", "reasoning_effort": "high" }`
+  and then use as `Sia -m codex-high ....`
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)
 - **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)

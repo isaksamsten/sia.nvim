@@ -1,97 +1,279 @@
 local openai = require("sia.provider.openai")
+local common = require("sia.provider.common")
 
----Find the appropriate configuration directory based on the OS
----@return string? config_path The full path to the config directory or nil if not found
-local function find_config()
-  local config = vim.fn.expand("$XDG_CONFIG_HOME")
-  if config and vim.fn.isdirectory(config) > 0 then
-    return config
-  elseif vim.fn.has("win32") > 0 then
-    config = vim.fn.expand("~/AppData/Local")
-    if vim.fn.isdirectory(config) > 0 then
-      return config
-    end
-  else
-    config = vim.fn.expand("~/.config")
-    if vim.fn.isdirectory(config) > 0 then
-      return config
-    end
+local GITHUB_OAUTH_CLIENT_ID = "Iv1.b507a08c87ecfe98"
+local DEVICE_CODE_URL = "https://github.com/login/device/code"
+local ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
+local COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
+local COPILOT_USER_URL = "https://api.github.com/copilot_internal/user"
+local OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+
+---@return string
+local function get_cache_dir()
+  local cache_dir = vim.fn.stdpath("cache") .. "/sia"
+  if vim.fn.isdirectory(cache_dir) == 0 then
+    vim.fn.mkdir(cache_dir, "p")
   end
+  return cache_dir
 end
 
----Extract the OAuth token from the GitHub Copilot apps.json configuration file
----@return string? oauth_token The OAuth token if found, nil otherwise
-local function get_oauth_token(oauth)
-  if oauth then
-    return oauth
-  end
-  local config_home = find_config()
-  if not config_home then
+---@return string
+local function get_oauth_cache_path()
+  return get_cache_dir() .. "/copilot_oauth.json"
+end
+
+---@return string
+local function get_token_cache_path()
+  return get_cache_dir() .. "/copilot_token.json"
+end
+
+---@return table?
+local function load_json_file(path)
+  if vim.fn.filereadable(path) == 0 then
     return nil
   end
-  local apps = config_home .. "/github-copilot/apps.json"
-  if vim.fn.filereadable(apps) == 1 then
-    local data = vim.json.decode(table.concat(vim.fn.readfile(apps), " "))
-    for key, value in pairs(data) do
-      if string.find(key, "github.com") then
-        return value.oauth_token
-      end
-    end
+  local ok, data = pcall(function()
+    return vim.json.decode(table.concat(vim.fn.readfile(path), ""))
+  end)
+  if ok then
+    return data
   end
   return nil
 end
 
+---@param path string
+---@param data table
+local function save_json_file(path, data)
+  vim.fn.writefile({ vim.json.encode(data) }, path)
+end
+
+---@param cmd string[]
+---@return table?
+local function curl_json_sync(cmd)
+  local result = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+  local ok, json = pcall(vim.json.decode, result)
+  if ok then
+    return json
+  end
+  return nil
+end
+
+---@param url string
+local function open_url(url)
+  local open_cmd = nil
+  if vim.fn.has("mac") > 0 then
+    open_cmd = "open"
+  elseif vim.fn.has("unix") > 0 then
+    open_cmd = "xdg-open"
+  elseif vim.fn.has("win32") > 0 then
+    open_cmd = "start"
+  end
+
+  if open_cmd then
+    vim.fn.jobstart({ open_cmd, url }, { detach = true })
+    vim.notify("Sia Copilot: Opening browser for authorization...", vim.log.levels.INFO)
+  else
+    vim.notify("Sia Copilot: Open this URL to authorize:\n" .. url, vim.log.levels.INFO)
+  end
+end
+
+---@return string?
+local function load_cached_oauth_token()
+  local cached = load_json_file(get_oauth_cache_path())
+  if cached and cached.access_token then
+    return cached.access_token
+  end
+  return nil
+end
+
+---@param token string
+local function save_cached_oauth_token(token)
+  save_json_file(get_oauth_cache_path(), {
+    access_token = token,
+    created_at = os.time(),
+  })
+end
+
+---Get OAuth token from cache
+---@param oauth string?
+---@return string?
+local function get_oauth_token(oauth)
+  if oauth then
+    return oauth
+  end
+
+  local cached = load_cached_oauth_token()
+  if cached then
+    return cached
+  end
+
+  return nil
+end
+
+---@param callback fun(data: table?)
+local function authorize(callback)
+  local device_data = curl_json_sync({
+    "curl",
+    "--silent",
+    "--request",
+    "POST",
+    "--header",
+    "Accept: application/json",
+    "--header",
+    "Content-Type: application/json",
+    "--header",
+    "User-Agent: Sia.nvim",
+    "--data",
+    vim.json.encode({
+      client_id = GITHUB_OAUTH_CLIENT_ID,
+      scope = "",
+    }),
+    DEVICE_CODE_URL,
+  })
+
+  if
+    not device_data
+    or not device_data.device_code
+    or not device_data.verification_uri
+  then
+    vim.notify(
+      "Sia Copilot: Failed to initiate OAuth device authorization.",
+      vim.log.levels.ERROR
+    )
+    callback(nil)
+    return
+  end
+
+  open_url(device_data.verification_uri)
+  vim.notify(
+    "Sia Copilot: Enter code in browser: " .. (device_data.user_code or ""),
+    vim.log.levels.INFO
+  )
+
+  local interval_seconds = tonumber(device_data.interval) or 5
+  local expires_in = tonumber(device_data.expires_in) or 900
+  local deadline = os.time() + expires_in
+  local completed = false
+
+  local function finish(data)
+    if completed then
+      return
+    end
+    completed = true
+    callback(data)
+  end
+
+  local function poll(interval_ms)
+    vim.defer_fn(function()
+      if completed then
+        return
+      end
+
+      if os.time() > deadline then
+        vim.notify("Sia Copilot: Authorization timed out.", vim.log.levels.ERROR)
+        finish(nil)
+        return
+      end
+
+      local token_data = curl_json_sync({
+        "curl",
+        "--silent",
+        "--request",
+        "POST",
+        "--header",
+        "Accept: application/json",
+        "--header",
+        "Content-Type: application/json",
+        "--header",
+        "User-Agent: Sia.nvim",
+        "--data",
+        vim.json.encode({
+          client_id = GITHUB_OAUTH_CLIENT_ID,
+          device_code = device_data.device_code,
+          grant_type = "urn:ietf:params:oauth:grant-type:device_code",
+        }),
+        ACCESS_TOKEN_URL,
+      })
+
+      if not token_data then
+        vim.notify("Sia Copilot: OAuth polling failed.", vim.log.levels.ERROR)
+        finish(nil)
+        return
+      end
+
+      if token_data.access_token then
+        save_cached_oauth_token(token_data.access_token)
+        -- Clear cached API token so the new OAuth token is used for the next exchange
+        local token_cache = get_token_cache_path()
+        if vim.fn.filereadable(token_cache) == 1 then
+          vim.fn.delete(token_cache)
+        end
+        finish({ oauth_token = token_data.access_token })
+        return
+      end
+
+      if token_data.error == "authorization_pending" then
+        poll((interval_seconds * 1000) + OAUTH_POLLING_SAFETY_MARGIN_MS)
+        return
+      end
+
+      if token_data.error == "slow_down" then
+        local next_interval = tonumber(token_data.interval) or (interval_seconds + 5)
+        interval_seconds = next_interval
+        poll((next_interval * 1000) + OAUTH_POLLING_SAFETY_MARGIN_MS)
+        return
+      end
+
+      if token_data.error then
+        vim.notify(
+          "Sia Copilot: Authorization failed: " .. token_data.error,
+          vim.log.levels.ERROR
+        )
+      else
+        vim.notify("Sia Copilot: Authorization failed.", vim.log.levels.ERROR)
+      end
+      finish(nil)
+    end, interval_ms)
+  end
+
+  poll((interval_seconds * 1000) + OAUTH_POLLING_SAFETY_MARGIN_MS)
+end
+
 ---Get a valid GitHub Copilot API key by:
----1. Looking up the OAuth token in the GitHub Copilot config
----2. Using the OAuth token to request a temporary access token from GitHub's API
+---1. Looking up the OAuth token from cache
+---2. Exchanging the OAuth token for a temporary API token via /copilot_internal/v2/token
 ---@return function(): string? Function that returns a valid Copilot API token or nil if unsuccessful
 local function copilot_api_key()
   local token = nil
   local oauth = nil
 
-  ---Get the cache file path for storing the token
-  ---@return string cache_path The full path to the cache file
-  local function get_cache_path()
-    local cache_dir = vim.fn.stdpath("cache") .. "/sia"
-    if vim.fn.isdirectory(cache_dir) == 0 then
-      vim.fn.mkdir(cache_dir, "p")
-    end
-    return cache_dir .. "/copilot_token.json"
-  end
-
-  ---Load token from disk cache if it exists
-  ---@return table? token The cached token or nil if not found
-  local function load_cached_token()
-    local cache_path = get_cache_path()
-    if vim.fn.filereadable(cache_path) == 0 then
-      return nil
-    end
-    local status, cached = pcall(function()
-      return vim.json.decode(table.concat(vim.fn.readfile(cache_path), ""))
-    end)
-    if status and cached then
+  ---@return table?
+  local function load_cached_api_token()
+    local cached = load_json_file(get_token_cache_path())
+    if cached and cached.token and cached.expires_at then
+      cached.expires_at = tonumber(cached.expires_at)
       return cached
     end
     return nil
   end
 
-  ---Save token to disk cache
-  ---@param token_data table The token data to cache
-  local function save_cached_token(token_data)
-    local cache_path = get_cache_path()
-    vim.fn.writefile({ vim.json.encode(token_data) }, cache_path)
+  ---@param token_data table
+  local function save_cached_api_token(token_data)
+    save_json_file(get_token_cache_path(), token_data)
   end
 
-  ---Closure that manages token state and retrieves a valid Copilot API token
-  ---@return string? token A valid Copilot API token or nil if the request fails
+  ---@return string?
   return function()
     -- Check in-memory cache first
-    if token and token.expires_at > os.time() then
+    if token and token.expires_at and token.expires_at > os.time() then
       return token.token
     end
 
     -- Check disk cache
-    token = load_cached_token()
+    token = load_cached_api_token()
     if token and token.expires_at and token.expires_at > os.time() then
       return token.token
     end
@@ -99,25 +281,36 @@ local function copilot_api_key()
     -- Need to fetch a new token
     oauth = get_oauth_token(oauth)
     if not oauth then
-      vim.notify("Sia: Can't find Copilot auth token")
+      vim.notify(
+        "Sia Copilot: Not authenticated. Run :SiaAuth copilot to authorize.",
+        vim.log.levels.WARN
+      )
       return nil
     end
 
-    local cmd = table.concat({
+    local json = curl_json_sync({
       "curl",
       "--silent",
-      '--header "Authorization: Bearer ' .. oauth .. '"',
-      '--header "Content-Type: application/json"',
-      '--header "Accept: application/json"',
-      "https://api.github.com/copilot_internal/v2/token",
-    }, " ")
-    local response = vim.fn.system(cmd)
-    local status, json = pcall(vim.json.decode, response)
-    if status and json and json.token and json.expires_at then
-      token = json
-      save_cached_token(token)
+      "--header",
+      "Authorization: Bearer " .. oauth,
+      "--header",
+      "Content-Type: application/json",
+      "--header",
+      "Accept: application/json",
+      COPILOT_TOKEN_URL,
+    })
+
+    if json and json.token and json.expires_at then
+      token = {
+        token = json.token,
+        expires_at = tonumber(json.expires_at),
+      }
+      if token.expires_at then
+        save_cached_api_token(token)
+      end
       return token.token
     end
+
     return nil
   end
 end
@@ -150,6 +343,11 @@ end
 --- @param conversation sia.Conversation
 local function get_stats(callback, conversation)
   local oauth = get_oauth_token()
+  if not oauth then
+    callback()
+    return
+  end
+
   local cmd = {
     "curl",
     "--silent",
@@ -159,8 +357,9 @@ local function get_stats(callback, conversation)
     "Accept: */*",
     "--header",
     "User-Agent: Sia.nvim",
-    "https://api.github.com/copilot_internal/user",
+    COPILOT_USER_URL,
   }
+
   vim.system(
     cmd,
     { text = true },
@@ -171,14 +370,16 @@ local function get_stats(callback, conversation)
       if conversation then
         local usage = conversation:get_cumulative_usage()
         if usage and usage.total > 0 then
-          token_display = require("sia.provider.common").format_token_count(usage.total)
+          token_display = common.format_token_count(usage.total)
         end
       end
+
       if status then
         local premium = json.quota_snapshots
           and json.quota_snapshots.premium_interactions
         if not premium then
-          return nil
+          callback({ right = token_display })
+          return
         end
 
         local percent_remaining = premium.percent_remaining or 0
@@ -198,15 +399,14 @@ local function get_stats(callback, conversation)
             days_remaining = math.ceil((reset_time - now) / 86400) .. "d"
           end
         end
+
         callback({
           bar = { percent = used_percent, icon = " ", text = percent_display },
           left = days_remaining,
           right = token_display,
         })
       else
-        callback({
-          right = token_display,
-        })
+        callback({ right = token_display })
       end
     end)
   )
@@ -229,4 +429,5 @@ responses.get_stats = get_stats
 return {
   completion = completion,
   responses = responses,
+  authorize = authorize,
 }

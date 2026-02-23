@@ -756,6 +756,21 @@ local SIA_AUTH_PROVIDERS = {
       end)
     end,
   },
+  copilot = {
+    label = "Copilot",
+    authorize = function(callback)
+      require("sia.provider.copilot").authorize(function(token_data)
+        if token_data then
+          vim.notify("Sia Copilot: Ready to use copilot/ models.", vim.log.levels.INFO)
+        else
+          vim.notify("Sia Copilot: Authorization failed.", vim.log.levels.ERROR)
+        end
+        if callback then
+          callback(token_data)
+        end
+      end)
+    end,
+  },
 }
 
 vim.api.nvim_create_user_command("SiaAuth", function(args)
