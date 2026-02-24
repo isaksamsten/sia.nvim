@@ -130,10 +130,6 @@ function M.execute_strategy(strategy)
           if status then
             local m_err = extract_error(json)
             if m_err then
-              vim.api.nvim_exec_autocmds("User", {
-                pattern = "SiaError",
-                data = m_err,
-              })
               error_initialize = true
               strategy.is_busy = false
               strategy:on_error()
@@ -147,11 +143,6 @@ function M.execute_strategy(strategy)
               vim.fn.jobstop(job_id)
               return
             end
-            vim.api.nvim_exec_autocmds("User", {
-              pattern = "SiaStart",
-              --- @diagnostic disable-next-line: undefined-field
-              data = { buf = strategy.buf, job = job_id },
-            })
           end
         end
 
@@ -242,11 +233,6 @@ function M.execute_strategy(strategy)
 
         local finish = function()
           strategy.is_busy = false
-          vim.api.nvim_exec_autocmds("User", {
-            pattern = "SiaComplete",
-            --- @diagnostic disable-next-line: undefined-field
-            data = { buf = strategy.buf, job = jobid, usage = usage },
-          })
         end
 
         local continue_execution = function()

@@ -1,0 +1,230 @@
+# Usage
+
+## Basic Commands
+
+**Normal Mode**
+
+- `:Sia [query]` - Sends the query and opens a chat view with the response.
+- `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
+- `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
+- `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
+
+**Ranges**
+
+Any range is supported. For example:
+
+- `:'<,'>Sia! [query]` - Sends the selected lines along with the query and diffs the response.
+- `:'<,'>Sia [query]` - Sends the selected lines and query, opening a chat with the response.
+- `:'<,'>Sia /prompt [query]` - Executes the prompt with the extra query for the selected range.
+
+**Examples**
+
+- `:%Sia fix the test function` - Opens a chat with a suggested fix for the test function.
+- `:Sia write snake in pygame` - Opens a chat with the generated answer for the query.
+- `:Sia /doc numpydoc` - Documents the function or class under the cursor using the numpydoc format.
+
+## Interaction Modes
+
+Sia supports three primary interaction modes that determine how the AI
+assistant responds to your queries. Each mode is optimized for different
+workflows.
+
+### Chat Mode
+
+**Usage:** `:Sia [query]` or `:Sia /prompt [query]`
+
+Chat mode opens a conversational interface where you can interact with the AI assistant. The assistant can use tools (read files, search code, execute commands) and provide explanations, suggestions, and guidance. This mode is ideal for:
+
+- Exploratory conversations about your codebase
+- Getting explanations and suggestions
+- Multi-step problem solving where the AI needs to gather information
+- Code reviews and architectural discussions
+
+The chat window persists across queries, maintaining conversation history and
+allowing you to build on previous exchanges.
+
+After the AI makes suggestions, you can navigate through changes with
+`]c`/`[c]` and accept/reject them individually with `ga`/`gx` or in bulk with
+`:SiaAccept!`/`:SiaReject!`. See the [Reviewing Changes](changes.md)
+documentation for more details.
+
+### Insert Mode
+
+**Usage:** `:Sia! [query]` (without a range)
+
+Insert mode generates text and inserts it directly at the cursor position. The AI's response is inserted as-is without any conversational wrapper. This mode is ideal for:
+
+- Code generation at the current cursor position
+- Writing boilerplate code
+- Generating documentation or comments
+- Quick text generation tasks
+
+The AI is instructed to output only the content to be inserted, without explanations or markdown formatting.
+
+https://github.com/user-attachments/assets/84a412d4-ff42-437a-86cc-bdb8e9eb85e9
+
+### Diff Mode
+
+**Usage:** `:'<,'>Sia! [query]` (with a range or visual selection)
+
+Diff mode shows AI-suggested changes in a side-by-side diff view. The assistant analyzes your selected code and proposes modifications, which you can then accept or reject selectively. This mode is ideal for:
+
+- Refactoring existing code
+- Fixing bugs with suggested patches
+- Applying style or formatting changes
+- Making targeted improvements to selected code
+
+https://github.com/user-attachments/assets/c8a5f031-b032-4a04-96c5-a6407fe43545
+
+### Choosing the Right Mode
+
+- Use **chat mode** when you need to explore, discuss, or get guidance
+- Use **insert mode** when you want generated code at your cursor
+- Use **diff mode** when you want to modify existing code with AI suggestions
+
+You can customize the default behavior and create custom actions that use any of these modes. See [Actions](actions.md) for details.
+
+## Commands
+
+For the most part, Sia will read and add files, diagnostics, and search results
+autonomously. The available commands are:
+
+**Context Management:**
+
+- `SiaAdd file <filename>` - Add a file to the currently visible conversation
+- `SiaAdd buffer <buffer>` - Add a buffer to the currently visible conversation
+- `SiaAdd context` - Add the current visual mode selection to the currently visible conversation
+
+If there are no visible conversations, Sia will add the context to the next new
+conversation that is started.
+
+**Change Management:**
+
+- `SiaAccept` - Accept the change under the cursor
+- `SiaReject` - Reject the change under the cursor
+- `SiaAccept!` - Accept **all** changes in the current buffer
+- `SiaReject!` - Reject **all** changes in the current buffer
+- `SiaDiff` - Show all changes in a diff view
+
+**Tool Approval (Async Mode):**
+
+- `SiaAnswer prompt` - Show the approval prompt for pending tool operations
+- `SiaAnswer accept` - Auto-accept the pending tool operation
+- `SiaAnswer decline` - Auto-decline the pending tool operation
+- `SiaAnswer preview` - Preview the pending tool operation
+
+Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
+
+**Conversation Management:**
+
+- `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
+- `SiaClear` - Remove outdated tool calls and their results from the conversation history
+- `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
+- `SiaCompact` - Compact the current conversation history
+- `SiaDebug` - Show the current conversation's JSON payload in a new buffer
+
+## Keybindings
+
+### Suggested Keybindings
+
+You can bind visual and operator mode selections to enhance your workflow with `sia.nvim`:
+
+- **Append Current Selection**:
+  - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible chat.
+- **Execute Default Prompt**:
+  - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
+
+```lua
+keys = {
+  { "Za", mode = { "n", "x" }, "<Plug>(sia-append)" },
+  { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
+  { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
+  { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
+  { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
+  { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
+  { "<Leader>aq", mode = "n", function() require("sia").show_edits_qf() end, desc = "Show changes", },
+  {
+    "[c",
+    mode = "n",
+    function()
+      if vim.wo.diff then
+        vim.api.nvim_feedkeys("[c", "n", true)
+        return
+      end
+      require("sia").prev_edit()
+    end,
+    desc = "Previous edit",
+  },
+  {
+    "]c",
+    mode = "n",
+    function()
+      if vim.wo.diff then
+        vim.api.nvim_feedkeys("]c", "n", true)
+        return
+      end
+      require("sia").next_edit()
+    end,
+    desc = "Next edit",
+  },
+  -- Tool approval (async mode)
+  -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
+  -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
+  -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
+  { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
+  { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
+  -- Or, to be consistent with vim.wo.diff
+  --
+  -- {
+  --   "dp",
+  --   mode = "n",
+  --   function()
+  --     if vim.wo.diff then
+  --       vim.api.nvim_feedkeys("dp", "n", true)
+  --       return
+  --     end
+  --     require("sia").accept_edit()
+  --   end,
+  --   desc = "Accept edit",
+  -- },
+  -- {
+  --   "do",
+  --   mode = "n",
+  --   function()
+  --     if vim.wo.diff then
+  --       vim.api.nvim_feedkeys("do", "n", true)
+  --       return
+  --     end
+  --     require("sia").reject_edit()
+  --   end,
+  --   desc = "Reject edit",
+  -- },
+}
+```
+
+You can send the current paragraph to the default prompt using `gzzip` or append the current method (assuming `treesitter-textobjects`) to the ongoing chat with `gzaam`.
+
+Sia also creates Plug bindings for all actions using `<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-explain)` for the default action `/explain`.
+
+```lua
+keys = {
+  { "Ze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
+}
+```
+
+### Chat Mappings
+
+In the chat view (with `ft=sia`), you can bind the following mappings for efficient interaction:
+
+```lua
+keys = {
+  { "p", mode = "n", require("sia").show_messages, ft = "sia" },
+  { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
+  -- toggle the todo view
+  { "t", mode = "n", require("sia").todos, ft = "sia" },
+  -- toggle the tasks/agents view
+  { "a", mode = "n", require("sia").tasks, ft = "sia" },
+  -- show a quickfix window with active context references
+  { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
+}
+```

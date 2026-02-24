@@ -182,7 +182,6 @@ function Strategy:on_round_start() end
 --- receive content chunks. At this point, the API has responded successfully.
 ---
 --- When: After on_request_start() and on_round_start(), when first stream data arrives
---- Triggers: SiaStart autocmd if successful
 ---
 --- @return boolean success If false, execution stops and on_error() is called
 function Strategy:on_stream_start()
@@ -207,7 +206,6 @@ end
 --- another round (if tools were used) or finish.
 ---
 --- When: After all content has been streamed
---- Triggers: SiaComplete autocmd when control.finish() is called
 ---
 --- The control table provides:
 --- - continue_execution(): Start another round (typically after tool execution)

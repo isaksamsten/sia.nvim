@@ -683,23 +683,6 @@ function M.setup(options)
 
   local augroup = vim.api.nvim_create_augroup("SiaGroup", { clear = true })
 
-  vim.api.nvim_create_autocmd("User", {
-    group = augroup,
-    pattern = "SiaError",
-    callback = function(args)
-      local data = args.data
-      if data.message then
-        if type(data.message) == "string" then
-          vim.notify("Sia: " .. data.message, vim.log.levels.WARN)
-        elseif data.message.error and type(data.message.error) == "string" then
-          vim.notify("Sia: " .. data.message.error, vim.log.levels.WARN)
-        end
-      else
-        vim.notify("Sia: unknown error", vim.log.levels.WARN)
-      end
-    end,
-  })
-
   vim.api.nvim_create_autocmd("ColorScheme", {
     group = augroup,
     pattern = "*",

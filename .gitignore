@@ -1,4 +1,7 @@
 deps/**
+
+# Generated intermediate doc (vimdoc source)
+doc/sia.md
 # Compiled Lua sources
 luac.out
 

@@ -1,0 +1,43 @@
+name: panvimdoc
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "scripts/build-doc.sh"
+      - ".github/workflows/panvimdoc.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    name: Generate vimdoc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Concatenate docs into single markdown
+        run: |
+          chmod +x scripts/build-doc.sh
+          ./scripts/build-doc.sh
+
+      - uses: kdheepak/panvimdoc@main
+        with:
+          vimdoc: sia
+          pandoc: doc/sia.md
+          version: "Neovim >= 0.11"
+          toc: true
+          treesitter: true
+          demojify: false
+          dedupsubheadings: true
+          ignorerawblocks: true
+          shiftheadinglevelby: 0
+          incrementheadinglevelby: 0
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-generate vimdoc"
+          branch: ${{ github.head_ref }}
+
