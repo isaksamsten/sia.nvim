@@ -414,7 +414,7 @@ function M.show_contexts()
   vim.cmd("copen")
 end
 
-function M.open_reply()
+function M.reply()
   local buf = vim.api.nvim_get_current_buf()
   local current = require("sia.strategy").ChatStrategy.by_buf(buf)
   if current then
@@ -445,8 +445,8 @@ function M.open_reply()
   end
 end
 
---- Open a floating prompt window to start a new conversation
-function M.prompt_window()
+--- Open a floating compose window to start a new conversation
+function M.compose()
   local config = require("sia.config")
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -518,6 +518,7 @@ function M.prompt_window()
     local model_name = vim.b[buf].sia_prompt_model
     local action =
       vim.tbl_deep_extend("force", {}, config.options.settings.actions.chat)
+    action.instructions = vim.list_extend({}, action.instructions)
     table.insert(action.instructions, {
       role = "user",
       content = prompt,

@@ -145,12 +145,12 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 - `SiaAuth codex` - Authenticate with OpenAI Codex (browser-based OAuth)
 - `SiaAuth copilot` - Authenticate with GitHub Copilot (device flow)
 
-## Prompt Window
+## Compose Window
 
-Sia provides a floating prompt window for composing queries with optional model
-selection. Call `require("sia").prompt_window()` to open it.
+Sia provides a floating compose window for starting new conversations with optional model
+selection. Call `require("sia").compose()` to open it.
 
-**Keybindings in the prompt window:**
+**Keybindings in the compose window:**
 
 - `<CR>` - Submit the prompt
 - `m` - Select a different model
@@ -172,7 +172,7 @@ keys = {
   { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
   { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
   { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
-  { "<Leader>ap", mode = "n", function() require("sia").prompt_window() end, desc = "Open prompt window", },
+  { "<Leader>ap", mode = "n", function() require("sia").compose() end, desc = "Compose new chat", },
   { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
   { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
   { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
@@ -253,7 +253,7 @@ In the chat view (with `ft=sia`), you can bind the following mappings for effici
 ```lua
 keys = {
   { "p", mode = "n", require("sia").show_messages, ft = "sia" },
-  { "<CR>", mode = "n", require("sia").open_reply, ft = "sia" },
+  { "<CR>", mode = "n", require("sia").reply, ft = "sia" },
   -- toggle the todo view
   { "t", mode = "n", require("sia").todos, ft = "sia" },
   -- toggle the tasks/agents view
