@@ -13,7 +13,9 @@ require("sia").setup({
     model = "openai/gpt-4.1",           -- Main model for conversations
     fast_model = "openai/gpt-4.1-mini", -- Fast model for quick tasks
     plan_model = "openai/o3-mini",       -- Model for planning and reasoning
+    embedding_model = "openai/text-embedding-3-small", -- Model for semantic embeddings
     temperature = 0.3,                   -- Creativity level (0-1)
+    icons = "emoji",                     -- Icon set: "emoji" or a custom table
 
     -- UI behavior
     ui = {
@@ -25,7 +27,10 @@ require("sia").setup({
       approval = {
         use_vim_ui = false,  -- Use Vim's built-in input/select for approvals
         show_preview = true, -- Show preview in approval prompts
-        async = false,       -- Queue approvals in background (non-blocking)
+        async = {
+          enable = false,    -- Queue approvals in background (non-blocking)
+          -- notifier = require("sia.approval").floating_notifier(), -- default
+        },
       },
     },
 
@@ -38,9 +43,9 @@ require("sia").setup({
 
     -- Default context settings
     context = {
-      max_tool = 30,         -- Maximum tool calls before pruning occurs
-      exclude = {},          -- Tool names to exclude from pruning
-      clear_input = false,   -- Whether to clear tool input parameters during pruning
+      max_tool = 200,        -- Maximum tool calls before pruning occurs
+      exclude = { "grep", "glob", "read_todos" }, -- Tool names to exclude from pruning
+      clear_input = true,    -- Whether to clear tool input parameters during pruning
       keep = 20,             -- Number of recent tool calls to keep after pruning
     },
 
@@ -97,7 +102,8 @@ Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier`
 in the model configuration.
 
-Enable by setting the `settings.chat.winbar` option.
+The winbar is enabled by default in chat windows. You can customize or disable
+it via the `settings.chat.winbar` option (set to `nil` to disable).
 
 ### Customizing Winbar Display
 
@@ -152,6 +158,8 @@ specific project:
     "clear_input": false,
     "keep": 10
   },
+  "skills": ["monitor-logs", "tmux-interactive"],
+  "skills_extras": ["~/my-custom-skills"],
   "permission": {
     "allow": {
       "bash": {
@@ -215,6 +223,11 @@ specific project:
   cancelled (default: false)
 - **`action`**: Override default actions for different modes (`insert`, `diff`, `chat`)
 - **`context`**: Project-specific context management (tool pruning behavior)
+- **`skills`**: Array of skill names to enable from `~/.config/sia/skills/` or extra paths
+  (e.g., `["monitor-logs", "tmux-interactive"]`). Skills are techniques the assistant
+  knows for combining tools effectively.
+- **`skills_extras`**: Array of additional directory paths to search for skill definitions
+  (e.g., `["/path/to/custom/skills"]`). Each skill is a subdirectory containing a `SKILL.md` file.
 - **`permission`**: Fine-grained tool access control (see [Permission System](#permission-system) below)
 - **`risk`**: Configure risk levels for visual feedback and auto-confirm behavior (see [Risk Level System](#risk-level-system) below)
 
@@ -410,3 +423,61 @@ Each field should reference an action name defined in your global configuration.
   }
 }
 ```
+
+## Highlight Groups
+
+Sia defines the following highlight groups that you can customize. They are
+only set if they don't already exist, so defining them in your colorscheme
+or config will take precedence.
+
+**Change Review (inline diff):**
+
+| Group                 | Default Link           | Description               |
+| --------------------- | ---------------------- | ------------------------- |
+| `SiaDiffAdd`          | `DiffAdd`              | Added lines               |
+| `SiaDiffChange`       | `DiffChange`           | Changed lines             |
+| `SiaDiffDelete`       | `DiffDelete`           | Deleted lines             |
+| `SiaDiffInlineAdd`    | `GitSignsAddInline`    | Character-level additions |
+| `SiaDiffInlineChange` | `GitSignsChangeInline` | Character-level changes   |
+| `SiaDiffAddSign`      | `GitSignsAdd`          | Sign column for additions |
+| `SiaDiffChangeSign`   | `GitSignsChange`       | Sign column for changes   |
+
+**Chat UI:**
+
+| Group           | Default Link | Description               |
+| --------------- | ------------ | ------------------------- |
+| `SiaAssistant`  | `DiffAdd`    | Assistant message markers |
+| `SiaUser`       | `DiffChange` | User message markers      |
+| `SiaToolResult` | `DiffChange` | Tool result markers       |
+| `SiaProgress`   | `NonText`    | Progress indicators       |
+| `SiaModel`      | —            | Model name display        |
+| `SiaUsage`      | —            | Token usage display       |
+| `SiaStatus`     | —            | Status display            |
+
+**Tool Approval:**
+
+| Group            | Default Link | Description             |
+| ---------------- | ------------ | ----------------------- |
+| `SiaApproveInfo` | `StatusLine` | Standard risk level     |
+| `SiaApproveSafe` | `StatusLine` | Safe/low risk level     |
+| `SiaApproveWarn` | `StatusLine` | Warning/high risk level |
+
+**Insert/Diff Mode:**
+
+| Group                  | Default Link | Description                  |
+| ---------------------- | ------------ | ---------------------------- |
+| `SiaInsert`            | `DiffAdd`    | Inserted text in insert mode |
+| `SiaInsertPostProcess` | `DiffChange` | Post-processed text          |
+| `SiaReplace`           | `DiffChange` | Replaced text in diff mode   |
+
+**Todos & Tasks:**
+
+| Group              | Default Link      | Description           |
+| ------------------ | ----------------- | --------------------- |
+| `SiaTodoActive`    | `DiagnosticWarn`  | Active todo items     |
+| `SiaTodoPending`   | `Comment`         | Pending todo items    |
+| `SiaTodoDone`      | `DiagnosticOk`    | Completed todo items  |
+| `SiaTodoSkipped`   | `NonText`         | Skipped todo items    |
+| `SiaTaskRunning`   | `DiagnosticHint`  | Running agent tasks   |
+| `SiaTaskCompleted` | `DiagnosticOk`    | Completed agent tasks |
+| `SiaTaskFailed`    | `DiagnosticError` | Failed agent tasks    |

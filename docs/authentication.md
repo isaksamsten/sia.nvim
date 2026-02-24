@@ -78,3 +78,11 @@ Add your OpenRouter API key to your environment:
 export OPENROUTER_API_KEY="sk-or-..."
 ```
 
+## ZAI
+
+Add your ZAI Coding API key to your environment:
+
+```bash
+export ZAI_CODING_API_KEY="..."
+```
+

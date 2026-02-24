@@ -26,7 +26,7 @@ in the background without interrupting your workflow. This allows you to:
    󱇥 [conversation-name] Execute bash command 'git status'
    ```
 
-   The notification uses the `SiaApprove` or `SiaApproveWarn` highlight group (both linked to `StatusLine` by default).
+   The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn` highlight groups depending on the risk level (all linked to `StatusLine` by default).
 
 2. **Process approvals**: When you're ready, use one of these functions:
    - `require("sia.approval").prompt()` - Shows the full approval prompt
@@ -70,7 +70,11 @@ require("sia").setup({
 
 The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
-- `show(conversation_name, msg, total)` - Show/update the notification. Called whenever the message changes (both initially and on updates).
+- `show(args)` - Show/update the notification. Called whenever the message changes. `args` is a table with:
+  - `level` - Risk level (`"safe"`, `"info"`, or `"warn"`)
+  - `name` - Conversation name
+  - `message` - The notification message
+  - `total` - Number of pending approvals
 - `clear()` - Clear/dismiss the notification
 
 **Example using nvim-notify:**
@@ -86,8 +90,8 @@ require("sia").setup({
             local notif_id = nil
 
             return {
-              show = function(_, msg, _)
-                notif_id = vim.notify(msg, vim.log.levels.INFO, {
+              show = function(args)
+                notif_id = vim.notify(args.message, vim.log.levels.INFO, {
                   title = "Sia Approval",
                   timeout = false,
                   replace = notif_id,  -- Replace if exists, create if not
@@ -143,7 +147,7 @@ require("sia").setup({
 
 **Traditional (Blocking) Mode:**
 
-If you prefer immediate prompts (the default behavior), keep `async = false`.
+If you prefer immediate prompts (the default behavior), keep `async.enable = false`.
 Tool operations will show an approval prompt immediately and wait for your
 response before continuing.
 
@@ -311,7 +315,7 @@ System prompt for the agent goes here.
 
 You can view and track running agents in the tasks window:
 
-- **In chat:** Press `t` (or your configured binding) to toggle the tasks window
+- **In chat:** Press `a` (or your configured binding) to toggle the tasks window
 - **Programmatically:** Call `require("sia").tasks("toggle")`
 
 **Tips:**

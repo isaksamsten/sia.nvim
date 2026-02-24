@@ -2,12 +2,25 @@
 
 ## Basic Commands
 
+**Buffer-Local Default Prompt:**
+
+You can set `vim.b.sia` to define a default prompt for a buffer. When set,
+`:Sia` (without arguments) will use this prompt automatically. For example:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "python",
+  callback = function() vim.b.sia = "/doc numpydoc" end,
+})
+```
+
 **Normal Mode**
 
 - `:Sia [query]` - Sends the query and opens a chat view with the response.
 - `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
+- `:Sia -m model [query]` - Overrides the model for this conversation (e.g., `:Sia -m copilot/claude-sonnet-4.5 explain this`).
 
 **Ranges**
 
@@ -91,9 +104,9 @@ autonomously. The available commands are:
 
 **Context Management:**
 
-- `SiaAdd file <filename>` - Add a file to the currently visible conversation
+- `SiaAdd file <pattern>` - Add file(s) to the currently visible conversation (supports glob patterns like `src/*.lua`)
 - `SiaAdd buffer <buffer>` - Add a buffer to the currently visible conversation
-- `SiaAdd context` - Add the current visual mode selection to the currently visible conversation
+- `:'<,'>SiaAdd context` - Add the current visual selection to the currently visible conversation
 
 If there are no visible conversations, Sia will add the context to the next new
 conversation that is started.
@@ -120,8 +133,30 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 - `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
 - `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
-- `SiaCompact` - Compact the current conversation history
+- `SiaCompact` - Summarize and compact the conversation history (replaces messages with an AI-generated summary to free context window space)
+- `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation's JSON payload in a new buffer
+
+**Shell Process Management:**
+
+- `SiaShell` or `SiaShell list` - List all bash processes (running, completed, failed) for the current conversation
+- `SiaShell stop <id>` - Send SIGTERM to a running background process by ID
+
+**Authentication:**
+
+- `SiaAuth codex` - Authenticate with OpenAI Codex (browser-based OAuth)
+- `SiaAuth copilot` - Authenticate with GitHub Copilot (device flow)
+
+## Prompt Window
+
+Sia provides a floating prompt window for composing queries with optional model
+selection. Call `require("sia").prompt_window()` to open it.
+
+**Keybindings in the prompt window:**
+
+- `<CR>` - Submit the prompt
+- `m` - Select a different model
+- `q` or `<Esc>` - Close the window
 
 ## Keybindings
 
@@ -129,16 +164,17 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
 You can bind visual and operator mode selections to enhance your workflow with `sia.nvim`:
 
-- **Append Current Selection**:
-  - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible chat.
+- **Append Current Context**:
+  - `<Plug>(sia-add-context)` - Appends the current selection or operator mode selection to the visible chat.
 - **Execute Default Prompt**:
   - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
 
 ```lua
 keys = {
-  { "Za", mode = { "n", "x" }, "<Plug>(sia-append)" },
+  { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
   { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
   { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
+  { "<Leader>ap", mode = "n", function() require("sia").prompt_window() end, desc = "Open prompt window", },
   { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
   { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
   { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
@@ -171,8 +207,8 @@ keys = {
   -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
   -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
   -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
-  { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
-  { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
+  { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Accept edit", },
+  { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Reject edit", },
   -- Or, to be consistent with vim.wo.diff
   --
   -- {
@@ -202,13 +238,13 @@ keys = {
 }
 ```
 
-You can send the current paragraph to the default prompt using `gzzip` or append the current method (assuming `treesitter-textobjects`) to the ongoing chat with `gzaam`.
+You can send the current paragraph to the default prompt using `ZZip` or append the current method (assuming `treesitter-textobjects`) to the ongoing chat with `Zaaam`.
 
-Sia also creates Plug bindings for all actions using `<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-explain)` for the default action `/explain`.
+Sia also creates Plug bindings for all actions using `<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-doc)` for the built-in `/doc` action.
 
 ```lua
 keys = {
-  { "Ze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
+  { "Zd", mode = { "n", "x" }, "<Plug>(sia-execute-doc)" },
 }
 ```
 

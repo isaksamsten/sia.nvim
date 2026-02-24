@@ -5,7 +5,7 @@
 
 An LLM assistant for Neovim.
 
-Supports: OpenAI, Copilot and OpenRouter (both OpenAI Chat Completions and Responses), Anthropic (native API), Gemini and ZAI.
+Supports: OpenAI, Codex, Copilot and OpenRouter (both OpenAI Chat Completions and Responses), Anthropic (native API), Gemini and ZAI.
 
 ## Features
 
@@ -30,7 +30,10 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
 - Neovim >= **0.11**
 - curl
-- Access to OpenAI API, Copilot or Gemini
+- [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) — for the `grep` tool
+- [fd](https://github.com/sharkdp/fd) — for the `glob` tool and directory listing
+- Access to OpenAI API, Codex, Copilot, Gemini, Anthropic, ZAI, or OpenRouter
+- Optional: [pandoc](https://pandoc.org/) — for the `fetch` tool (web content conversion)
 
 ## Installation
 

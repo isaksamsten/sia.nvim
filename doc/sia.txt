@@ -10,21 +10,22 @@ Table of Contents                                      *sia-table-of-contents*
   - Anthropic                                   |sia-authentication-anthropic|
   - Gemini                                         |sia-authentication-gemini|
   - OpenRouter                                 |sia-authentication-openrouter|
+  - ZAI                                               |sia-authentication-zai|
 3. Configuration                                           |sia-configuration|
   - Global Configuration              |sia-configuration-global-configuration|
   - Cost Tracking                            |sia-configuration-cost-tracking|
   - Project-Level Configuration|sia-configuration-project-level-configuration|
+  - Highlight Groups                      |sia-configuration-highlight-groups|
 4. Usage                                                           |sia-usage|
   - Basic Commands                                  |sia-usage-basic-commands|
   - Interaction Modes                            |sia-usage-interaction-modes|
   - Commands                                              |sia-usage-commands|
+  - Prompt Window                                    |sia-usage-prompt-window|
   - Keybindings                                        |sia-usage-keybindings|
 5. Tools                                                           |sia-tools|
-  - File Operations                                |sia-tools-file-operations|
-  - Code Navigation & Search              |sia-tools-code-navigation-&-search|
-  - Development Environment                |sia-tools-development-environment|
-  - Advanced Capabilities                    |sia-tools-advanced-capabilities|
-  - Task Management                                |sia-tools-task-management|
+  - Core Tools                                          |sia-tools-core-tools|
+  - Extra Tools                                        |sia-tools-extra-tools|
+  - Adding Tools to Actions                |sia-tools-adding-tools-to-actions|
 6. Core Concepts                                           |sia-core-concepts|
   - Tool Approval System              |sia-core-concepts-tool-approval-system|
   - Agent Memory                              |sia-core-concepts-agent-memory|
@@ -139,6 +140,15 @@ Add your OpenRouter API key to your environment:
 <
 
 
+ZAI                                                   *sia-authentication-zai*
+
+Add your ZAI Coding API key to your environment:
+
+>bash
+    export ZAI_CODING_API_KEY="..."
+<
+
+
 ==============================================================================
 3. Configuration                                           *sia-configuration*
 
@@ -156,7 +166,9 @@ Configure Sia in your `init.lua`:
         model = "openai/gpt-4.1",           -- Main model for conversations
         fast_model = "openai/gpt-4.1-mini", -- Fast model for quick tasks
         plan_model = "openai/o3-mini",       -- Model for planning and reasoning
+        embedding_model = "openai/text-embedding-3-small", -- Model for semantic embeddings
         temperature = 0.3,                   -- Creativity level (0-1)
+        icons = "emoji",                     -- Icon set: "emoji" or a custom table
     
         -- UI behavior
         ui = {
@@ -168,7 +180,10 @@ Configure Sia in your `init.lua`:
           approval = {
             use_vim_ui = false,  -- Use Vim's built-in input/select for approvals
             show_preview = true, -- Show preview in approval prompts
-            async = false,       -- Queue approvals in background (non-blocking)
+            async = {
+              enable = false,    -- Queue approvals in background (non-blocking)
+              -- notifier = require("sia.approval").floating_notifier(), -- default
+            },
           },
         },
     
@@ -181,9 +196,9 @@ Configure Sia in your `init.lua`:
     
         -- Default context settings
         context = {
-          max_tool = 30,         -- Maximum tool calls before pruning occurs
-          exclude = {},          -- Tool names to exclude from pruning
-          clear_input = false,   -- Whether to clear tool input parameters during pruning
+          max_tool = 200,        -- Maximum tool calls before pruning occurs
+          exclude = { "grep", "glob", "read_todos" }, -- Tool names to exclude from pruning
+          clear_input = true,    -- Whether to clear tool input parameters during pruning
           keep = 20,             -- Number of recent tool calls to keep after pruning
         },
     
@@ -243,7 +258,8 @@ Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier` in the
 model configuration.
 
-Enable by setting the `settings.chat.winbar` option.
+The winbar is enabled by default in chat windows. You can customize or disable
+it via the `settings.chat.winbar` option (set to `nil` to disable).
 
 
 CUSTOMIZING WINBAR DISPLAY ~
@@ -301,6 +317,8 @@ specific project:
         "clear_input": false,
         "keep": 10
       },
+      "skills": ["monitor-logs", "tmux-interactive"],
+      "skills_extras": ["~/my-custom-skills"],
       "permission": {
         "allow": {
           "bash": {
@@ -365,6 +383,11 @@ AVAILABLE LOCAL CONFIGURATION OPTIONS ~
     cancelled (default: false)
 - **action**: Override default actions for different modes (`insert`, `diff`, `chat`)
 - **context**: Project-specific context management (tool pruning behavior)
+- **skills**: Array of skill names to enable from `~/.config/sia/skills/` or extra paths
+    (e.g., `["monitor-logs", "tmux-interactive"]`). Skills are techniques the assistant
+    knows for combining tools effectively.
+- **skills_extras**: Array of additional directory paths to search for skill definitions
+    (e.g., `["/path/to/custom/skills"]`). Each skill is a subdirectory containing a `SKILL.md` file.
 - **permission**: Fine-grained tool access control (see |sia-permission-system| below)
 - **risk**: Configure risk levels for visual feedback and auto-confirm behavior (see |sia-risk-level-system| below)
 
@@ -574,11 +597,85 @@ basis.
 <
 
 
+HIGHLIGHT GROUPS                          *sia-configuration-highlight-groups*
+
+Sia defines the following highlight groups that you can customize. They are
+only set if they don’t already exist, so defining them in your colorscheme or
+config will take precedence.
+
+**Change Review (inline diff):**
+
+  -----------------------------------------------------------------------
+  Group                 Default Link           Description
+  --------------------- ---------------------- --------------------------
+  SiaDiffAdd            DiffAdd                Added lines
+
+  SiaDiffChange         DiffChange             Changed lines
+
+  SiaDiffDelete         DiffDelete             Deleted lines
+
+  SiaDiffInlineAdd      GitSignsAddInline      Character-level additions
+
+  SiaDiffInlineChange   GitSignsChangeInline   Character-level changes
+
+  SiaDiffAddSign        GitSignsAdd            Sign column for additions
+
+  SiaDiffChangeSign     GitSignsChange         Sign column for changes
+  -----------------------------------------------------------------------
+**Chat UI:**
+
+  Group           Default Link   Description
+  --------------- -------------- ---------------------------
+  SiaAssistant    DiffAdd        Assistant message markers
+  SiaUser         DiffChange     User message markers
+  SiaToolResult   DiffChange     Tool result markers
+  SiaProgress     NonText        Progress indicators
+  SiaModel        —              Model name display
+  SiaUsage        —              Token usage display
+  SiaStatus       —              Status display
+**Tool Approval:**
+
+  Group            Default Link   Description
+  ---------------- -------------- -------------------------
+  SiaApproveInfo   StatusLine     Standard risk level
+  SiaApproveSafe   StatusLine     Safe/low risk level
+  SiaApproveWarn   StatusLine     Warning/high risk level
+**Insert/Diff Mode:**
+
+  Group                  Default Link   Description
+  ---------------------- -------------- ------------------------------
+  SiaInsert              DiffAdd        Inserted text in insert mode
+  SiaInsertPostProcess   DiffChange     Post-processed text
+  SiaReplace             DiffChange     Replaced text in diff mode
+**Todos & Tasks:**
+
+  Group              Default Link      Description
+  ------------------ ----------------- -----------------------
+  SiaTodoActive      DiagnosticWarn    Active todo items
+  SiaTodoPending     Comment           Pending todo items
+  SiaTodoDone        DiagnosticOk      Completed todo items
+  SiaTodoSkipped     NonText           Skipped todo items
+  SiaTaskRunning     DiagnosticHint    Running agent tasks
+  SiaTaskCompleted   DiagnosticOk      Completed agent tasks
+  SiaTaskFailed      DiagnosticError   Failed agent tasks
+
 ==============================================================================
 4. Usage                                                           *sia-usage*
 
 
 BASIC COMMANDS                                      *sia-usage-basic-commands*
+
+**Buffer-Local Default Prompt:**
+
+You can set `vim.b.sia` to define a default prompt for a buffer. When set,
+`:Sia` (without arguments) will use this prompt automatically. For example:
+
+>lua
+    vim.api.nvim_create_autocmd("FileType", {
+      pattern = "python",
+      callback = function() vim.b.sia = "/doc numpydoc" end,
+    })
+<
 
 **Normal Mode**
 
@@ -586,6 +683,7 @@ BASIC COMMANDS                                      *sia-usage-basic-commands*
 - `:Sia [query]` (from a conversation) - Continues the conversation with the new query.
 - `:Sia /prompt [query]` - Executes the prompt with the optional additional query.
 - `:Sia! [query]` - Sends the query and inserts the response directly into the buffer.
+- `:Sia -m model [query]` - Overrides the model for this conversation (e.g., `:Sia -m copilot/claude-sonnet-4.5 explain this`).
 
 **Ranges**
 
@@ -686,9 +784,9 @@ autonomously. The available commands are:
 
 **Context Management:**
 
-- `SiaAdd file <filename>` - Add a file to the currently visible conversation
+- `SiaAdd file <pattern>` - Add file(s) to the currently visible conversation (supports glob patterns like `src/*.lua`)
 - `SiaAdd buffer <buffer>` - Add a buffer to the currently visible conversation
-- `SiaAdd context` - Add the current visual mode selection to the currently visible conversation
+- `:'<,'>SiaAdd context` - Add the current visual selection to the currently visible conversation
 
 If there are no visible conversations, Sia will add the context to the next new
 conversation that is started.
@@ -715,8 +813,31 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 - `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
 - `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
-- `SiaCompact` - Compact the current conversation history
+- `SiaCompact` - Summarize and compact the conversation history (replaces messages with an AI-generated summary to free context window space)
+- `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation’s JSON payload in a new buffer
+
+**Shell Process Management:**
+
+- `SiaShell` or `SiaShell list` - List all bash processes (running, completed, failed) for the current conversation
+- `SiaShell stop <id>` - Send SIGTERM to a running background process by ID
+
+**Authentication:**
+
+- `SiaAuth codex` - Authenticate with OpenAI Codex (browser-based OAuth)
+- `SiaAuth copilot` - Authenticate with GitHub Copilot (device flow)
+
+
+PROMPT WINDOW                                        *sia-usage-prompt-window*
+
+Sia provides a floating prompt window for composing queries with optional model
+selection. Call `require("sia").prompt_window()` to open it.
+
+**Keybindings in the prompt window:**
+
+- `<CR>` - Submit the prompt
+- `m` - Select a different model
+- `q` or `<Esc>` - Close the window
 
 
 KEYBINDINGS                                            *sia-usage-keybindings*
@@ -727,16 +848,17 @@ SUGGESTED KEYBINDINGS ~
 You can bind visual and operator mode selections to enhance your workflow with
 `sia.nvim`:
 
-- **Append Current Selection**:
-    - `<Plug>(sia-append)` - Appends the current selection or operator mode selection to the visible chat.
+- **Append Current Context**:
+    - `<Plug>(sia-add-context)` - Appends the current selection or operator mode selection to the visible chat.
 - **Execute Default Prompt**:
     - `<Plug>(sia-execute)` - Executes the default prompt (`vim.b.sia`) with the current selection or operator mode selection.
 
 >lua
     keys = {
-      { "Za", mode = { "n", "x" }, "<Plug>(sia-append)" },
+      { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
       { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
       { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
+      { "<Leader>ap", mode = "n", function() require("sia").prompt_window() end, desc = "Open prompt window", },
       { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
       { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
       { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
@@ -769,8 +891,8 @@ You can bind visual and operator mode selections to enhance your workflow with
       -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
       -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
       -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
-      { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Next edit", },
-      { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Next edit", },
+      { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Accept edit", },
+      { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Reject edit", },
       -- Or, to be consistent with vim.wo.diff
       --
       -- {
@@ -800,17 +922,17 @@ You can bind visual and operator mode selections to enhance your workflow with
     }
 <
 
-You can send the current paragraph to the default prompt using `gzzip` or
-append the current method (assuming `treesitter-textobjects`) to the ongoing
-chat with `gzaam`.
+You can send the current paragraph to the default prompt using `ZZip` or append
+the current method (assuming `treesitter-textobjects`) to the ongoing chat with
+`Zaaam`.
 
 Sia also creates Plug bindings for all actions using
-`<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-explain)` for
-the default action `/explain`.
+`<Plug>(sia-execute-<ACTION>)`, for example, `<Plug>(sia-execute-doc)` for the
+built-in `/doc` action.
 
 >lua
     keys = {
-      { "Ze", mode = { "n", "x" }, "<Plug>(sia-execute-explain)" },
+      { "Zd", mode = { "n", "x" }, "<Plug>(sia-execute-doc)" },
     }
 <
 
@@ -841,59 +963,143 @@ Sia comes with a comprehensive set of tools that enable the AI assistant to
 interact with your codebase and development environment.
 
 
-FILE OPERATIONS                                    *sia-tools-file-operations*
+CORE TOOLS                                              *sia-tools-core-tools*
 
-- **read** - Read file contents with optional line ranges and limits (up to
+These tools are available via `require("sia.tools")`. Tools marked with **★**
+are included in the default chat action.
+
+
+FILE OPERATIONS ~
+
+- **★ read** - Read file contents with optional line offset and limit (up to
     2000 lines by default, with line number display)
-- **write** - Write complete file contents to create new files or overwrite
-    existing ones (ideal for large changes >50% of file content)
-- **edit** - Make precise targeted edits using search and replace with fuzzy
+- **★ write** - Write complete file contents to create new files or overwrite
+    existing ones (ideal for large changes or new files)
+- **★ edit** - Make precise targeted edits using search and replace with fuzzy
     matching and context validation
-- **rename_file** - Rename or move files within the project with automatic
-    buffer updates
-- **remove_file** - Safely delete files with optional trash functionality
-    (moves to `.sia_trash` by default)
+- **★ insert** - Insert text at a specific line in a file (1-based, text is
+    inserted before the specified line)
+- **apply_diff** - Apply patches using the Codex apply_patch format (automatically
+    added to the default chat action for GPT-5 models)
 
 
-CODE NAVIGATION & SEARCH                  *sia-tools-code-navigation-&-search*
+CODE NAVIGATION & SEARCH ~
 
-- **grep** - Fast content search using ripgrep with regex support and glob
-    patterns (max 100 results, sorted by file modification time)
-- **glob** - Find files matching patterns using `fd` (supports `*.lua`,
+- **★ grep** - Fast content search using ripgrep with regex support, glob
+    patterns, and multiline matching (max 100 results, sorted by file
+    modification time)
+- **★ glob** - Find files matching patterns using `fd` (supports `*.lua`,
     `**/*.py`, etc.) with hidden file options
+
+
+DEVELOPMENT ENVIRONMENT ~
+
+- **★ bash** - Execute shell commands with persistent sessions, async support,
+    process management (start/status/wait/kill), timeout control, and output
+    truncation (8000 char limit)
+- **★ diagnostics** - Retrieve LSP diagnostics for a specific file with severity
+    levels and source information
+- **★ websearch** - Search the web using Google
+- **★ memory** - Manage persistent agent memory in `.sia/memory/` (view, create,
+    edit, delete, rename, search)
+- **fetch** - Retrieve and convert web content to markdown using pandoc, with
+    AI-powered content analysis (requires curl; pandoc optional)
+
+
+TASK MANAGEMENT ~
+
+- **★ write_todos** - Create and manage todo lists for tracking multi-step tasks
+    (add new todos, update status, replace all, or clear completed items)
+- **★ read_todos** - Read the current todo list with IDs, descriptions, and
+    status for each item
+
+
+INTERACTION ~
+
+- **★ ask_user** - Ask the user to choose from a list of options using an
+    interactive selection interface
+
+
+AGENTS ~
+
+- **task** - Launch autonomous agents with their own tools and system prompts
+    for complex tasks (see Custom Agent Registry <concepts.md#custom-agent-registry>)
+
+
+EXTRA TOOLS                                            *sia-tools-extra-tools*
+
+These tools are available under `require("sia.tools.extra")` and can be added
+to custom actions or agent configurations.
+
+
+FILE OPERATIONS ~
+
+- **rename** - Rename or move files within the project with automatic buffer
+    updates
+- **remove** - Safely delete files with optional trash functionality (moves to
+    `.sia_trash` by default)
+- **replace_region** - Replace a line region in a file (useful for targeted
+    block replacements)
+- **unread** - Mark file contexts as outdated in the conversation, prompting
+    re-reads
+
+
+CODE NAVIGATION ~
+
 - **workspace** - Show currently visible files with line ranges, cursor
     positions, and background buffers
-- **show_locations** - Create navigable quickfix lists for multiple locations
+- **locations** - Create navigable quickfix lists for multiple locations
     (supports error/warning/info/note types)
-- **get_diagnostics** - Retrieve diagnostics with severity levels and
-    source information
+- **lsp** - Interact with Language Server Protocol servers (hover, definition,
+    references, rename, etc.)
 
 
-DEVELOPMENT ENVIRONMENT                    *sia-tools-development-environment*
+RESEARCH ~
 
-- **bash** - Execute shell commands in persistent sessions with security
-    restrictions and output truncation (8000 char limit)
-- **fetch** - Retrieve and convert web content to markdown using pandoc, with
-    AI-powered content analysis
-- **lsp** - Interact with Language Server Protocol servers for code intelligence
+These tools are available via direct `require` but not exported in
+`require("sia.tools.extra")`:
+
+- **search_papers** - Search for research articles using the CORE API
+    (`require("sia.tools.extra.search_papers")`)
+- **paper** - Retrieve a specific research paper by its CORE ID
+    (`require("sia.tools.extra.paper")`)
 
 
-ADVANCED CAPABILITIES                        *sia-tools-advanced-capabilities*
+ADVANCED CAPABILITIES ~
 
-- **task** - Launch autonomous agents with access to read-only tools
-    (glob, grep, read) for complex search tasks
-- **compact_conversation** - Intelligently summarize and compact conversation
-    history when topics change
-- **history** - Access and search saved conversation history (see
+- **history** - Access and search saved conversation history with search,
+    view, and table-of-contents modes (see
     Conversation History <concepts.md#conversation-history>)
+- **plan** - Planning tool for task decomposition
 
 
-TASK MANAGEMENT                                    *sia-tools-task-management*
+ADDING TOOLS TO ACTIONS                    *sia-tools-adding-tools-to-actions*
 
-- **write_todos** - Create and manage todo lists for tracking multi-step tasks
-    (add new todos, update status, or clear completed items)
-- **read_todos** - Read the current todo list with IDs, descriptions, and
-    status for each item
+You can include any combination of core and extra tools in your custom actions:
+
+>lua
+    require("sia").setup({
+      actions = {
+        research = {
+          mode = "chat",
+          tools = function()
+            local tools = require("sia.tools")
+            local extra = require("sia.tools.extra")
+            return {
+              tools.read,
+              tools.grep,
+              tools.glob,
+              tools.bash,
+              extra.lsp,
+              extra.workspace,
+              extra.history,
+            }
+          end,
+          -- ...
+        },
+      }
+    })
+<
 
 The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
@@ -932,8 +1138,9 @@ a floating window at the top of your screen:
     󱇥 [conversation-name] Execute bash command 'git status'
 <
 
-The notification uses the `SiaApprove` or `SiaApproveWarn` highlight group
-(both linked to `StatusLine` by default).
+The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn`
+highlight groups depending on the risk level (all linked to `StatusLine` by
+default).
 
 
 2. **Process approvals**: When you’re ready, use one of these functions:
@@ -981,7 +1188,11 @@ or you can provide your own custom notifier.
 
 The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
-- `show(conversation_name, msg, total)` - Show/update the notification. Called whenever the message changes (both initially and on updates).
+- `show(args)` - Show/update the notification. Called whenever the message changes. `args` is a table with:
+    - `level` - Risk level (`"safe"`, `"info"`, or `"warn"`)
+    - `name` - Conversation name
+    - `message` - The notification message
+    - `total` - Number of pending approvals
 - `clear()` - Clear/dismiss the notification
 
 **Example using nvim-notify:**
@@ -997,8 +1208,8 @@ The `notifier` must implement the `sia.ApprovalNotifier` interface:
                 local notif_id = nil
     
                 return {
-                  show = function(_, msg, _)
-                    notif_id = vim.notify(msg, vim.log.levels.INFO, {
+                  show = function(args)
+                    notif_id = vim.notify(args.message, vim.log.levels.INFO, {
                       title = "Sia Approval",
                       timeout = false,
                       replace = notif_id,  -- Replace if exists, create if not
@@ -1057,9 +1268,9 @@ The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
 **Traditional (Blocking) Mode:**
 
-If you prefer immediate prompts (the default behavior), keep `async = false`.
-Tool operations will show an approval prompt immediately and wait for your
-response before continuing.
+If you prefer immediate prompts (the default behavior), keep `async.enable =
+false`. Tool operations will show an approval prompt immediately and wait for
+your response before continuing.
 
 
 AGENT MEMORY                                  *sia-core-concepts-agent-memory*
@@ -1234,7 +1445,7 @@ that agent
 
 You can view and track running agents in the tasks window:
 
-- **In chat:** Press `t` (or your configured binding) to toggle the tasks window
+- **In chat:** Press `a` (or your configured binding) to toggle the tasks window
 - **Programmatically:** Call `require("sia").tasks("toggle")`
 
 **Tips:**
@@ -1369,9 +1580,9 @@ When defining custom actions, you can configure the following options:
 - `system` - Array of system-level instructions (optional)
 - `model` - Override the default model for this action (optional)
 - `temperature` - Override the default temperature (optional)
-- `tools` - Array of tools available to the action (optional)
+- `tools` - Function `(model) -> tool[]` returning tools available to the action (optional)
 - `ignore_tool_confirm` - Skip confirmation prompts for tool usage (optional)
-- `input` - How to handle user input: `"ignore"`, `"required"`, or `"optional"` (default: `"optional"`)
+- `input` - How to handle user input: `"require"` (prompt must include user text) or `"ignore"` (user text is not used). If omitted, user text is optional.
 - `range` - Whether a range/selection is required (default: `false`)
 - `capture` - Function to automatically capture context (e.g., using treesitter)
 - `enabled` - Function or boolean to determine if action is available
@@ -1397,8 +1608,8 @@ For `mode = "chat"`:
 
 For `mode = "hidden"`:
 
-- `hidden.callback` - Function called with the model’s response
-- `hidden.messages` - Status messages: `{ on_start = "...", on_progress = {...} }`
+- `hidden.callback` - Function called with `(ctx, content, usage)` when the response completes
+- `hidden.notify` - Function called with status messages during execution
 
 
 BUILT-IN INSTRUCTIONS ~
@@ -1428,7 +1639,9 @@ You can reference these by their string name in the `instructions` array:
 
 These are typically used in the `system` array for specific modes:
 
-- `"default_system"` - The default system prompt for coding tasks
+- `"model_system"` - Model-dependent system prompt: uses GPT-5 specific instructions for GPT-5 models, falls back to a minimal prompt for others (default for chat action)
+- `"default_system"` - A comprehensive default system prompt for coding tasks with collaboration guidelines
+- `"minimal_system"` - A minimal system prompt suitable for simpler interactions
 - `"prose_system"` - System prompt optimized for writing and prose editing
 - `"insert_system"` - System prompt for insert mode (instructs to output only insertable text)
 - `"diff_system"` - System prompt for diff mode (instructs to output replacement text)
@@ -1493,9 +1706,6 @@ EXAMPLE 1: SIMPLE CHAT ACTION ~
           },
           range = true,
         },
-    
-        -- Customize a built-in action
-        fix = require("sia.actions").fix({chat = true})
       }
     })
 <

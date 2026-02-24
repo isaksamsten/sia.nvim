@@ -28,9 +28,9 @@ When defining custom actions, you can configure the following options:
 - `system` - Array of system-level instructions (optional)
 - `model` - Override the default model for this action (optional)
 - `temperature` - Override the default temperature (optional)
-- `tools` - Array of tools available to the action (optional)
+- `tools` - Function `(model) -> tool[]` returning tools available to the action (optional)
 - `ignore_tool_confirm` - Skip confirmation prompts for tool usage (optional)
-- `input` - How to handle user input: `"ignore"`, `"required"`, or `"optional"` (default: `"optional"`)
+- `input` - How to handle user input: `"require"` (prompt must include user text) or `"ignore"` (user text is not used). If omitted, user text is optional.
 - `range` - Whether a range/selection is required (default: `false`)
 - `capture` - Function to automatically capture context (e.g., using treesitter)
 - `enabled` - Function or boolean to determine if action is available
@@ -56,8 +56,8 @@ For `mode = "chat"`:
 
 For `mode = "hidden"`:
 
-- `hidden.callback` - Function called with the model's response
-- `hidden.messages` - Status messages: `{ on_start = "...", on_progress = {...} }`
+- `hidden.callback` - Function called with `(ctx, content, usage)` when the response completes
+- `hidden.notify` - Function called with status messages during execution
 
 ### Built-in Instructions
 
@@ -88,7 +88,9 @@ You can reference these by their string name in the `instructions` array:
 
 These are typically used in the `system` array for specific modes:
 
-- `"default_system"` - The default system prompt for coding tasks
+- `"model_system"` - Model-dependent system prompt: uses GPT-5 specific instructions for GPT-5 models, falls back to a minimal prompt for others (default for chat action)
+- `"default_system"` - A comprehensive default system prompt for coding tasks with collaboration guidelines
+- `"minimal_system"` - A minimal system prompt suitable for simpler interactions
 - `"prose_system"` - System prompt optimized for writing and prose editing
 - `"insert_system"` - System prompt for insert mode (instructs to output only insertable text)
 - `"diff_system"` - System prompt for diff mode (instructs to output replacement text)
@@ -150,9 +152,6 @@ require("sia").setup({
       },
       range = true,
     },
-
-    -- Customize a built-in action
-    fix = require("sia.actions").fix({chat = true})
   }
 })
 ```
