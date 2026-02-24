@@ -89,13 +89,12 @@ end
 --- @field hide boolean?
 --- @field kind string?
 --- @field ephemeral boolean?
-
 --- @field content (string|sia.InstructionContent[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
 --- @field description string?
---- @field status ("outdated"|"failed"|"superseded")?
+--- @field status ("outdated"|"failed"|"superseded"|"dropped")?
 local Message = {}
 Message.__index = Message
 
@@ -930,6 +929,10 @@ function Conversation:prepare_messages()
     --- @return boolean
     :filter(function(m)
       if self.enable_supersede and m.status == "superseded" then
+        return false
+      end
+
+      if m.status == "dropped" then
         return false
       end
 

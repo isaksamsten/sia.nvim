@@ -132,8 +132,6 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
 - `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
-- `SiaCompact` - Summarize and compact the conversation history (replaces messages with an AI-generated summary to free context window space)
 - `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation's JSON payload in a new buffer
 

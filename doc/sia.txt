@@ -1,4 +1,4 @@
-*sia.txt*           For Neovim >= 0.11           Last change: 2026 February 24
+*sia.txt*           For Neovim >= 0.11           Last change: 2026 February 25
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -33,6 +33,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Conversation History              |sia-core-concepts-conversation-history|
   - Custom Agent Registry            |sia-core-concepts-custom-agent-registry|
   - Concurrent Conversations      |sia-core-concepts-concurrent-conversations|
+  - Context Window Management    |sia-core-concepts-context-window-management|
 7. Reviewing Changes                                   |sia-reviewing-changes|
   - Example Workflow                  |sia-reviewing-changes-example-workflow|
   - Live Example                          |sia-reviewing-changes-live-example|
@@ -211,6 +212,13 @@ Configure Sia in your `init.lua`:
           --   return { "-lc" }
           -- end,
         },
+    
+        -- Automatic context window management
+        context_management = {
+          prune_threshold = 0.85,    -- Start pruning at 85% of context window
+          target_after_prune = 0.70, -- Target 70% after pruning
+          compact_ratio = 0.5,       -- Fraction of messages to compact (last resort)
+        },
       },
     
       -- Add custom actions (see Actions documentation)
@@ -257,6 +265,34 @@ model configuration:
 Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier` in the
 model configuration.
+
+
+SETTING CONTEXT WINDOW SIZE ~
+
+All built-in models include a `context_window` parameter (in tokens) that tells
+Sia the maximum context the model supports. If you define custom models, you
+should set this so that Sia can track context usage and automatically manage
+conversation length:
+
+>lua
+    require("sia").setup({
+      models = {
+        ["openrouter/my-model"] = {
+          "openrouter",
+          "provider/model-name",
+          context_window = 128000,  -- 128K tokens
+        },
+      }
+    })
+<
+
+When `context_window` is set, the winbar displays a context budget indicator
+showing what percentage of the model’s context window is currently in use.
+This also enables automatic context management (see Context Window Management
+<concepts.md#context-window-management>).
+
+If `context_window` is not set for a model, context tracking and automatic
+pruning are disabled for that model — conversations will grow without limits.
 
 The winbar is enabled by default in chat windows. You can customize or disable
 it via the `settings.chat.winbar` option (set to `nil` to disable).
@@ -554,7 +590,10 @@ RISK LEVEL EXAMPLES
 
 CONTEXT MANAGEMENT ~
 
-Control how Sia manages conversation history and tool call pruning:
+Sia has two layers of context management that work together:
+
+**Tool call pruning** (`context`): Controls how individual tool call results
+are pruned within a conversation based on count:
 
 - **Tool pruning**: Use `context.max_tool` to set when pruning occurs and
     `context.keep` to control how many recent tool calls are retained
@@ -563,6 +602,22 @@ Control how Sia manages conversation history and tool call pruning:
 - **Input parameter clearing**: Use `context.clear_input` to also remove tool
     input parameters during pruning
 
+**Context window management** (`context_management`): Automatically prevents
+conversations from exceeding the model’s context window. See Context Window
+Management <concepts.md#context-window-management> for details on how this
+works. Configure the thresholds:
+
+- **prune_threshold** (default: `0.85`): Start pruning when estimated tokens
+    reach this fraction of the context window
+- **target_after_prune** (default: `0.70`): Target this fraction after pruning
+- **compact_ratio** (default: `0.5`): Fraction of oldest messages to include
+    when compacting (last resort)
+
+
+  **Note**: Compaction uses `fast_model` to generate summaries. Ensure your
+  `fast_model` has a sufficiently large context window (e.g.,
+  `openai/gpt-4.1-mini` with 1M tokens) to accommodate the messages being
+  summarized.
 
 AUTO-CONTINUE BEHAVIOR ~
 
@@ -812,8 +867,6 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
 - `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaClear!` - Clear all non-system messages from the conversation (fresh start)
-- `SiaCompact` - Summarize and compact the conversation history (replaces messages with an AI-generated summary to free context window space)
 - `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation’s JSON payload in a new buffer
 
@@ -1483,6 +1536,78 @@ re-read the modified version)
 
 This allows multiple conversations to work independently while staying aware of
 each other’s changes.
+
+
+CONTEXT WINDOW MANAGEMENT        *sia-core-concepts-context-window-management*
+
+Long-running conversations — especially those with many tool calls — can
+grow to exceed a model’s context window. Sia automatically manages this by
+estimating the current token usage and pruning old messages when the
+conversation approaches the limit.
+
+**How token estimation works:**
+
+Sia uses a fast heuristic to estimate tokens: it sums up the byte size of all
+message content, tool call arguments, and tool results, then divides by 4
+(roughly 4 bytes per token for English text and code). This runs only at the
+start of each round (before each API call), not on every render, so it has
+negligible performance impact.
+
+**When pruning is triggered:**
+
+Pruning activates when the estimated token count exceeds `prune_threshold`
+(default: 85%) of the model’s `context_window`. Sia then applies a series of
+increasingly aggressive strategies to bring usage down to `target_after_prune`
+(default: 70%):
+
+1. **Drop oldest tool call pairs**: Assistant messages containing tool calls and
+their matching tool result messages are fully removed from the conversation,
+starting from the oldest. Messages that are already marked as outdated (from
+cross-conversation invalidation) are dropped first, since they’re already
+stale. Tool names listed in `context.exclude` (e.g., `grep`, `glob`) are never
+dropped.
+
+
+2. **Compact the conversation** (last resort): If dropping all eligible tool calls
+isn’t enough, Sia summarizes the entire conversation history into a concise
+summary using the `fast_model`. The summary replaces the old messages while
+preserving key technical details, decisions, and file paths.
+
+
+
+**Winbar indicator:**
+
+When a model has `context_window` defined, the winbar displays a context budget
+indicator showing estimated usage as a percentage of the available window:
+
+>
+    ▰▱▱ 28% of 200K
+<
+
+The indicator changes color as usage increases: - Normal highlight below 85% -
+Warning highlight (`DiagnosticWarn`) at 85%+ - Error highlight
+(`DiagnosticError`) at 95%+
+
+**Relationship to tool call pruning:**
+
+Context window management works alongside — not instead of — the existing
+tool call pruning system (`context.max_tool` / `context.keep`). Tool call
+pruning operates based on _count_ (how many tool calls exist), while context
+window management operates based on _size_ (how many tokens the conversation
+uses). Both can be active simultaneously: tool pruning marks old results as
+outdated (replacing content with a short note), and context window management
+can then fully drop those outdated messages when space is needed.
+
+**Configuration:**
+
+See Context Management <configuration.md#context-management> for the available
+threshold settings.
+
+**Defining context windows for custom models:**
+
+See Setting Context Window Size <configuration.md#setting-context-window-size>
+for how to add `context_window` to your model definitions. All built-in models
+already have this set.
 
 
 ==============================================================================

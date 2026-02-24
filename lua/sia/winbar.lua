@@ -6,6 +6,8 @@ local ICONS = {
   agents = " ",
   tool = " ",
   queue = " ",
+  total_tokens = "󰚾 ",
+  price = " ",
 }
 
 local SPINNER_FRAMES = { "", "", "", "", "", "" }
@@ -157,37 +159,47 @@ end
 --- @return string
 local function render_bar(percent, width)
   width = width or 5
-  local filled = math.floor(percent * width + 0.5)
+  local filled = math.min(width, math.floor(percent * width + 0.5))
   local empty = width - filled
   return string.rep("▰", filled) .. string.rep("▱", empty)
 end
 
 --- @param data sia.WinbarData
 --- @return string
-local function format_right_metric(data)
-  local tokens = nil
-  if data.stats and data.stats.right then
-    tokens = data.stats.right
-  elseif data.conversation then
-    local usage = data.conversation:get_cumulative_usage()
-    if usage and usage.total > 0 then
-      tokens = common.format_token_count(usage.total)
-    end
+local function context_budget_section(data)
+  local budget = data.context_budget
+  if not budget then
+    return ""
   end
 
+  local visual = render_bar(math.min(budget.percent, 1.0), 6)
+  local hl = "NonText"
+  if budget.percent >= 0.95 then
+    hl = "DiagnosticError"
+  elseif budget.percent >= 0.85 then
+    hl = "DiagnosticWarn"
+  end
+  local limit_str = common.format_token_count(budget.limit)
+  local estimate_str = common.format_token_count(budget.estimated)
+  return section(hl, string.format("%s %s %s", estimate_str, visual, limit_str))
+end
+
+--- @param data sia.WinbarData
+--- @return string
+local function format_right_metric(data)
   local bar = data.stats and data.stats.bar
   local parts = {}
 
-  if tokens and tokens ~= "" then
-    table.insert(parts, "%#NonText# %#Normal#" .. tokens)
-  end
-
   if bar and bar.text and vim.startswith(vim.trim(bar.text), "$") then
-    table.insert(parts, "%#NonText# %#Normal#" .. vim.trim(bar.text))
+    table.insert(parts, "%#NonText#" .. ICONS.price .. vim.trim(bar.text))
   elseif bar and bar.percent then
     local pct = math.floor(bar.percent * 100 + 0.5)
-    local visual = render_bar(bar.percent, 2)
-    table.insert(parts, "%#NonText#" .. visual .. " " .. pct .. "%%")
+    table.insert(parts, "%#NonText#" .. ICONS.price .. pct .. "%%")
+  end
+
+  local budget_part = context_budget_section(data)
+  if budget_part ~= "" then
+    table.insert(parts, budget_part)
   end
 
   if #parts > 0 then
@@ -246,6 +258,7 @@ end
 --- @field stats sia.conversation.Stats?
 --- @field tool_status sia.WinbarToolStatus[]?
 --- @field status sia.WinbarStatus?
+--- @field context_budget { estimated: integer, limit: integer, percent: number }?
 --- @field spinner string?
 --- @field win integer
 --- @field buf integer
@@ -283,6 +296,7 @@ end
 --- @field last_usage_total integer
 --- @field tool_status sia.WinbarToolStatus[]?
 --- @field status sia.WinbarStatus?
+--- @field context_budget { estimated: integer, limit: integer, percent: number }?
 --- @field spinner_frame integer
 
 --- @type table<integer, sia.WinbarEntry>
@@ -321,6 +335,7 @@ local function render_one(buf, entry)
     stats = entry.stats,
     status = entry.status,
     tool_status = entry.tool_status,
+    context_budget = entry.context_budget,
     spinner = SPINNER_FRAMES[entry.spinner_frame],
     win = win,
     buf = buf,
@@ -485,6 +500,17 @@ function M.update_status(buf, status)
   local entry = entries[buf]
   if entry then
     entry.status = status
+    M.schedule_render()
+  end
+end
+
+--- Update context budget for a chat buffer
+--- @param buf integer
+--- @param budget { estimated: integer, limit: integer, percent: number }?
+function M.update_context_budget(buf, budget)
+  local entry = entries[buf]
+  if entry then
+    entry.context_budget = budget
     M.schedule_render()
   end
 end

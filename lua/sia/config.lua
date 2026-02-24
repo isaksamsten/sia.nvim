@@ -748,6 +748,11 @@ end
 --- @field clear_input boolean?
 --- @field keep integer?
 
+--- @class sia.config.ContextManagement
+--- @field prune_threshold number? Start pruning when context exceeds this fraction (default 0.85)
+--- @field target_after_prune number? Target fraction after pruning tool calls (default 0.70)
+--- @field compact_ratio number? Fraction of oldest messages to include in compaction (default 0.5)
+
 --- @class sia.config.Settings
 --- @field model string
 --- @field fast_model string
@@ -756,6 +761,7 @@ end
 --- @field temperature number
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
+--- @field context_management sia.config.ContextManagement?
 --- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
 --- @field chat sia.config.Chat
 --- @field diff sia.config.Diff
@@ -799,116 +805,176 @@ end
 M._raw_options = {
   providers = {},
   models = {
-    ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
-    ["zai/glm-4.6"] = { "zai", "GLM-4.6" },
-    ["openai/gpt-5.2"] = { "openai_responses", "gpt-5.2", can_reason = true },
+    ["zai/glm-4.5"] = { "zai", "GLM-4.5", context_window = 128000 },
+    ["zai/glm-4.6"] = { "zai", "GLM-4.6", context_window = 128000 },
+    ["openai/gpt-5.2"] = {
+      "openai_responses",
+      "gpt-5.2",
+      can_reason = true,
+      context_window = 400000,
+    },
     ["openai/gpt-5.2-codex"] = {
       "openai_responses",
       "gpt-5.2-codex",
       can_reason = true,
+      context_window = 400000,
     },
-    ["openai/gpt-5.1"] = { "openai_responses", "gpt-5.1", can_reason = true },
+    ["openai/gpt-5.1"] = {
+      "openai_responses",
+      "gpt-5.1",
+      can_reason = true,
+      context_window = 400000,
+    },
     ["openai/gpt-5.1-codex"] = {
       "openai_responses",
       "gpt-5.1-codex",
       can_reason = true,
+      context_window = 400000,
     },
-    ["codex/gpt-5.3-codex"] = { "codex", "gpt-5.3-codex", can_reason = true },
-    ["codex/gpt-5.2-codex"] = { "codex", "gpt-5.2-codex", can_reason = true },
-    ["codex/gpt-5.2"] = { "codex", "gpt-5.2", can_reason = true },
-    ["codex/gpt-5.1-codex"] = { "codex", "gpt-5.1-codex", can_reason = true },
-    ["codex/gpt-5.1-codex-mini"] = { "codex", "gpt-5.1-codex-mini", can_reason = true },
-    ["openai/gpt-5"] = { "openai_responses", "gpt-5" },
-    ["openai/gpt-5-codex"] = { "openai_responses", "gpt-5-codex" },
-    ["openai/gpt-4.1"] = { "openai", "gpt-4.1" },
-    ["openai/gpt-4.1-mini"] = { "openai", "gpt-4.1-mini" },
-    ["openai/gpt-4.1-nano"] = { "openai", "gpt-4.1-nano" },
-    ["openai/o3"] = { "openai", "o3", can_reason = true },
-    ["openai/o4-mini"] = { "openai", "o4-mini", can_reason = true },
-    ["openai/o3-mini"] = { "openai", "o3-mini", can_reason = true },
-    ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1" },
-    ["copilot/gpt-5.2"] = { "copilot", "gpt-5.2" },
-    ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini" },
+    ["openai/gpt-5"] = { "openai_responses", "gpt-5", context_window = 400000 },
+    ["openai/gpt-5-codex"] = {
+      "openai_responses",
+      "gpt-5-codex",
+      context_window = 400000,
+    },
+    ["openai/gpt-4.1"] = { "openai", "gpt-4.1", context_window = 1047576 },
+    ["codex/gpt-5.3-codex"] = {
+      "codex",
+      "gpt-5.3-codex",
+      can_reason = true,
+      context_window = 400000,
+    },
+    ["codex/gpt-5.2-codex"] = {
+      "codex",
+      "gpt-5.2-codex",
+      can_reason = true,
+      context_window = 400000,
+    },
+    ["codex/gpt-5.2"] = {
+      "codex",
+      "gpt-5.2",
+      can_reason = true,
+      context_window = 400000,
+    },
+    ["codex/gpt-5.1-codex"] = {
+      "codex",
+      "gpt-5.1-codex",
+      can_reason = true,
+      context_window = 400000,
+    },
+    ["codex/gpt-5.1-codex-mini"] = {
+      "codex",
+      "gpt-5.1-codex-mini",
+      can_reason = true,
+      context_window = 400000,
+    },
+    ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1", context_window = 128000 },
+    ["copilot/gpt-5.2"] = { "copilot", "gpt-5.2", context_window = 128000 },
+    ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini", context_window = 128000 },
     ["copilot/gpt-5.2-codex"] = {
       "copilot_responses",
       "gpt-5.2-codex",
       can_reason = true,
+      context_window = 128000,
     },
-    ["copilot/claude-haiku-4.5"] = { "copilot", "claude-haiku-4.5" },
-    ["copilot/claude-opus-4.6"] = { "copilot", "claude-opus-4.6" },
-    ["copilot/claude-sonnet-4.5"] = { "copilot", "claude-sonnet-4.5" },
-    ["copilot/gemini-3-pro"] = { "copilot", "gemini-3-pro-preview" },
-    ["copilot/gemini-3-flash"] = { "copilot", "gemini-3-flash-preview" },
-    ["copilot/grok-code-fast-1"] = { "copilot", "grok-code-fast-1" },
-    ["anthropic/claude-sonnet-4.5"] = { "anthropic", "claude-4.5-sonnet" },
+    ["copilot/claude-haiku-4.5"] = {
+      "copilot",
+      "claude-haiku-4.5",
+      context_window = 128000,
+    },
+    ["copilot/claude-opus-4.6"] = {
+      "copilot",
+      "claude-opus-4.6",
+      context_window = 128000,
+    },
+    ["copilot/claude-sonnet-4.5"] = {
+      "copilot",
+      "claude-sonnet-4.5",
+      context_window = 128000,
+    },
+    ["copilot/claude-sonnet-4.6"] = {
+      "copilot",
+      "claude-sonnet-4.6",
+      context_window = 128000,
+    },
+    ["copilot/gemini-3-pro"] = {
+      "copilot",
+      "gemini-3-pro-preview",
+      context_window = 128000,
+    },
+    ["copilot/gemini-3-flash"] = {
+      "copilot",
+      "gemini-3-flash-preview",
+      context_window = 128000,
+    },
+    ["copilot/grok-code-fast-1"] = {
+      "copilot",
+      "grok-code-fast-1",
+      context_window = 109000,
+    },
+    ["anthropic/claude-sonnet-4.5"] = {
+      "anthropic",
+      "claude-4.5-sonnet",
+      context_window = 200000,
+    },
     ["openrouter/claude-sonnet-4"] = {
       "openrouter",
       "anthropic/claude-sonnet-4",
       pricing = { input = 3.00, output = 15.00 },
       cache_multiplier = { read = 0.1, write = 1.25 },
+      context_window = 200000,
     },
     ["openrouter/claude-sonnet-4.5"] = {
       "openrouter",
       "anthropic/claude-sonnet-4.5",
       pricing = { input = 3.00, output = 15.00 },
       cache_multiplier = { read = 0.1, write = 1.25 },
+      context_window = 200000,
+    },
+    ["openrouter/claude-sonnet-4.6"] = {
+      "openrouter",
+      "anthropic/claude-sonnet-4.6",
+      pricing = { input = 3.00, output = 15.00 },
+      cache_multiplier = { read = 0.1, write = 1.25 },
+      context_window = 200000,
     },
     ["openrouter/claude-haiku-4.5"] = {
       "openrouter",
       "anthropic/claude-haiku-4.5",
       pricing = { input = 1.00, output = 5.00 },
       cache_multiplier = { read = 0.1, write = 1.25 },
+      context_window = 200000,
     },
     ["openrouter/gemini-2.5-pro"] = {
       "openrouter",
       "google/gemini-2.5-pro",
       pricing = { input = 1.25, output = 5.00 },
       cache_multiplier = { read = 0.1, write = 1.25 },
+      context_window = 1000000,
     },
     ["openrouter/glm-4.5"] = {
       "openrouter",
       "z-ai/glm-4.5",
       pricing = { input = 0.35, output = 2.00 },
+      context_window = 128000,
     },
     ["openrouter/glm-4.6"] = {
       "openrouter",
       "z-ai/glm-4.6",
       pricing = { input = 0.45, output = 1.50 },
+      context_window = 128000,
     },
     ["openrouter/qwen3-coder"] = {
       "openrouter",
       "qwen/qwen3-coder",
       pricing = { input = 0.07, output = 0.26 },
+      context_window = 262144,
     },
     ["openrouter/kimi-k2"] = {
       "openrouter",
       "moonshotai/kimi-k2",
       pricing = { input = 0.40, output = 2.0 },
-    },
-    ["openrouter/gpt-5"] = {
-      "openrouter",
-      "openai/gpt-5",
-      pricing = { input = 1.25, output = 10.00 },
-    },
-    ["openrouter/gpt-5-codex"] = {
-      "openrouter",
-      "openai/gpt-5-codex",
-      pricing = { input = 1.25, output = 10.00 },
-    },
-    ["openrouter/gpt-5-mini"] = {
-      "openrouter",
-      "openai/gpt-5-mini",
-      pricing = { input = 0.25, output = 2.0 },
-    },
-    ["openrouter/grok-code-fast-1"] = {
-      "openrouter",
-      "x-ai/grok-code-fast-1",
-      pricing = { input = 0.20, output = 1.50 },
-    },
-    ["openrouter/qwen3-next"] = {
-      "openrouter",
-      "qwen/qwen3-next-80b-a3b-instruct",
-      pricing = { input = 0.10, output = 1.10 },
+      context_window = 131072,
     },
   },
   embeddings = {
@@ -918,17 +984,22 @@ M._raw_options = {
   instructions = {},
   --- @type sia.config.Settings
   settings = {
-    model = "openai/gpt-4.1",
-    fast_model = "openai/gpt-4.1-mini",
-    plan_model = "openai/o3-mini",
+    model = "openai/gpt-5.2",
+    fast_model = "openai/gpt-4.1",
+    plan_model = "openai/gpt-5.2",
     embedding_model = "openai/text-embedding-3-small",
     icons = "emoji",
-    temperature = 0.3, -- default temperature
+    temperature = 0.3,
     context = {
       max_tool = 200,
       keep = 20,
       clear_input = true,
       exclude = { "grep", "glob", "read_todos" },
+    },
+    context_management = {
+      prune_threshold = 0.85,
+      target_after_prune = 0.70,
+      compact_ratio = 0.5,
     },
     chat = {
       cmd = "botright vnew",

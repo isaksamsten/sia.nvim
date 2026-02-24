@@ -159,6 +159,28 @@ function ChatStrategy:on_round_start()
     return false
   end
 
+  local context_manager = require("sia.context_manager")
+  context_manager.prune_if_needed(self.conversation, {
+    on_complete = function(pruned, compacted)
+      if compacted and self:buf_is_loaded() then
+        winbar.update_status(self.buf, nil)
+        self:redraw()
+      end
+      winbar.update_context_budget(
+        self.buf,
+        context_manager.get_budget(self.conversation)
+      )
+    end,
+    on_status = function(message)
+      if self:buf_is_loaded() then
+        winbar.update_status(self.buf, {
+          message = message,
+          status = "info",
+        })
+      end
+    end,
+  })
+
   self.canvas:update_assistant_extmark(
     self.assistant_extmark,
     { model = self.conversation.model:name() }

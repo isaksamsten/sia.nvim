@@ -353,3 +353,73 @@ When conversation A makes changes to a file using the edit/write/insert tools:
 This allows multiple conversations to work independently while staying aware of
 each other's changes.
 
+## Context Window Management
+
+Long-running conversations — especially those with many tool calls — can grow
+to exceed a model's context window. Sia automatically manages this by
+estimating the current token usage and pruning old messages when the
+conversation approaches the limit.
+
+**How token estimation works:**
+
+Sia uses a fast heuristic to estimate tokens: it sums up the byte size of all
+message content, tool call arguments, and tool results, then divides by 4
+(roughly 4 bytes per token for English text and code). This runs only at the
+start of each round (before each API call), not on every render, so it has
+negligible performance impact.
+
+**When pruning is triggered:**
+
+Pruning activates when the estimated token count exceeds `prune_threshold`
+(default: 85%) of the model's `context_window`. Sia then applies a series of
+increasingly aggressive strategies to bring usage down to `target_after_prune`
+(default: 70%):
+
+1. **Drop oldest tool call pairs**: Assistant messages containing tool calls
+   and their matching tool result messages are fully removed from the
+   conversation, starting from the oldest. Messages that are already marked
+   as outdated (from cross-conversation invalidation) are dropped first,
+   since they're already stale. Tool names listed in `context.exclude`
+   (e.g., `grep`, `glob`) are never dropped.
+
+2. **Compact the conversation** (last resort): If dropping all eligible tool
+   calls isn't enough, Sia summarizes the entire conversation history into a
+   concise summary using the `fast_model`. The summary replaces the old
+   messages while preserving key technical details, decisions, and file paths.
+
+**Winbar indicator:**
+
+When a model has `context_window` defined, the winbar displays a context budget
+indicator showing estimated usage as a percentage of the available window:
+
+```
+▰▱▱ 28% of 200K
+```
+
+The indicator changes color as usage increases:
+- Normal highlight below 85%
+- Warning highlight (`DiagnosticWarn`) at 85%+
+- Error highlight (`DiagnosticError`) at 95%+
+
+**Relationship to tool call pruning:**
+
+Context window management works alongside — not instead of — the existing tool
+call pruning system (`context.max_tool` / `context.keep`). Tool call pruning
+operates based on _count_ (how many tool calls exist), while context window
+management operates based on _size_ (how many tokens the conversation uses).
+Both can be active simultaneously: tool pruning marks old results as outdated
+(replacing content with a short note), and context window management can then
+fully drop those outdated messages when space is needed.
+
+**Configuration:**
+
+See [Context Management](configuration.md#context-management) for the
+available threshold settings.
+
+**Defining context windows for custom models:**
+
+See [Setting Context Window Size](configuration.md#setting-context-window-size)
+for how to add `context_window` to your model definitions. All built-in models
+already have this set.
+
+

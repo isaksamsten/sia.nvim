@@ -58,6 +58,13 @@ require("sia").setup({
       --   return { "-lc" }
       -- end,
     },
+
+    -- Automatic context window management
+    context_management = {
+      prune_threshold = 0.85,    -- Start pruning at 85% of context window
+      target_after_prune = 0.70, -- Target 70% after pruning
+      compact_ratio = 0.5,       -- Fraction of messages to compact (last resort)
+    },
   },
 
   -- Add custom actions (see Actions documentation)
@@ -101,6 +108,33 @@ require("sia").setup({
 Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier`
 in the model configuration.
+
+### Setting Context Window Size
+
+All built-in models include a `context_window` parameter (in tokens) that tells
+Sia the maximum context the model supports. If you define custom models, you
+should set this so that Sia can track context usage and automatically manage
+conversation length:
+
+```lua
+require("sia").setup({
+  models = {
+    ["openrouter/my-model"] = {
+      "openrouter",
+      "provider/model-name",
+      context_window = 128000,  -- 128K tokens
+    },
+  }
+})
+```
+
+When `context_window` is set, the winbar displays a context budget indicator
+showing what percentage of the model's context window is currently in use.
+This also enables automatic context management (see
+[Context Window Management](concepts.md#context-window-management)).
+
+If `context_window` is not set for a model, context tracking and automatic
+pruning are disabled for that model — conversations will grow without limits.
 
 The winbar is enabled by default in chat windows. You can customize or disable
 it via the `settings.chat.winbar` option (set to `nil` to disable).
@@ -388,7 +422,10 @@ async approval system to highlight tools differently.
 
 ### Context Management
 
-Control how Sia manages conversation history and tool call pruning:
+Sia has two layers of context management that work together:
+
+**Tool call pruning** (`context`): Controls how individual tool call results
+are pruned within a conversation based on count:
 
 - **Tool pruning**: Use `context.max_tool` to set when pruning occurs and
   `context.keep` to control how many recent tool calls are retained
@@ -396,6 +433,21 @@ Control how Sia manages conversation history and tool call pruning:
   should never be pruned (e.g., `["grep", "glob"]`)
 - **Input parameter clearing**: Use `context.clear_input` to also remove tool
   input parameters during pruning
+
+**Context window management** (`context_management`): Automatically prevents
+conversations from exceeding the model's context window. See
+[Context Window Management](concepts.md#context-window-management) for details
+on how this works. Configure the thresholds:
+
+- **`prune_threshold`** (default: `0.85`): Start pruning when estimated tokens
+  reach this fraction of the context window
+- **`target_after_prune`** (default: `0.70`): Target this fraction after pruning
+- **`compact_ratio`** (default: `0.5`): Fraction of oldest messages to include
+  when compacting (last resort)
+
+> **Note**: Compaction uses `fast_model` to generate summaries. Ensure your
+> `fast_model` has a sufficiently large context window (e.g., `openai/gpt-4.1-mini`
+> with 1M tokens) to accommodate the messages being summarized.
 
 ### Auto-Continue Behavior
 
