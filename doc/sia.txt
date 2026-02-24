@@ -1,4 +1,4 @@
-*sia.txt*           For Neovim >= 0.11           Last change: 2026 February 25
+*sia.txt*           For Neovim >= 0.11           Last change: 2026 February 24
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
