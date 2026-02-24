@@ -168,13 +168,8 @@ end
 --- @return string[] extra_paths
 local function get_skills_config()
   local config = require("sia.config")
-  local lc = config.get_local_config()
-  if not lc then
-    return {}, {}
-  end
-
-  local skill_names = lc.skills or {}
-  local extra_paths = lc.skills_extras or {}
+  local skill_names = config.options.settings.skills or {}
+  local extra_paths = config.options.settings.skills_extras or {}
 
   return skill_names, extra_paths
 end

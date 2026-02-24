@@ -20,6 +20,7 @@ local function match_any_flag(prefix)
   local config = require("sia.config")
   local models = match_flag(prefix, "m", config.options.models)
   if models then
+    table.sort(models)
     return models
   end
 
@@ -463,7 +464,7 @@ vim.api.nvim_create_user_command("SiaSave", function()
     return
   end
 
-  local embedding_model_name = require("sia.config").options.defaults.embedding_model
+  local embedding_model_name = require("sia.config").options.settings.embedding_model
   local embedding_model
   if embedding_model_name then
     embedding_model = require("sia.model").resolve(embedding_model_name)

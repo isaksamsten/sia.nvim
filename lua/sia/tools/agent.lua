@@ -157,7 +157,7 @@ Usage notes:
         local Conversation = require("sia.conversation").Conversation
         local new_conversation = Conversation:new({
           mode = "hidden",
-          model = agent_def.model or config.get_default_model("fast_model"),
+          model = agent_def.model or config.options.settings.fast_model,
           system = {
             {
               role = "system",

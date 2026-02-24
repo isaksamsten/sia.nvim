@@ -3,430 +3,438 @@ local M = {}
 --- @type table<string, {mtime: integer, json: table}?>
 local config_cache = {}
 
-local function validate_permission_patterns(patterns, path)
-  if type(patterns) ~= "table" then
-    return false, path .. " must be an array, got " .. type(patterns)
-  end
-
-  for i, pattern_def in ipairs(patterns) do
-    local pattern
-
-    if type(pattern_def) == "string" then
-      pattern = pattern_def
-    elseif type(pattern_def) == "table" then
-      if type(pattern_def.pattern) ~= "string" then
-        return false,
-          path .. "[" .. i .. "].pattern must be a string, got " .. type(
-            pattern_def.pattern
-          )
-      end
-      pattern = pattern_def.pattern
-    else
-      return false,
-        path
-          .. "["
-          .. i
-          .. "] must be a string or object with 'pattern' field, got "
-          .. type(pattern_def)
+local validate = {
+  permissions = function(permission)
+    if not permission then
+      return true
     end
 
-    local ok, regex = pcall(vim.regex, "\\v" .. pattern)
-    if not ok then
-      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
+    if type(permission) ~= "table" then
+      return false, "'permission' must be an object, got " .. type(permission)
     end
-    patterns[i] = regex
-  end
-  return true
-end
-
-local function validate_permissions(permission)
-  if not permission then
-    return true
-  end
-
-  if type(permission) ~= "table" then
-    return false, "'permission' must be an object, got " .. type(permission)
-  end
-
-  for section_name, section in pairs(permission) do
-    if type(section) ~= "table" then
-      return false,
-        "permission." .. section_name .. " must be an object, got " .. type(section)
-    end
-
-    for tool_name, tool_perms in pairs(section) do
-      if type(tool_perms) ~= "table" then
-        return false,
-          "permission."
-            .. section_name
-            .. "."
-            .. tool_name
-            .. " must be an object, got "
-            .. type(tool_perms)
+    local validate_permission_patterns = function(patterns, path)
+      if type(patterns) ~= "table" then
+        return false, path .. " must be an array, got " .. type(patterns)
       end
 
-      if not tool_perms.arguments then
-        return false,
-          "permission."
-            .. section_name
-            .. "."
-            .. tool_name
-            .. " must have an 'arguments' field"
-      end
+      for i, pattern_def in ipairs(patterns) do
+        local pattern
 
-      if type(tool_perms.arguments) ~= "table" then
-        return false,
-          "permission."
-            .. section_name
-            .. "."
-            .. tool_name
-            .. ".arguments must be an object, got "
-            .. type(tool_perms.arguments)
-      end
-
-      for param_name, patterns in pairs(tool_perms.arguments) do
-        local path = "permission."
-          .. section_name
-          .. "."
-          .. tool_name
-          .. ".arguments."
-          .. param_name
-        local ok, err = validate_permission_patterns(patterns, path)
-        if not ok then
-          return false, err
+        if type(pattern_def) == "string" then
+          pattern = pattern_def
+        elseif type(pattern_def) == "table" then
+          if type(pattern_def.pattern) ~= "string" then
+            return false,
+              path .. "[" .. i .. "].pattern must be a string, got " .. type(
+                pattern_def.pattern
+              )
+          end
+          pattern = pattern_def.pattern
+        else
+          return false,
+            path
+              .. "["
+              .. i
+              .. "] must be a string or object with 'pattern' field, got "
+              .. type(pattern_def)
         end
+
+        local ok, regex = pcall(vim.regex, "\\v" .. pattern)
+        if not ok then
+          return false,
+            "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
+        end
+        patterns[i] = regex
+      end
+      return true
+    end
+
+    for section_name, section in pairs(permission) do
+      if type(section) ~= "table" then
+        return false,
+          "permission." .. section_name .. " must be an object, got " .. type(section)
       end
 
-      if section_name == "allow" and tool_perms.choice ~= nil then
-        if
-          type(tool_perms.choice) ~= "number"
-          or tool_perms.choice < 1
-          or tool_perms.choice ~= math.floor(tool_perms.choice)
-        then
+      for tool_name, tool_perms in pairs(section) do
+        if type(tool_perms) ~= "table" then
           return false,
             "permission."
               .. section_name
               .. "."
               .. tool_name
-              .. ".choice must be a positive integer, got "
-              .. type(tool_perms.choice)
+              .. " must be an object, got "
+              .. type(tool_perms)
+        end
+
+        if not tool_perms.arguments then
+          return false,
+            "permission."
+              .. section_name
+              .. "."
+              .. tool_name
+              .. " must have an 'arguments' field"
+        end
+
+        if type(tool_perms.arguments) ~= "table" then
+          return false,
+            "permission."
+              .. section_name
+              .. "."
+              .. tool_name
+              .. ".arguments must be an object, got "
+              .. type(tool_perms.arguments)
+        end
+
+        for param_name, patterns in pairs(tool_perms.arguments) do
+          local path = "permission."
+            .. section_name
+            .. "."
+            .. tool_name
+            .. ".arguments."
+            .. param_name
+          local ok, err = validate_permission_patterns(patterns, path)
+          if not ok then
+            return false, err
+          end
+        end
+
+        if section_name == "allow" and tool_perms.choice ~= nil then
+          if
+            type(tool_perms.choice) ~= "number"
+            or tool_perms.choice < 1
+            or tool_perms.choice ~= math.floor(tool_perms.choice)
+          then
+            return false,
+              "permission."
+                .. section_name
+                .. "."
+                .. tool_name
+                .. ".choice must be a positive integer, got "
+                .. type(tool_perms.choice)
+          end
         end
       end
     end
-  end
-  return true
-end
-
-local function validate_risk_patterns(patterns, path)
-  if type(patterns) ~= "table" then
-    return false, path .. " must be an array, got " .. type(patterns)
-  end
-
-  local valid_levels = { safe = true, info = true, warn = true }
-
-  for i, pattern_def in ipairs(patterns) do
-    if type(pattern_def) ~= "table" then
-      return false,
-        path
-          .. "["
-          .. i
-          .. "] must be an object with 'pattern' and 'level' fields, got "
-          .. type(pattern_def)
-    end
-
-    if type(pattern_def.pattern) ~= "string" then
-      return false,
-        path .. "[" .. i .. "].pattern must be a string, got " .. type(
-          pattern_def.pattern
-        )
-    end
-
-    if type(pattern_def.level) ~= "string" then
-      return false,
-        path .. "[" .. i .. "].level must be a string, got " .. type(pattern_def.level)
-    end
-
-    if not valid_levels[pattern_def.level] then
-      return false,
-        path
-          .. "["
-          .. i
-          .. "].level must be one of 'safe', 'info', or 'warn', got '"
-          .. pattern_def.level
-          .. "'"
-    end
-
-    local ok, regex = pcall(vim.regex, "\\v" .. pattern_def.pattern)
-    if not ok then
-      return false, "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
-    end
-
-    patterns[i] = { level = pattern_def.level, regex = regex }
-  end
-  return true
-end
-
-local function validate_risk(risk)
-  if not risk then
     return true
-  end
+  end,
 
-  if type(risk) ~= "table" then
-    return false, "'risk' must be an object, got " .. type(risk)
-  end
-
-  for tool_name, tool_risk in pairs(risk) do
-    if type(tool_risk) ~= "table" then
-      return false,
-        "risk." .. tool_name .. " must be an object, got " .. type(tool_risk)
+  risk = function(risk)
+    if not risk then
+      return true
     end
 
-    if not tool_risk.arguments then
-      return false, "risk." .. tool_name .. " must have an 'arguments' field"
+    if type(risk) ~= "table" then
+      return false, "'risk' must be an object, got " .. type(risk)
     end
-
-    if type(tool_risk.arguments) ~= "table" then
-      return false,
-        "risk." .. tool_name .. ".arguments must be an object, got " .. type(
-          tool_risk.arguments
-        )
-    end
-
-    for param_name, patterns in pairs(tool_risk.arguments) do
-      local path = "risk." .. tool_name .. ".arguments." .. param_name
-      local ok, err = validate_risk_patterns(patterns, path)
-      if not ok then
-        return false, err
+    local validate_risk_patterns = function(patterns, path)
+      if type(patterns) ~= "table" then
+        return false, path .. " must be an array, got " .. type(patterns)
       end
+
+      local valid_levels = { safe = true, info = true, warn = true }
+
+      for i, pattern_def in ipairs(patterns) do
+        if type(pattern_def) ~= "table" then
+          return false,
+            path
+              .. "["
+              .. i
+              .. "] must be an object with 'pattern' and 'level' fields, got "
+              .. type(pattern_def)
+        end
+
+        if type(pattern_def.pattern) ~= "string" then
+          return false,
+            path .. "[" .. i .. "].pattern must be a string, got " .. type(
+              pattern_def.pattern
+            )
+        end
+
+        if type(pattern_def.level) ~= "string" then
+          return false,
+            path .. "[" .. i .. "].level must be a string, got " .. type(
+              pattern_def.level
+            )
+        end
+
+        if not valid_levels[pattern_def.level] then
+          return false,
+            path
+              .. "["
+              .. i
+              .. "].level must be one of 'safe', 'info', or 'warn', got '"
+              .. pattern_def.level
+              .. "'"
+        end
+
+        local ok, regex = pcall(vim.regex, "\\v" .. pattern_def.pattern)
+        if not ok then
+          return false,
+            "invalid regex pattern in " .. path .. "[" .. i .. "]: " .. regex
+        end
+
+        patterns[i] = { level = pattern_def.level, regex = regex }
+      end
+      return true
     end
-  end
-  return true
-end
 
-local function validate_context(context)
-  if not context then
-    return true
-  end
-
-  if type(context) ~= "table" then
-    return false, "'context' must be an object, got " .. type(context)
-  end
-
-  if context.max_tool ~= nil then
-    if
-      type(context.max_tool) ~= "number"
-      or context.max_tool < 0
-      or context.max_tool ~= math.floor(context.max_tool)
-    then
-      return false,
-        "context.max_tool must be a non-negative integer, got " .. type(
-          context.max_tool
-        )
-    end
-  end
-
-  if context.exclude ~= nil then
-    if type(context.exclude) ~= "table" then
-      return false, "context.exclude must be an array, got " .. type(context.exclude)
-    end
-
-    for i, item in ipairs(context.exclude) do
-      if type(item) ~= "string" then
+    for tool_name, tool_risk in pairs(risk) do
+      if type(tool_risk) ~= "table" then
         return false,
-          "context.exclude[" .. i .. "] must be a string, got " .. type(item)
+          "risk." .. tool_name .. " must be an object, got " .. type(tool_risk)
       end
-    end
-  end
 
-  if context.clear_input ~= nil then
-    if type(context.clear_input) ~= "boolean" then
-      return false,
-        "context.clear_input must be a boolean, got " .. type(context.clear_input)
-    end
-  end
-
-  if context.keep ~= nil then
-    if
-      type(context.keep) ~= "number"
-      or context.keep < 0
-      or context.keep ~= math.floor(context.keep)
-    then
-      return false,
-        "context.keep must be a non-negative integer, got " .. type(context.keep)
-    end
-  end
-
-  return true
-end
-
-local function validate_skills(json)
-  if json.skills ~= nil then
-    if type(json.skills) ~= "table" then
-      return false, "'skills' must be an array of strings, got " .. type(json.skills)
-    end
-    for i, item in ipairs(json.skills) do
-      if type(item) ~= "string" then
-        return false, "skills[" .. i .. "] must be a string, got " .. type(item)
+      if not tool_risk.arguments then
+        return false, "risk." .. tool_name .. " must have an 'arguments' field"
       end
-    end
-  end
 
-  if json.skills_extras ~= nil then
-    if type(json.skills_extras) ~= "table" then
-      return false,
-        "'skills_extras' must be an array of strings, got " .. type(json.skills_extras)
-    end
-    for i, item in ipairs(json.skills_extras) do
-      if type(item) ~= "string" then
-        return false, "skills_extras[" .. i .. "] must be a string, got " .. type(item)
-      end
-    end
-  end
-
-  return true
-end
-
-local function validate_action(action)
-  if not action then
-    return true
-  end
-
-  if type(action) ~= "table" then
-    return false, "'action' must be an object, got " .. type(action)
-  end
-
-  local allowed_fields = { insert = true, diff = true, chat = true }
-  for field, value in pairs(action) do
-    if allowed_fields[field] and type(value) ~= "string" then
-      return false,
-        string.format("action.%s must be a string, got %s", field, type(value))
-    end
-
-    if not M.options.actions[value] then
-      return false, string.format("action.%s, %s is no a defined action", field, value)
-    end
-  end
-
-  return true
-end
-
-local function validate_model_field(json, field)
-  if json[field] ~= nil then
-    local model_value = json[field]
-    local model_name
-
-    if type(model_value) == "string" then
-      model_name = model_value
-    elseif type(model_value) == "table" then
-      if type(model_value.name) ~= "string" then
+      if type(tool_risk.arguments) ~= "table" then
         return false,
-          string.format(
-            "'%s' must be a string or table with 'name' field, got table without valid name",
-            field
+          "risk." .. tool_name .. ".arguments must be an object, got " .. type(
+            tool_risk.arguments
           )
       end
-      model_name = model_value.name
-    else
-      return false,
-        string.format(
-          "'%s' must be a string or table, got %s",
-          field,
-          type(model_value)
-        )
-    end
 
-    local aliases = json.aliases or {}
-    if not M.options.models[model_name] and not aliases[model_name] then
-      return false,
-        string.format(
-          "'%s' must be one of the allowed models or aliases, got '%s'",
-          field,
-          tostring(model_name)
-        )
+      for param_name, patterns in pairs(tool_risk.arguments) do
+        local path = "risk." .. tool_name .. ".arguments." .. param_name
+        local ok, err = validate_risk_patterns(patterns, path)
+        if not ok then
+          return false, err
+        end
+      end
     end
-  end
-  return true
-end
-
-local function validate_models_overrides(models)
-  if not models then
     return true
-  end
+  end,
 
-  if type(models) ~= "table" then
-    return false, "'models' must be an object, got " .. type(models)
-  end
-
-  for model_name, overrides in pairs(models) do
-    if type(model_name) ~= "string" then
-      return false, "models keys must be strings (model names)"
+  context = function(context)
+    if not context then
+      return true
     end
 
-    if not M.options.models[model_name] then
-      return false,
-        string.format(
-          "models.%s: '%s' is not a valid model name",
-          model_name,
-          model_name
-        )
+    if type(context) ~= "table" then
+      return false, "'context' must be an object, got " .. type(context)
     end
 
-    if type(overrides) ~= "table" then
-      return false,
-        string.format(
-          "models.%s must be an object with override parameters, got %s",
-          model_name,
-          type(overrides)
-        )
+    if context.max_tool ~= nil then
+      if
+        type(context.max_tool) ~= "number"
+        or context.max_tool < 0
+        or context.max_tool ~= math.floor(context.max_tool)
+      then
+        return false,
+          "context.max_tool must be a non-negative integer, got " .. type(
+            context.max_tool
+          )
+      end
     end
-  end
 
-  return true
-end
+    if context.exclude ~= nil then
+      if type(context.exclude) ~= "table" then
+        return false, "context.exclude must be an array, got " .. type(context.exclude)
+      end
 
-local function validate_aliases(aliases)
-  if not aliases then
+      for i, item in ipairs(context.exclude) do
+        if type(item) ~= "string" then
+          return false,
+            "context.exclude[" .. i .. "] must be a string, got " .. type(item)
+        end
+      end
+    end
+
+    if context.clear_input ~= nil then
+      if type(context.clear_input) ~= "boolean" then
+        return false,
+          "context.clear_input must be a boolean, got " .. type(context.clear_input)
+      end
+    end
+
+    if context.keep ~= nil then
+      if
+        type(context.keep) ~= "number"
+        or context.keep < 0
+        or context.keep ~= math.floor(context.keep)
+      then
+        return false,
+          "context.keep must be a non-negative integer, got " .. type(context.keep)
+      end
+    end
+
     return true
-  end
+  end,
 
-  if type(aliases) ~= "table" then
-    return false, "'aliases' must be an object, got " .. type(aliases)
-  end
-
-  for alias_name, alias_def in pairs(aliases) do
-    if type(alias_name) ~= "string" then
-      return false, "aliases keys must be strings"
+  skills = function(json)
+    if json.skills ~= nil then
+      if type(json.skills) ~= "table" then
+        return false, "'skills' must be an array of strings, got " .. type(json.skills)
+      end
+      for i, item in ipairs(json.skills) do
+        if type(item) ~= "string" then
+          return false, "skills[" .. i .. "] must be a string, got " .. type(item)
+        end
+      end
     end
 
-    if type(alias_def) ~= "table" then
-      return false,
-        string.format(
-          "aliases.%s must be an object with at least a 'name' field, got %s",
-          alias_name,
-          type(alias_def)
-        )
+    if json.skills_extras ~= nil then
+      if type(json.skills_extras) ~= "table" then
+        return false,
+          "'skills_extras' must be an array of strings, got " .. type(
+            json.skills_extras
+          )
+      end
+      for i, item in ipairs(json.skills_extras) do
+        if type(item) ~= "string" then
+          return false,
+            "skills_extras[" .. i .. "] must be a string, got " .. type(item)
+        end
+      end
     end
 
-    if type(alias_def.name) ~= "string" then
-      return false,
-        string.format(
-          "aliases.%s must have a 'name' field pointing to a valid model",
-          alias_name
-        )
+    return true
+  end,
+
+  action = function(action)
+    if not action then
+      return true
     end
 
-    if not M.options.models[alias_def.name] then
-      return false,
-        string.format(
-          "aliases.%s: '%s' is not a valid model name",
-          alias_name,
-          alias_def.name
-        )
+    if type(action) ~= "table" then
+      return false, "'action' must be an object, got " .. type(action)
     end
-  end
 
-  return true
-end
+    local allowed_fields = { insert = true, diff = true, chat = true }
+    for field, value in pairs(action) do
+      if allowed_fields[field] and type(value) ~= "string" then
+        return false,
+          string.format("action.%s must be a string, got %s", field, type(value))
+      end
+
+      if not M._raw_options.actions[value] then
+        return false,
+          string.format("action.%s, %s is no a defined action", field, value)
+      end
+    end
+
+    return true
+  end,
+
+  model_field = function(json, field)
+    if json[field] ~= nil then
+      local model_value = json[field]
+      local model_name
+
+      if type(model_value) == "string" then
+        model_name = model_value
+      elseif type(model_value) == "table" then
+        if type(model_value.name) ~= "string" then
+          return false,
+            string.format(
+              "'%s' must be a string or table with 'name' field, got table without valid name",
+              field
+            )
+        end
+        model_name = model_value.name
+      else
+        return false,
+          string.format(
+            "'%s' must be a string or table, got %s",
+            field,
+            type(model_value)
+          )
+      end
+
+      local aliases = json.aliases or {}
+      if not M._raw_options.models[model_name] and not aliases[model_name] then
+        return false,
+          string.format(
+            "'%s' must be one of the allowed models or aliases, got '%s'",
+            field,
+            tostring(model_name)
+          )
+      end
+    end
+    return true
+  end,
+
+  models_overrides = function(models)
+    if not models then
+      return true
+    end
+
+    if type(models) ~= "table" then
+      return false, "'models' must be an object, got " .. type(models)
+    end
+
+    for model_name, overrides in pairs(models) do
+      if type(model_name) ~= "string" then
+        return false, "models keys must be strings (model names)"
+      end
+
+      if not M._raw_options.models[model_name] then
+        return false,
+          string.format(
+            "models.%s: '%s' is not a valid model name",
+            model_name,
+            model_name
+          )
+      end
+
+      if type(overrides) ~= "table" then
+        return false,
+          string.format(
+            "models.%s must be an object with override parameters, got %s",
+            model_name,
+            type(overrides)
+          )
+      end
+    end
+
+    return true
+  end,
+
+  aliases = function(aliases)
+    if not aliases then
+      return true
+    end
+
+    if type(aliases) ~= "table" then
+      return false, "'aliases' must be an object, got " .. type(aliases)
+    end
+
+    for alias_name, alias_def in pairs(aliases) do
+      if type(alias_name) ~= "string" then
+        return false, "aliases keys must be strings"
+      end
+
+      if type(alias_def) ~= "table" then
+        return false,
+          string.format(
+            "aliases.%s must be an object with at least a 'name' field, got %s",
+            alias_name,
+            type(alias_def)
+          )
+      end
+
+      if type(alias_def.name) ~= "string" then
+        return false,
+          string.format(
+            "aliases.%s must have a 'name' field pointing to a valid model",
+            alias_name
+          )
+      end
+
+      if not M._raw_options.models[alias_def.name] then
+        return false,
+          string.format(
+            "aliases.%s: '%s' is not a valid model name",
+            alias_name,
+            alias_def.name
+          )
+      end
+    end
+
+    return true
+  end,
+}
 
 --- Normalize model config to a consistent table format
 --- @param model_value string|table|nil
@@ -439,50 +447,90 @@ local function normalize_model_config(model_value)
   if type(model_value) == "string" then
     return { name = model_value }
   elseif type(model_value) == "table" then
-    return vim.tbl_extend("force", {}, model_value)
+    return model_value
   end
 
   return nil
 end
 
---- Get model overrides from local config for a specific model
---- @param model_name string
---- @return table|nil parameters override parameters, or nil if no overrides
-function M.get_model_overrides(model_name)
-  local lc = M.get_local_config()
-  if not lc or not lc.models then
-    return nil
-  end
+local action_proxy = setmetatable({}, {
+  __index = function(_, mode)
+    local lc = M.get_local_config()
+    if lc and lc.action and lc.action[mode] then
+      return M._raw_options.actions[lc.action[mode]]
+    end
+    return M._raw_options.settings.actions[mode]
+  end,
+})
 
-  return lc.models[model_name]
-end
+local MODEL_KEYS = { model = true, fast_model = true, plan_model = true }
+local LOCAL_ONLY_KEYS = {
+  permission = true,
+  risk = true,
+  skills = true,
+  skills_extras = true,
+  aliases = true,
+  models = true,
+}
 
---- Resolve a model config by applying local config overrides
---- @param model_spec {name: string}
---- @return table
-function M.resolve_model_config(model_spec)
-  local name = model_spec.name
+--- The settings proxy. Indexing resolves local → global automatically.
+--- Accessed via config.options.settings.
+local settings_proxy = setmetatable({}, {
+  __index = function(_, key)
+    local lc = M.get_local_config()
 
-  -- Resolve alias: if the name matches a local config alias, expand it
-  local lc = M.get_local_config()
-  if lc and lc.aliases and lc.aliases[name] then
-    local alias = lc.aliases[name]
-    -- Merge: alias provides defaults, original model_spec overrides on top
-    model_spec = vim.tbl_extend("force", alias, model_spec)
-    -- The alias's name is the real model name
-    name = alias.name
-    model_spec.name = name
-  end
+    if key == "actions" then
+      return action_proxy
+    end
 
-  local overrides = M.get_model_overrides(name)
-  if overrides then
-    model_spec = vim.tbl_extend("force", overrides, model_spec)
-  end
-  -- Don't override the model name
-  model_spec.name = name
+    if key == "context" then
+      local global = M._raw_options.settings.context or {}
+      if not lc or not lc.context then
+        return global
+      end
 
-  return model_spec
-end
+      local merged = vim.tbl_deep_extend("keep", lc.context, global)
+
+      if lc.context.exclude and global.exclude then
+        merged.exclude =
+          vim.list_extend(vim.deepcopy(global.exclude or {}), lc.context.exclude)
+      end
+      return merged
+    end
+
+    if MODEL_KEYS[key] then
+      if lc and lc[key] then
+        return lc[key]
+      end
+      local default_model = normalize_model_config(M._raw_options.settings[key])
+      if not default_model then
+        error("default " .. key .. " is not set")
+      end
+      return default_model
+    end
+
+    if key == "auto_continue" then
+      return lc and lc.auto_continue or false
+    end
+
+    if LOCAL_ONLY_KEYS[key] then
+      return lc and lc[key]
+    end
+
+    local global_val = M._raw_options.settings[key]
+    if lc and lc[key] ~= nil then
+      if type(global_val) == "table" and type(lc[key]) == "table" then
+        return vim.tbl_deep_extend("force", global_val, lc[key])
+      end
+      return lc[key]
+    end
+
+    return global_val
+  end,
+  __newindex = function(_, key, value)
+    M._raw_options.settings[key] = value
+  end,
+})
 
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
@@ -530,7 +578,7 @@ function M.get_local_config()
   end
 
   local has_failed = false
-  local function validate(fun, ...)
+  local function validate_with(fun, ...)
     if not has_failed then
       local ok, err = fun(...)
       if not ok then
@@ -564,18 +612,18 @@ function M.get_local_config()
     has_failed = true
   end
 
-  validate(validate_permissions, json.permission)
-  validate(validate_risk, json.risk)
-  validate(validate_context, json.context)
-  validate(validate_action, json.action)
-  validate(validate_models_overrides, json.models)
-  validate(validate_aliases, json.aliases)
+  validate_with(validate.permissions, json.permission)
+  validate_with(validate.risk, json.risk)
+  validate_with(validate.context, json.context)
+  validate_with(validate.action, json.action)
+  validate_with(validate.models_overrides, json.models)
+  validate_with(validate.aliases, json.aliases)
 
-  validate(validate_skills, json)
-  validate(validate_model_field, json, "model")
-  validate(validate_model_field, json, "fast_model")
-  validate(validate_model_field, json, "plan_model")
-  validate(function()
+  validate_with(validate.skills, json)
+  validate_with(validate.model_field, json, "model")
+  validate_with(validate.model_field, json, "fast_model")
+  validate_with(validate.model_field, json, "plan_model")
+  validate_with(function()
     if json.auto_continue and type(json.auto_continue) ~= "boolean" then
       return false,
         string.format(
@@ -599,76 +647,23 @@ function M.get_local_config()
   return json
 end
 
---- @param type ("model"|"fast_model"|"plan_model")?
---- @return {name: string}
-function M.get_default_model(type)
-  local lc = M.get_local_config() or {}
-  type = type or "model"
+--- @class sia.config.Settings.Ui
+--- @field diff sia.config.Settings.Ui.Diff
+--- @field approval sia.config.Settings.Ui.Approval
 
-  if lc[type] then
-    return lc[type]
-  end
-
-  local default_model = normalize_model_config(M.options.defaults[type])
-  if not default_model then
-    error("default model is not set")
-  end
-  return default_model
-end
-
---- @return boolean
-function M.get_auto_continue()
-  local lc = M.get_local_config() or {}
-  return lc and lc.auto_continue or false
-end
-
---- @return sia.config.Context
-function M.get_context_config()
-  local local_config = M.get_local_config()
-  if local_config and local_config.context then
-    local merged = vim.tbl_deep_extend(
-      "keep",
-      local_config.context or {},
-      M.options.defaults.context or {}
-    )
-
-    -- Special handling: merge exclude lists
-    if local_config.context.exclude and M.options.defaults.context.exclude then
-      merged.exclude = vim.list_extend(
-        vim.deepcopy(M.options.defaults.context.exclude),
-        local_config.context.exclude
-      )
-    end
-
-    return merged
-  end
-  return M.options.defaults.context or {}
-end
-
---- @param mode "insert"|"diff"|"chat"|"hidden"
---- @return sia.config.Action
-function M.get_default_action(mode)
-  local lc = M.get_local_config()
-  return lc and lc.action and M.options.actions[lc.action[mode]]
-    or M.options.defaults.actions[mode]
-end
---- @class sia.config.Defaults.Ui
---- @field diff sia.config.Defaults.Ui.Diff
---- @field approval sia.config.Defaults.Ui.Approval
-
---- @class sia.config.Defaults.Ui.Diff
+--- @class sia.config.Settings.Ui.Diff
 --- @field enable boolean?
 --- @field show_signs boolean?
 --- @field char_diff boolean?
 
---- @class sia.config.Defaults.Ui.Approval.Async
+--- @class sia.config.Settings.Ui.Approval.Async
 --- @field enable boolean?
 --- @field notifier sia.ApprovalNotifier?
 
---- @class sia.config.Defaults.Ui.Approval
+--- @class sia.config.Settings.Ui.Approval
 --- @field use_vim_ui boolean?
 --- @field show_preview boolean?
---- @field async sia.config.Defaults.Ui.Approval.Async?
+--- @field async sia.config.Settings.Ui.Approval.Async?
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -753,7 +748,7 @@ end
 --- @field clear_input boolean?
 --- @field keep integer?
 
---- @class sia.config.Defaults
+--- @class sia.config.Settings
 --- @field model string
 --- @field fast_model string
 --- @field plan_model string
@@ -767,7 +762,7 @@ end
 --- @field insert sia.config.Insert
 --- @field hidden sia.config.Hidden
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
---- @field ui sia.config.Defaults.Ui?
+--- @field ui sia.config.Settings.Ui?
 --- @field shell sia.config.Shell?
 
 --- @class sia.config.Shell
@@ -798,10 +793,10 @@ end
 --- @field models sia.config.Models
 --- @field embeddings sia.config.Embeddings?
 --- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
---- @field defaults sia.config.Defaults
+--- @field settings sia.config.Settings
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
-M.options = {
+M._raw_options = {
   providers = {},
   models = {
     ["zai/glm-4.5"] = { "zai", "GLM-4.5" },
@@ -921,8 +916,8 @@ M.options = {
     ["openai/text-embedding-3-large"] = { "openai", "text-embedding-3-large" },
   },
   instructions = {},
-  --- @type sia.config.Defaults
-  defaults = {
+  --- @type sia.config.Settings
+  settings = {
     model = "openai/gpt-4.1",
     fast_model = "openai/gpt-4.1-mini",
     plan_model = "openai/o3-mini",
@@ -1089,6 +1084,7 @@ M.options = {
         if model:api_name():match("gpt%-5") then
           table.insert(all, tools.apply_diff)
         end
+        return all
       end,
     },
     commit = require("sia.actions").commit(),
@@ -1096,8 +1092,86 @@ M.options = {
   },
 }
 
+--- Proxy for config.options that:
+--- - Enriches the models table with aliases from local project config
+--- - Returns the settings proxy for transparent local → global resolution
+M.options = setmetatable({}, {
+  __index = function(_, key)
+    if key == "settings" then
+      return settings_proxy
+    end
+    if key == "models" then
+      local raw_models = M._raw_options.models
+      local lc = M.get_local_config()
+      local aliases = lc and lc.aliases or nil
+      local model_overrides = lc and lc.models or nil
+
+      if not aliases and not model_overrides then
+        return raw_models
+      end
+
+      --- Resolve a model spec by applying local overrides and alias params.
+      --- @param name string The model or alias name
+      --- @return table? The enriched spec, or nil if unknown
+      local function resolve_spec(name)
+        local base_name = name
+        local alias_params = nil
+
+        if aliases and aliases[name] then
+          local alias = aliases[name]
+          base_name = alias.name
+          alias_params = alias
+        end
+
+        local base_spec = raw_models[base_name]
+        if not base_spec then
+          return nil
+        end
+
+        local spec = vim.tbl_extend("force", {}, base_spec)
+        if model_overrides and model_overrides[base_name] then
+          spec = vim.tbl_extend("force", spec, model_overrides[base_name])
+        end
+
+        if alias_params then
+          for k, v in pairs(alias_params) do
+            if k ~= "name" then
+              spec[k] = v
+            end
+          end
+        end
+
+        return spec
+      end
+
+      local combined = {}
+      for k, _ in pairs(raw_models) do
+        combined[k] = resolve_spec(k)
+      end
+      if aliases then
+        for alias_name, _ in pairs(aliases) do
+          if not combined[alias_name] then
+            combined[alias_name] = resolve_spec(alias_name)
+          end
+        end
+      end
+      return combined
+    end
+    return M._raw_options[key]
+  end,
+  __newindex = function(_, key, value)
+    M._raw_options[key] = value
+  end,
+})
+
 function M.setup(options)
-  M.options = vim.tbl_deep_extend("force", {}, M.options, options or {})
+  if options and options.defaults ~= nil then
+    vim.notify(
+      "Sia: `defaults` has been renamed to `settings`. Please update your setup() config.",
+      vim.log.levels.WARN
+    )
+  end
+  M._raw_options = vim.tbl_deep_extend("force", {}, M._raw_options, options or {})
 end
 
 return M

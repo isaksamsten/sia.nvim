@@ -278,7 +278,7 @@ function ChatStrategy:on_complete(control)
 
     if not self.has_generated_name then
       local name_conv = require("sia.conversation").Conversation:new({
-        model = require("sia.config").get_default_model("fast_model"),
+        model = require("sia.config").options.settings.fast_model,
         system = {
           { role = "system", content = SUMMARIZE_PROMPT },
         },

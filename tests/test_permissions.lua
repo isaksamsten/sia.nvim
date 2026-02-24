@@ -146,8 +146,8 @@ T["permissions (nil treated as empty)"]["ask on missing arg forces prompt even i
   }, function()
     local config = require("sia.config")
     -- Force using vim.ui so we can stub it easily
-    local original_ui_flag = config.options.defaults.ui.use_vim_ui
-    config.options.defaults.ui.use_vim_ui = true
+    local original_ui_flag = config.options.settings.ui.use_vim_ui
+    config.options.settings.ui.use_vim_ui = true
 
     local prompt_called = false
     local original_vim_ui_input = vim.ui.input
@@ -174,7 +174,7 @@ T["permissions (nil treated as empty)"]["ask on missing arg forces prompt even i
     eq("ok", result.kind)
 
     vim.ui.input = original_vim_ui_input
-    config.options.defaults.ui.use_vim_ui = original_ui_flag
+    config.options.settings.ui.use_vim_ui = original_ui_flag
   end)
 end
 
@@ -263,8 +263,8 @@ T["permissions (nil treated as empty)"]["ask triggers on negative lookahead patt
     },
   }, function()
     local config = require("sia.config")
-    local original_ui_flag = config.options.defaults.ui.use_vim_ui
-    config.options.defaults.ui.use_vim_ui = true
+    local original_ui_flag = config.options.settings.ui.use_vim_ui
+    config.options.settings.ui.use_vim_ui = true
 
     local prompt_called = false
     local original_vim_ui_input = vim.ui.input
@@ -305,7 +305,7 @@ T["permissions (nil treated as empty)"]["ask triggers on negative lookahead patt
     eq(false, prompt_called)
 
     vim.ui.input = original_vim_ui_input
-    config.options.defaults.ui.use_vim_ui = original_ui_flag
+    config.options.settings.ui.use_vim_ui = original_ui_flag
   end)
 end
 

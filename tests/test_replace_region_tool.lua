@@ -16,7 +16,7 @@ T["sia.tools.replace_region"] = MiniTest.new_set()
 
 T["sia.tools.replace_region"]["replaces a region with new text"] = function()
   local code = [[
-    local tool = require("sia.tools.replace_region")
+    local tool = require("sia.tools.extra.replace_region")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -63,13 +63,16 @@ T["sia.tools.replace_region"]["replaces a region with new text"] = function()
 
   eq("edit", result.kind)
   eq("Replaced lines 2-3 in test.txt", result.content[1])
-  eq(true, string.find(result.display_content[1], "Replaced lines 2%-3 in test%.txt") ~= nil)
+  eq(
+    true,
+    string.find(result.display_content[1], "Replaced lines 2%-3 in test%.txt") ~= nil
+  )
   eq({ 2, 3 }, result.context.pos)
 end
 
 T["sia.tools.replace_region"]["deletes a region when text is empty"] = function()
   local code = [[
-    local tool = require("sia.tools.replace_region")
+    local tool = require("sia.tools.extra.replace_region")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -119,7 +122,7 @@ end
 
 T["sia.tools.replace_region"]["fails on invalid line range"] = function()
   local code = [[
-    local tool = require("sia.tools.replace_region")
+    local tool = require("sia.tools.extra.replace_region")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -154,4 +157,3 @@ T["sia.tools.replace_region"]["fails on invalid line range"] = function()
 end
 
 return T
-

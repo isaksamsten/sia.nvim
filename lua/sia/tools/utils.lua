@@ -125,7 +125,7 @@ local function input(opts, on_confirm)
     confirmation_text = prompt
   end
 
-  local show_preview = require("sia.config").options.defaults.ui.approval.show_preview
+  local show_preview = require("sia.config").options.settings.ui.approval.show_preview
   if show_preview and opts.preview and not clear_preview then
     clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
     vim.cmd.redraw()
@@ -212,7 +212,7 @@ local function create_user_input_handler(
   callback,
   permission
 )
-  local approval_conf = require("sia.config").options.defaults.ui.approval
+  local approval_conf = require("sia.config").options.settings.ui.approval
   local ignore_confirm = conversation.ignore_tool_confirm
     or (permission and permission.auto_allow)
 
@@ -311,7 +311,7 @@ local function create_user_choice_handler(
       return
     end
 
-    local approval_conf = require("sia.config").options.defaults.ui.approval
+    local approval_conf = require("sia.config").options.settings.ui.approval
 
     local function prompt_user()
       local select_fn = select

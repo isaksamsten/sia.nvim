@@ -23,9 +23,7 @@ end
 --- @return sia.PermissionOpts?
 function M.get_permission(name, args)
   local config = require("sia.config")
-  local lc = config.get_local_config()
-
-  local permission = lc and lc.permission or {}
+  local permission = config.options.settings.permission or {}
   -- If any argument is denied
   local deny = permission.deny and permission.deny[name] or {}
   if deny.arguments then

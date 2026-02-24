@@ -139,7 +139,7 @@ end
 
 --- @param conversation sia.Conversation
 local function mark_outdated_messages(conversation)
-  local context_config = require("sia.config").get_context_config()
+  local context_config = require("sia.config").options.settings.context
   local min_keep = context_config.keep or 5
   local max_tool_calls = context_config.max_tool or 100
   local exclude_tool = context_config.exclude or {}
@@ -347,7 +347,7 @@ local function prepare_message(message, template_context)
     hide = true
   end
 
-  local context_conf = require("sia.config").get_context_config()
+  local context_conf = require("sia.config").options.settings.context
   local meta
   if message.meta then
     meta = vim.deepcopy(message.meta)

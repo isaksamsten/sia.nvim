@@ -74,7 +74,7 @@ T["assistant.streaming"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
       config.options.models["openai/test"] = { "openai", "test-model" }
-      config.options.defaults.model = "openai/test"
+      config.options.settings.model = "openai/test"
 
       mock.mock_fn_jobstart({
         {

@@ -198,7 +198,7 @@ Use this tool to:
       return
     end
 
-    local embedding_model_name = require("sia.config").options.defaults.embedding_model
+    local embedding_model_name = require("sia.config").options.settings.embedding_model
     if not embedding_model_name then
       callback({
         content = {

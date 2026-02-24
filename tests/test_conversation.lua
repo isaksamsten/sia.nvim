@@ -49,20 +49,22 @@ end
 T["tool call filtering"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
-      T.original_get_context_config = config.get_context_config
+      T.original_get_local_config = config.get_local_config
     end,
     post_once = function()
-      config.get_context_config = T.original_get_context_config
+      config.get_local_config = T.original_get_local_config
     end,
   },
 })
 
 T["tool call filtering"]["under max limit should not filter"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 3,
-      max_tool = 10,
-      exclude = {},
+      context = {
+        keep = 3,
+        max_tool = 10,
+        exclude = {},
+      },
     }
   end
 
@@ -78,12 +80,14 @@ T["tool call filtering"]["under max limit should not filter"] = function()
 end
 
 T["tool call filtering"]["exceeding max should filter to keep most recent"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 3,
-      max_tool = 5,
-      exclude = {},
-      clear_input = true,
+      context = {
+        keep = 3,
+        max_tool = 5,
+        exclude = {},
+        clear_input = true,
+      },
     }
   end
 
@@ -113,11 +117,13 @@ T["tool call filtering"]["exceeding max should filter to keep most recent"] = fu
 end
 
 T["tool call filtering"]["should permanently mark outdated tool calls"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 2,
-      max_tool = 3,
-      exclude = {},
+      context = {
+        keep = 2,
+        max_tool = 3,
+        exclude = {},
+      },
     }
   end
 
@@ -138,11 +144,13 @@ T["tool call filtering"]["should permanently mark outdated tool calls"] = functi
 end
 
 T["tool call filtering"]["should respect excluded tools"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 2,
-      max_tool = 3,
-      exclude = { "important_tool" },
+      context = {
+        keep = 2,
+        max_tool = 3,
+        exclude = { "important_tool" },
+      },
     }
   end
 
@@ -163,11 +171,13 @@ T["tool call filtering"]["should respect excluded tools"] = function()
 end
 
 T["tool call filtering"]["should handle failed tool calls"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 2,
-      max_tool = 3,
-      exclude = {},
+      context = {
+        keep = 2,
+        max_tool = 3,
+        exclude = {},
+      },
     }
   end
 
@@ -193,11 +203,13 @@ T["tool call filtering"]["should handle failed tool calls"] = function()
 end
 
 T["tool call filtering"]["add and remove"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 2,
-      max_tool = 4,
-      exclude = {},
+      context = {
+        keep = 2,
+        max_tool = 4,
+        exclude = {},
+      },
     }
   end
 
@@ -221,11 +233,13 @@ T["tool call filtering"]["add and remove"] = function()
 end
 
 T["tool call filtering"]["should only trigger when both conditions met"] = function()
-  config.get_context_config = function()
+  config.get_local_config = function()
     return {
-      keep = 3,
-      max_tool = 10,
-      exclude = {},
+      context = {
+        keep = 3,
+        max_tool = 10,
+        exclude = {},
+      },
     }
   end
 

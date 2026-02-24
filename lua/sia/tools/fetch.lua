@@ -229,7 +229,7 @@ Usage notes:
             if args.prompt then
               local config = require("sia.config")
               local conversation = require("sia.conversation").Conversation:new({
-                model = config.get_default_model("fast_model"),
+                model = config.options.settings.fast_model,
                 system = { { role = "system", content = SUB_AGENT_PROMPT } },
                 instructions = {
                   {

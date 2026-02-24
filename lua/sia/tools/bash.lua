@@ -92,7 +92,7 @@ local function ensure_shell(conversation)
     local Shell = require("sia.shell")
     local config = require("sia.config")
     local project_root = vim.fn.getcwd()
-    conversation.shell = Shell.new(project_root, config.options.defaults.shell)
+    conversation.shell = Shell.new(project_root, config.options.settings.shell)
   end
   return conversation.shell
 end

@@ -35,7 +35,7 @@ Usage notes:
       local Conversation = require("sia.conversation").Conversation
       local conversation = Conversation:new({
         mode = "hidden",
-        model = config.get_default_model("plan_model"),
+        model = config.options.settings.plan_model,
         system = {
           {
             role = "system",

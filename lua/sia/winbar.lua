@@ -309,7 +309,7 @@ local function render_one(buf, entry)
   end
 
   local config = require("sia.config")
-  local winbar_config = config.options.defaults.chat.winbar
+  local winbar_config = config.options.settings.chat.winbar
   if not winbar_config then
     return
   end

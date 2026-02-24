@@ -470,7 +470,7 @@ local function get_hunk_highlights(baseline, max_lines, hunks)
     return nil
   end
 
-  local show_signs = require("sia.config").options.defaults.ui.show_signs
+  local show_signs = require("sia.config").options.settings.ui.show_signs
   ---@type table<integer, {col: integer?, args:vim.api.keyset.set_extmark}[]?>
   local extmarks = {}
 
@@ -571,7 +571,7 @@ function M.update_diff(buf)
     return
   end
 
-  local show_char_diff = require("sia.config").options.defaults.ui.char_diff
+  local show_char_diff = require("sia.config").options.settings.ui.char_diff
 
   local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local current_content = table.concat(current_lines, "\n")

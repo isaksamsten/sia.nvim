@@ -1,7 +1,7 @@
 --- Centralized icon definitions for sia.nvim
 ---
 --- Supports multiple icon sets: "emoji" (default), "nerd" (Nerd Fonts), and "ascii".
---- Users can select which set to use via config: `defaults = { icons = "nerd" }`.
+--- Users can select which set to use via config: `settings = { icons = "nerd" }`.
 
 local M = {}
 

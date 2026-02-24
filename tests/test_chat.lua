@@ -8,22 +8,22 @@ local tracker = require("sia.tracker")
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
 
-local defaults = config.options.defaults
+local settings = config._raw_options.settings
 local vim_notify = vim.notify
 config.get_local_config = function()
-  return "mock/model"
+  return nil
 end
 T["strategy.chat"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
       config.options.models["openai/test"] = { "openai", "test-model" }
-      config.options.defaults.model = "openai/test"
-      config.options.defaults.fast_model = "openai/test"
-      config.options.defaults.plan_model = "openai/test"
+      config.options.settings.model = "openai/test"
+      config.options.settings.fast_model = "openai/test"
+      config.options.settings.plan_model = "openai/test"
       vim.notify = function() end
     end,
     post_once = function()
-      config.options.defaults = defaults
+      config._raw_options.settings = settings
       vim.notify = vim_notify
     end,
   },

@@ -42,13 +42,13 @@ end
 --- @return sia.RiskLevel
 function M.get_risk_level(tool_name, args, default_level)
   local config = require("sia.config")
-  local lc = config.get_local_config()
+  local risk = config.options.settings.risk
 
-  if not lc or not lc.risk or not lc.risk[tool_name] then
+  if not risk or not risk[tool_name] then
     return default_level
   end
 
-  local risk_config = lc.risk[tool_name]
+  local risk_config = risk[tool_name]
   if not risk_config.arguments then
     return default_level
   end

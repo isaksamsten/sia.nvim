@@ -146,7 +146,7 @@ local default_notifier = M.floating_notifier()
 --- @param prompt string The prompt to show to the user
 --- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
 function M.show(conversation, prompt, opts)
-  local approval_config = require("sia.config").options.defaults.ui.approval
+  local approval_config = require("sia.config").options.settings.ui.approval
   local notifier = (approval_config.async and approval_config.async.notifier)
     or default_notifier
 

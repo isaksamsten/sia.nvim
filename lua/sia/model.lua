@@ -1,13 +1,13 @@
 local M = {}
 
 --- @class sia.Model
---- @field config table The normalized model config with name and optional overrides
---- @field spec table The model specification from M.options.models
+--- @field config table The model config with name and optional per-usage overrides
+--- @field spec table The resolved model specification (base + alias params + local overrides)
 local Model = {}
 Model.__index = Model
 
 --- Create a new Model instance
---- @param model_config table Normalized model config with at least {name:string}
+--- @param model_config table Model config with at least {name:string}
 --- @return sia.Model
 function Model:new(model_config)
   local config = require("sia.config")
@@ -38,7 +38,7 @@ function M.resolve(model_config)
 
   -- If nil, use default model
   if not model_config then
-    model_config = config.get_default_model()
+    model_config = config.options.settings.model
   end
 
   -- If string, normalize it
@@ -46,7 +46,7 @@ function M.resolve(model_config)
     model_config = { name = model_config }
   end
 
-  return Model:new(config.resolve_model_config(model_config))
+  return Model:new(model_config)
 end
 
 --- Get the model name (e.g., "openai/gpt-4.1")

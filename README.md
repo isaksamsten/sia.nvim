@@ -136,8 +136,7 @@ Configure Sia in your `init.lua`:
 
 ```lua
 require("sia").setup({
-  -- Model defaults
-  defaults = {
+  settings = {
     model = "openai/gpt-4.1",           -- Main model for conversations
     fast_model = "openai/gpt-4.1-mini", -- Fast model for quick tasks
     plan_model = "openai/o3-mini",       -- Model for planning and reasoning
@@ -257,7 +256,7 @@ Providers with built-in cache multipliers (Anthropic, OpenAI) will
 automatically apply these. For custom models, specify `cache_multiplier`
 in the model configuration.
 
-Enable by setting the `defaults.chat.winbar` option.
+Enable by setting the `settings.chat.winbar` option.
 
 ### Customizing Winbar Display
 
@@ -266,7 +265,7 @@ function receives a `data` table with the current conversation state.
 
 ```lua
 require("sia").setup({
-  defaults = {
+  settings = {
     chat = {
       winbar = {
         left = function(data)
@@ -462,7 +461,7 @@ or you can provide your own custom notifier.
 
 ```lua
 require("sia").setup({
-  defaults = {
+  settings = {
     ui = {
       approval = {
         async = {
@@ -486,7 +485,7 @@ The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
 ```lua
 require("sia").setup({
-  defaults = {
+  settings = {
     ui = {
       approval = {
         async = {
@@ -534,7 +533,7 @@ require("sia").setup({
 
 ```lua
 require("sia").setup({
-  defaults = {
+  settings = {
     ui = {
       approval = {
         use_vim_ui = false,  -- Use custom preview UI
@@ -928,7 +927,7 @@ To enable semantic search across conversation history, configure an embedding mo
 
 ```lua
 require("sia").setup({
-  defaults = {
+  settings = {
     embedding_model = "openai/text-embedding-3-small",
   }
 })

@@ -491,7 +491,7 @@ function M.prompt_window()
   vim.keymap.set("n", "m", function()
     vim.ui.input({
       prompt = "Model: ",
-      default = vim.b[buf].sia_prompt_model or config.get_default_model("model").name,
+      default = vim.b[buf].sia_prompt_model or config.options.settings.model.name,
       completion = "customlist,v:lua.sia_model_complete",
     }, function(input)
       if input and input ~= "" then
@@ -516,7 +516,8 @@ function M.prompt_window()
     end
 
     local model_name = vim.b[buf].sia_prompt_model
-    local action = vim.tbl_deep_extend("force", {}, config.get_default_action("chat"))
+    local action =
+      vim.tbl_deep_extend("force", {}, config.options.settings.actions.chat)
     table.insert(action.instructions, {
       role = "user",
       content = prompt,
@@ -585,7 +586,7 @@ end
 --- @param callback function? Optional callback to execute after compacting
 M.compact_conversation = function(conversation, reason, callback)
   local new_conversation = require("sia.conversation").Conversation:new({
-    model = require("sia.config").get_default_model("fast_model"),
+    model = require("sia.config").options.settings.fast_model,
     system = {
       {
         role = "system",
@@ -669,10 +670,10 @@ function M.setup(options)
   local config = require("sia.config")
   config.setup(options)
 
-  require("sia.icons").setup(config.options.defaults.icons or "emoji")
+  require("sia.icons").setup(config.options.settings.icons or "emoji")
   require("sia.mappings").setup()
 
-  if config.options.defaults.ui.diff.enable then
+  if config.options.settings.ui.diff.enable then
     require("sia.diff").setup()
   end
 
@@ -736,19 +737,19 @@ function M.execute_action(action, opts)
       local conversation = require("sia.conversation").Conversation:new(action, context)
       if conversation.mode == "diff" then
         local options =
-          vim.tbl_deep_extend("force", config.options.defaults.diff, action.diff or {})
+          vim.tbl_deep_extend("force", config.options.settings.diff, action.diff or {})
         strategy = require("sia.strategy").DiffStrategy:new(conversation, options)
       elseif conversation.mode == "insert" then
         local options = vim.tbl_deep_extend(
           "force",
-          config.options.defaults.insert,
+          config.options.settings.insert,
           action.insert or {}
         )
         strategy = require("sia.strategy").InsertStrategy:new(conversation, options)
       elseif conversation.mode == "hidden" then
         local options = vim.tbl_deep_extend(
           "force",
-          config.options.defaults.hidden,
+          config.options.settings.hidden,
           action.hidden or {}
         )
         if not options.callback then
@@ -761,7 +762,7 @@ function M.execute_action(action, opts)
         strategy = require("sia.strategy").HiddenStrategy:new(conversation, options)
       else
         local options =
-          vim.tbl_deep_extend("force", config.options.defaults.chat, action.chat or {})
+          vim.tbl_deep_extend("force", config.options.settings.chat, action.chat or {})
         strategy = require("sia.strategy").ChatStrategy:new(conversation, options)
       end
     end

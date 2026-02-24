@@ -40,7 +40,7 @@ return tool_utils.new_tool({
   },
   required = { "path" },
 }, function(args, _, callback, opts)
-  local cfg = require("sia.config").options.defaults.file_ops or {}
+  local cfg = require("sia.config").options.settings.file_ops or {}
   local trash = cfg.trash ~= false
   local restrict_root = cfg.restrict_to_project_root ~= false
   local trash_dir_name = ".sia_trash"

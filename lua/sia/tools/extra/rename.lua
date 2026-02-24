@@ -28,7 +28,7 @@ Notes:
     return string.format("Rename %s → %s", args.src, args.dest)
   end,
 }, function(args, _, callback, opts)
-  local config = require("sia.config").options.defaults.file_ops or {}
+  local config = require("sia.config").options.settings.file_ops or {}
   local create_dirs = config.create_dirs_on_rename ~= false
   local restrict_root = config.restrict_to_project_root ~= false
 

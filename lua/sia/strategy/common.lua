@@ -260,7 +260,7 @@ end
 function Strategy:confirm_continue_after_cancelled_tool(control)
   if
     self.auto_continue_after_cancellation
-    or require("sia.config").get_auto_continue()
+    or require("sia.config").options.settings.auto_continue
   then
     control.continue_execution()
   else
