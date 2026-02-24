@@ -555,7 +555,7 @@ local function browser_authorize(callback)
     open_cmd = "start"
   end
 
-  if open_cmd then
+  if open_cmd and vim.fs.executable(open_cmd) == 1 then
     vim.fn.jobstart({ open_cmd, auth_url }, { detach = true })
     vim.notify("Sia Codex: Opening browser for authorization...", vim.log.levels.INFO)
   else
