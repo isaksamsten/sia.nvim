@@ -339,6 +339,9 @@ end
 --- @return integer? buf
 function M.ensure_file_is_loaded(file, opts)
   opts = opts or {}
+  -- Resolve to an absolute path so that vim.fn.bufnr() performs an exact
+  -- match rather than a suffix/fuzzy match.
+  file = vim.fn.fnamemodify(file, ":p")
   local bufnr = vim.fn.bufnr(file)
   if
     bufnr ~= -1
