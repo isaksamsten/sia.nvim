@@ -130,9 +130,12 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
 **Conversation Management:**
 
-- `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
+- `SiaSave` - Save the current conversation to `.sia/history/` with automatic
+  table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
+- `SiaBranch <prompt>` - Create a new conversation branching from the current
+  one. Copies the full conversation history and continues with the given prompt.
+  Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation's JSON payload in a new buffer
 
 **Shell Process Management:**
@@ -256,8 +259,8 @@ keys = {
   { "<CR>", mode = "n", require("sia").reply, ft = "sia" },
   -- toggle the todo view
   { "t", mode = "n", require("sia").todos, ft = "sia" },
-  -- toggle the tasks/agents view
-  { "a", mode = "n", require("sia").tasks, ft = "sia" },
+  -- toggle the status view (agents/processes)
+  { "a", mode = "n", require("sia").status, ft = "sia" },
   -- show a quickfix window with active context references
   { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
 }

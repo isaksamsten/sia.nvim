@@ -272,12 +272,13 @@ tailored for particular tasks.
 
 ```markdown
 ---
-{
-  "description": "Brief description of what this agent does",
-  "tools": ["tool1", "tool2", "tool3"],
-  "model": "openai/gpt-4.1-mini",
-  "require_confirmation": false,
-}
+description: Brief description of what this agent does
+tools:
+  - tool1
+  - tool2
+  - tool3
+model: openai/gpt-5.2
+require_confirmation: false
 ---
 
 System prompt for the agent goes here.
@@ -296,7 +297,7 @@ System prompt for the agent goes here.
 
 - **`model`** (optional): Override the model for this agent
   - Defaults to `fast_model` if not specified
-  - Example: `"openai/gpt-4.1-mini"`
+  - Example: `"openai/gpt-4.1"`
 
 - **`require_confirmation`** (optional): Whether tool operations need user approval
   - Default: `true` (requires approval)
@@ -304,11 +305,11 @@ System prompt for the agent goes here.
 
 **How Agents Work:**
 
-1. The AI assistant can use the `task` tool to list available agents
-2. When it identifies a task that matches an agent's description, it launches
+1. The AI assistant can use the `agent` tool to list available agents
+2. When it identifies a agents that matches an agent's description, it launches
    that agent
 3. The agent runs autonomously in the background with its own conversation
-4. Progress updates appear in the tasks window
+4. Progress updates appear in the `status` window
 5. Results are integrated back into the main conversation
 
 **Viewing Running Agents:**
@@ -316,7 +317,7 @@ System prompt for the agent goes here.
 You can view and track running agents in the tasks window:
 
 - **In chat:** Press `a` (or your configured binding) to toggle the tasks window
-- **Programmatically:** Call `require("sia").tasks("toggle")`
+- **Programmatically:** Call `require("sia").status("toggle")`
 
 **Tips:**
 
@@ -397,6 +398,7 @@ indicator showing estimated usage as a percentage of the available window:
 ```
 
 The indicator changes color as usage increases:
+
 - Normal highlight below 85%
 - Warning highlight (`DiagnosticWarn`) at 85%+
 - Error highlight (`DiagnosticError`) at 95%+
@@ -421,5 +423,3 @@ available threshold settings.
 See [Setting Context Window Size](configuration.md#setting-context-window-size)
 for how to add `context_window` to your model definitions. All built-in models
 already have this set.
-
-

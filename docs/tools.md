@@ -56,7 +56,7 @@ are included in the default chat action.
 
 ### Agents
 
-- **task** - Launch autonomous agents with their own tools and system prompts
+- **agent** - Launch autonomous agents with their own tools and system prompts
   for complex tasks (see [Custom Agent Registry](concepts.md#custom-agent-registry))
 
 ## Extra Tools
@@ -132,4 +132,3 @@ require("sia").setup({
 The assistant combines these tools intelligently to handle complex development
 workflows, from simple file edits to multi-file refactoring, debugging, and
 project analysis.
-

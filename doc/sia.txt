@@ -236,9 +236,6 @@ window’s status bar (winbar). This helps you track API costs and token
 consumption during conversations.
 
 
-https://github.com/user-attachments/assets/8ac71544-d18e-403d-b2b5-48a862f36138
-
-
 ADDING PRICING TO CUSTOM MODELS ~
 
 For OpenRouter or other custom models, you can add pricing information to your
@@ -865,9 +862,12 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 
 **Conversation Management:**
 
-- `SiaSave` - Save the current conversation to `.sia/history/` with automatic table of contents generation
+- `SiaSave` - Save the current conversation to `.sia/history/` with automatic
+    table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaBranch [-m model] <prompt>` - Create a new conversation branching from the current one. Copies the full conversation history and continues with the given prompt. Optionally override the model with `-m`.
+- `SiaBranch <prompt>` - Create a new conversation branching from the current
+    one. Copies the full conversation history and continues with the given prompt.
+    Optionally override the model with `-m`.
 - `SiaDebug` - Show the current conversation’s JSON payload in a new buffer
 
 **Shell Process Management:**
@@ -1001,8 +1001,8 @@ efficient interaction:
       { "<CR>", mode = "n", require("sia").reply, ft = "sia" },
       -- toggle the todo view
       { "t", mode = "n", require("sia").todos, ft = "sia" },
-      -- toggle the tasks/agents view
-      { "a", mode = "n", require("sia").tasks, ft = "sia" },
+      -- toggle the status view (agents/processes)
+      { "a", mode = "n", require("sia").status, ft = "sia" },
       -- show a quickfix window with active context references
       { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
     }
@@ -1075,7 +1075,7 @@ INTERACTION ~
 
 AGENTS ~
 
-- **task** - Launch autonomous agents with their own tools and system prompts
+- **agent** - Launch autonomous agents with their own tools and system prompts
     for complex tasks (see Custom Agent Registry <concepts.md#custom-agent-registry>)
 
 
@@ -1458,12 +1458,13 @@ prompts tailored for particular tasks.
 
 >markdown
     ---
-    {
-      "description": "Brief description of what this agent does",
-      "tools": ["tool1", "tool2", "tool3"],
-      "model": "openai/gpt-4.1-mini",
-      "require_confirmation": false,
-    }
+    description: Brief description of what this agent does
+    tools:
+      - tool1
+      - tool2
+      - tool3
+    model: openai/gpt-5.2
+    require_confirmation: false
     ---
     
     System prompt for the agent goes here.
@@ -1480,18 +1481,18 @@ prompts tailored for particular tasks.
     - Example: `["glob", "grep", "read"]`
 - **model** (optional): Override the model for this agent
     - Defaults to `fast_model` if not specified
-    - Example: `"openai/gpt-4.1-mini"`
+    - Example: `"openai/gpt-4.1"`
 - **require_confirmation** (optional): Whether tool operations need user approval
     - Default: `true` (requires approval)
     - Set to `false` for read-only agents that should work autonomously
 
 **How Agents Work:**
 
-1. The AI assistant can use the `task` tool to list available agents
-2. When it identifies a task that matches an agent’s description, it launches
+1. The AI assistant can use the `agent` tool to list available agents
+2. When it identifies a agents that matches an agent’s description, it launches
 that agent
 3. The agent runs autonomously in the background with its own conversation
-4. Progress updates appear in the tasks window
+4. Progress updates appear in the `status` window
 5. Results are integrated back into the main conversation
 
 **Viewing Running Agents:**
@@ -1499,7 +1500,7 @@ that agent
 You can view and track running agents in the tasks window:
 
 - **In chat:** Press `a` (or your configured binding) to toggle the tasks window
-- **Programmatically:** Call `require("sia").tasks("toggle")`
+- **Programmatically:** Call `require("sia").status("toggle")`
 
 **Tips:**
 
@@ -1584,9 +1585,11 @@ indicator showing estimated usage as a percentage of the available window:
     ▰▱▱ 28% of 200K
 <
 
-The indicator changes color as usage increases: - Normal highlight below 85% -
-Warning highlight (`DiagnosticWarn`) at 85%+ - Error highlight
-(`DiagnosticError`) at 95%+
+The indicator changes color as usage increases:
+
+- Normal highlight below 85%
+- Warning highlight (`DiagnosticWarn`) at 85%+
+- Error highlight (`DiagnosticError`) at 95%+
 
 **Relationship to tool call pruning:**
 
@@ -1683,9 +1686,6 @@ Sia includes these built-in actions:
     - Example: `Sia /commit`
 - **doc**: Insert documentation for the function or class under cursor
     - Example: `Sia /doc`
-
-
-https://github.com/user-attachments/assets/99cc381d-13bc-4729-9b8b-7d1bc719e143
 
 
 CUSTOMIZING ACTIONS                          *sia-actions-customizing-actions*

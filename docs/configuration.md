@@ -80,8 +80,6 @@ Sia provides real-time cost tracking and token usage monitoring in the chat
 window's status bar (winbar). This helps you track API costs and token
 consumption during conversations.
 
-https://github.com/user-attachments/assets/8ac71544-d18e-403d-b2b5-48a862f36138
-
 ### Adding Pricing to Custom Models
 
 For OpenRouter or other custom models, you can add pricing information to your
