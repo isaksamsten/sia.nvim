@@ -101,19 +101,33 @@ end
 --- @param conversation sia.Conversation
 --- @return string
 local function agents_section(conversation)
-  if not conversation:has_tool("agents") then
+  if not conversation:has_tool("agent") then
     return ""
   end
 
-  local running_agents = 0
-  for _, task in ipairs(conversation.tasks) do
-    if task.status == "running" then
-      running_agents = running_agents + 1
+  local running = {}
+  for _, agent in ipairs(conversation.agents) do
+    if agent.status == "running" then
+      table.insert(running, agent)
     end
   end
 
-  local hl = running_agents > 0 and "SiaTaskRunning" or "NonText"
-  return section(hl, string.format("%s %d", ICONS.agents, running_agents))
+  if #running == 0 then
+    return ""
+  end
+
+  local label
+  if #running == 1 then
+    local a = running[1]
+    label = a.name
+    if a.progress and #a.progress > 0 then
+      label = label .. " " .. truncate_middle(a.progress, 20)
+    end
+  else
+    label = tostring(#running)
+  end
+
+  return section("SiaTaskRunning", string.format("%s%s", ICONS.agents, label))
 end
 
 --- @param conversation sia.Conversation
@@ -123,15 +137,26 @@ local function bash_section(conversation)
     return ""
   end
 
-  local running_bash = 0
+  local running = {}
   for _, proc in ipairs(conversation.bash_processes) do
     if proc.status == "running" then
-      running_bash = running_bash + 1
+      table.insert(running, proc)
     end
   end
 
-  local hl = running_bash > 0 and "SiaTaskRunning" or "NonText"
-  return section(hl, string.format("%s%d", ICONS.bash, running_bash))
+  if #running == 0 then
+    return ""
+  end
+
+  local label
+  if #running == 1 then
+    local desc = running[1].description or running[1].command
+    label = truncate_middle(desc, 20)
+  else
+    label = tostring(#running)
+  end
+
+  return section("SiaTaskRunning", string.format("%s%s", ICONS.bash, label))
 end
 
 --- @param data sia.WinbarData

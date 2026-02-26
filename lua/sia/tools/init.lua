@@ -1,4 +1,5 @@
 return {
+  agent = require("sia.tools.agent"),
   read = require("sia.tools.read"),
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),

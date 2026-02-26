@@ -25,9 +25,9 @@ local highlight_groups = {
   SiaTodoPending = { link = "Comment" },
   SiaTodoDone = { link = "DiagnosticOk" },
   SiaTodoSkipped = { link = "NonText" },
-  SiaTaskRunning = { link = "DiagnosticHint" },
-  SiaTaskCompleted = { link = "DiagnosticOk" },
-  SiaTaskFailed = { link = "DiagnosticError" },
+  SiaAgentRunning = { link = "DiagnosticHint" },
+  SiaAgentCompleted = { link = "DiagnosticOk" },
+  SiaAgentFailed = { link = "DiagnosticError" },
 }
 
 local function set_highlight_groups()
@@ -263,127 +263,15 @@ function M.toggle()
   end
 end
 
---- @type table<integer, integer>
-M._todos_windows = {}
-
 --- Manage todos window for the current chat
 --- @param action? string "open" | "close" | "toggle" (default: "toggle")
 function M.todos(action)
-  action = action or "toggle"
-
-  local buf = vim.api.nvim_get_current_buf()
-  local chat = require("sia.strategy").ChatStrategy.by_buf(buf)
-
-  if not chat then
-    return
-  end
-
-  local todos_buf = chat.conversation.todos and chat.conversation.todos.buf
-  local existing_win = M._todos_windows[chat.buf]
-  local is_open = existing_win and vim.api.nvim_win_is_valid(existing_win)
-
-  if action == "close" then
-    if is_open then
-      vim.api.nvim_win_close(existing_win, true)
-      M._todos_windows[chat.buf] = nil
-    end
-    return
-  end
-
-  if action == "toggle" then
-    if is_open then
-      vim.api.nvim_win_close(existing_win, true)
-      M._todos_windows[chat.buf] = nil
-      return
-    end
-  end
-
-  if not todos_buf or not vim.api.nvim_buf_is_valid(todos_buf) then
-    if action == "open" then
-      if not chat.conversation.todos or #chat.conversation.todos.items == 0 then
-        return
-      end
-    end
-    return
-  end
-
-  local chat_win = vim.fn.bufwinid(chat.buf)
-  if chat_win == -1 then
-    return
-  end
-
-  local chat_width = vim.api.nvim_win_get_width(chat_win)
-  local screen_width = vim.o.columns
-  local is_full_width = chat_width >= (screen_width - 2)
-
-  local current_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_set_current_win(chat_win)
-
-  local todos_win
-  if is_full_width then
-    vim.cmd("vertical topleft split")
-    if is_open then
-      todos_win = existing_win
-    else
-      todos_win = vim.api.nvim_get_current_win()
-    end
-    local width = math.floor(screen_width * 0.2)
-    vim.api.nvim_win_set_width(todos_win, width)
-  else
-    if is_open then
-      todos_win = existing_win
-    else
-      vim.cmd("belowright split")
-      todos_win = vim.api.nvim_get_current_win()
-    end
-    local max_height = math.floor(vim.o.lines * 0.2)
-    vim.api.nvim_win_set_height(
-      todos_win,
-      math.min(vim.api.nvim_buf_line_count(todos_buf), max_height)
-    )
-  end
-
-  vim.api.nvim_win_set_buf(todos_win, todos_buf)
-
-  vim.wo[todos_win].wrap = true
-  vim.wo[todos_win].number = false
-  vim.wo[todos_win].relativenumber = false
-  vim.wo[todos_win].signcolumn = "no"
-
-  M._todos_windows[chat.buf] = todos_win
-
-  if vim.api.nvim_win_is_valid(current_win) then
-    vim.api.nvim_set_current_win(current_win)
-  end
-
-  vim.api.nvim_create_autocmd(
-    { "BufDelete", "BufWipeout", "WinClosed", "BufWinLeave" },
-    {
-      buffer = chat.buf,
-      callback = function(ev)
-        local win = M._todos_windows[chat.buf]
-        if ev.event == "WinClosed" then
-          local closed_win = tonumber(ev.match)
-          if closed_win == chat_win then
-            if win and vim.api.nvim_win_is_valid(M._todos_windows[chat.buf]) then
-              vim.api.nvim_win_close(win, true)
-            end
-            M._todos_windows[chat.buf] = nil
-          end
-        else
-          if win and vim.api.nvim_win_is_valid(M._todos_windows[chat.buf]) then
-            vim.api.nvim_win_close(win, true)
-          end
-          M._todos_windows[chat.buf] = nil
-        end
-      end,
-    }
-  )
+  require("sia.ui.todos").toggle(action)
 end
 
 --- @param action ("open"|"close"|"toggle")?
-function M.tasks(action)
-  require("sia.tasks").task_window(action)
+function M.status(action)
+  require("sia.ui.status").toggle(action)
 end
 
 --- Show contexts in quickfix list

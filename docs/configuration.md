@@ -524,12 +524,12 @@ or config will take precedence.
 
 **Todos & Tasks:**
 
-| Group              | Default Link      | Description           |
-| ------------------ | ----------------- | --------------------- |
-| `SiaTodoActive`    | `DiagnosticWarn`  | Active todo items     |
-| `SiaTodoPending`   | `Comment`         | Pending todo items    |
-| `SiaTodoDone`      | `DiagnosticOk`    | Completed todo items  |
-| `SiaTodoSkipped`   | `NonText`         | Skipped todo items    |
-| `SiaTaskRunning`   | `DiagnosticHint`  | Running agent tasks   |
-| `SiaTaskCompleted` | `DiagnosticOk`    | Completed agent tasks |
-| `SiaTaskFailed`    | `DiagnosticError` | Failed agent tasks    |
+| Group               | Default Link      | Description           |
+| ------------------- | ----------------- | --------------------- |
+| `SiaTodoActive`     | `DiagnosticWarn`  | Active todo items     |
+| `SiaTodoPending`    | `Comment`         | Pending todo items    |
+| `SiaTodoDone`       | `DiagnosticOk`    | Completed todo items  |
+| `SiaTodoSkipped`    | `NonText`         | Skipped todo items    |
+| `SiaAgentRunning`   | `DiagnosticHint`  | Running agent tasks   |
+| `SiaAgentCompleted` | `DiagnosticOk`    | Completed agent tasks |
+| `SiaAgentFailed`    | `DiagnosticError` | Failed agent tasks    |

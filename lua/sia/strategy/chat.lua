@@ -1,5 +1,5 @@
 local common = require("sia.strategy.common")
-local winbar = require("sia.winbar")
+local winbar = require("sia.ui.winbar")
 
 local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy

@@ -782,4 +782,43 @@ function M.create_unified_diff(old_text, new_text, opts)
   return unified_diff
 end
 
+--- Parse simple YAML frontmatter (flat key-value pairs and simple lists).
+--- Supports:
+---   key: value          → result[key] = "value"
+---   key:                → result[key] stays unset until a list item follows
+---   - item              → appended to the most recently seen list key
+---   bool: true/false    → result[key] = true/false (Lua boolean)
+--- @param lines string[]
+--- @return table<string, string|string[]|boolean>
+function M.parse_yaml_frontmatter(lines)
+  local result = {}
+  local current_key = nil
+
+  for _, line in ipairs(lines) do
+    local list_item = line:match("^%s+-%s+(.+)$")
+    if list_item and current_key then
+      if type(result[current_key]) ~= "table" then
+        result[current_key] = {}
+      end
+      table.insert(result[current_key], list_item)
+    else
+      local key, value = line:match("^(%w[%w_]*):%s*(.-)%s*$")
+      if key then
+        current_key = key
+        if value ~= "" then
+          if value == "true" then
+            result[key] = true
+          elseif value == "false" then
+            result[key] = false
+          else
+            result[key] = value
+          end
+        end
+      end
+    end
+  end
+
+  return result
+end
+
 return M

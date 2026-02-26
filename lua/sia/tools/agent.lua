@@ -15,7 +15,7 @@ continue working on them now. Wait to call agent(command="wait") until either:
 ]]
 
 return tool_utils.new_tool({
-  name = "task",
+  name = "agent",
   message = "Launching autonomous agent...",
   read_only = true,
   description = [[Launch a new agent to handle complex, multi-step tasks autonomously.]],
@@ -62,8 +62,8 @@ Usage notes:
   parameters = {
     command = {
       type = "string",
-      enum = { "list", "start", "status", "wait" },
-      description = "The command to execute: list (show available agents), start (launch new agent), status (check agent status), wait (wait for agent completion)",
+      enum = { "start", "status", "wait" },
+      description = "The command to execute:  start (launch new agent), status (check agent status), wait (wait for agent completion)",
     },
     agent = {
       type = "string",
@@ -81,45 +81,13 @@ Usage notes:
   required = { "command" },
 }, function(args, conversation, callback, opts)
   local config = require("sia.config")
-  local agent_registry = require("sia.agent_registry")
-  local tasks = require("sia.tasks")
+  local registry = require("sia.agents.registry")
 
-  if args.command == "list" then
-    local agent_defintions = agent_registry.get_agent_definitions()
-
-    if vim.tbl_count(agent_defintions) == 0 then
-      callback({
-        content = {
-          "No agents available.",
-        },
-      })
-      return
-    end
-
-    local content_lines = { "Available agents:", "" }
-    for _, task in pairs(agent_defintions) do
-      table.insert(
-        content_lines,
-        string.format("- %s: %s", task.name, task.description)
-      )
-      table.insert(
-        content_lines,
-        string.format(
-          "  Tools: %s | Model: %s",
-          table.concat(task.tools, ", "),
-          task.model
-        )
-      )
-    end
-
-    callback({
-      content = content_lines,
-    })
-  elseif args.command == "start" then
+  if args.command == "start" then
     if not args.agent then
       callback({
         content = { "Error: 'agent' parameter is required for 'start' command" },
-        display_content = { icons.error .. " Missing agent parameter" },
+        kind = "failed",
       })
       return
     end
@@ -127,22 +95,19 @@ Usage notes:
     if not args.task then
       callback({
         content = { "Error: 'task' parameter is required for 'start' command" },
-        display_content = { icons.error .. " Missing task parameter" },
+        kind = "failed",
       })
       return
     end
 
-    local agent_def = agent_registry.get_agent_definition(args.agent)
+    local agent_def = registry.get_agent(args.agent)
 
     if not agent_def then
       callback({
         content = {
-          string.format(
-            "Error: Agent '%s' not found. Use 'list' command to see available agents.",
-            args.agent
-          ),
+          string.format("Error: Agent '%s' not found.", args.agent),
+          kind = "failed",
         },
-        display_content = { string.format("%s Agent '%s' not found", icons.error, args.agent) },
       })
       return
     end
@@ -151,7 +116,8 @@ Usage notes:
       string.format("Launch %s agent with task: %s", args.agent, args.task)
     opts.user_input(confirm_message, {
       on_accept = function()
-        local task = conversation:new_task(args.agent, args.task)
+        local agent = conversation:new_agent(args.agent, args.task)
+        local tools = require("sia.tools")
 
         local HiddenStrategy = require("sia.strategy").HiddenStrategy
         local Conversation = require("sia.conversation").Conversation
@@ -168,35 +134,43 @@ Usage notes:
             { role = "user", content = args.task },
           },
           ignore_tool_confirm = agent_def.require_confirmation == false,
-          tools = agent_def.tools,
+          tools = function()
+            return vim
+              .iter(agent_def.tools)
+              :filter(function(tool)
+                return tools[tool] ~= nil
+              end)
+              :map(function(tool)
+                return tools[tool]
+              end)
+              :totable()
+          end,
         }, nil)
-        new_conversation.name = conversation.name .. "-" .. task.name
+        new_conversation.name = conversation.name .. "-" .. agent.name
         local strategy = HiddenStrategy:new(new_conversation, {
           notify = function(msg)
-            task.progress = msg
-            tasks.update_progress(conversation)
+            agent.progress = msg
           end,
           callback = function(_, reply, usage)
-            if task then
+            if agent then
               if reply then
-                task.status = "completed"
-                task.result = reply
+                agent.status = "completed"
+                agent.result = reply
               else
-                task.status = "failed"
-                task.error = "No response (or cancelled)"
+                agent.status = "failed"
+                agent.error = "No response (or cancelled)"
               end
-              task.usage = usage
-              tasks.update_progress(conversation)
+              agent.usage = usage
             else
-              task.status = "failed"
-              task.error = "not started"
+              agent.status = "failed"
+              agent.error = "not started"
             end
           end,
         }, opts.cancellable)
         require("sia.assistant").execute_strategy(strategy)
 
         callback({
-          content = vim.split(string.format(START_REPLY, task.id), "\n"),
+          content = vim.split(string.format(START_REPLY, agent.id), "\n"),
           display_content = {
             string.format("%s Started agent '%s'", icons.started, args.agent),
           },
@@ -212,9 +186,9 @@ Usage notes:
       return
     end
 
-    local task = conversation:get_task(args.id)
+    local agent = conversation:get_agent(args.id)
 
-    if not task then
+    if not agent then
       callback({
         content = {
           string.format(
@@ -227,21 +201,21 @@ Usage notes:
     end
 
     local content = {
-      string.format("Agent ID: %d", task.id),
-      string.format("Agent: %s", task.name),
-      string.format("Status: %s", task.status),
-      string.format("Task: %s", task.task),
+      string.format("Agent ID: %d", agent.id),
+      string.format("Agent: %s", agent.name),
+      string.format("Status: %s", agent.status),
+      string.format("Task: %s", agent.task),
     }
 
-    if task.status == "completed" and task.result then
+    if agent.status == "completed" and agent.result then
       table.insert(content, "")
       table.insert(content, "Result:")
-      for _, line in ipairs(task.result) do
+      for _, line in ipairs(agent.result) do
         table.insert(content, line)
       end
-    elseif task.status == "failed" and task.error then
+    elseif agent.status == "failed" and agent.error then
       table.insert(content, "")
-      table.insert(content, string.format("Error: %s", task.error))
+      table.insert(content, string.format("Error: %s", agent.error))
     end
 
     callback({ content = content })
@@ -251,8 +225,8 @@ Usage notes:
       return
     end
 
-    local task = conversation:get_task(args.id)
-    if not task then
+    local agent = conversation:get_agent(args.id)
+    if not agent then
       callback({
         content = {
           string.format(
@@ -265,7 +239,7 @@ Usage notes:
     end
 
     local function poll()
-      local current_agent = conversation:get_task(args.id)
+      local current_agent = conversation:get_agent(args.id)
       if not current_agent then
         callback({
           content = { "Error: Agent instance was removed" },
@@ -286,7 +260,7 @@ Usage notes:
         callback({
           content = content,
           display_content = {
-            string.format("%s Agent %s completed", icons.success, task.name),
+            string.format("%s Agent %s completed", icons.success, agent.name),
           },
         })
       elseif current_agent.status == "failed" then
@@ -296,7 +270,9 @@ Usage notes:
             "",
             string.format("Error: %s", current_agent.error or "Unknown error"),
           },
-          display_content = { string.format("%s Agent %d failed", icons.error, args.id) },
+          display_content = {
+            string.format("%s Agent %d failed", icons.error, args.id),
+          },
         })
       else
         vim.defer_fn(poll, 500)
@@ -307,6 +283,7 @@ Usage notes:
   else
     callback({
       content = { string.format("Error: Unknown command '%s'", args.command) },
+      kind = "failed",
     })
   end
 end)

@@ -14,40 +14,13 @@ local State = {
 --- @field dir string            -- absolute path to skill directory
 --- @field filepath string       -- absolute path to SKILL.md
 
---- Parse simple YAML frontmatter (flat key-value pairs and simple lists)
---- @param lines string[]
---- @return table<string, string|string[]>
-local function parse_yaml_frontmatter(lines)
-  local result = {}
-  local current_key = nil
-
-  for _, line in ipairs(lines) do
-    local list_item = line:match("^%s+-%s+(.+)$")
-    if list_item and current_key then
-      if type(result[current_key]) ~= "table" then
-        result[current_key] = {}
-      end
-      table.insert(result[current_key], list_item)
-    else
-      local key, value = line:match("^(%w[%w_]*):%s*(.*)$")
-      if key then
-        current_key = key
-        if value ~= "" then
-          result[key] = value
-        end
-      end
-    end
-  end
-
-  return result
-end
-
 --- Parse a SKILL.md file into a skill definition
 --- @param filepath string Path to SKILL.md
 --- @param name string Skill name (directory name, used as fallback)
 --- @return sia.skill_registry.SkillDef? skill
 --- @return string|nil error
 local function parse_skill_file(filepath, name)
+  local utils = require("sia.utils")
   local file = vim.fn.readfile(filepath)
   --- @type string[]
   local frontmatter = {}
@@ -75,7 +48,7 @@ local function parse_skill_file(filepath, name)
     return nil, "Missing skill content body"
   end
 
-  local metadata = parse_yaml_frontmatter(frontmatter)
+  local metadata = utils.parse_yaml_frontmatter(frontmatter)
 
   if not metadata.name then
     return nil, "Missing required field: name"

@@ -30,7 +30,7 @@ end
 --- @field description string
 --- @field status string
 
---- @class sia.conversation.Task
+--- @class sia.conversation.Agent
 --- @field id integer
 --- @field status "running"|"completed"|"failed"
 --- @field progress string?
@@ -452,7 +452,7 @@ local CONVERSATION_ID = 1
 --- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 --- @field usage_history sia.Usage[]
---- @field tasks table<integer, sia.conversation.Task>
+--- @field agents table<integer, sia.conversation.Agent>
 --- @field bash_processes table<integer, sia.conversation.BashProcess>
 local Conversation = {}
 
@@ -491,7 +491,7 @@ function Conversation:new(action, context)
     items = {},
   }
   obj.usage_history = {}
-  obj.tasks = {}
+  obj.agents = {}
   obj.bash_processes = {}
 
   for _, instruction in ipairs(action.system or {}) do
@@ -595,7 +595,7 @@ function Conversation:deep_copy()
     items = {},
   }
   obj.usage_history = {}
-  obj.tasks = {}
+  obj.agents = {}
   obj.bash_processes = {}
 
   return obj
@@ -641,22 +641,22 @@ end
 
 --- @param name string
 --- @param task string
---- @return sia.conversation.Task
-function Conversation:new_task(name, task)
-  local task_id = #self.tasks + 1
+--- @return sia.conversation.Agent
+function Conversation:new_agent(name, task)
+  local task_id = #self.agents + 1
   local instance = {
     id = task_id,
     name = name,
     task = task,
     status = "running",
   }
-  table.insert(self.tasks, instance)
+  table.insert(self.agents, instance)
   return instance
 end
 
---- @return sia.conversation.Task
-function Conversation:get_task(id)
-  return self.tasks[id]
+--- @return sia.conversation.Agent
+function Conversation:get_agent(id)
+  return self.agents[id]
 end
 
 --- @param command string
@@ -885,7 +885,7 @@ function Conversation:build_template_context()
     return self._template_context
   end
 
-  local agents = require("sia.agent_registry").get_agent_definitions(false)
+  local agents = require("sia.agents.registry").get_agents(false)
   local agent_list = {}
   for _, agent in pairs(agents) do
     table.insert(agent_list, agent)

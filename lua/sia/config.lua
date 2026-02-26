@@ -292,6 +292,20 @@ local validate = {
     return true
   end,
 
+  agents = function(json)
+    if json.agents ~= nil then
+      if type(json.agents) ~= "table" then
+        return false, "'agents' must be an array of strings, got " .. type(json.agents)
+      end
+      for i, item in ipairs(json.agents) do
+        if type(item) ~= "string" then
+          return false, "agents[" .. i .. "] must be a string, got " .. type(item)
+        end
+      end
+    end
+    return true
+  end,
+
   action = function(action)
     if not action then
       return true
@@ -469,6 +483,7 @@ local LOCAL_ONLY_KEYS = {
   risk = true,
   skills = true,
   skills_extras = true,
+  agents = true,
   aliases = true,
   models = true,
 }
@@ -545,6 +560,7 @@ local settings_proxy = setmetatable({}, {
 --- @field context sia.config.Context?
 --- @field skills string[]?
 --- @field skills_extras string[]?
+--- @field agents string[]?
 
 --- @return sia.LocalConfig?
 function M.get_local_config()
@@ -620,6 +636,7 @@ function M.get_local_config()
   validate_with(validate.aliases, json.aliases)
 
   validate_with(validate.skills, json)
+  validate_with(validate.agents, json)
   validate_with(validate.model_field, json, "model")
   validate_with(validate.model_field, json, "fast_model")
   validate_with(validate.model_field, json, "plan_model")
@@ -1005,9 +1022,9 @@ M._raw_options = {
       cmd = "botright vnew",
       wo = { wrap = true, spell = false },
       winbar = {
-        left = require("sia.winbar").default_left,
-        center = require("sia.winbar").default_center,
-        right = require("sia.winbar").default_right,
+        left = require("sia.ui.winbar").default_left,
+        center = require("sia.ui.winbar").default_center,
+        right = require("sia.ui.winbar").default_right,
       },
     },
     hidden = {
@@ -1105,6 +1122,7 @@ M._raw_options = {
             tools.insert,
             tools.read,
             tools.glob,
+            tools.agent,
             tools.diagnostics,
             tools.bash,
             tools.websearch,
