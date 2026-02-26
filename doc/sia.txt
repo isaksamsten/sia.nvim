@@ -26,14 +26,14 @@ Table of Contents                                      *sia-table-of-contents*
   - Core Tools                                          |sia-tools-core-tools|
   - Extra Tools                                        |sia-tools-extra-tools|
   - Adding Tools to Actions                |sia-tools-adding-tools-to-actions|
-6. Core Concepts                                           |sia-core-concepts|
-  - Tool Approval System              |sia-core-concepts-tool-approval-system|
-  - Agent Memory                              |sia-core-concepts-agent-memory|
-  - Task Tracking with Todos      |sia-core-concepts-task-tracking-with-todos|
-  - Conversation History              |sia-core-concepts-conversation-history|
-  - Custom Agent Registry            |sia-core-concepts-custom-agent-registry|
-  - Concurrent Conversations      |sia-core-concepts-concurrent-conversations|
-  - Context Window Management    |sia-core-concepts-context-window-management|
+6. Concepts                                                     |sia-concepts|
+  - Tool Approval System                   |sia-concepts-tool-approval-system|
+  - Agent Memory                                   |sia-concepts-agent-memory|
+  - Task Tracking with Todos           |sia-concepts-task-tracking-with-todos|
+  - Conversation History                   |sia-concepts-conversation-history|
+  - Custom Agent Registry                 |sia-concepts-custom-agent-registry|
+  - Concurrent Conversations           |sia-concepts-concurrent-conversations|
+  - Context Window Management         |sia-concepts-context-window-management|
 7. Reviewing Changes                                   |sia-reviewing-changes|
   - Example Workflow                  |sia-reviewing-changes-example-workflow|
   - Live Example                          |sia-reviewing-changes-live-example|
@@ -285,8 +285,8 @@ conversation length:
 
 When `context_window` is set, the winbar displays a context budget indicator
 showing what percentage of the model’s context window is currently in use.
-This also enables automatic context management (see Context Window Management
-<concepts.md#context-window-management>).
+This also enables automatic context management (see
+|sia-context-window-management|).
 
 If `context_window` is not set for a model, context tracking and automatic
 pruning are disabled for that model — conversations will grow without limits.
@@ -600,9 +600,9 @@ are pruned within a conversation based on count:
     input parameters during pruning
 
 **Context window management** (`context_management`): Automatically prevents
-conversations from exceeding the model’s context window. See Context Window
-Management <concepts.md#context-window-management> for details on how this
-works. Configure the thresholds:
+conversations from exceeding the model’s context window. See
+|sia-context-window-management| for details on how this works. Configure the
+thresholds:
 
 - **prune_threshold** (default: `0.85`): Start pruning when estimated tokens
     reach this fraction of the context window
@@ -778,8 +778,8 @@ allowing you to build on previous exchanges.
 
 After the AI makes suggestions, you can navigate through changes with
 `]c`/`[c]` and accept/reject them individually with `ga`/`gx` or in bulk with
-`:SiaAccept!`/`:SiaReject!`. See the Reviewing Changes <changes.md>
-documentation for more details.
+`:SiaAccept!`/`:SiaReject!`. See the |sia-reviewing-changes| documentation for
+more details.
 
 
 INSERT MODE ~
@@ -826,7 +826,7 @@ CHOOSING THE RIGHT MODE ~
 - Use **diff mode** when you want to modify existing code with AI suggestions
 
 You can customize the default behavior and create custom actions that use any
-of these modes. See Actions <actions.md> for details.
+of these modes. See |sia-actions| for details.
 
 
 COMMANDS                                                  *sia-usage-commands*
@@ -1076,7 +1076,7 @@ INTERACTION ~
 AGENTS ~
 
 - **agent** - Launch autonomous agents with their own tools and system prompts
-    for complex tasks (see Custom Agent Registry <concepts.md#custom-agent-registry>)
+    for complex tasks (see |sia-custom-agent-registry|)
 
 
 EXTRA TOOLS                                            *sia-tools-extra-tools*
@@ -1122,7 +1122,7 @@ ADVANCED CAPABILITIES ~
 
 - **history** - Access and search saved conversation history with search,
     view, and table-of-contents modes (see
-    Conversation History <concepts.md#conversation-history>)
+    |sia-conversation-history|)
 - **plan** - Planning tool for task decomposition
 
 
@@ -1160,10 +1160,10 @@ project analysis.
 
 
 ==============================================================================
-6. Core Concepts                                           *sia-core-concepts*
+6. Concepts                                                     *sia-concepts*
 
 
-TOOL APPROVAL SYSTEM                  *sia-core-concepts-tool-approval-system*
+TOOL APPROVAL SYSTEM                       *sia-concepts-tool-approval-system*
 
 Sia includes a flexible approval system that allows you to control how tool
 operations are confirmed. You can choose between blocking (traditional) and
@@ -1326,7 +1326,7 @@ false`. Tool operations will show an approval prompt immediately and wait for
 your response before continuing.
 
 
-AGENT MEMORY                                  *sia-core-concepts-agent-memory*
+AGENT MEMORY                                       *sia-concepts-agent-memory*
 
 Sia maintains persistent memory across conversations using the `.sia/memory/`
 directory in your project root. This allows the AI assistant to:
@@ -1356,7 +1356,7 @@ files to version control, or commit them if you want to share context with your
 team.
 
 
-TASK TRACKING WITH TODOS          *sia-core-concepts-task-tracking-with-todos*
+TASK TRACKING WITH TODOS               *sia-concepts-task-tracking-with-todos*
 
 
 https://github.com/user-attachments/assets/0db7be98-2ec5-4bba-ba51-3afe8201f0ae
@@ -1392,7 +1392,7 @@ Todos help Sia stay focused on your goals and make it easier to resume work
 after interruptions or context switches.
 
 
-CONVERSATION HISTORY                  *sia-core-concepts-conversation-history*
+CONVERSATION HISTORY                       *sia-concepts-conversation-history*
 
 Sia can save and retrieve conversation history, allowing the AI assistant to
 learn from past interactions and build on previous work.
@@ -1442,7 +1442,7 @@ commit conversation history, or commit it if you want to share knowledge with
 your team.
 
 
-CUSTOM AGENT REGISTRY                *sia-core-concepts-custom-agent-registry*
+CUSTOM AGENT REGISTRY                     *sia-concepts-custom-agent-registry*
 
 You can define custom agents that the AI can invoke using the `task` tool.
 Agents are specialized assistants with specific capabilities, tools, and system
@@ -1511,7 +1511,7 @@ You can view and track running agents in the tasks window:
 - You can organize agents in subdirectories: `.sia/agents/code/searcher.md` becomes agent name `code/searcher`
 
 
-CONCURRENT CONVERSATIONS          *sia-core-concepts-concurrent-conversations*
+CONCURRENT CONVERSATIONS               *sia-concepts-concurrent-conversations*
 
 Sia supports running multiple conversations simultaneously, each maintaining
 its own independent view of file changes.
@@ -1539,7 +1539,7 @@ This allows multiple conversations to work independently while staying aware of
 each other’s changes.
 
 
-CONTEXT WINDOW MANAGEMENT        *sia-core-concepts-context-window-management*
+CONTEXT WINDOW MANAGEMENT             *sia-concepts-context-window-management*
 
 Long-running conversations — especially those with many tool calls — can
 grow to exceed a model’s context window. Sia automatically manages this by
@@ -1603,14 +1603,12 @@ can then fully drop those outdated messages when space is needed.
 
 **Configuration:**
 
-See Context Management <configuration.md#context-management> for the available
-threshold settings.
+See |sia-context-management| for the available threshold settings.
 
 **Defining context windows for custom models:**
 
-See Setting Context Window Size <configuration.md#setting-context-window-size>
-for how to add `context_window` to your model definitions. All built-in models
-already have this set.
+See |sia-setting-context-window-size| for how to add `context_window` to your
+model definitions. All built-in models already have this set.
 
 
 ==============================================================================

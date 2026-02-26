@@ -41,7 +41,13 @@ HEADER
 
     if [[ -f "$doc" ]]; then
       echo ""
-      cat "$doc"
+      # Strip any filename prefix from cross-file links, e.g.
+      # [text](configuration.md#anchor) -> [text](#anchor)
+      # [text](configuration.md)        -> [text](#configuration)  (no-anchor case)
+      sed -E \
+        -e 's|\(([a-zA-Z0-9_-]+)\.md#([^)]+)\)|(#\2)|g' \
+        -e 's|\(([a-zA-Z0-9_-]+)\.md\)|(#\1)|g' \
+        "$doc"
       echo ""
     else
       echo "Warning: $doc not found, skipping." >&2

@@ -1,4 +1,4 @@
-# Core Concepts
+# Concepts
 
 ## Tool Approval System
 
