@@ -18,7 +18,7 @@
     "clear_input": true
   },
   "skills": ["monitor-logs", "tmux-interactive"],
-  "agents": ["review/code"],
+  "agents": ["code/review", "code/explore"],
   "permission": {
     "deny": {
       "bash": {
