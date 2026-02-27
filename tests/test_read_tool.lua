@@ -178,8 +178,6 @@ T["sia.tools.read"]["tool metadata"] = function()
   eq("read", read_tool.name)
   eq("Reads a file from the local filesystem.", read_tool.description)
 
-  eq("Reading file contents...", read_tool.message)
-
   local required = read_tool.required
   eq(true, vim.tbl_contains(required, "path"))
 

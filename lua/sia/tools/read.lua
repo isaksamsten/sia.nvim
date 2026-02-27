@@ -20,7 +20,7 @@ local function read_display(path)
     }
   end
 
-  if require("sia.skill_registry").is_skill_path(path) then
+  if require("sia.skills.registry").is_skill_path(path) then
     return {
       icon = icons.read_skill,
       label = function(p)
@@ -70,7 +70,7 @@ will be truncated.]],
       if tool_utils.is_bash_output_path(args.path) then
         return 1
       end
-      if require("sia.skill_registry").is_skill_path(args.path) then
+      if require("sia.skills.registry").is_skill_path(args.path) then
         return 1
       end
     end
