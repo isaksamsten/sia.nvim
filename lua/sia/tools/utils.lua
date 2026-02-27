@@ -125,7 +125,7 @@ local function input(opts, on_confirm)
     confirmation_text = prompt
   end
 
-  local show_preview = require("sia.config").options.settings.ui.approval.show_preview
+  local show_preview = require("sia.config").options.settings.ui.confirm.show_preview
   if show_preview and opts.preview and not clear_preview then
     clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
     vim.cmd.redraw()
@@ -212,7 +212,7 @@ local function create_user_input_handler(
   callback,
   permission
 )
-  local approval_conf = require("sia.config").options.settings.ui.approval
+  local confirm_conf = require("sia.config").options.settings.ui.confirm
   local ignore_confirm = conversation.ignore_tool_confirm
     or (permission and permission.auto_allow)
 
@@ -232,7 +232,7 @@ local function create_user_input_handler(
       local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
 
-      local input_fn = approval_conf.use_vim_ui and vim.ui.input or input
+      local input_fn = confirm_conf.use_vim_ui and vim.ui.input or input
 
       input_fn({
         prompt = string.format("%s - %s", prompt, confirmation_text),
@@ -257,8 +257,8 @@ local function create_user_input_handler(
       end)
     end
 
-    if approval_conf.async and approval_conf.async.enable then
-      require("sia.approval").show(conversation, prompt, {
+    if confirm_conf.async and confirm_conf.async.enable then
+      require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
         on_accept = input_args.on_accept,
         on_cancel = function()
@@ -311,11 +311,11 @@ local function create_user_choice_handler(
       return
     end
 
-    local approval_conf = require("sia.config").options.settings.ui.approval
+    local confirm_conf = require("sia.config").options.settings.ui.confirm
 
     local function prompt_user()
       local select_fn = select
-      if approval_conf.use_vim_ui then
+      if confirm_conf.use_vim_ui then
         select_fn = vim.ui.select
       end
 
@@ -336,8 +336,9 @@ local function create_user_choice_handler(
       end)
     end
 
-    if approval_conf.async and approval_conf.async.enable then
-      require("sia.approval").show(conversation, prompt, {
+    if confirm_conf.async and confirm_conf.async.enable then
+      require("sia.ui.confirm").show(conversation, prompt, {
+        level = resolved_level,
         on_accept = prompt_user,
         on_cancel = function()
           callback({

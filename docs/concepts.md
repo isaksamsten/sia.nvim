@@ -29,10 +29,10 @@ in the background without interrupting your workflow. This allows you to:
    The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn` highlight groups depending on the risk level (all linked to `StatusLine` by default).
 
 2. **Process approvals**: When you're ready, use one of these functions:
-   - `require("sia.approval").prompt()` - Shows the full approval prompt
-   - `require("sia.approval").accept()` - Auto-accepts without showing prompt
-   - `require("sia.approval").decline()` - Auto-declines without showing prompt
-   - `require("sia.approval").preview()` - Preview without showing prompt
+   - `require("sia").approval.prompt()` - Shows the full approval prompt
+   - `require("sia").approval.accept()` - Auto-accepts without showing prompt
+   - `require("sia").approval.decline()` - Auto-declines without showing prompt
+   - `require("sia").approval.preview()` - Preview without showing prompt
 
 All functions will show a picker when multiple approvals are pending,
 allowing you to select which one to process. The difference is in the default
@@ -46,8 +46,8 @@ or you can provide your own custom notifier.
 
 **Built-in notifiers:**
 
-- `require("sia.approval").floating_notifier()` - Non-focusable floating window at top (default)
-- `require("sia.approval").winbar_notifier()` - Shows in the current window's winbar
+- `require("sia.ui.confirm").floating_notifier()` - Non-focusable floating window at top (default)
+- `require("sia.ui.confirm").winbar_notifier()` - Shows in the current window's winbar
 
 **Example using winbar:**
 
@@ -58,7 +58,7 @@ require("sia").setup({
       approval = {
         async = {
           enable = true,
-          notifier = require("sia.approval").winbar_notifier(),
+          notifier = require("sia.ui.confirm").winbar_notifier(),
         },
       },
     },
@@ -119,9 +119,9 @@ require("sia").setup({
 3. **Suggested keybindings**:
    ```lua
    keys = {
-     { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool" },
-     { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool" },
-     { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool" },
+     { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool" },
+     { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool" },
+     { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool" },
    }
    ```
 

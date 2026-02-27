@@ -39,6 +39,13 @@ local function set_highlight_groups()
   end
 end
 
+M.confirm = {
+  prompt = require("sia.ui.confirm").prompt,
+  accept = require("sia.ui.confirm").accept,
+  decline = require("sia.ui.confirm").decline,
+  preview = require("sia.ui.confirm").preview,
+}
+
 M.edit = {
   reject = function(opts)
     opts = opts or {}

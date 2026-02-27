@@ -316,9 +316,9 @@ vim.api.nvim_create_user_command("SiaDiff", function()
   require("sia").edit.show()
 end, {})
 
-vim.api.nvim_create_user_command("SiaAnswer", function(args)
+vim.api.nvim_create_user_command("SiaConfirm", function(args)
   local command = args.fargs[1]
-  local approval = require("sia.approval")
+  local approval = require("sia").confirm
   if command == "prompt" then
     approval.prompt({ first = args.bang })
   elseif command == "accept" then

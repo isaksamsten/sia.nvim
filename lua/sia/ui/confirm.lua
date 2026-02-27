@@ -12,35 +12,35 @@ local function get_icon(level)
   end
 end
 
---- @class sia.ApprovalNotifierOpts
+--- @class sia.ConfirmNotifierOpts
 --- @field level sia.RiskLevel
 --- @field name string
 --- @field message string
 --- @field total integer?
 
---- @class sia.ApprovalNotifier
---- @field show fun(args:sia.ApprovalNotifierOpts) Show/update the notification. Called whenever the message changes.
+--- @class sia.ConfirmNotifier
+--- @field show fun(args:sia.ConfirmNotifierOpts) Show/update the notification. Called whenever the message changes.
 --- @field clear fun() Clear/dismiss the notification
 
---- Global state for managing pending approvals
---- @class sia.PendingApproval
+--- Global state for managing pending confirmations
+--- @class sia.PendingConfirm
 --- @field conversation sia.Conversation
 --- @field prompt string
 --- @field level sia.RiskLevel
 --- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
---- @type sia.PendingApproval[]
-local pending_approvals = {}
+--- @type sia.PendingConfirm[]
+local pending_confirms = {}
 
 --- Default notifier using floating window
---- @return sia.ApprovalNotifier
+--- @return sia.ConfirmNotifier
 function M.floating_notifier()
   local notification_win = nil
   local notification_buf = nil
   local resize_autocmd = nil
 
-  --- @type sia.ApprovalNotifier
+  --- @type sia.ConfirmNotifier
   return {
     show = function(args)
       if not notification_buf or not vim.api.nvim_buf_is_valid(notification_buf) then
@@ -109,12 +109,12 @@ function M.floating_notifier()
   }
 end
 
---- @return sia.ApprovalNotifier
+--- @return sia.ConfirmNotifier
 function M.winbar_notifier()
   local notification_win = nil
   local old_winbar = nil
 
-  --- @type sia.ApprovalNotifier
+  --- @type sia.ConfirmNotifier
   return {
     show = function(args)
       if not notification_win or not vim.api.nvim_win_is_valid(notification_win) then
@@ -141,39 +141,39 @@ end
 
 local default_notifier = M.floating_notifier()
 
---- Show a pending approval notification to the user
---- @param conversation sia.Conversation The conversation requesting approval
+--- Show a pending confirmation notification to the user
+--- @param conversation sia.Conversation The conversation requesting confirmation
 --- @param prompt string The prompt to show to the user
 --- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
 function M.show(conversation, prompt, opts)
-  local approval_config = require("sia.config").options.settings.ui.approval
-  local notifier = (approval_config.async and approval_config.async.notifier)
+  local confirm_config = require("sia.config").options.settings.ui.confirm
+  local notifier = (confirm_config.async and confirm_config.async.notifier)
     or default_notifier
 
-  local approval = {
+  local confirm = {
     conversation = conversation,
     prompt = prompt,
     level = opts.level,
   }
 
-  approval.on_ready = function(idx, choice)
+  confirm.on_ready = function(idx, choice)
     if choice ~= "preview" then
-      table.remove(pending_approvals, idx)
-      if #pending_approvals > 0 then
-        local next_approval = pending_approvals[1]
+      table.remove(pending_confirms, idx)
+      if #pending_confirms > 0 then
+        local next_confirm = pending_confirms[1]
         notifier.show({
-          level = next_approval.level,
-          name = next_approval.conversation.name,
-          message = next_approval.prompt,
-          total = #pending_approvals,
+          level = next_confirm.level,
+          name = next_confirm.conversation.name,
+          message = next_confirm.prompt,
+          total = #pending_confirms,
         })
       else
         notifier.clear()
       end
     end
 
-    if approval.clear_preview then
-      approval.clear_preview()
+    if confirm.clear_preview then
+      confirm.clear_preview()
     end
 
     if choice == "accept" then
@@ -181,100 +181,100 @@ function M.show(conversation, prompt, opts)
     elseif choice == "prompt" then
       opts.on_prompt()
     elseif choice == "preview" and opts.on_preview then
-      approval.clear_preview = opts.on_preview()
+      confirm.clear_preview = opts.on_preview()
     else
       opts.on_cancel()
     end
   end
 
-  table.insert(pending_approvals, approval)
-  local first_approval = pending_approvals[1]
+  table.insert(pending_confirms, confirm)
+  local first_confirm = pending_confirms[1]
   notifier.show({
-    level = first_approval.level,
-    name = first_approval.conversation.name,
-    message = first_approval.prompt,
-    total = #pending_approvals,
+    level = first_confirm.level,
+    name = first_confirm.conversation.name,
+    message = first_confirm.prompt,
+    total = #pending_confirms,
   })
 end
 
 --- @param idx integer
 --- @param choice "accept"|"decline"|"prompt"|"preview"
-local function trigger_approval(idx, choice)
-  if #pending_approvals == 0 or not pending_approvals[idx] then
+local function trigger_confirm(idx, choice)
+  if #pending_confirms == 0 or not pending_confirms[idx] then
     return
   end
 
-  pending_approvals[idx].on_ready(idx, choice)
+  pending_confirms[idx].on_ready(idx, choice)
 end
 
---- Internal helper to trigger an approval with a specific choice
+--- Internal helper to trigger a confirmation with a specific choice
 --- @param choice "accept"|"decline"|"prompt"|"preview"
-local function trigger_pending_approval(choice)
-  if #pending_approvals == 1 then
-    trigger_approval(1, choice)
+local function trigger_pending_confirm(choice)
+  if #pending_confirms == 1 then
+    trigger_confirm(1, choice)
   else
     local items = {}
-    for _, approval in ipairs(pending_approvals) do
+    for _, confirm in ipairs(pending_confirms) do
       table.insert(
         items,
-        string.format("[%s] %s", approval.conversation.name, approval.prompt)
+        string.format("[%s] %s", confirm.conversation.name, confirm.prompt)
       )
     end
 
     vim.ui.select(items, {
-      prompt = "Select approval:",
+      prompt = "Select confirmation:",
     }, function(_, idx)
       if idx then
-        trigger_approval(idx, choice)
+        trigger_confirm(idx, choice)
       end
     end)
   end
 end
 
---- Show the approval prompt to the user
+--- Show the confirmation prompt to the user
 function M.prompt(opts)
   opts = opts or {}
   if opts.first then
-    trigger_approval(1, "prompt")
+    trigger_confirm(1, "prompt")
   else
-    trigger_pending_approval("prompt")
+    trigger_pending_confirm("prompt")
   end
 end
 
---- Accept the pending approval
+--- Accept the pending confirmation
 function M.accept(opts)
   opts = opts or {}
   if opts.first then
-    trigger_approval(1, "accept")
+    trigger_confirm(1, "accept")
   else
-    trigger_pending_approval("accept")
+    trigger_pending_confirm("accept")
   end
 end
 
---- Decline the pending approval
+--- Decline the pending confirmation
 function M.decline(opts)
   opts = opts or {}
   if opts.first then
-    trigger_approval(1, "decline")
+    trigger_confirm(1, "decline")
   else
-    trigger_pending_approval("decline")
+    trigger_pending_confirm("decline")
   end
 end
 
---- Show preview for the pending approval
+--- Show preview for the pending confirmation
 function M.preview(opts)
   opts = opts or {}
   if opts.first then
-    trigger_approval(1, "preview")
+    trigger_confirm(1, "preview")
   else
-    trigger_pending_approval("preview")
+    trigger_pending_confirm("preview")
   end
 end
 
---- Get the count of pending approvals
+--- Get the count of pending confirmations
 --- @return integer
 function M.count()
-  return #pending_approvals
+  return #pending_confirms
 end
 
 return M

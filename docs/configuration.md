@@ -29,7 +29,7 @@ require("sia").setup({
         show_preview = true, -- Show preview in approval prompts
         async = {
           enable = false,    -- Queue approvals in background (non-blocking)
-          -- notifier = require("sia.approval").floating_notifier(), -- default
+          -- notifier = require("sia.ui.confirm").floating_notifier(), -- default
         },
       },
     },

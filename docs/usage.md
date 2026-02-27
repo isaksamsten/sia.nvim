@@ -121,12 +121,12 @@ conversation that is started.
 
 **Tool Approval (Async Mode):**
 
-- `SiaAnswer prompt` - Show the approval prompt for pending tool operations
-- `SiaAnswer accept` - Auto-accept the pending tool operation
-- `SiaAnswer decline` - Auto-decline the pending tool operation
-- `SiaAnswer preview` - Preview the pending tool operation
+- `SiaConfirm prompt` - Show the approval prompt for pending tool operations
+- `SiaConfirm accept` - Auto-accept the pending tool operation
+- `SiaConfirm decline` - Auto-decline the pending tool operation
+- `SiaConfirm preview` - Preview the pending tool operation
 
-Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
+Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending approval.
 
 **Conversation Management:**
 
@@ -205,9 +205,9 @@ keys = {
     desc = "Next edit",
   },
   -- Tool approval (async mode)
-  -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
-  -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
-  -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
+  -- { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool", },
+  -- { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool", },
+  -- { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool", },
   { "ga", mode = "n", function() require("sia").edit.accept() end, desc = "Accept edit", },
   { "gx", mode = "n", function() require("sia").edit.accept() end, desc = "Reject edit", },
   -- Or, to be consistent with vim.wo.diff

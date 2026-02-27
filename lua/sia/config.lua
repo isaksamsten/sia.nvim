@@ -666,21 +666,21 @@ end
 
 --- @class sia.config.Settings.Ui
 --- @field diff sia.config.Settings.Ui.Diff
---- @field approval sia.config.Settings.Ui.Approval
+--- @field confirm sia.config.Settings.Ui.Confirm
 
 --- @class sia.config.Settings.Ui.Diff
 --- @field enable boolean?
 --- @field show_signs boolean?
 --- @field char_diff boolean?
 
---- @class sia.config.Settings.Ui.Approval.Async
+--- @class sia.config.Settings.Ui.Confirm.Async
 --- @field enable boolean?
---- @field notifier sia.ApprovalNotifier?
+--- @field notifier sia.ConfirmNotifier?
 
---- @class sia.config.Settings.Ui.Approval
+--- @class sia.config.Settings.Ui.Confirm
 --- @field use_vim_ui boolean?
 --- @field show_preview boolean?
---- @field async sia.config.Settings.Ui.Approval.Async?
+--- @field async sia.config.Settings.Ui.Confirm.Async?
 
 --- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
 --- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
@@ -1048,7 +1048,7 @@ M._raw_options = {
         show_signs = true,
         char_diff = true,
       },
-      approval = {
+      confirm = {
         use_vim_ui = false,
         show_preview = true,
         async = {

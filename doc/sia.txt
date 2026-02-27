@@ -183,7 +183,7 @@ Configure Sia in your `init.lua`:
             show_preview = true, -- Show preview in approval prompts
             async = {
               enable = false,    -- Queue approvals in background (non-blocking)
-              -- notifier = require("sia.approval").floating_notifier(), -- default
+              -- notifier = require("sia.ui.confirm").floating_notifier(), -- default
             },
           },
         },
@@ -853,12 +853,13 @@ conversation that is started.
 
 **Tool Approval (Async Mode):**
 
-- `SiaAnswer prompt` - Show the approval prompt for pending tool operations
-- `SiaAnswer accept` - Auto-accept the pending tool operation
-- `SiaAnswer decline` - Auto-decline the pending tool operation
-- `SiaAnswer preview` - Preview the pending tool operation
+- `SiaConfirm prompt` - Show the approval prompt for pending tool operations
+- `SiaConfirm accept` - Auto-accept the pending tool operation
+- `SiaConfirm decline` - Auto-decline the pending tool operation
+- `SiaConfirm preview` - Preview the pending tool operation
 
-Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
+Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending
+approval.
 
 **Conversation Management:**
 
@@ -941,9 +942,9 @@ You can bind visual and operator mode selections to enhance your workflow with
         desc = "Next edit",
       },
       -- Tool approval (async mode)
-      -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
-      -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
-      -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
+      -- { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool", },
+      -- { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool", },
+      -- { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool", },
       { "ga", mode = "n", function() require("sia").edit.accept() end, desc = "Accept edit", },
       { "gx", mode = "n", function() require("sia").edit.accept() end, desc = "Reject edit", },
       -- Or, to be consistent with vim.wo.diff
@@ -1198,10 +1199,10 @@ default).
 
 2. **Process approvals**: When you’re ready, use one of these functions:
 
-- `require("sia.approval").prompt()` - Shows the full approval prompt
-- `require("sia.approval").accept()` - Auto-accepts without showing prompt
-- `require("sia.approval").decline()` - Auto-declines without showing prompt
-- `require("sia.approval").preview()` - Preview without showing prompt
+- `require("sia").approval.prompt()` - Shows the full approval prompt
+- `require("sia").approval.accept()` - Auto-accepts without showing prompt
+- `require("sia").approval.decline()` - Auto-declines without showing prompt
+- `require("sia").approval.preview()` - Preview without showing prompt
 
 
 
@@ -1217,8 +1218,8 @@ or you can provide your own custom notifier.
 
 **Built-in notifiers:**
 
-- `require("sia.approval").floating_notifier()` - Non-focusable floating window at top (default)
-- `require("sia.approval").winbar_notifier()` - Shows in the current window’s winbar
+- `require("sia.ui.confirm").floating_notifier()` - Non-focusable floating window at top (default)
+- `require("sia.ui.confirm").winbar_notifier()` - Shows in the current window’s winbar
 
 **Example using winbar:**
 
@@ -1229,7 +1230,7 @@ or you can provide your own custom notifier.
           approval = {
             async = {
               enable = true,
-              notifier = require("sia.approval").winbar_notifier(),
+              notifier = require("sia.ui.confirm").winbar_notifier(),
             },
           },
         },
@@ -1291,9 +1292,9 @@ The `notifier` must implement the `sia.ApprovalNotifier` interface:
 
 >lua
     keys = {
-      { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool" },
-      { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool" },
-      { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool" },
+      { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool" },
+      { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool" },
+      { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool" },
     }
 <
 
