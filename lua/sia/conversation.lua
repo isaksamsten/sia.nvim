@@ -891,7 +891,7 @@ function Conversation:build_template_context()
     table.insert(agent_list, agent)
   end
 
-  local skills = require("sia.skill_registry").get_skills(self.tool_fn, false)
+  local skills = require("sia.skills.registry").get_skills(self.tool_fn, false)
   local skill_list = {}
   for _, skill in ipairs(skills) do
     table.insert(skill_list, {

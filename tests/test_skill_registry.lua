@@ -12,9 +12,9 @@ local T = MiniTest.new_set({
 
 local eq = MiniTest.expect.equality
 
-T["sia.skill_registry"] = MiniTest.new_set()
+T["sia.skills.registry"] = MiniTest.new_set()
 
-T["sia.skill_registry"]["parse_skill_file parses valid SKILL.md"] = function()
+T["sia.skills.registry"]["parse_skill_file parses valid SKILL.md"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/test-skill", "p")
@@ -37,7 +37,7 @@ T["sia.skill_registry"]["parse_skill_file parses valid SKILL.md"] = function()
       "2. Check output",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "test-skill")
     _G.skill = skill
     _G.err = err
@@ -57,7 +57,7 @@ T["sia.skill_registry"]["parse_skill_file parses valid SKILL.md"] = function()
   eq("## When to Use", skill.content[2])
 end
 
-T["sia.skill_registry"]["parse_skill_file fails on missing frontmatter"] = function()
+T["sia.skills.registry"]["parse_skill_file fails on missing frontmatter"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/bad-skill", "p")
@@ -67,7 +67,7 @@ T["sia.skill_registry"]["parse_skill_file fails on missing frontmatter"] = funct
       "Just body content",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "bad-skill")
     _G.skill = skill
     _G.err = err
@@ -82,7 +82,7 @@ T["sia.skill_registry"]["parse_skill_file fails on missing frontmatter"] = funct
   eq("Invalid format: missing frontmatter", err)
 end
 
-T["sia.skill_registry"]["parse_skill_file fails on missing description"] = function()
+T["sia.skills.registry"]["parse_skill_file fails on missing description"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/bad-skill", "p")
@@ -96,7 +96,7 @@ T["sia.skill_registry"]["parse_skill_file fails on missing description"] = funct
       "body",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "bad-skill")
     _G.skill = skill
     _G.err = err
@@ -111,7 +111,7 @@ T["sia.skill_registry"]["parse_skill_file fails on missing description"] = funct
   eq("Missing required field: description", err)
 end
 
-T["sia.skill_registry"]["parse_skill_file defaults tools to empty when omitted"] = function()
+T["sia.skills.registry"]["parse_skill_file defaults tools to empty when omitted"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/no-tools-skill", "p")
@@ -124,7 +124,7 @@ T["sia.skill_registry"]["parse_skill_file defaults tools to empty when omitted"]
       "body",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "no-tools-skill")
     _G.skill = skill
     _G.err = err
@@ -141,7 +141,7 @@ T["sia.skill_registry"]["parse_skill_file defaults tools to empty when omitted"]
   eq({}, skill.tools)
 end
 
-T["sia.skill_registry"]["parse_skill_file resolves skill_dir template"] = function()
+T["sia.skills.registry"]["parse_skill_file resolves skill_dir template"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/tmux-skill", "p")
@@ -156,7 +156,7 @@ T["sia.skill_registry"]["parse_skill_file resolves skill_dir template"] = functi
       "Run: `bash {{skill_dir}}/scripts/tmux-send.sh`",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "tmux-skill")
     _G.skill = skill
     _G.err = err
@@ -172,7 +172,7 @@ T["sia.skill_registry"]["parse_skill_file resolves skill_dir template"] = functi
   eq(expected_dir, skill.dir)
 end
 
-T["sia.skill_registry"]["get_skills filters by conversation tools"] = function()
+T["sia.skills.registry"]["get_skills filters by conversation tools"] = function()
   child.lua([[
     -- Set up a temporary skills dir + config
     local tmpdir = vim.fn.tempname()
@@ -202,7 +202,7 @@ T["sia.skill_registry"]["get_skills filters by conversation tools"] = function()
     }, skills_dir .. "/read-bash-skill/SKILL.md")
 
     -- Manually scan and filter
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
 
     -- Test with only bash available
     local bash_only = { bash = true }
@@ -231,7 +231,7 @@ T["sia.skill_registry"]["get_skills filters by conversation tools"] = function()
   eq(true, child.lua_get("_G.read_bash_skill_with_both"))
 end
 
-T["sia.skill_registry"]["parse_skill_file fails on empty body"] = function()
+T["sia.skills.registry"]["parse_skill_file fails on empty body"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/empty-skill", "p")
@@ -245,7 +245,7 @@ T["sia.skill_registry"]["parse_skill_file fails on empty body"] = function()
       "---",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "empty-skill")
     _G.skill = skill
     _G.err = err
@@ -260,7 +260,7 @@ T["sia.skill_registry"]["parse_skill_file fails on empty body"] = function()
   eq("Missing skill content body", err)
 end
 
-T["sia.skill_registry"]["parse_skill_file uses name from frontmatter over directory"] = function()
+T["sia.skills.registry"]["parse_skill_file uses name from frontmatter over directory"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/dir-name", "p")
@@ -276,7 +276,7 @@ T["sia.skill_registry"]["parse_skill_file uses name from frontmatter over direct
       "Body content here",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "dir-name")
     _G.skill = skill
     _G.err = err
@@ -290,7 +290,7 @@ T["sia.skill_registry"]["parse_skill_file uses name from frontmatter over direct
   eq("name must match directory", err)
 end
 
-T["sia.skill_registry"]["parse_skill_file falls back to directory name when name omitted"] = function()
+T["sia.skills.registry"]["parse_skill_file falls back to directory name when name omitted"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/dir-name", "p")
@@ -302,7 +302,7 @@ T["sia.skill_registry"]["parse_skill_file falls back to directory name when name
       "Body content here",
     }, filepath)
 
-    local registry = require("sia.skill_registry")
+    local registry = require("sia.skills.registry")
     local skill, err = registry._parse_skill_file(filepath, "dir-name")
     _G.skill = skill
     _G.err = err

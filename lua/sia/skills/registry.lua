@@ -6,7 +6,7 @@ local State = {
   IN_BODY = 3,
 }
 
---- @class sia.skill_registry.SkillDef
+--- @class sia.skills.registry.SkillDef
 --- @field name string
 --- @field description string
 --- @field tools string[]
@@ -17,7 +17,7 @@ local State = {
 --- Parse a SKILL.md file into a skill definition
 --- @param filepath string Path to SKILL.md
 --- @param name string Skill name (directory name, used as fallback)
---- @return sia.skill_registry.SkillDef? skill
+--- @return sia.skills.registry.SkillDef? skill
 --- @return string|nil error
 local function parse_skill_file(filepath, name)
   local utils = require("sia.utils")
@@ -96,7 +96,7 @@ end
 --- Scan a directory for skill definitions (*/SKILL.md)
 --- @param base_dir string Directory to scan
 --- @param error_report boolean?
---- @return table<string, sia.skill_registry.SkillDef> skills Map of name to skill
+--- @return table<string, sia.skills.registry.SkillDef> skills Map of name to skill
 local function scan_skills_dir(base_dir, error_report)
   local skills = {}
 
@@ -154,7 +154,7 @@ end
 ---
 --- @param conversation_tools table<string, any>? Map of tool name → truthy (e.g., conversation.tool_fn)
 --- @param error_report boolean?
---- @return sia.skill_registry.SkillDef[] skills
+--- @return sia.skills.registry.SkillDef[] skills
 function M.get_skills(conversation_tools, error_report)
   local enabled_names, extra_paths = get_skills_config()
 
@@ -169,7 +169,7 @@ function M.get_skills(conversation_tools, error_report)
   end
 
   -- Scan all search paths. First match wins on name collision.
-  --- @type table<string, sia.skill_registry.SkillDef>
+  --- @type table<string, sia.skills.registry.SkillDef>
   local all_skills = {}
 
   -- Default location first
@@ -220,7 +220,7 @@ end
 --- Get a single skill definition by name (ignoring project config filter)
 --- Searches default dir + extras from config
 --- @param name string
---- @return sia.skill_registry.SkillDef?
+--- @return sia.skills.registry.SkillDef?
 function M.get_skill(name)
   local _, extra_paths = get_skills_config()
 
