@@ -884,7 +884,7 @@ Add `!` (e.g., `SiaAnswer! accept`) to process only the first pending approval.
 COMPOSE WINDOW                                      *sia-usage-compose-window*
 
 Sia provides a floating compose window for starting new conversations with
-optional model selection. Call `require("sia").compose()` to open it.
+optional model selection. Call `require("sia").chat.compose()` to open it.
 
 **Keybindings in the compose window:**
 
@@ -910,8 +910,8 @@ You can bind visual and operator mode selections to enhance your workflow with
     keys = {
       { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
       { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
-      { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
-      { "<Leader>ap", mode = "n", function() require("sia").compose() end, desc = "Compose new chat", },
+      { "<Leader>at", mode = "n", function() require("sia").chat.toggle() end, desc = "Toggle last Sia buffer", },
+      { "<Leader>ap", mode = "n", function() require("sia").chat.compose() end, desc = "Compose new chat", },
       { "<Leader>aa", mode = "n", function() require("sia").edit.accept_all() end, desc = "Accept changes", },
       { "<Leader>ar", mode = "n", function() require("sia").edit.reject_all() end, desc = "Reject changes", },
       { "<Leader>ad", mode = "n", function() require("sia").edit.show() end, desc = "Diff changes", },
@@ -997,14 +997,14 @@ efficient interaction:
 
 >lua
     keys = {
-      { "p", mode = "n", require("sia").show_messages, ft = "sia" },
-      { "<CR>", mode = "n", require("sia").reply, ft = "sia" },
+      { "p", mode = "n", require("sia").show.messages, ft = "sia" },
+      { "<CR>", mode = "n", require("sia").chat.reply, ft = "sia" },
       -- toggle the todo view
-      { "t", mode = "n", require("sia").todos, ft = "sia" },
+      { "t", mode = "n", require("sia").show.todos, ft = "sia" },
       -- toggle the status view (agents/processes)
-      { "a", mode = "n", require("sia").status, ft = "sia" },
+      { "a", mode = "n", require("sia").show.status, ft = "sia" },
       -- show a quickfix window with active context references
-      { "c", mode = "n", require("sia").show_contexts, ft = "sia" },
+      { "c", mode = "n", require("sia").show.contexts, ft = "sia" },
     }
 <
 
