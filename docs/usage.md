@@ -176,10 +176,10 @@ keys = {
   { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
   { "<Leader>at", mode = "n", function() require("sia").toggle() end, desc = "Toggle last Sia buffer", },
   { "<Leader>ap", mode = "n", function() require("sia").compose() end, desc = "Compose new chat", },
-  { "<Leader>aa", mode = "n", function() require("sia").accept_edits() end, desc = "Accept changes", },
-  { "<Leader>ar", mode = "n", function() require("sia").reject_edits() end, desc = "Reject changes", },
-  { "<Leader>ad", mode = "n", function() require("sia").show_edits_diff() end, desc = "Diff changes", },
-  { "<Leader>aq", mode = "n", function() require("sia").show_edits_qf() end, desc = "Show changes", },
+  { "<Leader>aa", mode = "n", function() require("sia").edit.accept_all() end, desc = "Accept changes", },
+  { "<Leader>ar", mode = "n", function() require("sia").edit.reject_all() end, desc = "Reject changes", },
+  { "<Leader>ad", mode = "n", function() require("sia").edit.show() end, desc = "Diff changes", },
+  { "<Leader>aq", mode = "n", function() require("sia").edit.open_qf() end, desc = "Show changes", },
   {
     "[c",
     mode = "n",
@@ -188,7 +188,7 @@ keys = {
         vim.api.nvim_feedkeys("[c", "n", true)
         return
       end
-      require("sia").prev_edit()
+      require("sia").edit.prev()
     end,
     desc = "Previous edit",
   },
@@ -200,7 +200,7 @@ keys = {
         vim.api.nvim_feedkeys("]c", "n", true)
         return
       end
-      require("sia").next_edit()
+      require("sia").edit.next()
     end,
     desc = "Next edit",
   },
@@ -208,8 +208,8 @@ keys = {
   -- { "<Leader>ac", mode = "n", function() require("sia.approval").prompt() end, desc = "Confirm pending tool", },
   -- { "<Leader>ay", mode = "n", function() require("sia.approval").accept() end, desc = "Accept pending tool", },
   -- { "<Leader>an", mode = "n", function() require("sia.approval").decline() end, desc = "Decline pending tool", },
-  { "ga", mode = "n", function() require("sia").accept_edit() end, desc = "Accept edit", },
-  { "gx", mode = "n", function() require("sia").reject_edit() end, desc = "Reject edit", },
+  { "ga", mode = "n", function() require("sia").edit.accept() end, desc = "Accept edit", },
+  { "gx", mode = "n", function() require("sia").edit.accept() end, desc = "Reject edit", },
   -- Or, to be consistent with vim.wo.diff
   --
   -- {
@@ -220,7 +220,7 @@ keys = {
   --       vim.api.nvim_feedkeys("dp", "n", true)
   --       return
   --     end
-  --     require("sia").accept_edit()
+  --     require("sia").edit.accept()
   --   end,
   --   desc = "Accept edit",
   -- },
@@ -232,7 +232,7 @@ keys = {
   --       vim.api.nvim_feedkeys("do", "n", true)
   --       return
   --     end
-  --     require("sia").reject_edit()
+  --     require("sia").edit.reject()
   --   end,
   --   desc = "Reject edit",
   -- },

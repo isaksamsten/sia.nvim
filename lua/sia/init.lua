@@ -39,131 +39,133 @@ local function set_highlight_groups()
   end
 end
 
-function M.reject_edit(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local win = vim.fn.bufwinid(buf)
-  local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
+M.edit = {
+  reject = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    local win = vim.fn.bufwinid(buf)
+    local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
 
-  local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
-  if hunk_idx then
-    require("sia.diff").reject_single_hunk(buf, hunk_idx)
-  end
-end
-
-function M.accept_edit(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local win = vim.fn.bufwinid(buf)
-  local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
-
-  local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
-  if hunk_idx then
-    require("sia.diff").accept_single_hunk(buf, hunk_idx)
-  end
-end
-
---- @param opts { buf: integer? }?
-function M.accept_edits(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  if not require("sia.diff").accept_diff(buf) then
-    vim.api.nvim_echo({ { "Sia: No changes to accept", "WarningMsg" } }, false, {})
-  end
-end
-
---- @param opts { buf: integer? }?
-function M.reject_edits(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  if not require("sia.diff").reject_diff(buf) then
-    vim.api.nvim_echo({ { "Sia: No changes to reject", "WarningMsg" } }, false, {})
-  end
-end
-
---- @param opts { buf: integer? }?
-function M.show_edits_diff(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local diff = require("sia.diff")
-
-  if not diff.show_diff_for_buffer(buf) then
-    vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
-  end
-end
-
---- Navigate to the next diff hunk
---- @param opts { buf: integer? }?
-function M.next_edit(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local current_line = cursor[1]
-
-  local diff = require("sia.diff")
-  local hunk_info = diff.get_next_hunk(buf, current_line)
-
-  if hunk_info then
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    if hunk_info.line > 0 and hunk_info.line <= line_count then
-      vim.cmd("normal! m'")
-      vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
-      local total_hunks = diff.get_hunk_count(buf)
-      vim.api.nvim_echo(
-        { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "None" } },
-        false,
-        {}
-      )
+    local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
+    if hunk_idx then
+      require("sia.diff").reject_single_hunk(buf, hunk_idx)
     end
-  end
-end
+  end,
 
---- Navigate to the previous diff hunk
---- @param opts { buf: integer? }?
-function M.prev_edit(opts)
-  opts = opts or {}
-  local buf = opts.buf or vim.api.nvim_get_current_buf()
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local current_line = cursor[1]
+  accept = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    local win = vim.fn.bufwinid(buf)
+    local line = opts.line or vim.api.nvim_win_get_cursor(win)[1]
 
-  local diff = require("sia.diff")
-  local hunk_info = diff.get_prev_hunk(buf, current_line)
-
-  if hunk_info then
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    if hunk_info.line > 0 and hunk_info.line <= line_count then
-      vim.cmd("normal! m'")
-      vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
-      local total_hunks = diff.get_hunk_count(buf)
-      vim.api.nvim_echo(
-        { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "None" } },
-        false,
-        {}
-      )
+    local hunk_idx = require("sia.diff").get_hunk_at_line(buf, line)
+    if hunk_idx then
+      require("sia.diff").accept_single_hunk(buf, hunk_idx)
     end
-  end
-end
+  end,
 
---- Populate quickfix list with all diff hunks
---- @param opts { buf: integer? }?
-function M.show_edits_qf(opts)
-  opts = opts or {}
-  local buf = opts.buf
-  if buf == 0 then
-    buf = vim.api.nvim_get_current_buf()
-  end
+  --- @param opts { buf: integer? }?
+  accept_all = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    if not require("sia.diff").accept_diff(buf) then
+      vim.api.nvim_echo({ { "Sia: No changes to accept", "WarningMsg" } }, false, {})
+    end
+  end,
 
-  local diff = require("sia.diff")
-  local quickfix_items = diff.get_all_hunks_for_quickfix(buf)
+  --- @param opts { buf: integer? }?
+  reject_all = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    if not require("sia.diff").reject_diff(buf) then
+      vim.api.nvim_echo({ { "Sia: No changes to reject", "WarningMsg" } }, false, {})
+    end
+  end,
 
-  if #quickfix_items == 0 then
-    vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
-    return
-  end
+  --- @param opts { buf: integer? }?
+  show = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    local diff = require("sia.diff")
 
-  vim.fn.setqflist(quickfix_items, "r")
-  vim.cmd("copen")
-end
+    if not diff.show_diff_for_buffer(buf) then
+      vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
+    end
+  end,
+
+  --- Navigate to the next diff hunk
+  --- @param opts { buf: integer? }?
+  next = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local current_line = cursor[1]
+
+    local diff = require("sia.diff")
+    local hunk_info = diff.get_next_hunk(buf, current_line)
+
+    if hunk_info then
+      local line_count = vim.api.nvim_buf_line_count(buf)
+      if hunk_info.line > 0 and hunk_info.line <= line_count then
+        vim.cmd("normal! m'")
+        vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+        local total_hunks = diff.get_hunk_count(buf)
+        vim.api.nvim_echo(
+          { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "None" } },
+          false,
+          {}
+        )
+      end
+    end
+  end,
+
+  --- Navigate to the previous diff hunk
+  --- @param opts { buf: integer? }?
+  prev = function(opts)
+    opts = opts or {}
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local current_line = cursor[1]
+
+    local diff = require("sia.diff")
+    local hunk_info = diff.get_prev_hunk(buf, current_line)
+
+    if hunk_info then
+      local line_count = vim.api.nvim_buf_line_count(buf)
+      if hunk_info.line > 0 and hunk_info.line <= line_count then
+        vim.cmd("normal! m'")
+        vim.api.nvim_win_set_cursor(0, { hunk_info.line, 0 })
+        local total_hunks = diff.get_hunk_count(buf)
+        vim.api.nvim_echo(
+          { { string.format("Edit %d of %d", hunk_info.index, total_hunks), "None" } },
+          false,
+          {}
+        )
+      end
+    end
+  end,
+
+  --- Populate quickfix list with all diff hunks
+  --- @param opts { buf: integer? }?
+  open_qf = function(opts)
+    opts = opts or {}
+    local buf = opts.buf
+    if buf == 0 then
+      buf = vim.api.nvim_get_current_buf()
+    end
+
+    local diff = require("sia.diff")
+    local quickfix_items = diff.get_all_hunks_for_quickfix(buf)
+
+    if #quickfix_items == 0 then
+      vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
+      return
+    end
+
+    vim.fn.setqflist(quickfix_items, "r")
+    vim.cmd("copen")
+  end,
+}
 
 --- @param opts table?
 function M.show_messages(opts)

@@ -298,22 +298,22 @@ local SIA_ADD_CMD = {
 
 vim.api.nvim_create_user_command("SiaAccept", function(args)
   if args.bang then
-    require("sia").accept_edits()
+    require("sia").edit.accept_all()
   else
-    require("sia").accept_edit()
+    require("sia").edit.accept()
   end
 end, { bang = true })
 
 vim.api.nvim_create_user_command("SiaReject", function(args)
   if args.bang then
-    require("sia").reject_edits()
+    require("sia").edit.reject_all()
   else
-    require("sia").reject_edit()
+    require("sia").edit.reject()
   end
 end, { bang = true })
 
 vim.api.nvim_create_user_command("SiaDiff", function()
-  require("sia").show_edits_diff()
+  require("sia").edit.show()
 end, {})
 
 vim.api.nvim_create_user_command("SiaAnswer", function(args)
