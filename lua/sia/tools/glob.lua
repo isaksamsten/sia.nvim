@@ -1,6 +1,6 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local MAX_FILES_RESULT = 100
 local MAX_FILES_SORT = 1000

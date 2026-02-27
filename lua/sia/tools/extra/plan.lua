@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   name = "plan",

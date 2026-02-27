@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   name = "memory",
@@ -116,7 +116,9 @@ All paths MUST start with `/memories/`.
       end
       callback({
         content = output,
-        display_content = { icons.directory .. " Viewed directory " .. (args.path or "/memories") },
+        display_content = {
+          icons.directory .. " Viewed directory " .. (args.path or "/memories"),
+        },
       })
     else
       -- Read file

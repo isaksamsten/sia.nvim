@@ -1,7 +1,7 @@
 local tracker = require("sia.tracker")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_get_diagnostics()
   return icons.error .. " Failed to read diagnostics"
@@ -65,7 +65,9 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
-      display_content = { string.format("%s No diagnostics found for %s", icons.diagnostics, args.file) },
+      display_content = {
+        string.format("%s No diagnostics found for %s", icons.diagnostics, args.file),
+      },
       content = { string.format("No diagnostics found for %s", args.file) },
       context = {
         buf = buf,
@@ -106,8 +108,13 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
 
   callback({
     content = content,
-    context = { buf = buf, tick = tracker.ensure_tracked(buf, { id = conversation.id }) },
+    context = {
+      buf = buf,
+      tick = tracker.ensure_tracked(buf, { id = conversation.id }),
+    },
     kind = "diagnostics",
-    display_content = { string.format("%s Found %d diagnostics", icons.diagnostics, #diagnostics) },
+    display_content = {
+      string.format("%s Found %d diagnostics", icons.diagnostics, #diagnostics),
+    },
   })
 end)

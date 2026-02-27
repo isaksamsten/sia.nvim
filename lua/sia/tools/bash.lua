@@ -1,6 +1,6 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_execute()
   return icons.error .. " Failed to execute command"
@@ -773,7 +773,12 @@ git commit -m "$(cat <<'EOF'
       callback({
         content = content,
         display_content = {
-          string.format("%s Killed process %d: %s", icons.bash_kill, args.id, proc.command),
+          string.format(
+            "%s Killed process %d: %s",
+            icons.bash_kill,
+            args.id,
+            proc.command
+          ),
         },
       })
     else

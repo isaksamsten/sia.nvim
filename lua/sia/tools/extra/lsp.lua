@@ -1,7 +1,6 @@
 local tool_utils = require("sia.tools.utils")
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function find_column(buf, line, pattern, occurrence)
   occurrence = occurrence or 1

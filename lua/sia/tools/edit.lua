@@ -2,7 +2,7 @@ local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local failed_matches = {}
 local MAX_FAILED_MATCHES = 3
@@ -73,7 +73,13 @@ local function create_display_description(target_file, pos, col_span, fuzzy)
   local edit_span = pos[1] ~= pos[2] and string.format("lines %d-%d", pos[1], pos[2])
     or string.format("line %d", pos[1])
 
-  return string.format("%s Edited %s in %s%s", icon, edit_span, target_file, fuzzy_suffix)
+  return string.format(
+    "%s Edited %s in %s%s",
+    icon,
+    edit_span,
+    target_file,
+    fuzzy_suffix
+  )
 end
 
 --- Execute multiple edits in reverse order to maintain line numbers

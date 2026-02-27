@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local START_REPLY = [[
 Async agent launched successfully.

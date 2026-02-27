@@ -1,9 +1,7 @@
---- Centralized icon definitions for sia.nvim
----
---- Supports multiple icon sets: "emoji" (default), "nerd" (Nerd Fonts), and "ascii".
---- Users can select which set to use via config: `settings = { icons = "nerd" }`.
-
 local M = {}
+
+-- @type sia.IconSet
+local icon_set = "emoji"
 
 --- @alias sia.IconSet "emoji"|"nerd"|"ascii"
 
@@ -119,37 +117,17 @@ local icon_sets = {
   },
 }
 
---- The single active icon table. Mutated in-place by setup() so that
---- any module that captured a reference via `require("sia.icons").get()`
---- at require-time keeps seeing the correct values after a later setup().
 --- @type sia.Icons
-local active = vim.tbl_extend("force", {}, icon_sets.emoji)
+M.icons = setmetatable({}, {
+  __index = function(_, key)
+    return icon_sets[icon_set][key]
+  end,
+})
 
 --- Set the active icon set.
---- @param name sia.IconSet
-function M.setup(name)
-  local set = icon_sets[name]
-  if not set then
-    vim.notify(
-      string.format("sia.icons: unknown icon set '%s', using 'emoji'", name),
-      vim.log.levels.WARN
-    )
-    set = icon_sets.emoji
-  end
-  for k in pairs(active) do
-    active[k] = nil
-  end
-  for k, v in pairs(set) do
-    active[k] = v
-  end
-end
-
---- Get the currently active icon table.
---- The returned table is stable: its identity never changes, only its contents.
---- Safe to capture once at require-time: `local icons = require("sia.icons").get()`.
---- @return sia.Icons
-function M.get()
-  return active
+--- @param opts {icons: sia.IconSet?}
+function M.setup(opts)
+  icon_set = opts.icons or "emoji"
 end
 
 return M

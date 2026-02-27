@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_create_qf()
   return icons.error .. " Failed to create quickfix list"
@@ -100,7 +100,11 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
       "Use :cnext/:cprev to navigate, or click items in the quickfix window",
     },
     display_content = {
-      string.format("%s Created quickfix list with %d items", icons.locations, #qf_items),
+      string.format(
+        "%s Created quickfix list with %d items",
+        icons.locations,
+        #qf_items
+      ),
     },
   })
 end)

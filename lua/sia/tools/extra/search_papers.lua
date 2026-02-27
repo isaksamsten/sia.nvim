@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_fetch()
   return icons.error .. " Failed to fetch research papers"
@@ -144,7 +144,9 @@ Usage notes:
                   "Error: CORE API is currently overloaded. Please try again in a few moments.",
                   "Suggestion: Try a more specific query or reduce the limit parameter.",
                 },
-                display_content = { icons.overloaded .. " CORE API overloaded - try again later" },
+                display_content = {
+                  icons.overloaded .. " CORE API overloaded - try again later",
+                },
                 kind = "failed",
               })
               return

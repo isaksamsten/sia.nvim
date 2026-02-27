@@ -2,7 +2,7 @@ local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_replace()
   return icons.error .. " Failed to replace region"

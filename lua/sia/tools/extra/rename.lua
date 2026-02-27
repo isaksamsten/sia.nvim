@@ -1,6 +1,6 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_rename()
   return icons.error .. " Failed to rename/move file"

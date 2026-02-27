@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local MAX_FILE_SIZE = 5 * 1024 * 1024
 local SUB_AGENT_PROMPT = [[Analyze webpage content and provide:
@@ -245,13 +245,17 @@ Usage notes:
               require("sia.assistant").fetch_response(conversation, function(response)
                 callback({
                   content = vim.split(response, "\n", { trimempty = true }),
-                  display_content = { string.format("%s Fetched %s", icons.fetch, args.url) },
+                  display_content = {
+                    string.format("%s Fetched %s", icons.fetch, args.url),
+                  },
                 })
               end)
             else
               callback({
                 content = vim.split(final_content, "\n", { trimempty = true }),
-                display_content = { string.format("%s Fetched %s", icons.fetch, args.url) },
+                display_content = {
+                  string.format("%s Fetched %s", icons.fetch, args.url),
+                },
               })
             end
           end)

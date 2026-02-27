@@ -1,5 +1,5 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 local MAX_LINE_LENGTH = 200
 local MAX_MATCHES = 100
 
@@ -233,7 +233,7 @@ Usage:
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
   message = function(args)
-    return string.format("Searching through files for %s...", args.pattern)
+    return string.format("Searching for %s...", args.pattern)
   end,
   description = "Grep for a pattern in files using rg",
   parameters = {

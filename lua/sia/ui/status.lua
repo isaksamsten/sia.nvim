@@ -1,6 +1,6 @@
 local M = {}
 
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 local format_tokens = require("sia.provider.common").format_token_count
 local split = require("sia.ui.split")
 
@@ -204,11 +204,7 @@ local function get_or_create_buf(conversation)
   vim.bo[buf].bufhidden = "hide"
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = "sia-status"
-  pcall(
-    vim.api.nvim_buf_set_name,
-    buf,
-    string.format("*%s status*", conversation.name)
-  )
+  pcall(vim.api.nvim_buf_set_name, buf, string.format("*%s status*", conversation.name))
 
   local lines, line_info = render_snapshot(conversation)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -244,4 +240,3 @@ function M.toggle(action)
 end
 
 return M
-

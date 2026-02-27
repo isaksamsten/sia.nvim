@@ -486,7 +486,7 @@ function M.setup(options)
   local config = require("sia.config")
   config.setup(options)
 
-  require("sia.icons").setup(config.options.settings.icons or "emoji")
+  require("sia.ui").setup({ icons = config.options.settings.icons })
   require("sia.mappings").setup()
 
   if config.options.settings.ui.diff.enable then

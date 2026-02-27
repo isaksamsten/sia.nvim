@@ -1,4 +1,4 @@
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_write()
   return icons.error .. " Failed to write file"

@@ -1,7 +1,7 @@
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.icons").get()
+local icons = require("sia.ui").icons
 
 local function failed_to_read()
   return icons.error .. " Failed to read"
@@ -40,7 +40,13 @@ end
 return tool_utils.new_tool({
   name = "read",
   read_only = true,
-  message = "Reading file contents...",
+  message = function(args)
+    if args.path then
+      return "Reading " .. vim.fn.fnamemodify(args.path, ":t")
+    else
+      return "Reading..."
+    end
+  end,
   system_prompt = [[Reads a file from the local filesystem. By default, it reads up to
 2000 lines starting from the beginning of the file. You can optionally specify a line
 offset and limit (especially handy for long files), but it`s RECOMMENDED TO READ THE
