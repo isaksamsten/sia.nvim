@@ -24,11 +24,11 @@ require("sia").setup({
         show_signs = true,   -- Show signs in the gutter for changes
         char_diff = true,    -- Show character-level diffs
       },
-      approval = {
-        use_vim_ui = false,  -- Use Vim's built-in input/select for approvals
-        show_preview = true, -- Show preview in approval prompts
+      confirm = {
+        use_vim_ui = false,  -- Use Vim's built-in input/select for confirm
+        show_preview = true, -- Show preview in confirm prompts
         async = {
-          enable = false,    -- Queue approvals in background (non-blocking)
+          enable = false,    -- Queue confirm in background (non-blocking)
           -- notifier = require("sia.ui.confirm").floating_notifier(), -- default
         },
       },
@@ -343,7 +343,7 @@ maintaining security and preventing accidental destructive operations.
 ### Risk Level System
 
 The risk level system provides visual feedback and control over how tool operations
-are presented in the async approval UI. Unlike the permission system (which controls whether
+are presented in the async confirm UI. Unlike the permission system (which controls whether
 operations require confirmation), the risk system lets you mark operations as safe,
 informational, or risky. By default, the risk system is used together with the
 async approval system to highlight tools differently.

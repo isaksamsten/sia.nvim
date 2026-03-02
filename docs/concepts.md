@@ -1,25 +1,25 @@
 # Concepts
 
-## Tool Approval System
+## Tool Confirmation
 
-Sia includes a flexible approval system that allows you to control how tool
+Sia includes a flexible confirm system that allows you to control how tool
 operations are confirmed. You can choose between blocking (traditional) and
-non-blocking (async) approval modes.
+non-blocking (async) confirm modes.
 
-### Async Approval Mode
+### Async Confirm Mode
 
 https://github.com/user-attachments/assets/7d9607c9-0846-4415-b32a-db1b51abbf56
 
-When enabled with `ui.approval.async = true`, tool approval requests are queued
+When enabled with `ui.confirm.async = true`, tool confirm requests are queued
 in the background without interrupting your workflow. This allows you to:
 
 - **Continue working** while approvals accumulate
-- **Batch process approvals** when you're ready
+- **Batch process confirm** when you're ready
 - **Maintain focus** on editing without constant interruptions
 
 **How it works:**
 
-1. **Queued notifications**: When a tool needs approval, a notification appears
+1. **Queued notifications**: When a tool needs confirm, a notification appears
    in a floating window at the top of your screen:
 
    ```
@@ -28,19 +28,19 @@ in the background without interrupting your workflow. This allows you to:
 
    The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn` highlight groups depending on the risk level (all linked to `StatusLine` by default).
 
-2. **Process approvals**: When you're ready, use one of these functions:
-   - `require("sia").approval.prompt()` - Shows the full approval prompt
-   - `require("sia").approval.accept()` - Auto-accepts without showing prompt
-   - `require("sia").approval.decline()` - Auto-declines without showing prompt
-   - `require("sia").approval.preview()` - Preview without showing prompt
+2. **Process confirm**: When you're ready, use one of these functions:
+   - `require("sia").confirm.prompt()` - Shows the full confirm prompt
+   - `require("sia").confirm.accept()` - Auto-accepts without showing prompt
+   - `require("sia").confirm.decline()` - Auto-declines without showing prompt
+   - `require("sia").confirm.preview()` - Preview without showing prompt
 
-All functions will show a picker when multiple approvals are pending,
+All functions will show a picker when multiple confirm are pending,
 allowing you to select which one to process. The difference is in the default
-action for a single pending approval.
+action for a single pending confirm.
 
 **Customizing Notifications:**
 
-By default, approval notifications are shown in a non-focusable floating window
+By default, confirm notifications are shown in a non-focusable floating window
 at the top of the editor. Sia provides built-in notifiers you can choose from,
 or you can provide your own custom notifier.
 
@@ -55,7 +55,7 @@ or you can provide your own custom notifier.
 require("sia").setup({
   settings = {
     ui = {
-      approval = {
+      confirm = {
         async = {
           enable = true,
           notifier = require("sia.ui.confirm").winbar_notifier(),
@@ -68,13 +68,13 @@ require("sia").setup({
 
 **Custom notifiers:**
 
-The `notifier` must implement the `sia.ApprovalNotifier` interface:
+The `notifier` must implement the `sia.ConfirmNotifier` interface:
 
 - `show(args)` - Show/update the notification. Called whenever the message changes. `args` is a table with:
   - `level` - Risk level (`"safe"`, `"info"`, or `"warn"`)
   - `name` - Conversation name
   - `message` - The notification message
-  - `total` - Number of pending approvals
+  - `total` - Number of pending confirms
 - `clear()` - Clear/dismiss the notification
 
 **Example using nvim-notify:**
@@ -83,7 +83,7 @@ The `notifier` must implement the `sia.ApprovalNotifier` interface:
 require("sia").setup({
   settings = {
     ui = {
-      approval = {
+      confirm = {
         async = {
           enable = true,
           notifier = (function()
@@ -92,7 +92,7 @@ require("sia").setup({
             return {
               show = function(args)
                 notif_id = vim.notify(args.message, vim.log.levels.INFO, {
-                  title = "Sia Approval",
+                  title = "Sia confirm",
                   timeout = false,
                   replace = notif_id,  -- Replace if exists, create if not
                 })
@@ -131,12 +131,12 @@ require("sia").setup({
 require("sia").setup({
   settings = {
     ui = {
-      approval = {
+      confirm = {
         use_vim_ui = false,  -- Use custom preview UI
         show_preview = true, -- Show detailed preview in prompts
 
         async = {
-          enable = true,     -- Enable non-blocking approval mode
+          enable = true,     -- Enable non-blocking confirm mode
           -- notifier = { ... } -- Optional: customize notification display
         },
       },

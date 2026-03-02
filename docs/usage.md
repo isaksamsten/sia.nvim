@@ -121,12 +121,12 @@ conversation that is started.
 
 **Tool Approval (Async Mode):**
 
-- `SiaConfirm prompt` - Show the approval prompt for pending tool operations
+- `SiaConfirm prompt` - Show the confirm prompt for pending tool operations
 - `SiaConfirm accept` - Auto-accept the pending tool operation
 - `SiaConfirm decline` - Auto-decline the pending tool operation
 - `SiaConfirm preview` - Preview the pending tool operation
 
-Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending approval.
+Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending confirm.
 
 **Conversation Management:**
 
