@@ -310,7 +310,7 @@ of newly added todos for future reference.]],
   if all_completed or #conversation.todos.items == 0 then
     response = { "All items are done or skipped!" }
     vim.schedule(function()
-      require("sia").todos("close")
+      require("sia").ui.todos("close")
     end)
   end
 
