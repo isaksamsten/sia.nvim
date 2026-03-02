@@ -149,7 +149,7 @@ function OpenAICompletionStream:finalize()
     nil,
     {
       meta = {
-        empty_content = true,
+        empty_content = self.reasoning_opaque ~= nil or self.reasoning_text ~= nil,
         reasoning_opaque = self.reasoning_opaque,
         reasoning_text = self.reasoning_text,
       },

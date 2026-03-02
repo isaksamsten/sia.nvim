@@ -255,4 +255,91 @@ T["tool call filtering"]["should only trigger when both conditions met"] = funct
   eq(0, count_pruned(query))
 end
 
+T["empty assistant messages"] = MiniTest.new_set()
+
+T["empty assistant messages"]["should filter assistant with nil content and no tool_calls"] = function()
+  local conv = Conversation:new({ instructions = {} }, nil)
+
+  -- Simulate what happens during a tool-call-only response:
+  -- The user asks something
+  conv:add_instruction({ role = "user", content = "Do something" })
+
+  -- The LLM responds with only tool calls. The finalize() method adds an
+  -- assistant message with content=nil. With no reasoning metadata,
+  -- empty_content will be false, so it should be filtered out.
+  conv:add_instruction({ role = "assistant", content = nil }, nil, {
+    meta = { empty_content = false },
+  })
+
+  -- Then the tool execution adds the actual tool call + result pair
+  conv:add_instruction({
+    { role = "assistant", tool_calls = {
+      { id = "call_1", type = "function", ["function"] = { name = "test", arguments = "{}" } },
+    } },
+    {
+      role = "tool",
+      content = "result",
+      _tool_call = {
+        id = "call_1",
+        ["function"] = { name = "test", arguments = "{}" },
+      },
+    },
+  })
+
+  local messages = conv:prepare_messages()
+
+  -- The empty assistant message should NOT appear in prepared messages.
+  -- We should only have: user, assistant (with tool_calls), tool
+  for _, msg in ipairs(messages) do
+    if msg.role == "assistant" then
+      -- Every assistant message should have either content or tool_calls
+      local has_content = msg.content ~= nil
+      local has_tool_calls = msg.tool_calls ~= nil and #msg.tool_calls > 0
+      eq(true, has_content or has_tool_calls, "assistant message has neither content nor tool_calls")
+    end
+  end
+  eq(3, #messages)
+end
+
+T["empty assistant messages"]["should keep assistant with reasoning metadata"] = function()
+  local conv = Conversation:new({ instructions = {} }, nil)
+
+  conv:add_instruction({ role = "user", content = "Think about this" })
+
+  -- A reasoning model might produce no text content but has reasoning metadata.
+  -- The reasoning_opaque or reasoning is stored in meta.
+  conv:add_instruction({ role = "assistant", content = nil }, nil, {
+    meta = { empty_content = true, reasoning_opaque = "encrypted_reasoning_data" },
+  })
+
+  local messages = conv:prepare_messages()
+
+  -- This message should be kept because it has meaningful metadata (reasoning)
+  eq(2, #messages)
+  eq("assistant", messages[2].role)
+  eq("encrypted_reasoning_data", messages[2].meta.reasoning_opaque)
+end
+
+T["empty assistant messages"]["should keep assistant with reasoning"] = function()
+  local conv = Conversation:new({ instructions = {} }, nil)
+
+  conv:add_instruction({ role = "user", content = "Think about this" })
+
+  -- Responses API: reasoning with encrypted content
+  conv:add_instruction({ role = "assistant", content = nil }, nil, {
+    meta = {
+      empty_content = true,
+      reasoning = {
+        summary = "I thought about it",
+        encrypted_content = { id = "r_123", encrypted_content = "enc..." },
+      },
+    },
+  })
+
+  local messages = conv:prepare_messages()
+
+  eq(2, #messages)
+  eq("assistant", messages[2].role)
+end
+
 return T

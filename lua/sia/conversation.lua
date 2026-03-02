@@ -334,7 +334,9 @@ local function get_message_content(message)
 end
 
 function Message:has_content()
-  return self.content ~= nil or self.tool_calls ~= nil or self.meta.empty_content
+  return self.content ~= nil
+    or self.tool_calls ~= nil
+    or (self.meta and self.meta.empty_content)
 end
 
 --- @param message sia.Message

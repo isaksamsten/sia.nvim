@@ -295,7 +295,7 @@ of newly added todos for future reference.]],
 
   if (args.replace and #args.replace > 0) or (args.add and #args.add > 0) then
     vim.schedule(function()
-      require("sia").todos("open")
+      require("sia").ui.todos("open")
     end)
   end
 

@@ -174,7 +174,7 @@ M.edit = {
   end,
 }
 
-M.show = {
+M.ui = {
   --- Manage todos window for the current chat
   --- @param action? string "open" | "close" | "toggle" (default: "toggle")
   todos = function(action)
