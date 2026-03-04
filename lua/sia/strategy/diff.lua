@@ -123,9 +123,7 @@ function DiffStrategy:on_complete(control)
           }, tool_result.result.context)
 
           if tool_result.result.display_content then
-            for _, display in ipairs(tool_result.result.display_content) do
-              self.writer:append(display)
-            end
+            self.writer:append(tool_result.result.display_content)
           end
         end
 

@@ -88,7 +88,7 @@ Use this tool to:
     if #all_history == 0 then
       callback({
         content = { "No conversation history found in .sia/history directory." },
-        display_content = { icons.history .. " No history found" },
+        display_content = icons.history .. " No history found",
       })
       return
     end
@@ -126,15 +126,17 @@ Use this tool to:
 
     callback({
       content = output,
-      display_content = {
-        string.format("%s Listed %d conversation(s)", icons.history, #all_history),
-      },
+      display_content = string.format(
+        "%s Listed %d conversation(s)",
+        icons.history,
+        #all_history
+      ),
     })
   elseif args.mode == "view" then
     if not args.filename then
       callback({
         content = { "Error: filename parameter is required for view mode" },
-        display_content = { icons.error .. " Missing filename" },
+        display_content = icons.error .. " Missing filename",
         kind = "failed",
       })
       return
@@ -145,7 +147,7 @@ Use this tool to:
         content = {
           "Error: indices parameter is required for view mode and must be a non-empty array",
         },
-        display_content = { icons.error .. " Missing or invalid indices" },
+        display_content = icons.error .. " Missing or invalid indices",
         kind = "failed",
       })
       return
@@ -163,7 +165,7 @@ Use this tool to:
             vim.inspect(args.indices)
           ),
         },
-        display_content = { icons.error .. " No messages found" },
+        display_content = icons.error .. " No messages found",
         kind = "failed",
       })
       return
@@ -184,15 +186,17 @@ Use this tool to:
 
     callback({
       content = output,
-      display_content = {
-        string.format("%s Retrieved %d message(s)", icons.read, #messages),
-      },
+      display_content = string.format(
+        "%s Retrieved %d message(s)",
+        icons.read,
+        #messages
+      ),
     })
   elseif args.mode == "search" then
     if not args.query or args.query == "" then
       callback({
         content = { "Error: query parameter is required for search mode" },
-        display_content = { icons.error .. " Missing query" },
+        display_content = icons.error .. " Missing query",
         kind = "failed",
       })
       return
@@ -205,7 +209,7 @@ Use this tool to:
           "Error: No embedding model configured.",
           "History search requires embeddings to be enabled.",
         },
-        display_content = { icons.error .. " No embedding model" },
+        display_content = icons.error .. " No embedding model",
         kind = "failed",
       })
       return
@@ -228,7 +232,7 @@ Use this tool to:
                   string.format("No matching messages found for query: %s", args.query),
                   "",
                 },
-                display_content = { icons.search .. " No matches found" },
+                display_content = icons.search .. " No matches found",
               })
               return
             end
@@ -250,14 +254,12 @@ Use this tool to:
 
             callback({
               content = output,
-              display_content = {
-                string.format(
-                  "%s Found %d match(es) for '%s'",
-                  icons.search,
-                  #results,
-                  args.query
-                ),
-              },
+              display_content = string.format(
+                "%s Found %d match(es) for '%s'",
+                icons.search,
+                #results,
+                args.query
+              ),
             })
           end,
         })
@@ -269,7 +271,7 @@ Use this tool to:
         string.format("Error: Invalid mode '%s'", args.mode or "nil"),
         "Valid modes are: 'search', 'view', 'view_toc'",
       },
-      display_content = { icons.error .. " Invalid mode" },
+      display_content = icons.error .. " Invalid mode",
       kind = "failed",
     })
   end

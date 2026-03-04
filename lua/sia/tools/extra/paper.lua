@@ -53,7 +53,7 @@ Usage notes:
   if not args.id or args.id == "" then
     callback({
       content = { "Error: Paper ID is required" },
-      display_content = { icons.error .. " Error: Paper ID is required" },
+      display_content = icons.error .. " Error: Paper ID is required",
     })
     return
   end
@@ -83,7 +83,7 @@ Usage notes:
         )
         callback({
           content = { failed_to_access() .. ": " .. error_msg },
-          display_content = { failed_to_access() },
+          display_content = failed_to_access(),
         })
         return
       end
@@ -94,7 +94,7 @@ Usage notes:
       if not ok then
         callback({
           content = { failed_fetch() .. ": Failed to parse API response - " },
-          display_content = { failed_fetch() },
+          display_content = failed_fetch(),
         })
         return
       end
@@ -106,7 +106,7 @@ Usage notes:
         end
         callback({
           content = { error_msg },
-          display_content = { icons.error .. " " .. error_msg },
+          display_content = icons.error .. " " .. error_msg,
         })
         return
       end
@@ -179,7 +179,7 @@ Usage notes:
 
       callback({
         content = { table.concat(content, "\n") },
-        display_content = { table.concat(display_content, "\n") },
+        display_content = table.concat(display_content, "\n"),
       })
     end,
   })

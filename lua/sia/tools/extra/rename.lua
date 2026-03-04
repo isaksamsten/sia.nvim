@@ -2,10 +2,6 @@ local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_to_rename()
-  return icons.error .. " Failed to rename/move file"
-end
-
 return tool_utils.new_tool({
   name = "rename_file",
   message = function(args)
@@ -35,7 +31,7 @@ Notes:
   if not args.src or not args.dest then
     callback({
       content = { "Error: src and dest are required" },
-      display_content = { failed_to_rename() },
+      display_content = icons.error .. " Failed to rename/move file",
       kind = "failed",
     })
     return
@@ -53,7 +49,7 @@ Notes:
         content = {
           string.format("Error: Operation must stay within project root: %s", root),
         },
-        display_content = { FAILED_TO_RENAME },
+        display_content = icons.error .. " Failed to rename/move file",
         kind = "failed",
       })
       return
@@ -64,7 +60,7 @@ Notes:
   if not stat then
     callback({
       content = { string.format("Error: Source not found: %s", args.src) },
-      display_content = { failed_to_rename() },
+      display_content = icons.error .. " Failed to rename/move file",
       kind = "failed",
     })
     return
@@ -72,7 +68,7 @@ Notes:
   if stat.type ~= "file" then
     callback({
       content = { "Error: Only file renames are supported" },
-      display_content = { failed_to_rename() },
+      display_content = icons.error .. " Failed to rename/move file",
       kind = "failed",
     })
     return
@@ -87,7 +83,7 @@ Notes:
           args.dest
         ),
       },
-      display_content = { failed_to_rename() },
+      display_content = icons.error .. " Failed to rename/move file",
       kind = "failed",
     })
     return
@@ -119,7 +115,7 @@ Notes:
           content = {
             string.format("Error: Failed to rename: %s", err_code or "unknown error"),
           },
-          display_content = { FAILED_TO_RENAME },
+          display_content = icons.error .. " Failed to rename/move file",
           kind = "failed",
         })
         return
@@ -154,14 +150,12 @@ Notes:
         content = {
           string.format("Successfully renamed %s → %s", rel(src_abs), rel(dest_abs)),
         },
-        display_content = {
-          string.format(
-            "%s Renamed %s → %s",
-            icons.rename,
-            rel(src_abs),
-            rel(dest_abs)
-          ),
-        },
+        display_content = string.format(
+          "%s Renamed %s → %s",
+          icons.rename,
+          rel(src_abs),
+          rel(dest_abs)
+        ),
       })
     end,
   })

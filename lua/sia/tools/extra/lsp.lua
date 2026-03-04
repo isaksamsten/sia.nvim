@@ -105,9 +105,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
       callback({
         content = markdown_lines,
         kind = "lsp_result",
-        display_content = {
-          string.format("%s Got documentation for '%s'", icons.lsp, args.pattern),
-        },
+        display_content = string.format("%s Got documentation for '%s'", icons.lsp, args.pattern),
       })
     end)
   elseif
@@ -152,15 +150,13 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
       callback({
         content = locations,
         kind = "lsp_result",
-        display_content = {
-          string.format(
+        display_content = string.format(
             "%s Found %d %s for '%s'",
             icons.lsp,
             #locations,
             #locations == 1 and command_label or command_label .. "s",
             args.pattern
           ),
-        },
       })
     end)
   elseif command == "rename" then
@@ -243,8 +239,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
           ),
         },
         kind = "lsp_result",
-        display_content = {
-          string.format(
+        display_content = string.format(
             "%s Renamed '%s' → '%s' in %d file%s",
             icons.lsp,
             args.pattern,
@@ -252,7 +247,6 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
             num_files,
             num_files == 1 and "" or "s"
           ),
-        },
       })
     end)
   else

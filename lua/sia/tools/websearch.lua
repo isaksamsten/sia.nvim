@@ -1,14 +1,6 @@
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_fetch()
-  return icons.error .. " Failed to fetch search results"
-end
-
-local function failed_to_access()
-  return icons.error .. " Failed to access search"
-end
-
 return tool_utils.new_tool({
   name = "websearch",
   is_available = function()
@@ -46,7 +38,7 @@ Usage notes:
   if not vim.fn.executable("curl") then
     callback({
       content = { "Error: curl is not installed. Don't try again." },
-      display_content = { failed_to_access() },
+      display_content = icons.error .. " Failed to access search",
     })
     return
   end
@@ -55,7 +47,7 @@ Usage notes:
       content = {
         "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
       },
-      display_content = { failed_to_access() },
+      display_content = icons.error .. " Failed to access search",
     })
     return
   end
@@ -64,7 +56,7 @@ Usage notes:
       content = {
         "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
       },
-      display_content = { failed_to_access() },
+      display_content = icons.error .. " Failed to access search",
     })
     return
   end
@@ -94,7 +86,7 @@ Usage notes:
               content = {
                 string.format("Error: Failed to fetch search results - %s", error_msg),
               },
-              display_content = { failed_fetch() },
+              display_content = icons.error .. " Failed to fetch search results",
             })
             return
           end
@@ -141,12 +133,12 @@ Usage notes:
               or string.format("%s Search results for: %s", icons.search, args.query)
             callback({
               content = content,
-              display_content = { display_content },
+              display_content = display_content,
             })
           else
             callback({
               content = { "Error: Failed to parse json response from search" },
-              display_content = { failed_fetch() },
+              display_content = icons.error .. " Failed to fetch search results",
             })
           end
         end)

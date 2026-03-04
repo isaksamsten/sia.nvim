@@ -3,7 +3,7 @@ local M = {}
 --- @field content string[]
 --- @field context sia.Context?
 --- @field kind string?
---- @field display_content string[]?
+--- @field display_content string?
 --- @field cancelled boolean?
 --- @field ephemeral boolean?
 

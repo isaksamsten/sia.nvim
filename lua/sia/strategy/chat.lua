@@ -352,9 +352,7 @@ function ChatStrategy:on_complete(control)
           if tool_result.result.display_content then
             self.writer:append_newline_if_needed()
             local line = self.writer.line
-            for _, display in ipairs(tool_result.result.display_content) do
-              self.writer:append(display)
-            end
+            self.writer:append(tool_result.result.display_content)
             self.writer:append_newline()
             self.canvas:highlight_tool(line, self.writer.line)
           end

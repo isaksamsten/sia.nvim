@@ -73,12 +73,12 @@ Make your plan concrete and actionable - each step should be specific enough tha
           if reply then
             callback({
               content = reply,
-              display_content = { icons.plan .. " Planning agent completed analysis" },
+              display_content = icons.plan .. " Planning agent completed analysis",
             })
           else
             callback({
               content = { "Planning failed" },
-              display_content = { icons.plan .. " Planning agent completed analysis" },
+              display_content = icons.plan .. " Planning agent completed analysis",
             })
           end
         end,

@@ -3,10 +3,6 @@ local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_to_get_diagnostics()
-  return icons.error .. " Failed to read diagnostics"
-end
-
 return tool_utils.new_tool({
   name = "get_diagnostics",
   read_only = true,
@@ -35,7 +31,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not args.file then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = { failed_to_get_diagnostics() },
+      display_content = icons.error .. " Failed to read diagnostics",
       kind = "failed",
     })
     return
@@ -44,7 +40,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if vim.fn.filereadable(args.file) == 0 then
     callback({
       content = { "Error: File cannot be found or is not readable" },
-      display_content = { failed_to_get_diagnostics() },
+      display_content = icons.error .. " Failed to read diagnostics",
       kind = "failed",
     })
     return
@@ -56,7 +52,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not buf then
     callback({
       content = { "Error: Cannot load file into buffer" },
-      display_content = { failed_to_get_diagnostics() },
+      display_content = icons.error .. " Failed to read diagnostics",
       kind = "failed",
     })
     return
@@ -65,9 +61,11 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
-      display_content = {
-        string.format("%s No diagnostics found for %s", icons.diagnostics, args.file),
-      },
+      display_content = string.format(
+        "%s No diagnostics found for %s",
+        icons.diagnostics,
+        args.file
+      ),
       content = { string.format("No diagnostics found for %s", args.file) },
       context = {
         buf = buf,
@@ -113,8 +111,10 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
       tick = tracker.ensure_tracked(buf, { id = conversation.id }),
     },
     kind = "diagnostics",
-    display_content = {
-      string.format("%s Found %d diagnostics", icons.diagnostics, #diagnostics),
-    },
+    display_content = string.format(
+      "%s Found %d diagnostics",
+      icons.diagnostics,
+      #diagnostics
+    ),
   })
 end)

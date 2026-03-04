@@ -137,7 +137,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not raw_input or raw_input == "" then
     callback({
       content = { "Error: No patch input received" },
-      display_content = { icons.error .. " No patch input" },
+      display_content = icons.error .. " No patch input",
       kind = "failed",
     })
     return
@@ -159,7 +159,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not ok then
     callback({
       content = { "Error parsing patch: " .. tostring(patch_or_err) },
-      display_content = { icons.error .. " Failed to parse patch" },
+      display_content = icons.error .. " Failed to parse patch",
       kind = "failed",
     })
     return
@@ -170,7 +170,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not commit_ok then
     callback({
       content = { "Error applying patch: " .. tostring(commit_or_err) },
-      display_content = { icons.error .. " Failed to apply patch" },
+      display_content = icons.error .. " Failed to apply patch",
       kind = "failed",
     })
     return
@@ -183,7 +183,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if change_count == 0 then
     callback({
       content = { "Patch produced no changes." },
-      display_content = { icons.edit .. " No changes to apply" },
+      display_content = icons.edit .. " No changes to apply",
     })
     return
   end
@@ -275,7 +275,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
 
       callback({
         content = content_lines,
-        display_content = display_lines,
+        display_content = table.concat(display_lines, "\n"),
         kind = "edit",
       })
     end,

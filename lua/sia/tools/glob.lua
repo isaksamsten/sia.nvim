@@ -202,7 +202,7 @@ return tool_utils.new_tool({
 
         callback({
           content = limited_files,
-          display_content = { display_line },
+          display_content = display_line,
         })
       end)
     end,

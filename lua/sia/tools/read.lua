@@ -3,10 +3,6 @@ local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_to_read()
-  return icons.error .. " Failed to read"
-end
-
 --- Determine the kind of read and return display helpers
 --- @param path string
 --- @return { icon: string, label: fun(path: string): string }
@@ -80,7 +76,7 @@ will be truncated.]],
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = { failed_to_read() },
+      display_content = icons.error .. " Failed to read",
       kind = "failed",
     })
     return
@@ -89,7 +85,7 @@ will be truncated.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = { "Error: File cannot be found" },
-      display_content = { failed_to_read() },
+      display_content = icons.error .. " Failed to read",
       kind = "failed",
     })
     return
@@ -119,7 +115,7 @@ will be truncated.]],
       if not buf then
         callback({
           content = { "Error: Cannot load " .. args.path },
-          display_content = { failed_to_read() },
+          display_content = icons.error .. " Failed to read",
           kind = "failed",
         })
         return
@@ -135,7 +131,7 @@ will be truncated.]],
               total_lines
             ),
           },
-          display_content = { failed_to_read() },
+          display_content = icons.error .. " Failed to read",
           kind = "failed",
         })
         return
@@ -202,7 +198,7 @@ will be truncated.]],
           outdated_message = outdated_message,
         },
         kind = "context",
-        display_content = { display_content },
+        display_content = display_content,
       })
     end,
   })

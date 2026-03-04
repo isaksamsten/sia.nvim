@@ -25,7 +25,7 @@ local function handle_files_with_matches_mode(lines, args, callback)
 
     callback({
       content = { "No files with matches found." },
-      display_content = { no_match_msg },
+      display_content = no_match_msg,
     })
     return
   end
@@ -46,7 +46,7 @@ local function handle_files_with_matches_mode(lines, args, callback)
 
   callback({
     content = output,
-    display_content = { display_msg },
+    display_content = display_msg,
   })
 end
 
@@ -60,7 +60,7 @@ local function handle_count_mode(lines, args, callback)
 
     callback({
       content = { "No matches found." },
-      display_content = { no_match_msg },
+      display_content = no_match_msg,
     })
     return
   end
@@ -117,7 +117,7 @@ local function handle_count_mode(lines, args, callback)
 
   callback({
     content = output,
-    display_content = { display_msg },
+    display_content = display_msg,
   })
 end
 
@@ -174,7 +174,7 @@ local function handle_content_mode(lines, args, callback)
 
     callback({
       content = { "No matches found." },
-      display_content = { no_match_msg },
+      display_content = no_match_msg,
     })
     return
   end
@@ -215,7 +215,7 @@ local function handle_content_mode(lines, args, callback)
 
   callback({
     content = output,
-    display_content = { display_msg },
+    display_content = display_msg,
   })
 end
 

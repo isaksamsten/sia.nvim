@@ -65,7 +65,7 @@ T["sia.tools.replace_region"]["replaces a region with new text"] = function()
   eq("Replaced lines 2-3 in test.txt", result.content[1])
   eq(
     true,
-    string.find(result.display_content[1], "Replaced lines 2%-3 in test%.txt") ~= nil
+    string.find(result.display_content, "Replaced lines 2%-3 in test%.txt") ~= nil
   )
   eq({ 2, 3 }, result.context.pos)
 end

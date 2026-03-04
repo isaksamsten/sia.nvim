@@ -7,10 +7,6 @@ local icons = require("sia.ui").icons
 local failed_matches = {}
 local MAX_FAILED_MATCHES = 3
 
-local function failed_to_edit()
-  return icons.error .. " Failed to edit"
-end
-
 local function failed_to_edit_file(filename)
   return icons.error .. " Failed to edit " .. filename
 end
@@ -214,7 +210,7 @@ Usage:
   if validation_message then
     callback({
       content = { validation_message },
-      display_content = { failed_to_edit() },
+      display_content = icons.error .. " Failed to edit",
       kind = "failed",
     })
     return
@@ -224,7 +220,7 @@ Usage:
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
-      display_content = { failed_to_edit() },
+      display_content = icons.error .. " Failed to edit",
       kind = "failed",
     })
     return
@@ -316,7 +312,7 @@ Usage:
               clear_outdated_tool_input = clear_outdated_tool_input,
             },
             kind = "edit",
-            display_content = { display_description },
+            display_content = display_description,
           })
         end,
       })
@@ -383,7 +379,7 @@ Usage:
               clear_outdated_tool_input = clear_outdated_tool_input,
             },
             kind = "edit",
-            display_content = { display_description },
+            display_content = display_description,
           })
         end,
       })
@@ -400,9 +396,7 @@ Usage:
               args.target_file
             ),
           },
-          display_content = {
-            failed_to_edit_file(filename),
-          },
+          display_content = failed_to_edit_file(filename),
         })
       elseif not replace_all and num_matches > 1 then
         callback({
@@ -415,9 +409,7 @@ Usage:
               num_matches
             ),
           },
-          display_content = {
-            failed_to_edit_file(filename),
-          },
+          display_content = failed_to_edit_file(filename),
         })
       elseif failed_matches[buf] >= MAX_FAILED_MATCHES then
         callback({
@@ -429,9 +421,7 @@ Usage:
               match_description
             ),
           },
-          display_content = {
-            failed_to_edit_file(filename),
-          },
+          display_content = failed_to_edit_file(filename),
         })
       else
         callback({
@@ -444,9 +434,7 @@ Usage:
               result.fuzzy and " with fuzzy matching" or ""
             ),
           },
-          display_content = {
-            failed_to_edit_file(filename),
-          },
+          display_content = failed_to_edit_file(filename),
         })
       end
     end

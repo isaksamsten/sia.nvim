@@ -78,7 +78,7 @@ T["sia.tools.write"]["creates new file with parent directory"] = function()
       .. "/nested/dir/test.lua",
     result.content[1]
   )
-  eq(true, string.find(result.display_content[1], "💾 Created.*test%.lua") ~= nil)
+  eq(true, string.find(result.display_content, "💾 Created.*test%.lua") ~= nil)
   eq("edit", result.context.kind)
 end
 
@@ -122,7 +122,7 @@ T["sia.tools.write"]["creates new file without nested directories"] = function()
 
   eq(true, file_exists)
   eq(true, string.find(result.content[1], "Successfully created buffer") ~= nil)
-  eq(true, string.find(result.display_content[1], "💾 Created") ~= nil)
+  eq(true, string.find(result.display_content, "💾 Created") ~= nil)
 end
 
 T["sia.tools.write"]["overwrites existing file"] = function()
@@ -168,7 +168,7 @@ T["sia.tools.write"]["overwrites existing file"] = function()
 
   eq({ "new content" }, new_content)
   eq(true, string.find(result.content[1], "Successfully overwritten buffer") ~= nil)
-  eq(true, string.find(result.display_content[1], "💾 Overwrote") ~= nil)
+  eq(true, string.find(result.display_content, "💾 Overwrote") ~= nil)
 end
 
 T["sia.tools.write"]["handles missing path parameter"] = function()
@@ -197,7 +197,7 @@ T["sia.tools.write"]["handles missing path parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No file path provided", result.content[1])
-  eq("❌ Failed to write file", result.display_content[1])
+  eq("❌ Failed to write file", result.display_content)
   eq("failed", result.kind)
 end
 
@@ -227,7 +227,7 @@ T["sia.tools.write"]["handles missing content parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No content provided", result.content[1])
-  eq("❌ Failed to write file", result.display_content[1])
+  eq("❌ Failed to write file", result.display_content)
   eq("failed", result.kind)
 end
 
@@ -269,7 +269,7 @@ T["sia.tools.write"]["handles multiline content correctly"] = function()
   local file_content = child.lua_get("_G.file_content")
 
   eq({ "line 1", "line 2", "line 3" }, file_content)
-  eq(true, string.find(result.display_content[1], "%(3 lines%)") ~= nil)
+  eq(true, string.find(result.display_content, "%(3 lines%)") ~= nil)
 end
 T["sia.tools.write"]["tool metadata"] = function()
   local code = [[

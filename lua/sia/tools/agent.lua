@@ -171,9 +171,11 @@ Usage notes:
 
         callback({
           content = vim.split(string.format(START_REPLY, agent.id), "\n"),
-          display_content = {
-            string.format("%s Started agent '%s'", icons.started, args.agent),
-          },
+          display_content = string.format(
+            "%s Started agent '%s'",
+            icons.started,
+            args.agent
+          ),
         })
       end,
     })
@@ -181,7 +183,7 @@ Usage notes:
     if not args.id then
       callback({
         content = { "Error: 'id' parameter is required for 'status' command" },
-        display_content = { icons.error .. " Missing id parameter" },
+        display_content = icons.error .. " Missing id parameter",
       })
       return
     end
@@ -259,9 +261,11 @@ Usage notes:
         end
         callback({
           content = content,
-          display_content = {
-            string.format("%s Agent %s completed", icons.success, agent.name),
-          },
+          display_content = string.format(
+            "%s Agent %s completed",
+            icons.success,
+            agent.name
+          ),
         })
       elseif current_agent.status == "failed" then
         callback({
@@ -270,9 +274,7 @@ Usage notes:
             "",
             string.format("Error: %s", current_agent.error or "Unknown error"),
           },
-          display_content = {
-            string.format("%s Agent %d failed", icons.error, args.id),
-          },
+          display_content = string.format("%s Agent %d failed", icons.error, args.id),
         })
       else
         vim.defer_fn(poll, 500)

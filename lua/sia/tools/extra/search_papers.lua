@@ -1,14 +1,6 @@
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_fetch()
-  return icons.error .. " Failed to fetch research papers"
-end
-
-local function failed_to_access()
-  return icons.error .. " Failed to access CORE API"
-end
-
 return tool_utils.new_tool({
   name = "search_papers",
   is_available = function()
@@ -75,7 +67,7 @@ Usage notes:
   if not args.query or args.query == "" then
     callback({
       content = { "Error: Please provide a search query" },
-      display_content = { icons.error .. " No search query provided" },
+      display_content = icons.error .. " No search query provided",
       kind = "failed",
     })
     return
@@ -129,7 +121,7 @@ Usage notes:
               content = {
                 string.format("Error: Failed to fetch research papers - %s", error_msg),
               },
-              display_content = { failed_fetch() },
+              display_content = icons.error .. " Failed to fetch research papers",
               kind = "failed",
             })
             return
@@ -144,9 +136,8 @@ Usage notes:
                   "Error: CORE API is currently overloaded. Please try again in a few moments.",
                   "Suggestion: Try a more specific query or reduce the limit parameter.",
                 },
-                display_content = {
-                  icons.overloaded .. " CORE API overloaded - try again later",
-                },
+                display_content = icons.overloaded
+                  .. " CORE API overloaded - try again later",
                 kind = "failed",
               })
               return
@@ -231,12 +222,12 @@ Usage notes:
               string.format("%s Found %d research papers", icons.papers, resultCount)
             callback({
               content = content,
-              display_content = { display_content },
+              display_content = display_content,
             })
           else
             callback({
               content = { "Error: Failed to parse response from CORE API" },
-              display_content = { failed_fetch() },
+              display_content = icons.error .. " Failed to fetch research papers",
               kind = "failed",
             })
           end

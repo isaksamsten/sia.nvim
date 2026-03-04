@@ -4,10 +4,6 @@ local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
-local function failed_to_insert()
-  return icons.error .. " Failed to insert"
-end
-
 local clear_outdated_tool_input = tool_utils.gen_clear_outdated_tool_input({ "text" })
 
 --- @param filename string
@@ -74,7 +70,7 @@ Use cases:
   if not args.target_file then
     callback({
       content = { "Error: No target_file was provided" },
-      display_content = { failed_to_insert() },
+      display_content = icons.error .. " Failed to insert",
       kind = "failed",
     })
     return
@@ -83,7 +79,7 @@ Use cases:
   if not args.line then
     callback({
       content = { "Error: No line number was provided" },
-      display_content = { failed_to_insert() },
+      display_content = icons.error .. " Failed to insert",
       kind = "failed",
     })
     return
@@ -92,7 +88,7 @@ Use cases:
   if not args.text then
     callback({
       content = { "Error: No text was provided" },
-      display_content = { failed_to_insert() },
+      display_content = icons.error .. " Failed to insert",
       kind = "failed",
     })
     return
@@ -101,7 +97,7 @@ Use cases:
   if not buf then
     callback({
       content = { "Error: Cannot load " .. args.target_file },
-      display_content = { failed_to_insert() },
+      display_content = icons.error .. " Failed to insert",
       kind = "failed",
     })
     return
@@ -125,7 +121,7 @@ Use cases:
       content = {
         string.format("Error: Line number must be >= 1, got %d", insert_line),
       },
-      display_content = { failed_to_insert() },
+      display_content = icons.error .. " Failed to insert",
       kind = "failed",
     })
     return
@@ -228,7 +224,7 @@ Use cases:
           ),
         },
         kind = "edit",
-        display_content = { display_description },
+        display_content = display_description,
       })
     end,
   })

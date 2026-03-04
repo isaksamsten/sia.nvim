@@ -86,7 +86,7 @@ T["sia.tools.read"]["read text file basic"] = function()
   eq("     1\tline 1", result.content[1])
   eq("     2\tline 2", result.content[2])
   eq("     3\tline 3", result.content[3])
-  eq("📖 Read test.txt (3 lines)", result.display_content[1])
+  eq("📖 Read test.txt (3 lines)", result.display_content)
 
   restore_file_loader()
   restore_tracker()
@@ -114,7 +114,7 @@ T["sia.tools.read"]["read text file with offset and limit"] = function()
   eq(2, #result.content)
   eq("     2\tline 2", result.content[1])
   eq("     3\tline 3", result.content[2])
-  eq("📖 Read lines 2-3 from test.txt", result.display_content[1])
+  eq("📖 Read lines 2-3 from test.txt", result.display_content)
 
   restore_file_loader()
   restore_tracker()
@@ -131,7 +131,7 @@ T["sia.tools.read"]["missing path parameter"] = function()
   read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("Error: No file path was provided", result.content[1])
-  eq("❌ Failed to read", result.display_content[1])
+  eq("❌ Failed to read", result.display_content)
 end
 
 T["sia.tools.read"]["file not found"] = function()
@@ -147,7 +147,7 @@ T["sia.tools.read"]["file not found"] = function()
   read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("Error: File cannot be found", result.content[1])
-  eq("❌ Failed to read", result.display_content[1])
+  eq("❌ Failed to read", result.display_content)
 end
 
 T["sia.tools.read"]["offset beyond end of file"] = function()
@@ -168,7 +168,7 @@ T["sia.tools.read"]["offset beyond end of file"] = function()
   read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq(true, vim.startswith(result.content[1], "Error: Offset 10 is beyond end of file"))
-  eq("❌ Failed to read", result.display_content[1])
+  eq("❌ Failed to read", result.display_content)
 
   restore_file_loader()
   restore_tracker()
