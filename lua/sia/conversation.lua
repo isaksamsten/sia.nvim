@@ -638,6 +638,20 @@ function Conversation:new_turn()
   return turn_id
 end
 
+--- Get the turn_id of the last (most recent) turn.
+--- @return string? turn_id The last turn_id, or nil if no turns exist
+function Conversation:last_turn_id()
+  for i = #self.messages, 1, -1 do
+    local message = self.messages[i]
+    if message.turn_id and message.status ~= "dropped" then
+      return message.turn_id
+    end
+  end
+  return nil
+end
+
+
+
 --- Rollback the conversation to the given turn.
 --- Marks the first message with the matching turn_id and all messages after it as "dropped".
 --- @param turn_id string The turn_id to rollback (this turn and all after it are dropped)
