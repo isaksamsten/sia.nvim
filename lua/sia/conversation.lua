@@ -619,7 +619,7 @@ end
 --- @param message sia.Message
 --- @param status "outdated"|"failed"|"superseded"|"dropped"
 function Conversation:set_message_status(message, status)
-  if message.status == status then
+  if message.status then
     return
   end
   message.status = status
