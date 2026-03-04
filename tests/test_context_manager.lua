@@ -32,10 +32,18 @@ local function make_conversation(context_window, messages)
     },
     tools = {},
     messages = messages,
+    _invalidate_cache = function() end,
+    set_message_status = function(_, message, status)
+      message.status = status
+    end,
     prepare_messages = function(self)
       local result = {}
       for _, m in ipairs(self.messages) do
-        if m.status ~= "dropped" and m.status ~= "superseded" and m.status ~= "failed" then
+        if
+          m.status ~= "dropped"
+          and m.status ~= "superseded"
+          and m.status ~= "failed"
+        then
           table.insert(result, m)
         end
       end
@@ -192,38 +200,37 @@ T["context_manager"]["drop_oldest_tool_calls marks pairs as dropped"] = function
   expect.equality(after < before, true)
 end
 
-T["context_manager"]["drop_oldest_tool_calls drops oldest first and stops at target"] =
-  function()
-    local cm = require("sia.context_manager")
+T["context_manager"]["drop_oldest_tool_calls drops oldest first and stops at target"] = function()
+  local cm = require("sia.context_manager")
 
-    local a1, t1 = make_tool_pair("tc1", "read", 100, 2000)
-    local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
+  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000)
+  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
-    local conversation = make_conversation(10000, {
-      { role = "system", content = string.rep("s", 100) },
-      a1,
-      t1,
-      a2,
-      t2,
-      { role = "user", content = "question" },
-    })
+  local conversation = make_conversation(10000, {
+    { role = "system", content = string.rep("s", 100) },
+    a1,
+    t1,
+    a2,
+    t2,
+    { role = "user", content = "question" },
+  })
 
-    -- Set target so dropping the first pair is enough
-    local full_estimate = cm.estimate_tokens(conversation)
-    -- Target: drop ~one pair worth of tokens
-    local target = full_estimate - 400
+  -- Set target so dropping the first pair is enough
+  local full_estimate = cm.estimate_tokens(conversation)
+  -- Target: drop ~one pair worth of tokens
+  local target = full_estimate - 400
 
-    local dropped = cm.drop_oldest_tool_calls(conversation, target)
-    expect.equality(dropped, true)
+  local dropped = cm.drop_oldest_tool_calls(conversation, target)
+  expect.equality(dropped, true)
 
-    -- Oldest pair should be dropped
-    expect.equality(a1.status, "dropped")
-    expect.equality(t1.status, "dropped")
+  -- Oldest pair should be dropped
+  expect.equality(a1.status, "dropped")
+  expect.equality(t1.status, "dropped")
 
-    -- Second pair should still be active (not dropped)
-    expect.no_equality(a2.status, "dropped")
-    expect.no_equality(t2.status, "dropped")
-  end
+  -- Second pair should still be active (not dropped)
+  expect.no_equality(a2.status, "dropped")
+  expect.no_equality(t2.status, "dropped")
+end
 
 T["context_manager"]["outdated tool calls are droppable"] = function()
   local cm = require("sia.context_manager")
@@ -629,7 +636,11 @@ T["context_manager"]["compact adds summary message to conversation"] = function(
   -- Should have the system message + the summary message
   local found_summary = false
   for _, m in ipairs(conversation.messages) do
-    if m.content and type(m.content) == "string" and m.content:find("This is the summary content") then
+    if
+      m.content
+      and type(m.content) == "string"
+      and m.content:find("This is the summary content")
+    then
       found_summary = true
       expect.equality(m.role, "user")
     end
@@ -672,7 +683,4 @@ T["context_manager"]["compact does not include dropped messages in compact_ratio
   tracker.restore()
 end
 
-
-
 return T
-

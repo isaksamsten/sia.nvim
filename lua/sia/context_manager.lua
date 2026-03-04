@@ -120,13 +120,10 @@ information is lost.]],
     compact_count = math.max(1, math.floor(#non_system * opts.ratio))
   end
 
-  -- Feed dropped messages first — they are free to include since they
-  -- are already excluded from the context window
   for _, m in ipairs(dropped_messages) do
     new_conversation:add_instruction(normalize_for_summary(m), nil)
   end
 
-  -- Then feed the oldest compact_count non-dropped non-system messages
   for i = 1, compact_count do
     local msg = non_system[i].message
     new_conversation:add_instruction(normalize_for_summary(msg), nil)
@@ -135,15 +132,12 @@ information is lost.]],
   require("sia.assistant").fetch_response(new_conversation, function(content)
     if content then
       if compact_count >= #non_system then
-        -- Compacting everything: clear all non-system messages
         conversation:clear_user_instructions()
       else
-        -- Partial compaction: mark the oldest compact_count non-system messages
-        -- as dropped, preserving newer messages
         local dropped = 0
         for _, m in ipairs(conversation.messages) do
           if m.role ~= "system" and m.status ~= "dropped" then
-            m.status = "dropped"
+            conversation:set_message_status(m, "dropped")
             dropped = dropped + 1
             if dropped >= compact_count then
               break
@@ -152,9 +146,6 @@ information is lost.]],
         end
       end
 
-      -- Remove dropped and superseded messages. Dropped messages were
-      -- included in the summary; superseded messages are stale duplicates
-      -- that don't need summarizing. Both can be permanently removed.
       local dropped_set = {}
       for _, m in ipairs(dropped_messages) do
         dropped_set[m] = true
@@ -171,6 +162,7 @@ information is lost.]],
           return true
         end)
         :totable()
+      conversation:_invalidate_cache()
 
       local summary_content
       if opts.reason then
@@ -255,6 +247,31 @@ local function message_bytes(message)
   return bytes
 end
 
+--- Estimate the number of bytes in tool definitions.
+--- Cached on the conversation since tools don't change during its lifetime.
+--- @param conversation sia.Conversation
+--- @return integer bytes
+local function tool_definition_bytes(conversation)
+  if conversation._tool_def_bytes then
+    return conversation._tool_def_bytes
+  end
+  local bytes = 0
+  if conversation.tools then
+    for _, tool in ipairs(conversation.tools) do
+      bytes = bytes + #(tool.name or "")
+      bytes = bytes + #(tool.description or "")
+      if tool.parameters then
+        local ok, json = pcall(vim.json.encode, tool.parameters)
+        if ok then
+          bytes = bytes + #json
+        end
+      end
+    end
+  end
+  conversation._tool_def_bytes = bytes
+  return bytes
+end
+
 --- Estimate the token count for a conversation's prepared messages.
 --- Uses the heuristic: tokens ≈ bytes / 4
 --- @param conversation sia.Conversation
@@ -265,20 +282,7 @@ function M.estimate_tokens(conversation)
   for _, message in ipairs(messages) do
     total_bytes = total_bytes + message_bytes(message)
   end
-  -- Also account for tool definitions in the request
-  if conversation.tools then
-    for _, tool in ipairs(conversation.tools) do
-      -- Rough estimate: tool name + description + parameters schema
-      total_bytes = total_bytes + #(tool.name or "")
-      total_bytes = total_bytes + #(tool.description or "")
-      if tool.parameters then
-        local ok, json = pcall(vim.json.encode, tool.parameters)
-        if ok then
-          total_bytes = total_bytes + #json
-        end
-      end
-    end
-  end
+  total_bytes = total_bytes + tool_definition_bytes(conversation)
   return math.floor(total_bytes / 4)
 end
 
@@ -354,6 +358,7 @@ end
 --- Hard-drop the oldest tool call pairs by marking them as "dropped".
 --- Unlike "outdated" (which replaces content with a pruning note),
 --- "dropped" causes messages to be fully filtered from prepared output.
+--- Uses incremental byte estimation to avoid calling estimate_tokens() in a loop.
 --- @param conversation sia.Conversation
 --- @param target_tokens integer Target token count to get below
 --- @return boolean dropped Whether any messages were dropped
@@ -363,24 +368,82 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
     return false
   end
 
+  -- Compute current tokens once, then subtract bytes as we drop messages
+  local current_tokens = M.estimate_tokens(conversation)
+  if current_tokens <= target_tokens then
+    return false
+  end
+
+  -- Pre-compute byte costs for the raw messages that will be dropped.
+  -- We use the raw Message objects (not PreparedMessage) to estimate bytes
+  -- without calling prepare_messages again.
   local dropped_any = false
-  -- Drop from oldest (lowest index) first
   for _, pair in ipairs(droppable) do
-    local current = M.estimate_tokens(conversation)
-    if current <= target_tokens then
+    if current_tokens <= target_tokens then
       break
     end
-    -- Mark both the assistant message and tool result as dropped
+
     local assistant_msg = conversation.messages[pair.assistant_idx]
     local tool_msg = conversation.messages[pair.tool_idx]
+    local bytes_freed = 0
+
     if assistant_msg and assistant_msg.status ~= "dropped" then
-      assistant_msg.status = "dropped"
+      -- Estimate bytes for the assistant message
+      if assistant_msg.tool_calls then
+        for _, tc in ipairs(assistant_msg.tool_calls) do
+          if tc["function"] then
+            bytes_freed = bytes_freed + #(tc["function"].name or "")
+            bytes_freed = bytes_freed + #(tc["function"].arguments or "")
+          elseif tc["custom"] then
+            bytes_freed = bytes_freed + #(tc["custom"].name or "")
+            bytes_freed = bytes_freed + #(tc["custom"].input or "")
+          end
+        end
+      end
+      if assistant_msg.content then
+        if type(assistant_msg.content) == "string" then
+          bytes_freed = bytes_freed + #assistant_msg.content
+        end
+      end
+      bytes_freed = bytes_freed + 40 -- overhead
+      conversation:set_message_status(assistant_msg, "dropped")
       dropped_any = true
     end
+
     if tool_msg and tool_msg.status ~= "dropped" then
-      tool_msg.status = "dropped"
+      -- Estimate bytes for the tool result message
+      if tool_msg.content then
+        if type(tool_msg.content) == "string" then
+          bytes_freed = bytes_freed + #tool_msg.content
+        elseif type(tool_msg.content) == "table" then
+          for _, part in ipairs(tool_msg.content) do
+            if type(part) == "string" then
+              bytes_freed = bytes_freed + #part
+            end
+          end
+        end
+      end
+      if tool_msg._tool_call then
+        local tc = tool_msg._tool_call
+        if tc["function"] then
+          bytes_freed = bytes_freed + #(tc["function"].name or "")
+          bytes_freed = bytes_freed + #(tc["function"].arguments or "")
+        elseif tc["custom"] then
+          bytes_freed = bytes_freed + #(tc["custom"].name or "")
+          bytes_freed = bytes_freed + #(tc["custom"].input or "")
+        end
+      end
+      bytes_freed = bytes_freed + 40 -- overhead
+      conversation:set_message_status(tool_msg, "dropped")
       dropped_any = true
     end
+
+    -- Convert bytes freed to estimated tokens
+    current_tokens = current_tokens - math.floor(bytes_freed / 4)
+  end
+
+  if dropped_any then
+    conversation:_invalidate_cache()
   end
 
   return dropped_any

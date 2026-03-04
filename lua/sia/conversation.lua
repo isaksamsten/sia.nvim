@@ -197,12 +197,12 @@ local function mark_outdated_messages(conversation)
       end
 
       if tool_call_id and tool_filter[tool_call_id] == "ephemeral" then
-        m.status = "failed"
+        conversation:set_message_status(m, "failed")
       elseif
         (tool_call_id and tool_filter[tool_call_id] == "outdated")
         or is_outdated(m, conversation.id)
       then
-        m.status = "outdated"
+        conversation:set_message_status(m, "outdated")
       end
     end
   end
@@ -344,13 +344,12 @@ end
 --- @param message sia.Message
 --- @param template_context table
 --- @return sia.PreparedMessage
-local function prepare_message(message, template_context)
+local function prepare_message(message, template_context, context_conf)
   local hide = false
   if message.hide then
     hide = true
   end
 
-  local context_conf = require("sia.config").options.settings.context
   local meta
   if message.meta then
     meta = vim.deepcopy(message.meta)
@@ -498,6 +497,7 @@ function Conversation:new(action, context)
   obj.usage_history = {}
   obj.agents = {}
   obj.bash_processes = {}
+  obj._prepared_messages = nil
 
   for _, instruction in ipairs(action.system or {}) do
     for _, message in ipairs(Message:new(instruction, context) or {}) do
@@ -596,6 +596,7 @@ function Conversation:deep_copy()
   obj.usage_history = {}
   obj.agents = {}
   obj.bash_processes = {}
+  obj._prepared_messages = nil
 
   return obj
 end
@@ -605,6 +606,21 @@ function Conversation:untrack_messages()
     if message.context and message.context.buf and message.context.tick then
       tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
     end
+  end
+end
+
+--- Set a message's status, automatically untracking from the tracker when
+--- the message transitions to a terminal status (dropped, superseded, failed, outdated).
+--- This is the single chokepoint for status changes that affect tracking.
+--- @param message sia.Message
+--- @param status "outdated"|"failed"|"superseded"|"dropped"
+function Conversation:set_message_status(message, status)
+  if message.status == status then
+    return
+  end
+  message.status = status
+  if message.context and message.context.buf and message.context.tick then
+    tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
   end
 end
 
@@ -635,16 +651,11 @@ function Conversation:rollback_to(turn_id)
   for i = target_index, #self.messages do
     local message = self.messages[i]
     if message.status ~= "dropped" then
-      message.status = "dropped"
-      if message.context and message.context.buf and message.context.tick then
-        tracker.untrack(
-          message.context.buf,
-          { id = self.id, pos = message.context.pos }
-        )
-      end
+      self:set_message_status(message, "dropped")
     end
   end
 
+  self:_invalidate_cache()
   return true
 end
 
@@ -656,6 +667,7 @@ function Conversation:clear_user_instructions()
       return m.role == "system"
     end)
     :totable()
+  self:_invalidate_cache()
 end
 
 --- Clean up all conversation resources (shell, processes)
@@ -717,6 +729,11 @@ function Conversation:get_bash_process(id)
   return self.bash_processes[id]
 end
 
+--- Invalidate the prepared messages cache. Call whenever messages or their statuses change.
+function Conversation:_invalidate_cache()
+  self._prepared_messages = nil
+end
+
 --- Check if the new interval completely encompasses an existing interval
 --- Returns true if the existing interval should be masked (new is superset of existing)
 --- @param new_interval sia.Context
@@ -766,7 +783,7 @@ function Conversation:_update_overlapping_messages(context, kind)
       and (message.role == "user" or message.role == "tool")
     then
       if should_mask_existing(context, old_context) then
-        message.status = "superseded"
+        self:set_message_status(message, "superseded")
 
         -- If this is a tool result being superseded, mark its tool call ID for superseding
         if message.role == "tool" and message._tool_call then
@@ -781,11 +798,25 @@ function Conversation:_update_overlapping_messages(context, kind)
     if message.role == "assistant" and message.tool_calls then
       for _, tool_call in ipairs(message.tool_calls) do
         if tool_call_ids_to_supersede[tool_call.id] then
-          message.status = "superseded"
+          self:set_message_status(message, "superseded")
           break
         end
       end
     end
+  end
+
+  -- Remove superseded messages immediately — they are never read back
+  local had_superseded = false
+  local kept = {}
+  for _, message in ipairs(self.messages) do
+    if message.status == "superseded" then
+      had_superseded = true
+    else
+      kept[#kept + 1] = message
+    end
+  end
+  if had_superseded then
+    self.messages = kept
   end
 end
 
@@ -807,7 +838,12 @@ function Conversation:add_instruction(instruction, context, opts)
   -- In short: run overlap updates at most once per message.kind for the current instruction batch.
   local done = {}
   for _, message in ipairs(Message:new(instruction, context) or {}) do
-    if message.kind and opts.ignore_duplicates ~= true and not done[message.kind] then
+    if
+      message.kind
+      and opts.ignore_duplicates ~= true
+      and not done[message.kind]
+      and self.enable_supersede
+    then
       self:_update_overlapping_messages(context, message.kind)
       done[message.kind] = true
     end
@@ -823,12 +859,14 @@ function Conversation:add_instruction(instruction, context, opts)
   if opts.mark_outdated ~= false then
     mark_outdated_messages(self)
   end
+  self:_invalidate_cache()
 end
 
 --- @return sia.PreparedMessage message
 function Conversation:last_message()
   local template_context = self:build_template_context()
-  return prepare_message(self.messages[#self.messages], template_context)
+  local context_conf = require("sia.config").options.settings.context
+  return prepare_message(self.messages[#self.messages], template_context, context_conf)
 end
 
 --- @param name string
@@ -875,6 +913,7 @@ end
 --- @return sia.Context[]
 function Conversation:get_contexts()
   mark_outdated_messages(self)
+  self:_invalidate_cache()
   local contexts = {}
   for _, message in ipairs(self.messages) do
     local ctx = message.context
@@ -961,14 +1000,20 @@ end
 
 --- @return sia.PreparedMessage[]
 function Conversation:prepare_messages()
+  if self._prepared_messages then
+    return self._prepared_messages
+  end
+
   local template_context = self:build_template_context()
+  local context_conf = require("sia.config").options.settings.context
+  local outdated_any = false
   --- @type sia.Message[]
   local messages = vim
     .iter(self.messages)
     --- @param m sia.Message
     --- @return boolean
     :filter(function(m)
-      if self.enable_supersede and m.status == "superseded" then
+      if m.status == "superseded" then
         return false
       end
 
@@ -990,11 +1035,16 @@ function Conversation:prepare_messages()
     --- @return sia.PreparedMessage
     :map(function(m)
       if not m.status and is_outdated(m, self.id) then
-        m.status = "outdated"
+        self:set_message_status(m, "outdated")
+        outdated_any = true
       end
-      return prepare_message(m, vim.deepcopy(template_context))
+      return prepare_message(m, template_context, context_conf)
     end)
     :totable()
+
+  if not outdated_any then
+    self._prepared_messages = messages
+  end
 
   return messages
 end

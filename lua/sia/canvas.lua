@@ -112,21 +112,6 @@ function Canvas:update_assistant_extmark(extmark_id, opts)
   if usage then
     local usage_text = {}
 
-    -- if usage.input and usage.input > 0 then
-    --   table.insert(usage_text, {
-    --     "  " .. usage.input + (usage.cache_read or 0) + (usage.cache_write or 0),
-    --     "SiaUsage",
-    --   })
-    -- end
-
-    -- if usage.output and usage.output > 0 then
-    --   table.insert(usage_text, { "  " .. usage.output, "SiaUsage" })
-    -- end
-    --
-    -- if usage.total then
-    --   table.insert(usage_text, { "  " .. usage.total, "SiaUsage" })
-    -- end
-
     if usage.total_time then
       table.insert(
         usage_text,
@@ -142,12 +127,12 @@ function Canvas:update_assistant_extmark(extmark_id, opts)
     end
   end
 
-  if opts.status_text then
-    table.insert(virt_text, { "  " .. opts.status_text .. "  ", "SiaStatus" })
-  end
-
   if opts.model then
     table.insert(virt_text, { opts.model, "SiaModel" })
+  end
+
+  if opts.status_text then
+    table.insert(virt_text, { " [" .. opts.status_text .. "]", "SiaStatus" })
   end
 
   vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
