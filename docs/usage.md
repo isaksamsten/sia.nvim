@@ -118,6 +118,9 @@ conversation that is started.
 - `SiaAccept!` - Accept **all** changes in the current buffer
 - `SiaReject!` - Reject **all** changes in the current buffer
 - `SiaDiff` - Show all changes in a diff view
+- `SiaRollback [turn_id]` - Roll back all changes from a given assistant turn
+  onward, reverting both the conversation history and any file edits made during
+  that turn. Supports tab-completion for available turn IDs.
 
 **Tool Approval (Async Mode):**
 

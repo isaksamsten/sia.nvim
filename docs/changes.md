@@ -50,3 +50,26 @@ In the following screencast, we see a complete workflow example:
      automatically accepted and moved to **baseline**
 7. **Bulk operations**: Finally, we show all remaining changes in a quickfix
    window and use `cdo norm ga` to accept all changes at once
+
+## Rolling Back Changes
+
+If the assistant's changes aren't what you wanted, you can roll back an entire
+turn (a user query and the assistant's response) using `SiaRollback`. This
+reverts both the conversation history and all file edits made during that turn.
+
+Each user/assistant exchange is assigned a **turn ID**. When you run
+`:SiaRollback [turn_id]`, Sia will:
+
+1. Remove all conversation messages from that turn onward
+2. Revert all file changes introduced during that turn (restoring buffers to
+   their state before the turn)
+3. Preserve any changes you have already **accepted** — only pending
+   (unreviewed) edits from the rolled-back turns are reverted
+
+The command supports tab-completion, so you can press `<Tab>` after
+`:SiaRollback` to see available turn IDs. If no turn ID is provided, it rolls
+back the most recent turn.
+
+This is useful when the assistant takes a wrong approach and you want to try a
+different prompt without manually rejecting individual changes.
+
