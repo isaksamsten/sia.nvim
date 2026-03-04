@@ -106,6 +106,7 @@ function M.create_context(args)
     opts.pos = nil
   end
   opts.tick = require("sia.tracker").ensure_tracked(opts.buf, { pos = opts.pos })
+  opts.global = true
   return opts
 end
 

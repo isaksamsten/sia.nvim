@@ -5,6 +5,7 @@ local RELOAD_FULL_RANGE = 2 ^ 31
 --- @class sia.tracker.Options
 --- @field pos [integer, integer]?
 --- @field id integer?
+--- @field global boolean?
 
 --- @class sia.tracker.Region
 --- @field id integer?
@@ -259,6 +260,9 @@ end
 function M.untrack(buf, opts)
   opts = opts or {}
   local id = opts.id
+  if opts.global then
+    id = nil
+  end
   local pos = opts.pos
 
   local tracker = M.tracked_buffers[buf]
@@ -267,19 +271,10 @@ function M.untrack(buf, opts)
   end
 
   local regions_array
-  -- First try to find the regions for the provided id
   if id then
     regions_array = tracker.regions[id]
-    -- If id is provided but no conv regions exist, only fall through to
-    -- global for whole-buffer (pos=nil) untracks. Never fall through for
-    -- region-specific untracks, as that could accidentally destroy a global
-    -- region that another conversation depends on.
     if not regions_array then
-      if pos then
-        return
-      end
-      id = nil
-      regions_array = tracker.global
+      return -- no fallthrough, ever
     end
   else
     regions_array = tracker.global

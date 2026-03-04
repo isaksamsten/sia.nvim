@@ -81,7 +81,7 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
     instructions = {
       { role = "user", kind = "context", content = "Here's the content of the file" },
     },
-  }, { tick = tracker.ensure_tracked(buf), buf = buf })
+  }, { tick = tracker.ensure_tracked(buf), buf = buf, global = true })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
 

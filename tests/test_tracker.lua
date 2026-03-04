@@ -333,4 +333,309 @@ T["sia.tracker"]["edits after all regions don't invalidate"] = function()
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
+T["sia.tracker"]["untrack with id never touches global"] = function()
+  local buf = create_test_buffer({ "line 1", "line 2", "line 3" })
+  local conv1 = 1
+
+  -- Track globally (simulating initial user message with pos={1,1})
+  tracker.ensure_tracked(buf, { pos = { 1, 1 } })
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
+
+  -- Track conv1 whole buffer (simulating read tool)
+  tracker.ensure_tracked(buf, { id = conv1 })
+
+  -- Untrack conv1 (simulating dropped message)
+  tracker.untrack(buf, { id = conv1 })
+  -- conv1 regions should be cleaned up
+  eq(tracker.tracked_buffers[buf].regions[conv1], nil)
+
+  -- A second untrack with id=conv1 must NOT touch global at all
+  tracker.untrack(buf, { id = conv1 })
+  -- Global should still exist!
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
+
+  -- Also test with pos — conv-specific untrack with pos must not touch global
+  tracker.untrack(buf, { id = conv1, pos = { 1, 1 } })
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
+
+  -- Clean up
+  tracker.untrack(buf, { pos = { 1, 1 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["ensure_tracked inherits max global tick for whole buffer"] = function()
+  local buf = create_test_buffer({ "line 1", "line 2", "line 3", "line 4", "line 5" })
+  local conv1 = 1
+
+  -- Global tracks pos={1,1} (initial user message from normal mode on line 1)
+  tracker.ensure_tracked(buf, { pos = { 1, 1 } })
+
+  -- LLM reads file (whole buffer, conv-specific), tick starts at 0
+  local read_tick = tracker.ensure_tracked(buf, { id = conv1 })
+  eq(read_tick, 0)
+
+  -- LLM makes edits via without_tracking (doesn't increment ticks)
+  tracker.without_tracking(buf, conv1, function()
+    vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "modified line 1" })
+  end)
+  vim.wait(100)
+
+  -- Untrack the read (simulating set_message_status("outdated"))
+  tracker.untrack(buf, { id = conv1 })
+
+  -- External edits happen (undo, user edits, etc.) incrementing global
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 v2" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 v3" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 v4" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1" })
+  vim.wait(100)
+
+  -- Global tick for pos={1,1} is now 4
+  eq(tracker.tracked_buffers[buf].global[1].tick, 4)
+
+  -- LLM reads file again (whole buffer, conv-specific)
+  local new_tick = tracker.ensure_tracked(buf, { id = conv1 })
+  local ut = tracker.user_tick(buf, conv1)
+
+  -- CRITICAL: ensure_tracked must return same tick as user_tick,
+  -- otherwise the message is immediately outdated.
+  -- The bug: ensure_tracked only inherits from global whole-buffer (pos=nil),
+  -- but global only has pos={1,1}. So it returns 0.
+  -- user_tick falls back to global's max tick (4).
+  eq(new_tick, ut)
+
+  -- Clean up
+  tracker.untrack(buf, { id = conv1 })
+  tracker.untrack(buf, { pos = { 1, 1 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["re-ensure_tracked on existing conv region inherits updated global"] = function()
+  local buf = create_test_buffer({ "line 1", "line 2", "line 3" })
+  local conv1 = 1
+
+  -- Global tracks pos={1,1}
+  tracker.ensure_tracked(buf, { pos = { 1, 1 } })
+
+  -- Conv tracks whole buffer, inherits 0
+  tracker.ensure_tracked(buf, { id = conv1 })
+
+  -- External edits increment global tick
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "modified line 1" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 again" })
+  vim.wait(100)
+
+  eq(tracker.tracked_buffers[buf].global[1].tick, 2)
+
+  -- Re-call ensure_tracked for the same conv (simulating second read tool call).
+  -- The existing whole-buffer region has tick=0 (conv was skipped during edits
+  -- if without_tracking was used, or the edits didn't match). But global advanced.
+  -- ensure_tracked should return a tick consistent with user_tick.
+  local tick = tracker.ensure_tracked(buf, { id = conv1 })
+  local ut = tracker.user_tick(buf, conv1)
+  eq(tick, ut)
+
+  -- Clean up
+  tracker.untrack(buf, { id = conv1 })
+  tracker.untrack(buf, { id = conv1 }) -- second refcount
+  tracker.untrack(buf, { pos = { 1, 1 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["ensure_tracked inherits fallback tick from global region"] = function()
+  -- Reproduces the bug scenario:
+  -- 1. Chat starts, global tracks pos={13,13}
+  -- 2. LLM reads file (whole buffer, conv-specific) -> ensure_tracked returns 0
+  -- 3. LLM makes edits via without_tracking
+  -- 4. Messages get untracked (dropped/outdated), conv regions cleared
+  -- 5. User undoes changes, global tick increments to 2
+  -- 6. LLM reads file again -> ensure_tracked should return tick consistent with user_tick
+  --
+  -- The bug: ensure_tracked only inherits from global whole-buffer (pos=nil),
+  -- but global only has pos={13,13}. So it returns 0.
+  -- user_tick falls back to global's fallback tick (2), causing immediate "outdated".
+
+  local buf = create_test_buffer({
+    "line 1",
+    "line 2",
+    "line 3",
+    "line 4",
+    "line 5",
+    "line 6",
+    "line 7",
+    "line 8",
+    "line 9",
+    "line 10",
+    "line 11",
+    "line 12",
+    "line 13",
+  })
+  local conv1 = 1
+
+  -- Step 1: Global tracks pos={13,13} (user cursor on line 13)
+  tracker.ensure_tracked(buf, { pos = { 13, 13 } })
+
+  -- Step 2: LLM reads file (whole buffer for conv1)
+  local tick = tracker.ensure_tracked(buf, { id = conv1 })
+  eq(tick, 0)
+
+  -- Step 3: LLM makes edits via without_tracking
+  tracker.without_tracking(buf, conv1, function()
+    vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "modified line 1" })
+  end)
+  vim.wait(100)
+
+  -- Step 4: Message gets untracked (simulating set_message_status("dropped"))
+  tracker.untrack(buf, { id = conv1 })
+  eq(tracker.tracked_buffers[buf].regions[conv1], nil)
+
+  -- Step 5: User undoes changes (two edits that increment global tick)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 undo 1" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1" })
+  vim.wait(100)
+
+  -- Verify global tick is 2
+  eq(tracker.tracked_buffers[buf].global[1].tick, 2)
+  -- Verify state matches the reported bug scenario
+  eq(#vim.tbl_keys(tracker.tracked_buffers[buf].regions), 0)
+
+  -- Step 6: LLM reads file again (whole buffer for conv1)
+  local new_tick = tracker.ensure_tracked(buf, { id = conv1 })
+  local ut = tracker.user_tick(buf, conv1)
+
+  -- CRITICAL: ensure_tracked must return same tick as user_tick
+  eq(new_tick, ut)
+
+  -- Both should be 2 (inherited from global's fallback)
+  eq(new_tick, 2)
+
+  -- Clean up
+  tracker.untrack(buf, { id = conv1 })
+  tracker.untrack(buf, { pos = { 13, 13 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["untrack with id+pos is no-op when conv regions absent"] = function()
+  -- With tracker_id stored in context, untrack always uses the correct id.
+  -- When conv regions don't exist, untrack with id simply returns (no fallthrough).
+  -- This test verifies that global tracking is never accidentally destroyed.
+
+  local buf = create_test_buffer({
+    "line 1",
+    "line 2",
+    "line 3",
+    "line 4",
+    "line 5",
+    "line 6",
+    "line 7",
+    "line 8",
+    "line 9",
+    "line 10",
+    "line 11",
+    "line 12",
+    "line 13",
+  })
+  local conv1 = 1
+
+  -- Step 1: Global tracks pos={13,13}
+  tracker.ensure_tracked(buf, { pos = { 13, 13 } })
+  eq(tracker.tracked_buffers[buf].global[1].tick, 0)
+
+  -- Step 2: LLM reads file → tracks whole buffer for conv1
+  tracker.ensure_tracked(buf, { id = conv1 })
+
+  -- Step 3: LLM makes edits via without_tracking
+  tracker.without_tracking(buf, conv1, function()
+    vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "modified line 1" })
+  end)
+  vim.wait(100)
+
+  -- Messages get dropped → conv1 regions untracked
+  tracker.untrack(buf, { id = conv1 })
+  eq(tracker.tracked_buffers[buf].regions[conv1], nil)
+
+  -- Step 4: User undoes changes
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1 undo 1" })
+  vim.wait(100)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "line 1" })
+  vim.wait(100)
+  eq(tracker.tracked_buffers[buf].global[1].tick, 2)
+
+  -- Step 5-6: mark_outdated_messages finds initial context message outdated
+  -- and calls untrack(buf, {id=conv1, pos={13,13}})
+  -- This MUST NOT fall through to global and destroy it!
+  tracker.untrack(buf, { id = conv1, pos = { 13, 13 } })
+
+  -- Global must still exist
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].global[1].tick, 2)
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
+  eq(tracker.tracked_buffers[buf].marked_for_deletion, false)
+
+  -- Step 7: LLM reads file again
+  local tick = tracker.ensure_tracked(buf, { id = conv1 })
+  local ut = tracker.user_tick(buf, conv1)
+
+  -- Both must agree and not be -1
+  eq(tick, ut)
+  eq(tick >= 0, true)
+
+  -- Clean up
+  tracker.untrack(buf, { id = conv1 })
+  tracker.untrack(buf, { pos = { 13, 13 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["global untrack does not require conversation id"] = function()
+  local buf = create_test_buffer({ "line 1", "line 2", "line 3" })
+
+  -- Track globally (nil id, simulating initial user context)
+  tracker.ensure_tracked(buf, { pos = { 1, 2 } })
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].global[1].refcount, 1)
+
+  -- Untrack globally (nil id) — should work
+  tracker.untrack(buf, { pos = { 1, 2 } })
+  eq(tracker.tracked_buffers[buf].marked_for_deletion, true)
+
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["sia.tracker"]["conv-specific untrack does not affect other conversations"] = function()
+  local buf = create_test_buffer({ "line 1", "line 2", "line 3" })
+  local conv1 = 1
+  local conv2 = 2
+
+  -- Track globally
+  tracker.ensure_tracked(buf, { pos = { 1, 1 } })
+
+  -- Track for both conversations
+  tracker.ensure_tracked(buf, { id = conv1 })
+  tracker.ensure_tracked(buf, { id = conv2 })
+
+  -- Untrack conv1 — should not affect conv2 or global
+  tracker.untrack(buf, { id = conv1 })
+  eq(tracker.tracked_buffers[buf].regions[conv1], nil)
+  eq(tracker.tracked_buffers[buf].regions[conv2] ~= nil, true)
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].marked_for_deletion, false)
+
+  -- Untrack conv2 — should not affect global
+  tracker.untrack(buf, { id = conv2 })
+  eq(tracker.tracked_buffers[buf].regions[conv2], nil)
+  eq(tracker.tracked_buffers[buf].global ~= nil, true)
+  eq(tracker.tracked_buffers[buf].marked_for_deletion, false)
+
+  -- Clean up
+  tracker.untrack(buf, { pos = { 1, 1 } })
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
 return T

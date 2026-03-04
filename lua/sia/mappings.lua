@@ -90,6 +90,7 @@ function _G.__sia_execute(type)
       vim.api.nvim_get_current_buf(),
       { pos = pos }
     ),
+    global = true,
   }
   local action
   if _G.__sia_execute_action == nil and vim.b.sia then

@@ -76,6 +76,7 @@ end
 --- @field bang boolean?
 --- @field cursor integer[]? 1-indexed
 --- @field tick integer?
+--- @field global boolean?
 --- @field outdated_message string?
 --- @field clear_outdated_tool_input (fun(t: sia.ToolCall):sia.ToolCall)?
 
@@ -604,7 +605,10 @@ end
 function Conversation:untrack_messages()
   for _, message in ipairs(self.messages) do
     if message.context and message.context.buf and message.context.tick then
-      tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
+      tracker.untrack(
+        message.context.buf,
+        { id = self.id, pos = message.context.pos, global = message.context.global }
+      )
     end
   end
 end
@@ -620,7 +624,10 @@ function Conversation:set_message_status(message, status)
   end
   message.status = status
   if message.context and message.context.buf and message.context.tick then
-    tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
+    tracker.untrack(
+      message.context.buf,
+      { id = self.id, pos = message.context.pos, global = message.context.global }
+    )
   end
 end
 
