@@ -106,6 +106,29 @@ local function attach(buf)
   })
 end
 
+local function resolve_tick(regions, pos)
+  if not regions then
+    return nil
+  end
+
+  local fallback_tick
+  for _, region in ipairs(regions) do
+    if region.pos == nil then
+      return region.tick
+    end
+
+    if pos and region.pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
+      return region.tick
+    end
+
+    if not fallback_tick or region.tick > fallback_tick then
+      fallback_tick = region.tick
+    end
+  end
+
+  return fallback_tick
+end
+
 --- Track a buffer or region for a conversation
 --- @param buf integer
 --- @param opts sia.tracker.Options?
@@ -170,14 +193,12 @@ function M.ensure_tracked(buf, opts)
   -- If adding whole buffer when regions exist then we remove all regions
   if not pos and not whole_buffer_region then
     -- Inherit tick from global if this is a conversation tracking
+    -- Use resolve_tick to match the same fallback logic as user_tick,
+    -- otherwise ensure_tracked and user_tick can disagree causing
+    -- immediate "outdated" status.
     local inherited_tick = 0
-    if id and tracker.global then
-      for _, global_region in ipairs(tracker.global) do
-        if global_region.pos == nil then
-          inherited_tick = global_region.tick
-          break
-        end
-      end
+    if id then
+      inherited_tick = resolve_tick(tracker.global, nil) or 0
     end
 
     if id then
@@ -218,13 +239,8 @@ function M.ensure_tracked(buf, opts)
 
   -- For new region we inherit tick from global if that exists
   local inherited_tick = 0
-  if id and tracker.global then
-    for _, region in ipairs(tracker.global) do
-      if region.pos and pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
-        inherited_tick = region.tick
-        break
-      end
-    end
+  if id then
+    inherited_tick = resolve_tick(tracker.global, pos) or 0
   end
 
   table.insert(regions_array, {
@@ -254,11 +270,18 @@ function M.untrack(buf, opts)
   -- First try to find the regions for the provided id
   if id then
     regions_array = tracker.regions[id]
-  end
-
-  -- If id==nil, or there are no regions for id
-  if not regions_array then
-    id = nil -- ensure that we clean up global later
+    -- If id is provided but no conv regions exist, only fall through to
+    -- global for whole-buffer (pos=nil) untracks. Never fall through for
+    -- region-specific untracks, as that could accidentally destroy a global
+    -- region that another conversation depends on.
+    if not regions_array then
+      if pos then
+        return
+      end
+      id = nil
+      regions_array = tracker.global
+    end
+  else
     regions_array = tracker.global
   end
 
@@ -291,6 +314,7 @@ function M.untrack(buf, opts)
           if id then
             tracker.regions[id] = nil
           else
+            -- TODO: perhaps we should cleanup global too
             tracker.global = nil
           end
 
@@ -337,29 +361,6 @@ function M.without_tracking(buf, id, callback)
   end
 
   return result
-end
-
-local function resolve_tick(regions, pos)
-  if not regions then
-    return nil
-  end
-
-  local fallback_tick
-  for _, region in ipairs(regions) do
-    if region.pos == nil then
-      return region.tick
-    end
-
-    if pos and region.pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
-      return region.tick
-    end
-
-    if not fallback_tick or region.tick > fallback_tick then
-      fallback_tick = region.tick
-    end
-  end
-
-  return fallback_tick
 end
 
 --- Get the current tick for a buffer or region
