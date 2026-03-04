@@ -269,7 +269,7 @@ function M.resolve_action(argument, opts)
     action = vim.deepcopy(config.options.actions[argument[1]:sub(2)])
     if action == nil then
       vim.api.nvim_echo({
-        { "Sia: The action '" .. argument[1] .. "' does not exist.", "ErrorMsg" },
+        { "sia: action '" .. argument[1] .. "' does not exist", "ErrorMsg" },
       }, false, {})
       return nil, true
     end
@@ -277,7 +277,7 @@ function M.resolve_action(argument, opts)
     if action.input and action.input == "require" and #argument < 2 then
       vim.api.nvim_echo({
         {
-          "Sia: The action '" .. argument[1] .. "' requires additional input.",
+          "sia: action '" .. argument[1] .. "' requires additional input",
           "ErrorMsg",
         },
       }, false, {})
@@ -499,9 +499,7 @@ function M.select_other_buffer(current_buf, callback)
     end,
     source = "tab",
     on_select = callback,
-    on_nothing = function()
-      vim.notify("Sia: No other buffer")
-    end,
+    on_nothing = function() end,
   })
 end
 

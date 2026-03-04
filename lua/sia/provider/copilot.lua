@@ -74,9 +74,9 @@ local function open_url(url)
 
   if open_cmd and vim.fn.executable(open_cmd) == 1 then
     vim.fn.jobstart({ open_cmd, url }, { detach = true })
-    vim.notify("Sia Copilot: Opening browser for authorization...", vim.log.levels.INFO)
+    vim.notify("sia: opening browser for authorization...", vim.log.levels.INFO)
   else
-    vim.notify("Sia Copilot: Open this URL to authorize:\n" .. url, vim.log.levels.INFO)
+    vim.notify("sia: open this URL to authorize:\n" .. url, vim.log.levels.INFO)
   end
 end
 
@@ -140,7 +140,7 @@ local function authorize(callback)
     or not device_data.verification_uri
   then
     vim.notify(
-      "Sia Copilot: Failed to initiate OAuth device authorization.",
+      "sia: failed to initiate OAuth device authorization.",
       vim.log.levels.ERROR
     )
     callback(nil)
@@ -149,7 +149,7 @@ local function authorize(callback)
 
   open_url(device_data.verification_uri)
   vim.notify(
-    "Sia Copilot: Enter code in browser: " .. (device_data.user_code or ""),
+    "sia: enter code in browser: " .. (device_data.user_code or ""),
     vim.log.levels.INFO
   )
 
@@ -173,7 +173,7 @@ local function authorize(callback)
       end
 
       if os.time() > deadline then
-        vim.notify("Sia Copilot: Authorization timed out.", vim.log.levels.ERROR)
+        vim.notify("sia: authorization timed out.", vim.log.levels.ERROR)
         finish(nil)
         return
       end
@@ -199,7 +199,7 @@ local function authorize(callback)
       })
 
       if not token_data then
-        vim.notify("Sia Copilot: OAuth polling failed.", vim.log.levels.ERROR)
+        vim.notify("sia: oauth polling failed.", vim.log.levels.ERROR)
         finish(nil)
         return
       end
@@ -229,11 +229,11 @@ local function authorize(callback)
 
       if token_data.error then
         vim.notify(
-          "Sia Copilot: Authorization failed: " .. token_data.error,
+          "sia: authorization failed: " .. token_data.error,
           vim.log.levels.ERROR
         )
       else
-        vim.notify("Sia Copilot: Authorization failed.", vim.log.levels.ERROR)
+        vim.notify("sia: authorization failed.", vim.log.levels.ERROR)
       end
       finish(nil)
     end, interval_ms)
@@ -281,10 +281,7 @@ local function copilot_api_key()
     -- Need to fetch a new token
     oauth = get_oauth_token(oauth)
     if not oauth then
-      vim.notify(
-        "Sia Copilot: Not authenticated. Run :SiaAuth copilot to authorize.",
-        vim.log.levels.WARN
-      )
+      vim.notify("sia: run :SiaAuth copilot to authorize", vim.log.levels.WARN)
       return nil
     end
 

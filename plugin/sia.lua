@@ -82,12 +82,12 @@ vim.api.nvim_create_user_command("Sia", function(args)
 
   local model = find_and_remove_flag("-m", args.fargs)
   if model and not require("sia.config").options.models[model] then
-    vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: model is not defined", vim.log.levels.ERROR)
     return
   end
 
   if #args.fargs == 0 and not vim.b.sia then
-    vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
     return
   end
 
@@ -106,11 +106,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if action.capture and context.mode ~= "v" then
     local capture = action.capture(context)
     if not capture then
-      vim.api.nvim_echo(
-        { { "Sia: Unable to capture current context.", "ErrorMsg" } },
-        false,
-        {}
-      )
+      vim.notify("sia: unable to capture current context", vim.log.levels.ERROR)
       return
     end
     context.start_line, context.end_line = capture[1], capture[2]
@@ -119,26 +115,20 @@ vim.api.nvim_create_user_command("Sia", function(args)
   end
 
   if action.range == true and context.mode ~= "v" then
-    vim.api.nvim_echo({
-      {
-        "Sia: The action " .. args.fargs[1] .. " must be used with a range",
-        "ErrorMsg",
-      },
-    }, false, {})
+    vim.notify(
+      "sia: action " .. args.fargs[1] .. " must be used with a range",
+      vim.log.levels.ERROR
+    )
     return
   end
 
   local is_range = context.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
-    vim.api.nvim_echo({
-      {
-        "Sia: The action "
-          .. args.fargs[1]
-          .. " is not enabled in the current context.",
-        "ErrorMsg",
-      },
-    }, false, {})
+    vim.notify(
+      "sia: action " .. args.fargs[1] .. " is not enabled in the current context",
+      vim.log.levels.ERROR
+    )
     return
   end
 
@@ -158,13 +148,13 @@ vim.api.nvim_create_user_command("SiaDebug", function()
   local ChatStrategy = require("sia.strategy").ChatStrategy
   local chat = ChatStrategy.by_buf()
   if not chat or not chat.conversation or not chat.conversation.prepare_messages then
-    vim.notify("SiaDebug: No active Sia chat in this buffer.", vim.log.levels.WARN)
+    vim.notify("sia: no active chat in this buffer", vim.log.levels.WARN)
     return
   end
   local ok, result = pcall(chat.conversation.prepare_messages, chat.conversation)
   if not ok then
     vim.notify(
-      "SiaDebug: Error generating conversation query: " .. tostring(result),
+      "sia: error generating conversation query: " .. tostring(result),
       vim.log.levels.ERROR
     )
     return
@@ -326,34 +316,21 @@ vim.api.nvim_create_user_command("SiaRollback", function(args)
   end
 
   if chat.is_busy then
-    vim.api.nvim_echo(
-      { { "SiaRollback: Chat is busy, wait for completion.", "ErrorMsg" } },
-      false,
-      {}
-    )
+    vim.notify("sia: chat is busy, wait for completion", vim.log.levels.WARN)
     return
   end
 
-  local turn_id = args.fargs[1]
+  local turn_id = args.fargs[1] --[[@as string?]]
   if not turn_id then
     turn_id = chat.conversation:last_turn_id()
     if not turn_id then
-      vim.api.nvim_echo(
-        { { "SiaRollback: No turns to rollback.", "ErrorMsg" } },
-        false,
-        {}
-      )
+      vim.notify("sia: no turns to rollback", vim.log.levels.WARN)
       return
     end
   end
   local dropped_turn_ids = chat.conversation:rollback_to(turn_id)
   if not dropped_turn_ids then
-    vim.api.nvim_echo({
-      {
-        string.format("SiaRollback: Turn '%s' not found.", turn_id),
-        "ErrorMsg",
-      },
-    }, false, {})
+    vim.notify(string.format("sia: turn '%s' not found", turn_id), vim.log.levels.ERROR)
     return
   end
 
@@ -412,7 +389,7 @@ vim.api.nvim_create_user_command("SiaAdd", function(args)
   local command = SIA_ADD_CMD[cmd_name]
   if command then
     if command.non_sia_buf and vim.bo.ft == "sia" then
-      vim.notify("Sia: Not a valid context")
+      vim.notify("sia: not a valid context", vim.log.levels.WARN)
       return
     end
 
@@ -423,8 +400,6 @@ vim.api.nvim_create_user_command("SiaAdd", function(args)
       on_none = function()
         if command.execute_global then
           command.execute_global(args)
-        else
-          vim.notify("No *sia* buffer")
         end
       end,
       only_visible = true,
@@ -466,12 +441,12 @@ end, {
 vim.api.nvim_create_user_command("SiaSave", function()
   local chat = require("sia.strategy").ChatStrategy.by_buf()
   if not chat then
-    vim.notify("Sia: No active chat for this buffer", vim.log.levels.WARN)
+    vim.notify("sia: no active chat for this buffer", vim.log.levels.WARN)
     return
   end
 
   if not chat.conversation then
-    vim.notify("Sia: Conversation not found for current chat", vim.log.levels.WARN)
+    vim.notify("sia: conversation not found for current chat", vim.log.levels.WARN)
     return
   end
 
@@ -483,13 +458,11 @@ vim.api.nvim_create_user_command("SiaSave", function()
   local history = require("sia.history")
   local utils = require("sia.utils")
 
-  vim.notify("Sia: Saving conversation...", vim.log.levels.INFO)
-
   history.new_history(chat.conversation, {
     embedding_model = embedding_model,
     callback = function(obj)
       if not obj then
-        vim.notify("Sia: Failed to save conversation", vim.log.levels.ERROR)
+        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
         return
       end
 
@@ -503,17 +476,15 @@ vim.api.nvim_create_user_command("SiaSave", function()
 
       local ok, encoded = pcall(vim.json.encode, obj, { indent = true })
       if not ok then
-        vim.notify("Sia: Failed to save conversation", vim.log.levels.ERROR)
+        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
         return
       end
 
       local write_ok = pcall(vim.fn.writefile, vim.split(encoded, "\n"), filename)
       if not write_ok then
-        vim.notify("Sia: Failed to save conversation", vim.log.levels.ERROR)
+        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
         return
       end
-
-      vim.notify("Sia: Conversation saved", vim.log.levels.INFO)
     end,
   })
 end, {})
@@ -523,30 +494,26 @@ vim.api.nvim_create_user_command("SiaBranch", function(args)
   local chat = ChatStrategy.by_buf()
 
   if not chat or not chat.conversation then
-    vim.api.nvim_echo(
-      { { "Sia: No active chat in this buffer.", "ErrorMsg" } },
-      false,
-      {}
-    )
+    vim.notify("sia: no active chat in this buffer", vim.log.levels.ERROR)
     return
   end
 
   if chat.is_busy then
-    vim.notify("Sia: Current conversation is busy", vim.log.levels.WARN)
+    vim.notify("sia: current conversation is busy", vim.log.levels.WARN)
     return
   end
 
   -- Parse -m flag for model override
   local model = find_and_remove_flag("-m", args.fargs)
   if model and not require("sia.config").options.models[model] then
-    vim.api.nvim_echo({ { "Sia: Model is not defined.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: model is not defined", vim.log.levels.ERROR)
     return
   end
 
   -- Get the prompt
   local prompt = table.concat(args.fargs, " ")
   if prompt == "" then
-    vim.api.nvim_echo({ { "Sia: No prompt provided.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
     return
   end
 
@@ -595,7 +562,7 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
   end
 
   if not chat or not chat.conversation then
-    vim.api.nvim_echo({ { "SiaShell: No active chat found.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: no active chat found", vim.log.levels.ERROR)
     return
   end
 
@@ -604,57 +571,34 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
   if subcommand == "stop" then
     local id = tonumber(args.fargs[2])
     if not id then
-      vim.api.nvim_echo(
-        { { "SiaShell: Process ID required. Usage: SiaShell stop <id>", "ErrorMsg" } },
-        false,
-        {}
+      vim.notify(
+        "sia: process ID required. usage: SiaShell stop <id>",
+        vim.log.levels.ERROR
       )
       return
     end
 
     local proc = chat.conversation:get_bash_process(id)
     if not proc then
-      vim.api.nvim_echo(
-        { { string.format("SiaShell: No process with ID %d", id), "ErrorMsg" } },
-        false,
-        {}
-      )
+      vim.notify(string.format("sia: no process with ID %d", id), vim.log.levels.ERROR)
       return
     end
 
     if proc.status ~= "running" then
-      vim.api.nvim_echo({
-        {
-          string.format("SiaShell: Process %d is already %s", id, proc.status),
-          "WarningMsg",
-        },
-      }, false, {})
       return
     end
 
     if proc.detached_handle then
       proc.detached_handle.kill()
-      vim.api.nvim_echo({
-        {
-          string.format("SiaShell: Sent SIGTERM to process %d (%s)", id, proc.command),
-          "Normal",
-        },
-      }, false, {})
     else
-      vim.api.nvim_echo({
-        {
-          string.format(
-            "SiaShell: Process %d is synchronous and cannot be stopped",
-            id
-          ),
-          "WarningMsg",
-        },
-      }, false, {})
+      vim.notify(
+        string.format("sia: process %d is synchronous and cannot be stopped", id),
+        vim.log.levels.WARN
+      )
     end
   elseif subcommand == "list" or subcommand == nil then
     local procs = chat.conversation.bash_processes
     if #procs == 0 then
-      vim.api.nvim_echo({ { "SiaShell: No processes.", "Normal" } }, false, {})
       return
     end
 
@@ -689,19 +633,15 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
     end
 
     vim.api.nvim_echo(
-      { { "SiaShell processes:\n" .. table.concat(lines, "\n"), "Normal" } },
-      false,
+      { { "sia: processes\n" .. table.concat(lines, "\n"), "Normal" } },
+      true,
       {}
     )
   else
-    vim.api.nvim_echo({
-      {
-        "SiaShell: Unknown subcommand '"
-          .. subcommand
-          .. "'. Use 'list' or 'stop <id>'.",
-        "ErrorMsg",
-      },
-    }, false, {})
+    vim.notify(
+      "sia: unknown subcommand '" .. subcommand .. "'. use 'list' or 'stop <id>'",
+      vim.log.levels.ERROR
+    )
   end
 end, {
   nargs = "*",
@@ -758,9 +698,9 @@ local SIA_AUTH_PROVIDERS = {
     authorize = function(callback)
       require("sia.provider.codex").authorize(function(token_data)
         if token_data then
-          vim.notify("Sia Codex: Ready to use codex/ models.", vim.log.levels.INFO)
+          vim.notify("sia: ready to use codex/ models", vim.log.levels.INFO)
         else
-          vim.notify("Sia Codex: Authorization failed.", vim.log.levels.ERROR)
+          vim.notify("sia: codex authorization failed", vim.log.levels.ERROR)
         end
         if callback then
           callback(token_data)
@@ -773,9 +713,9 @@ local SIA_AUTH_PROVIDERS = {
     authorize = function(callback)
       require("sia.provider.copilot").authorize(function(token_data)
         if token_data then
-          vim.notify("Sia Copilot: Ready to use copilot/ models.", vim.log.levels.INFO)
+          vim.notify("sia: ready to use copilot/ models", vim.log.levels.INFO)
         else
-          vim.notify("Sia Copilot: Authorization failed.", vim.log.levels.ERROR)
+          vim.notify("sia: copilot authorization failed", vim.log.levels.ERROR)
         end
         if callback then
           callback(token_data)
@@ -788,22 +728,20 @@ local SIA_AUTH_PROVIDERS = {
 vim.api.nvim_create_user_command("SiaAuth", function(args)
   local provider_name = args.fargs[1]
   if not provider_name then
-    vim.api.nvim_echo({ { "SiaAuth: Provider name required.", "ErrorMsg" } }, false, {})
+    vim.notify("sia: provider name required", vim.log.levels.ERROR)
     return
   end
 
   local provider = SIA_AUTH_PROVIDERS[provider_name]
   if not provider then
-    vim.api.nvim_echo({
-      {
-        string.format(
-          "SiaAuth: Unknown provider '%s'. Available: %s",
-          provider_name,
-          table.concat(vim.tbl_keys(SIA_AUTH_PROVIDERS), ", ")
-        ),
-        "ErrorMsg",
-      },
-    }, false, {})
+    vim.notify(
+      string.format(
+        "sia: unknown provider '%s'. available: %s",
+        provider_name,
+        table.concat(vim.tbl_keys(SIA_AUTH_PROVIDERS), ", ")
+      ),
+      vim.log.levels.ERROR
+    )
     return
   end
 

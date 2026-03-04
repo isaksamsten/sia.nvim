@@ -138,7 +138,7 @@ local function scan_agents_dir(base_dir, error_report)
         agents[name] = agent
       elseif error_report ~= false then
         vim.notify(
-          string.format("Sia: Failed to load agent from %s: %s", filepath, err),
+          string.format("sia: failed to load agent from %s: %s", filepath, err),
           vim.log.levels.WARN
         )
       end

@@ -399,7 +399,7 @@ local function browser_authorize(callback)
     vim.schedule_wrap(function()
       if not completed then
         cleanup()
-        vim.notify("Sia Codex: Authorization timed out", vim.log.levels.ERROR)
+        vim.notify("sia: authorization timed out", vim.log.levels.ERROR)
         callback(nil)
       end
     end)
@@ -410,10 +410,7 @@ local function browser_authorize(callback)
     if err then
       vim.schedule(function()
         cleanup()
-        vim.notify(
-          "Sia Codex: Failed to start OAuth server: " .. err,
-          vim.log.levels.ERROR
-        )
+        vim.notify("sia: failed to start oauth server: " .. err, vim.log.levels.ERROR)
         callback(nil)
       end)
       return
@@ -465,10 +462,7 @@ local function browser_authorize(callback)
               end)
             end)
             cleanup()
-            vim.notify(
-              "Sia Codex: Authorization failed: " .. error_msg,
-              vim.log.levels.ERROR
-            )
+            vim.notify("sia: authorization failed: " .. error_msg, vim.log.levels.ERROR)
             callback(nil)
             return
           end
@@ -486,7 +480,7 @@ local function browser_authorize(callback)
               end)
             end)
             cleanup()
-            vim.notify("Sia Codex: Missing authorization code", vim.log.levels.ERROR)
+            vim.notify("sia: missing authorization code", vim.log.levels.ERROR)
             callback(nil)
             return
           end
@@ -504,10 +498,7 @@ local function browser_authorize(callback)
               end)
             end)
             cleanup()
-            vim.notify(
-              "Sia Codex: Invalid state - potential CSRF attack",
-              vim.log.levels.ERROR
-            )
+            vim.notify("sia: invalid state", vim.log.levels.ERROR)
             callback(nil)
             return
           end
@@ -525,9 +516,9 @@ local function browser_authorize(callback)
           exchange_code_for_tokens(params.code, redirect_uri, pkce, function(token_data)
             if token_data then
               save_cached_token(token_data)
-              vim.notify("Sia Codex: Authorization successful!", vim.log.levels.INFO)
+              vim.notify("sia: authorization successful", vim.log.levels.INFO)
             else
-              vim.notify("Sia Codex: Token exchange failed", vim.log.levels.ERROR)
+              vim.notify("sia: token exchange failed", vim.log.levels.ERROR)
             end
             callback(token_data)
           end)
@@ -557,12 +548,8 @@ local function browser_authorize(callback)
 
   if open_cmd and vim.fn.executable(open_cmd) == 1 then
     vim.fn.jobstart({ open_cmd, auth_url }, { detach = true })
-    vim.notify("Sia Codex: Opening browser for authorization...", vim.log.levels.INFO)
   else
-    vim.notify(
-      "Sia Codex: Open this URL to authorize:\n" .. auth_url,
-      vim.log.levels.INFO
-    )
+    vim.notify("sia: open this url to authorize:\n" .. auth_url, vim.log.levels.INFO)
   end
 end
 
@@ -613,10 +600,7 @@ end
 local function codex_api_key()
   local token = get_access_token()
   if not token then
-    vim.notify(
-      "Sia Codex: Not authenticated. Run :SiaAuth codex to authorize.",
-      vim.log.levels.WARN
-    )
+    vim.notify("sia: run :SiaAuth codex to authorize", vim.log.levels.WARN)
     return nil
   end
   return token

@@ -1,4 +1,5 @@
 local common = require("sia.strategy.common")
+local icons = require("sia.ui").icons
 
 local Strategy = common.Strategy
 
@@ -18,7 +19,7 @@ function HiddenStrategy:new(conversation, options, cancellable)
 end
 
 local function default_notify(msg)
-  vim.api.nvim_echo({ { "🤖 " .. msg, "SiaProgress" } }, false, {})
+  vim.api.nvim_echo({ { icons.agents .. " " .. msg, "SiaProgress" } }, false, {})
 end
 
 function HiddenStrategy:on_request_start()
@@ -106,7 +107,7 @@ function HiddenStrategy:on_cancel()
     self.conversation.context,
     { "Operation was cancelled by user" }
   )
-  vim.api.nvim_echo({ { "Sia: Operation cancelled", "DiagnosticWarn" } }, false, {})
+  vim.api.nvim_echo({ { "sia: cancelled", "DiagnosticWarn" } }, false, {})
 end
 
 return HiddenStrategy

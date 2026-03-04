@@ -76,7 +76,7 @@ M.edit = {
     opts = opts or {}
     local buf = opts.buf or vim.api.nvim_get_current_buf()
     if not require("sia.diff").accept_diff(buf) then
-      vim.api.nvim_echo({ { "Sia: No changes to accept", "WarningMsg" } }, false, {})
+      vim.api.nvim_echo({ { "sia: no changes to accept", "WarningMsg" } }, false, {})
     end
   end,
 
@@ -85,7 +85,7 @@ M.edit = {
     opts = opts or {}
     local buf = opts.buf or vim.api.nvim_get_current_buf()
     if not require("sia.diff").reject_diff(buf) then
-      vim.api.nvim_echo({ { "Sia: No changes to reject", "WarningMsg" } }, false, {})
+      vim.api.nvim_echo({ { "sia: no changes to reject", "WarningMsg" } }, false, {})
     end
   end,
 
@@ -96,7 +96,7 @@ M.edit = {
     local diff = require("sia.diff")
 
     if not diff.show_diff_for_buffer(buf) then
-      vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
+      vim.api.nvim_echo({ { "sia: no changes to show", "WarningMsg" } }, false, {})
     end
   end,
 
@@ -165,7 +165,6 @@ M.edit = {
     local quickfix_items = diff.get_all_hunks_for_quickfix(buf)
 
     if #quickfix_items == 0 then
-      vim.api.nvim_echo({ { "Sia: No changes to show", "WarningMsg" } }, false, {})
       return
     end
 
@@ -195,7 +194,6 @@ M.ui = {
 
     local contexts = chat.conversation:get_contexts()
     if #contexts == 0 then
-      vim.notify("No contexts available", vim.log.levels.INFO)
       return
     end
 
@@ -221,7 +219,6 @@ M.ui = {
     if chat then
       local messages = chat.conversation:get_messages()
       if #messages == 0 then
-        vim.notify("Sia: No messages in the current conversation.")
         return
       end
       vim.ui.select(messages, {
@@ -411,7 +408,6 @@ M.chat = {
       local prompt = table.concat(lines, "\n"):gsub("^%s*(.-)%s*$", "%1")
 
       if prompt == "" then
-        vim.notify("Sia: No prompt provided.", vim.log.levels.WARN)
         return
       end
 
@@ -552,10 +548,6 @@ function M.execute_action(action, opts)
           action.hidden or {}
         )
         if not options.callback then
-          vim.notify(
-            "Sia: Hidden strategy requires a callback function",
-            vim.log.levels.ERROR
-          )
           return
         end
         strategy = require("sia.strategy").HiddenStrategy:new(conversation, options)

@@ -125,7 +125,7 @@ local function scan_skills_dir(base_dir, error_report)
           skills[entry_name] = skill
         elseif error_report ~= false then
           vim.notify(
-            string.format("Failed to load skill from %s: %s", skill_file, err),
+            string.format("sia: failed to load skill from %s: %s", skill_file, err),
             vim.log.levels.WARN
           )
         end

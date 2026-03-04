@@ -584,7 +584,7 @@ function M.get_local_config()
   if not read_ok then
     vim.notify(
       string.format(
-        "Sia: Failed to read config file %s: %s",
+        "sia: failed to read config file %s: %s",
         local_config,
         file_content
       ),
@@ -599,7 +599,7 @@ function M.get_local_config()
       local ok, err = fun(...)
       if not ok then
         vim.notify(
-          string.format("Sia: Config file %s: %s", local_config, err),
+          string.format("sia: %s: %s", local_config, err),
           vim.log.levels.ERROR
         )
         has_failed = true
@@ -610,7 +610,7 @@ function M.get_local_config()
   local decode_ok, json = pcall(vim.json.decode, content)
   if not decode_ok then
     vim.notify(
-      string.format("Sia: Invalid JSON in config file %s: %s", local_config, json),
+      string.format("sia: invalid json %s: %s", local_config, json),
       vim.log.levels.ERROR
     )
     has_failed = true
@@ -618,11 +618,7 @@ function M.get_local_config()
 
   if not has_failed and type(json) ~= "table" then
     vim.notify(
-      string.format(
-        "Sia: Config file %s must contain a JSON object, got %s",
-        local_config,
-        type(json)
-      ),
+      string.format("sia: %s expect json object, got %s", local_config, type(json)),
       vim.log.levels.ERROR
     )
     has_failed = true
@@ -1256,7 +1252,7 @@ M.options = setmetatable({}, {
 function M.setup(options)
   if options and options.defaults ~= nil then
     vim.notify(
-      "Sia: `defaults` has been renamed to `settings`. Please update your setup() config.",
+      "sia: `defaults` has been renamed to `settings`. Please update your setup() config.",
       vim.log.levels.WARN
     )
   end

@@ -1,6 +1,5 @@
 local utils = require("sia.utils")
-local NO_ACTION_ERROR =
-  "Sia: No available action selected. Please ensure the action is enabled."
+local NO_ACTION_ERROR = "sia: no available action selected"
 
 local M = {}
 
