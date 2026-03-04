@@ -634,7 +634,7 @@ end
 --- Rollback the conversation to the given turn.
 --- Marks the first message with the matching turn_id and all messages after it as "dropped".
 --- @param turn_id string The turn_id to rollback (this turn and all after it are dropped)
---- @return boolean success Whether any messages were dropped
+--- @return string[]? dropped_turn_ids List of unique dropped turn_ids, or nil if turn not found
 function Conversation:rollback_to(turn_id)
   local target_index = nil
   for i, message in ipairs(self.messages) do
@@ -645,18 +645,24 @@ function Conversation:rollback_to(turn_id)
   end
 
   if not target_index then
-    return false
+    return nil
   end
 
+  local dropped_turn_ids = {}
+  local seen = {}
   for i = target_index, #self.messages do
     local message = self.messages[i]
     if message.status ~= "dropped" then
       self:set_message_status(message, "dropped")
     end
+    if message.turn_id and not seen[message.turn_id] then
+      seen[message.turn_id] = true
+      table.insert(dropped_turn_ids, message.turn_id)
+    end
   end
 
   self:_invalidate_cache()
-  return true
+  return dropped_turn_ids
 end
 
 function Conversation:clear_user_instructions()

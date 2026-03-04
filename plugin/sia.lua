@@ -335,8 +335,8 @@ vim.api.nvim_create_user_command("SiaRollback", function(args)
   end
 
   local turn_id = args.fargs[1]
-  local success = chat.conversation:rollback_to(turn_id)
-  if not success then
+  local dropped_turn_ids = chat.conversation:rollback_to(turn_id)
+  if not dropped_turn_ids then
     vim.api.nvim_echo({
       {
         string.format("SiaRollback: Turn '%s' not found.", turn_id),
@@ -346,10 +346,8 @@ vim.api.nvim_create_user_command("SiaRollback", function(args)
     return
   end
 
-  diff.rollback(turn_id)
-
+  diff.rollback(dropped_turn_ids)
   chat:redraw()
-  vim.notify("Sia: Rolled back turn", vim.log.levels.INFO)
 end, {
   nargs = "?",
   complete = function(arg_lead)

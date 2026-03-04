@@ -1079,25 +1079,27 @@ function M.get_hunk_at_line(buf, line)
   return nil
 end
 
---- Get all buffers that have change snapshots for a given turn_id
---- @param turn_id string
---- @return integer[] bufs List of buffer handles
-local function get_buffers_for_turn(turn_id)
-  local bufs = {}
-  for buf, state in pairs(buffer_diff_state) do
-    if state.change_snapshots[turn_id] then
-      table.insert(bufs, buf)
-    end
-  end
-  return bufs
-end
-
---- Rollback all changes associated with turn_id
---- @param turn_id string
+--- Rollback all changes associated with any of the given turn_ids.
+--- For each buffer, finds the earliest matching turn and rolls back from there.
+--- @param turn_ids string|string[] A single turn_id or list of turn_ids to rollback
 --- @return boolean success
-function M.rollback(turn_id)
-  for _, buf in ipairs(get_buffers_for_turn(turn_id)) do
-    M.rollback_buf(buf, turn_id)
+function M.rollback(turn_ids)
+  if type(turn_ids) == "string" then
+    turn_ids = { turn_ids }
+  end
+  local id_set = {}
+  for _, id in ipairs(turn_ids) do
+    id_set[id] = true
+  end
+
+  for buf, state in pairs(buffer_diff_state) do
+    -- Find the earliest turn in this buffer's change_order that matches any dropped turn_id
+    for _, id in ipairs(state.change_order) do
+      if id_set[id] then
+        M.rollback_buf(buf, id)
+        break
+      end
+    end
   end
   return true
 end

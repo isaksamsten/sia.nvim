@@ -1045,4 +1045,122 @@ T["sia.diff"]["rollback_to_turn"]["preserves accepted hunks and implicitly accep
   )
 end
 
+T["sia.diff"]["rollback_to_turn"]["rollback with list of turn_ids across buffers"] = function()
+  local buf1 = create_test_buffer()
+  local buf2 = create_test_buffer()
+  local original1 = { "file1 line 1", "file1 line 2" }
+  local original2 = { "file2 line 1", "file2 line 2" }
+
+  -- buf1: Round 1 edits
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, false, original1)
+  diff.update_baseline(buf1)
+  diff.update_baseline(buf1, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, false, { "file1 line 1", "msg1 modified" })
+  diff.update_reference(buf1)
+
+  -- buf2: Round 2 edits (different buffer, different turn)
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, false, original2)
+  diff.update_baseline(buf2)
+  diff.update_baseline(buf2, { turn_id = "msg-2" })
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, false, { "file2 line 1", "msg2 modified" })
+  diff.update_reference(buf2)
+  diff.update_diff(buf2)
+
+  -- Rollback both turns (as conversation:rollback_to would return)
+  local success = diff.rollback({ "msg-1", "msg-2" })
+  eq(success, true)
+
+  -- Both buffers should be reverted to their original state
+  eq(vim.api.nvim_buf_get_lines(buf1, 0, -1, false), original1)
+  eq(vim.api.nvim_buf_get_lines(buf2, 0, -1, false), original2)
+
+  eq(diff.get_hunks(buf1), nil)
+  eq(diff.get_hunks(buf2), nil)
+end
+
+T["sia.diff"]["rollback_to_turn"]["rollback turn without diffs reverts later turns"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+
+  -- Initial baseline
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  -- Round 1: AI modifies line 2
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "round1 modified", "line 3" })
+  diff.update_reference(buf)
+
+  -- Round 2: conversation-only turn (no file edits, no diff snapshot for msg-2)
+
+  -- Round 3: AI adds a line
+  diff.update_baseline(buf, { turn_id = "msg-3" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "round1 modified", "line 3", "round3 added" }
+  )
+  diff.update_reference(buf)
+  diff.update_diff(buf)
+
+  -- Rollback turns msg-2 and msg-3 (msg-2 has no diffs, msg-3 does)
+  -- This simulates conversation:rollback_to("msg-2") returning {"msg-2", "msg-3"}
+  local success = diff.rollback({ "msg-2", "msg-3" })
+  eq(success, true)
+
+  -- Round 3 changes should be reverted; round 1 should remain
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, { "line 1", "round1 modified", "line 3" })
+
+  -- Round 1 hunks should still be tracked
+  local hunks = diff.get_hunks(buf)
+  eq(#hunks, 1)
+  eq(hunks[1].type, "change")
+end
+
+T["sia.diff"]["rollback_to_turn"]["rollback turn without diffs on separate buffer"] = function()
+  local buf1 = create_test_buffer()
+  local buf2 = create_test_buffer()
+  local original1 = { "file1 line 1", "file1 line 2" }
+  local original2 = { "file2 line 1", "file2 line 2" }
+
+  -- Round 1: edits buf1
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, false, original1)
+  diff.update_baseline(buf1)
+  diff.update_baseline(buf1, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf1, 0, -1, false, { "file1 line 1", "msg1 modified" })
+  diff.update_reference(buf1)
+  diff.update_diff(buf1)
+
+  -- Round 2: conversation-only turn (no diffs at all)
+
+  -- Round 3: edits buf2
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, false, original2)
+  diff.update_baseline(buf2)
+  diff.update_baseline(buf2, { turn_id = "msg-3" })
+  vim.api.nvim_buf_set_lines(buf2, 0, -1, false, { "file2 line 1", "msg3 modified" })
+  diff.update_reference(buf2)
+  diff.update_diff(buf2)
+
+  -- Rollback from conversation turn msg-2 (which has no diffs)
+  -- conversation:rollback_to("msg-2") returns {"msg-2", "msg-3"}
+  -- The old code with diff.rollback("msg-2") would find NO buffers and do nothing,
+  -- leaving msg-3's changes on buf2 intact. This is the bug.
+  local success = diff.rollback({ "msg-2", "msg-3" })
+  eq(success, true)
+
+  -- buf1 should be UNCHANGED (msg-1 was not rolled back)
+  eq(vim.api.nvim_buf_get_lines(buf1, 0, -1, false), { "file1 line 1", "msg1 modified" })
+  local hunks1 = diff.get_hunks(buf1)
+  eq(#hunks1, 1)
+
+  -- buf2 should be REVERTED (msg-3 was rolled back)
+  eq(vim.api.nvim_buf_get_lines(buf2, 0, -1, false), original2)
+  eq(diff.get_hunks(buf2), nil)
+end
+
+
+
 return T
