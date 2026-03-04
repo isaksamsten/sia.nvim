@@ -146,17 +146,24 @@ function Canvas:update_assistant_extmark(extmark_id, opts)
   })
 end
 
+--- @param line integer
+--- @param model string?
+--- @param status_text string?
 --- @return integer? extmark_id
-function Canvas:_set_assistant_extmark(line, model)
+function Canvas:_set_assistant_extmark(line, model, status_text)
   if model == nil then
     return nil
+  end
+  local virt_text = { { model, "SiaModel" } }
+  if status_text then
+    table.insert(virt_text, { " [#" .. status_text .. "]", "SiaStatus" })
   end
   return vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
     end_line = line,
     hl_eol = true,
     hl_group = "SiaAssistant",
     hl_mode = "combine",
-    virt_text = { { model, "SiaModel" } },
+    virt_text = virt_text,
     virt_text_pos = "right_align",
   })
 end
@@ -181,9 +188,14 @@ function Canvas:render_messages(messages, model)
       if content and type(content) == "string" then
         local line_count = vim.api.nvim_buf_line_count(self.buf)
         local heading = "/you"
-        if message.role == "assistant" then
+        local is_assistant = message.role == "assistant"
+        if is_assistant then
           heading = "/sia"
         end
+        local status_text = is_assistant
+            and message.turn_id
+            and message.turn_id:sub(1, 6)
+          or nil
         if line_count == 1 then
           vim.api.nvim_buf_set_lines(
             self.buf,
@@ -192,8 +204,8 @@ function Canvas:render_messages(messages, model)
             false,
             { heading, "" }
           )
-          if heading == "/sia" then
-            self:_set_assistant_extmark(line_count, model)
+          if is_assistant then
+            self:_set_assistant_extmark(line_count, model, status_text)
           else
             self:_set_user_extmark(line_count)
           end
@@ -205,8 +217,8 @@ function Canvas:render_messages(messages, model)
             false,
             { "", heading, "" }
           )
-          if heading == "/sia" then
-            self:_set_assistant_extmark(line_count + 2, model)
+          if is_assistant then
+            self:_set_assistant_extmark(line_count + 2, model, status_text)
           else
             self:_set_user_extmark(line_count + 2)
           end
