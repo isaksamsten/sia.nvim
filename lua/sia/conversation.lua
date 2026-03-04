@@ -12,6 +12,7 @@ local function make_uuid()
 end
 
 --- @class sia.PreparedMessage
+--- @field turn_id string?
 --- @field role string
 --- @field content (string|sia.InstructionContent[])?
 --- @field hide boolean
@@ -83,6 +84,7 @@ end
 --- @field end_line integer?
 
 --- @class sia.Message
+--- @field turn_id string? identifier for the user turn that created this message
 --- @field role sia.config.Role
 --- @field context sia.Context?
 --- @field template boolean
@@ -394,6 +396,7 @@ local function prepare_message(message, template_context)
 
   --- @type sia.PreparedMessage
   return {
+    turn_id = message.turn_id,
     role = message.role,
     hide = hide,
     meta = meta or {},
@@ -560,12 +563,10 @@ end
 function Conversation:deep_copy()
   local obj = setmetatable({}, getmetatable(self))
 
-  -- Create new conversation identity
   obj.uuid = make_uuid()
   obj.id = CONVERSATION_ID
   CONVERSATION_ID = CONVERSATION_ID + 1
 
-  -- Copy basic properties
   obj.context = self.context and vim.deepcopy(self.context) or nil
   obj.model = self.model
   obj.temperature = self.temperature
@@ -574,22 +575,18 @@ function Conversation:deep_copy()
   obj.enable_supersede = self.enable_supersede
   obj.ignore_tool_confirm = self.ignore_tool_confirm
 
-  -- Deep copy messages and mark messages with tick as outdated
   obj.messages = {}
   for _, message in ipairs(self.messages) do
     local msg_copy = vim.deepcopy(message)
-    -- Mark messages with tick as outdated (these are tracked contexts)
     if msg_copy.context and msg_copy.context.tick then
       msg_copy.status = "outdated"
     end
     table.insert(obj.messages, msg_copy)
   end
 
-  -- Deep copy tools
   obj.tools = vim.deepcopy(self.tools)
   obj.tool_fn = vim.deepcopy(self.tool_fn)
 
-  -- Reset state for new branch
   obj.auto_confirm_tools = {}
   obj._template_context = nil
   obj.todos = {
@@ -603,15 +600,52 @@ function Conversation:deep_copy()
   return obj
 end
 
---- @param tool sia.config.Tool
-function Conversation:add_tool(tool) end
-
 function Conversation:untrack_messages()
   for _, message in ipairs(self.messages) do
     if message.context and message.context.buf and message.context.tick then
       tracker.untrack(message.context.buf, { id = self.id, pos = message.context.pos })
     end
   end
+end
+
+---@return string turn_id
+function Conversation:new_turn()
+  local turn_id = make_uuid()
+  self.messages[#self.messages].turn_id = turn_id
+  return turn_id
+end
+
+--- Rollback the conversation to the given turn.
+--- Marks the first message with the matching turn_id and all messages after it as "dropped".
+--- @param turn_id string The turn_id to rollback (this turn and all after it are dropped)
+--- @return boolean success Whether any messages were dropped
+function Conversation:rollback_to(turn_id)
+  local target_index = nil
+  for i, message in ipairs(self.messages) do
+    if message.turn_id == turn_id then
+      target_index = i
+      break
+    end
+  end
+
+  if not target_index then
+    return false
+  end
+
+  for i = target_index, #self.messages do
+    local message = self.messages[i]
+    if message.status ~= "dropped" then
+      message.status = "dropped"
+      if message.context and message.context.buf and message.context.tick then
+        tracker.untrack(
+          message.context.buf,
+          { id = self.id, pos = message.context.pos }
+        )
+      end
+    end
+  end
+
+  return true
 end
 
 function Conversation:clear_user_instructions()
@@ -761,7 +795,7 @@ end
 --- Set mark_outdated = false to keep outdated messages
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param context sia.Context?
---- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?}?
+--- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?, turn_id: string?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
   -- We track per-kind updates to avoid two problems:
@@ -781,6 +815,9 @@ function Conversation:add_instruction(instruction, context, opts)
     if opts.meta then
       message.meta = opts.meta
     end
+    if opts.turn_id then
+      message.turn_id = opts.turn_id
+    end
   end
 
   if opts.mark_outdated ~= false then
@@ -796,12 +833,13 @@ end
 
 --- @param name string
 --- @param arguments table
---- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?) }
+--- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string? }
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, opts)
   if self.tool_fn[name] then
     local action = self.tool_fn[name].action
-    local ok, err = pcall(action, arguments, self, opts.callback, opts.cancellable)
+    local ok, err =
+      pcall(action, arguments, self, opts.callback, opts.cancellable, opts.turn_id)
     if not ok then
       print(vim.inspect(err))
       opts.callback({ content = { "Tool execution failed. " }, kind = "failed" })
@@ -961,4 +999,4 @@ function Conversation:prepare_messages()
   return messages
 end
 
-return { Message = Message, Conversation = Conversation }
+return { Message = Message, Conversation = Conversation, make_uuid = make_uuid }

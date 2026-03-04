@@ -213,7 +213,7 @@ end
 --- - content: The complete streamed content as string[]
 --- - usage: Token usage statistics
 ---
---- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage?, content: string[]? }
+--- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage?, content: string[]?, turn_id: string }
 function Strategy:on_complete(control) end
 
 --- Called when an error occurs during execution. This can be API errors,
@@ -290,6 +290,7 @@ end
 --- @field handle_empty_toolset fun(args: table?)
 --- @field handle_status_updates? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
 --- @field cancellable sia.Cancellable?
+--- @field turn_id string
 
 --- @param opts sia.ExecuteToolsOpts
 function Strategy:execute_tools(opts)
@@ -426,6 +427,7 @@ function Strategy:execute_tools(opts)
           if tool.arguments then
             self.conversation:execute_tool(tool.name, tool.arguments, {
               cancellable = opts.cancellable,
+              turn_id = opts.turn_id,
               callback = vim.schedule_wrap(function(tool_result)
                 if not tool_result then
                   tool_result =
@@ -465,6 +467,7 @@ function Strategy:execute_tools(opts)
         if tool.arguments then
           self.conversation:execute_tool(tool.name, tool.arguments, {
             cancellable = opts.cancellable,
+            turn_id = opts.turn_id,
             callback = vim.schedule_wrap(function(tool_result)
               if not tool_result then
                 tool_result =

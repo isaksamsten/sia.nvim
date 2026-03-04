@@ -19,6 +19,9 @@ end
 function Conversation:get_messages()
   return self._messages
 end
+function Conversation:new_turn()
+  return "abc"
+end
 function Conversation:last_message()
   return self._messages[#self._messages]
 end
@@ -151,25 +154,17 @@ T["assistant.streaming"]["handles partial data across stdout calls"] =
             10
           )
           -- Second call: rest of partial line + complete line
-          job_opts.on_stdout(
-            1,
-            {
-              'ices":[{"delta":{"content":"lo"}}]}',
-              'data: {"choices":[{"delta":{"content":"!"}}]}',
-            },
-            10
-          )
+          job_opts.on_stdout(1, {
+            'ices":[{"delta":{"content":"lo"}}]}',
+            'data: {"choices":[{"delta":{"content":"!"}}]}',
+          }, 10)
           -- Final events
-          job_opts.on_stdout(
-            1,
-            {
-              "data: " .. vim.json.encode({
-                choices = { { delta = {} } },
-                usage = { total_tokens = 5 },
-              }),
-            },
-            10
-          )
+          job_opts.on_stdout(1, {
+            "data: " .. vim.json.encode({
+              choices = { { delta = {} } },
+              usage = { total_tokens = 5 },
+            }),
+          }, 10)
           job_opts.on_stdout(1, { "data: [DONE]" }, nil)
           job_opts.on_exit(1, 0, nil)
           return 1
@@ -205,16 +200,12 @@ T["assistant.streaming"]["handles multiple events in single stdout call"] =
             'data: {"choices":[{"delta":{"content":"B"}}]}',
             'data: {"choices":[{"delta":{"content":"C"}}]}',
           }, 10)
-          job_opts.on_stdout(
-            1,
-            {
-              "data: " .. vim.json.encode({
-                choices = { { delta = {} } },
-                usage = { total_tokens = 3 },
-              }),
-            },
-            10
-          )
+          job_opts.on_stdout(1, {
+            "data: " .. vim.json.encode({
+              choices = { { delta = {} } },
+              usage = { total_tokens = 3 },
+            }),
+          }, 10)
           job_opts.on_stdout(1, { "data: [DONE]" }, nil)
           job_opts.on_exit(1, 0, nil)
           return 1
@@ -252,16 +243,12 @@ T["assistant.streaming"]["handles SSE event lines"] = MiniTest.new_set({
           "event: response.output_text.delta",
           'data: {"type":"response.output_text.delta","delta":" World"}',
         }, 10)
-        job_opts.on_stdout(
-          1,
-          {
-            "data: " .. vim.json.encode({
-              choices = { { delta = {} } },
-              usage = { total_tokens = 5 },
-            }),
-          },
-          10
-        )
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 5 },
+          }),
+        }, 10)
         job_opts.on_stdout(1, { "data: [DONE]" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1

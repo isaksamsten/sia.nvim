@@ -316,6 +316,74 @@ vim.api.nvim_create_user_command("SiaDiff", function()
   require("sia").edit.show()
 end, {})
 
+vim.api.nvim_create_user_command("SiaRollback", function(args)
+  local ChatStrategy = require("sia.strategy").ChatStrategy
+  local diff = require("sia.diff")
+
+  local chat = ChatStrategy.by_buf()
+  if not chat then
+    return
+  end
+
+  if chat.is_busy then
+    vim.api.nvim_echo(
+      { { "SiaRollback: Chat is busy, wait for completion.", "ErrorMsg" } },
+      false,
+      {}
+    )
+    return
+  end
+
+  local turn_id = args.fargs[1]
+  local success = chat.conversation:rollback_to(turn_id)
+  if not success then
+    vim.api.nvim_echo({
+      {
+        string.format("SiaRollback: Turn '%s' not found.", turn_id),
+        "ErrorMsg",
+      },
+    }, false, {})
+    return
+  end
+
+  diff.rollback(turn_id)
+
+  chat:redraw()
+  vim.notify("Sia: Rolled back turn", vim.log.levels.INFO)
+end, {
+  nargs = "?",
+  complete = function(arg_lead)
+    local ChatStrategy = require("sia.strategy").ChatStrategy
+    local chat = ChatStrategy.by_buf()
+    if not chat then
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        local c = ChatStrategy.by_buf(buf)
+        if c then
+          chat = c
+          break
+        end
+      end
+    end
+
+    if not chat or not chat.conversation then
+      return {}
+    end
+
+    local completions = {}
+    local seen = {}
+    for _, msg in ipairs(chat.conversation.messages) do
+      if msg.turn_id and not seen[msg.turn_id] and msg.status ~= "dropped" then
+        seen[msg.turn_id] = true
+        if vim.startswith(msg.turn_id, arg_lead) then
+          table.insert(completions, msg.turn_id)
+        end
+      end
+    end
+    return completions
+  end,
+})
+
 vim.api.nvim_create_user_command("SiaConfirm", function(args)
   local command = args.fargs[1]
   local approval = require("sia").confirm
@@ -674,7 +742,7 @@ end, {
   end,
 })
 
---- @type table<string, { authorize: fun(callback: fun(data: any?)), label: string }>
+--- @type table<string, { authorize: fun(callback: fun(data: any?)?), label: string }>
 local SIA_AUTH_PROVIDERS = {
   codex = {
     label = "Codex",

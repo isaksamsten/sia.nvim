@@ -129,8 +129,9 @@ function OpenAICompletionStream:process_stream_chunk(obj)
   end
 end
 
+--- @param turn_id string
 --- @return string[]? content
-function OpenAICompletionStream:finalize()
+function OpenAICompletionStream:finalize(turn_id)
   if not self:on_content({ tool_calls = self.pending_tool_calls }) then
     return nil
   end
@@ -153,6 +154,7 @@ function OpenAICompletionStream:finalize()
         reasoning_opaque = self.reasoning_opaque,
         reasoning_text = self.reasoning_text,
       },
+      turn_id = turn_id,
     }
   )
 
@@ -246,8 +248,9 @@ function OpenAIResponsesStream:process_stream_chunk(json)
   end
 end
 
+--- @param turn_id string
 --- @return string[]? content
-function OpenAIResponsesStream:finalize()
+function OpenAIResponsesStream:finalize(turn_id)
   if not self:on_content({ tool_calls = self.pending_tool_calls }) then
     return nil
   end
@@ -269,11 +272,18 @@ function OpenAIResponsesStream:finalize()
     content = vim.split(self.content, "\n")
   end
 
-  self.strategy.conversation:add_instruction({
-    hide = true,
-    role = "assistant",
-    content = content,
-  }, nil, { meta = { reasoning = reasoning, empty_content = reasoning ~= nil } })
+  self.strategy.conversation:add_instruction(
+    {
+      hide = true,
+      role = "assistant",
+      content = content,
+    },
+    nil,
+    {
+      meta = { reasoning = reasoning, empty_content = reasoning ~= nil },
+      turn_id = turn_id,
+    }
+  )
 
   return content
 end

@@ -236,12 +236,6 @@ function ChatStrategy:on_tools()
   if not self:buf_is_loaded() then
     return false
   end
-  if self.assistant_extmark then
-    self.canvas:update_assistant_extmark(
-      self.assistant_extmark,
-      { model = self.conversation.model:name() }
-    )
-  end
   return true
 end
 
@@ -283,10 +277,11 @@ function ChatStrategy:on_complete(control)
     self.canvas:clear_progress()
     winbar.update_status(self.buf, nil)
     if control.usage then
-      self.canvas:update_assistant_extmark(
-        self.assistant_extmark,
-        { usage = control.usage, model = self.conversation.model:name() }
-      )
+      self.canvas:update_assistant_extmark(self.assistant_extmark, {
+        usage = control.usage,
+        model = self.conversation.model:name(),
+        status_text = control.turn_id:sub(1, 5),
+      })
     end
     vim.bo[self.buf].modifiable = false
 
@@ -333,6 +328,7 @@ function ChatStrategy:on_complete(control)
 
   self:execute_tools({
     cancellable = self.cancellable,
+    turn_id = control.turn_id,
     handle_status_updates = function(statuses)
       --- @type sia.WinbarToolStatus[]
       local tool_statuses = {}
@@ -366,7 +362,7 @@ function ChatStrategy:on_complete(control)
               ephemeral = tool_result.result.kind == "failed"
                 or tool_result.result.ephemeral,
             },
-          }, tool_result.result.context)
+          }, tool_result.result.context, { turn_id = control.turn_id })
           self.writer:append_newline_if_needed()
         end
       end

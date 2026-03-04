@@ -107,6 +107,7 @@ end
 
 function DiffStrategy:on_complete(control)
   self:execute_tools({
+    turn_id = control.turn_id,
     handle_tools_completion = function(opts)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -120,7 +121,7 @@ function DiffStrategy:on_complete(control)
               ephemeral = tool_result.result.kind == "failed"
                 or tool_result.result.ephemeral,
             },
-          }, tool_result.result.context)
+          }, tool_result.result.context, { turn_id = control.turn_id })
 
           if tool_result.result.display_content then
             self.writer:append(tool_result.result.display_content)
@@ -130,7 +131,7 @@ function DiffStrategy:on_complete(control)
         self.conversation:add_instruction({
           role = "user",
           content = "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement.",
-        })
+        }, nil, { turn_id = control.turn_id })
       end
       self.writer:append_newline()
 

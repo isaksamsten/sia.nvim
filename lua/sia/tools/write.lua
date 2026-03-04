@@ -112,7 +112,7 @@ For small, targeted changes, prefer the edit tool instead.]],
         return
       end
 
-      diff.update_baseline(buf)
+      diff.update_baseline(buf, { turn_id = opts.turn_id })
       local lines = vim.split(args.content, "\n", { plain = true })
       tracker.without_tracking(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)

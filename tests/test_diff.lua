@@ -697,4 +697,352 @@ T["sia.diff"]["accept_diff"]["sequential accept and reject operations"] = functi
   eq(buffer_content, modified)
 end
 
+-- Helper that sets up diff state with a tagged turn_id
+local function setup_diff_state_tagged(buf, original_lines, current_lines, turn_id)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original_lines)
+  diff.update_baseline(buf)
+  -- Simulate tool call: update_baseline with turn_id snapshots before tool writes
+  diff.update_baseline(buf, { turn_id = turn_id })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
+  diff.update_reference(buf)
+  diff.update_diff(buf)
+end
+
+T["sia.diff"]["rollback_to_turn"] = MiniTest.new_set()
+
+T["sia.diff"]["rollback_to_turn"]["reverts buffer to pre-change state"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+  local current = { "line 1", "modified 2", "line 3" }
+
+  setup_diff_state_tagged(buf, original, current, "msg-1")
+
+  local hunks = diff.get_hunks(buf)
+  eq(#hunks, 1)
+
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, original)
+
+  -- Diff state should be cleaned up (no remaining hunks)
+  eq(diff.get_hunks(buf), nil)
+end
+
+T["sia.diff"]["rollback_to_turn"]["reverts multiple changes with same turn_id"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+
+  -- Initial baseline
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  -- First tool call in the round
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "modified 2", "line 3" })
+  diff.update_reference(buf)
+
+  -- Second tool call in the same round (same turn_id)
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "modified 2", "line 3", "added line" }
+  )
+  diff.update_reference(buf)
+  diff.update_diff(buf)
+
+  local hunks = diff.get_hunks(buf)
+  -- After two tool calls, baseline has absorbed round 1 changes,
+  -- so only round 2's addition is a visible hunk
+  eq(#hunks, 1)
+
+  -- Rollback should revert to original (before first tool call)
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, original)
+end
+
+T["sia.diff"]["rollback_to_turn"]["preserves accepted hunks"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3", "line 4" }
+  local current = { "line 1", "modified 2", "line 3", "modified 4" }
+
+  setup_diff_state_tagged(buf, original, current, "msg-1")
+
+  local hunks = diff.get_hunks(buf)
+  eq(#hunks, 2)
+
+  -- Accept the first hunk (modified 2)
+  diff.accept_single_hunk(buf, 1)
+  hunks = diff.get_hunks(buf)
+  eq(#hunks, 1) -- only modified 4 remains
+
+  -- Rollback should only revert the unaccepted hunk (modified 4)
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- modified 2 was accepted, so it stays; modified 4 was not, so it reverts
+  eq(buffer_content, { "line 1", "modified 2", "line 3", "line 4" })
+end
+
+T["sia.diff"]["rollback_to_turn"]["user edit merging with AI change implicitly accepts it"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+  local ai_change = { "line 1", "ai modified", "line 3" }
+
+  setup_diff_state_tagged(buf, original, ai_change, "msg-1")
+
+  -- User edits the buffer adjacent to AI change (adds a line right after it).
+  -- The diff system merges this with the AI change into a single baseline_hunk,
+  -- which implicitly accepts the AI change.
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "ai modified", "line 3", "user added" }
+  )
+
+  -- A new tool call triggers update_baseline, which absorbs the merged hunk
+  diff.update_baseline(buf, { turn_id = "msg-2" })
+  diff.update_diff(buf)
+
+  -- Rollback msg-1: the AI change was implicitly accepted via the user edit,
+  -- so both the AI change and user edit are preserved in the snapshot
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, { "line 1", "ai modified", "line 3", "user added" })
+end
+
+T["sia.diff"]["rollback_to_turn"]["only reverts from target round onwards"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+
+  -- Initial baseline
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  -- Round 1: AI modifies line 2
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "round1 modified", "line 3" }
+  )
+  diff.update_reference(buf)
+
+  -- Round 2: AI adds a line
+  diff.update_baseline(buf, { turn_id = "msg-2" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "round1 modified", "line 3", "round2 added" }
+  )
+  diff.update_reference(buf)
+  diff.update_diff(buf)
+
+  -- Rollback only round 2
+  local success = diff.rollback("msg-2")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- Round 1 changes should remain, round 2 reverted
+  eq(buffer_content, { "line 1", "round1 modified", "line 3" })
+
+  -- Round 1 hunks should still be tracked
+  local hunks = diff.get_hunks(buf)
+  eq(#hunks, 1)
+  eq(hunks[1].type, "change")
+end
+
+T["sia.diff"]["rollback_to_turn"]["rollback first round reverts everything"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+
+  -- Initial baseline
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  -- Round 1
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "round1 modified", "line 3" }
+  )
+  diff.update_reference(buf)
+
+  -- Round 2
+  diff.update_baseline(buf, { turn_id = "msg-2" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "round1 modified", "line 3", "round2 added" }
+  )
+  diff.update_reference(buf)
+  diff.update_diff(buf)
+
+  -- Rollback from round 1 (reverts everything)
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, original)
+  eq(diff.get_hunks(buf), nil)
+end
+
+T["sia.diff"]["rollback_to_turn"]["no-op after full acceptance"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3" }
+  local current = { "line 1", "modified 2", "line 3" }
+
+  setup_diff_state_tagged(buf, original, current, "msg-1")
+
+  -- Accept all changes (cleans up diff state entirely)
+  diff.accept_diff(buf)
+  eq(diff.get_diff_state(buf), nil)
+
+  -- Rollback should fail gracefully
+  local success = diff.rollback_buf(buf, "msg-1")
+  eq(success, false)
+
+  -- Buffer content unchanged (accepted changes stay)
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, current)
+end
+
+T["sia.diff"]["rollback_to_turn"]["returns false for invalid turn_id"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2" }
+  local current = { "line 1", "modified 2" }
+
+  setup_diff_state_tagged(buf, original, current, "msg-1")
+
+  local success = diff.rollback_buf(buf, "nonexistent")
+  eq(success, false)
+
+  -- Buffer unchanged
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(buffer_content, current)
+end
+
+T["sia.diff"]["rollback_to_turn"]["returns false for buffer without diff state"] = function()
+  local buf = create_test_buffer()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1" })
+
+  local success = diff.rollback_buf(buf, "msg-1")
+  eq(success, false)
+end
+
+T["sia.diff"]["get_change_snapshots"] = MiniTest.new_set()
+
+T["sia.diff"]["get_change_snapshots"]["tracks snapshots per turn_id"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2" }
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "modified" })
+  diff.update_reference(buf)
+
+  diff.update_baseline(buf, { turn_id = "msg-2" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "modified", "added" })
+  diff.update_reference(buf)
+
+  local snapshots = diff.get_change_snapshots(buf)
+  eq(snapshots["msg-1"], original)
+  -- msg-2 snapshot captures state after msg-1's edits were absorbed
+  eq(type(snapshots["msg-2"]), "table")
+
+  local order = diff.get_change_order(buf)
+  eq(order, { "msg-1", "msg-2" })
+end
+
+T["sia.diff"]["get_change_snapshots"]["only records first encounter per turn_id"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2" }
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, original)
+  diff.update_baseline(buf)
+
+  -- First tool call for msg-1
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "modified" })
+  diff.update_reference(buf)
+
+  -- Second tool call for msg-1 (same turn_id)
+  diff.update_baseline(buf, { turn_id = "msg-1" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1", "modified", "added" })
+  diff.update_reference(buf)
+
+  -- Only one snapshot, capturing state before first edit
+  local snapshots = diff.get_change_snapshots(buf)
+  eq(snapshots["msg-1"], original)
+
+  local order = diff.get_change_order(buf)
+  eq(order, { "msg-1" })
+end
+
+T["sia.diff"]["get_change_snapshots"]["returns nil for buffer without diff state"] = function()
+  local buf = create_test_buffer()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line 1" })
+  eq(diff.get_change_snapshots(buf), nil)
+end
+
+T["sia.diff"]["rollback_to_turn"]["preserves accepted hunks and implicitly accepted edits"] = function()
+  local buf = create_test_buffer()
+  local original = { "line 1", "line 2", "line 3", "line 4" }
+  local ai_change = { "line 1", "ai modified 2", "line 3", "ai modified 4" }
+
+  setup_diff_state_tagged(buf, original, ai_change, "msg-1")
+
+  -- Accept first hunk (ai modified 2)
+  diff.accept_single_hunk(buf, 1)
+
+  -- User makes their own edit (adds a line at end, adjacent to ai modified 4).
+  -- The diff system merges the user edit with the remaining AI change,
+  -- implicitly accepting ai modified 4 as well.
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "line 1", "ai modified 2", "line 3", "ai modified 4", "user line" }
+  )
+
+  -- A new tool call triggers update_baseline, which absorbs the merged hunk
+  diff.update_baseline(buf, { turn_id = "msg-2" })
+  diff.update_diff(buf)
+
+  -- Rollback msg-1: both the explicitly accepted hunk AND the implicitly
+  -- accepted (merged) hunk are preserved in the snapshot
+  local success = diff.rollback("msg-1")
+  eq(success, true)
+
+  local buffer_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  eq(
+    buffer_content,
+    { "line 1", "ai modified 2", "line 3", "ai modified 4", "user line" }
+  )
+end
+
 return T

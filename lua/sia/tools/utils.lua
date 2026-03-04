@@ -169,6 +169,7 @@ end
 --- @field cancellable sia.Cancellable?
 --- @field user_input sia.NewToolExecuteUserInput
 --- @field user_choice sia.NewToolExecuteUserChoice
+--- @field turn_id string?
 
 --- @param resp string?
 --- @param level sia.RiskLevel
@@ -404,7 +405,7 @@ M.new_tool = function(opts, execute)
     end,
     description = opts.description,
     required = opts.required,
-    execute = function(args, conversation, callback, cancellable)
+    execute = function(args, conversation, callback, cancellable, turn_id)
       local permission = resolve_permission(args, conversation)
       if permission and permission.deny then
         callback({
@@ -434,6 +435,7 @@ M.new_tool = function(opts, execute)
         cancellable = cancellable,
         user_input = user_input,
         user_choice = user_choice,
+        turn_id = turn_id,
       })
     end,
   }

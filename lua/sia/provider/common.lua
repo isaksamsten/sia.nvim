@@ -81,8 +81,9 @@ function M.ProviderStream:process_stream_chunk(obj)
   return false
 end
 
+--- @param turn_id string?
 --- @return string[]? content
-function M.ProviderStream:finalize() end
+function M.ProviderStream:finalize(turn_id) end
 
 --- @protected
 --- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }

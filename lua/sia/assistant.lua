@@ -78,6 +78,7 @@ function M.execute_strategy(strategy)
   --- @type sia.Usage?
   local usage
 
+  local turn_id = strategy.conversation:new_turn()
   local function execute_round(is_initial)
     local timer
     if is_initial then
@@ -229,7 +230,7 @@ function M.execute_strategy(strategy)
           strategy.is_busy = false
           return
         end
-        local final_content = stream:finalize()
+        local final_content = stream:finalize(turn_id)
 
         local finish = function()
           strategy.is_busy = false
@@ -256,6 +257,7 @@ function M.execute_strategy(strategy)
           finish = finish,
           content = final_content,
           usage = usage,
+          turn_id = turn_id,
         })
       end,
       stream = true,

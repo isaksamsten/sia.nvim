@@ -50,6 +50,7 @@ function HiddenStrategy:on_complete(control)
   local notify = self.options.notify or default_notify
   self:execute_tools({
     cancellable = self.cancellable,
+    turn_id = control.turn_id,
     handle_status_updates = function(statuses)
       local running_tools = vim.tbl_filter(function(s)
         return s.status == "running"
@@ -74,7 +75,7 @@ function HiddenStrategy:on_complete(control)
               ephemeral = tool_result.result.kind == "failed"
                 or tool_result.result.ephemeral,
             },
-          }, tool_result.result.context)
+          }, tool_result.result.context, { turn_id = control.turn_id })
         end
       end
 

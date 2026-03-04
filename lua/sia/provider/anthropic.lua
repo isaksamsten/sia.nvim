@@ -68,8 +68,9 @@ function AnthropicStream:process_stream_chunk(obj)
   end
 end
 
+--- @param turn_id string
 --- @return string[]? content
-function AnthropicStream:finalize()
+function AnthropicStream:finalize(turn_id)
   if not self:on_content({ tool_calls = self.pending_tool_calls }) then
     return nil
   end
@@ -82,7 +83,7 @@ function AnthropicStream:finalize()
   self.strategy.conversation:add_instruction({
     role = "assistant",
     content = content,
-  })
+  }, { turn_id = turn_id })
   return content
 end
 

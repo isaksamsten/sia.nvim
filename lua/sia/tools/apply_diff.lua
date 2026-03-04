@@ -39,9 +39,10 @@ end
 --- @param buf integer
 --- @param content string
 --- @param conversation_id integer
-local function write_buf(buf, content, conversation_id)
+--- @param turn_id string?
+local function write_buf(buf, content, conversation_id, turn_id)
   local lines = vim.split(content, "\n", { plain = true })
-  diff.update_baseline(buf)
+  diff.update_baseline(buf, { turn_id = turn_id })
   tracker.without_tracking(buf, conversation_id, function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.api.nvim_buf_call(buf, function()
@@ -237,7 +238,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
           end
           local buf = utils.ensure_file_is_loaded(path, { listed = true })
           if buf then
-            write_buf(buf, change.new_content, conversation.id)
+            write_buf(buf, change.new_content, conversation.id, opts.turn_id)
           end
         elseif change.type == "update" then
           if change.move_path then
@@ -248,13 +249,13 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
             local move_buf =
               utils.ensure_file_is_loaded(change.move_path, { listed = true })
             if move_buf then
-              write_buf(move_buf, change.new_content, conversation.id)
+              write_buf(move_buf, change.new_content, conversation.id, opts.turn_id)
             end
             remove_file(path)
           else
             local buf = bufs[path]
             if buf then
-              write_buf(buf, change.new_content, conversation.id)
+              write_buf(buf, change.new_content, conversation.id, opts.turn_id)
             end
           end
         end

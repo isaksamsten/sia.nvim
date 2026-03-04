@@ -83,7 +83,14 @@ end
 --- @param matches sia.matcher.Match[]
 --- @param new_text_lines string[]
 --- @param conversation_id integer
-local function perform_replace_all(buf, matches, new_text_lines, conversation_id)
+--- @param turn_id string?
+local function perform_replace_all(
+  buf,
+  matches,
+  new_text_lines,
+  conversation_id,
+  turn_id
+)
   local sorted_matches = matches
   if #matches > 1 then
     sorted_matches = vim.deepcopy(matches)
@@ -98,7 +105,7 @@ local function perform_replace_all(buf, matches, new_text_lines, conversation_id
     end)
   end
 
-  diff.update_baseline(buf)
+  diff.update_baseline(buf, { turn_id = turn_id })
 
   tracker.without_tracking(buf, conversation_id, function()
     for _, match in ipairs(sorted_matches) do
@@ -281,7 +288,13 @@ Usage:
               and matching.strip_line_numbers(args.new_string)
             or vim.split(args.new_string, "\n")
 
-          perform_replace_all(buf, result.matches, new_text_lines, conversation.id)
+          perform_replace_all(
+            buf,
+            result.matches,
+            new_text_lines,
+            conversation.id,
+            opts.turn_id
+          )
 
           local first_match = result.matches[1]
           local last_match = result.matches[#result.matches]
@@ -344,7 +357,13 @@ Usage:
               and matching.strip_line_numbers(args.new_string)
             or vim.split(args.new_string, "\n")
 
-          perform_replace_all(buf, { match }, new_text_lines, conversation.id)
+          perform_replace_all(
+            buf,
+            { match },
+            new_text_lines,
+            conversation.id,
+            opts.turn_id
+          )
 
           local edit_start = span[1]
           local edit_end = span[1] + #new_text_lines - 1

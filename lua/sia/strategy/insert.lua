@@ -119,6 +119,7 @@ function InsertStrategy:on_complete(control)
   end
 
   self:execute_tools({
+    turn_id = control.turn_id,
     handle_tools_completion = function(opts)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
@@ -132,7 +133,7 @@ function InsertStrategy:on_complete(control)
               ephemeral = tool_result.result.kind == "failed"
                 or tool_result.result.ephemeral,
             },
-          }, tool_result.result.context)
+          }, tool_result.result.context, { turn_id = control.turn_id })
           self.writer:append_newline()
           if tool_result.result.display_content then
             self.writer:append(tool_result.result.display_content)
@@ -141,7 +142,7 @@ function InsertStrategy:on_complete(control)
         self.conversation:add_instruction({
           role = "user",
           content = "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file.",
-        })
+        }, nil, { turn_id = control.turn_id })
       end
 
       if not self.writer:is_empty() then

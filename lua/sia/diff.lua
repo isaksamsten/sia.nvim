@@ -32,6 +32,8 @@ local REGION_GAP = 5
 --- @field needs_clear boolean?
 --- @field autocommand_group integer?
 --- @field reference_cache sia.diff.Reference[]? Cached ranges from baseline to reference
+--- @field change_snapshots table<string, string[]> Map of turn_id → buffer snapshot before first edit for that turn
+--- @field change_order string[] Ordered list of turn_ids (insertion order)
 
 --- @type table<integer, sia.diff.DiffState>
 local buffer_diff_state = {}
@@ -675,31 +677,51 @@ function M.show_diff_preview(buf)
   vim.api.nvim_set_current_win(right_win)
 end
 
-function M.update_baseline(buf)
+--- @param buf integer
+--- @param opts { turn_id: string? }?
+function M.update_baseline(buf, opts)
   if not DIFF_ENABLED then
     return
   end
+  opts = opts or {}
 
   local diff_state = buffer_diff_state[buf]
   if not diff_state then
     local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local change_snapshots = {}
+    local change_order = {}
+    if opts and opts.turn_id then
+      change_snapshots[opts.turn_id] = vim.deepcopy(current_lines)
+      table.insert(change_order, opts.turn_id)
+    end
     buffer_diff_state[buf] = {
       baseline = vim.deepcopy(current_lines),
       reference = current_lines,
       reference_hunks = {},
       autocommand_group = nil,
       reference_cache = {},
+      change_snapshots = change_snapshots,
+      change_order = change_order,
     }
     setup_auto_diff_updates(buf)
   else
+    local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    if opts.turn_id and not diff_state.change_snapshots[opts.turn_id] then
+      diff_state.change_snapshots[opts.turn_id] = current_content
+      table.insert(diff_state.change_order, opts.turn_id)
+    end
+
     M.update_diff(buf)
     local baseline_hunks = diff_state.baseline_hunks
     if not baseline_hunks then
       return
     end
 
-    local current_content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     apply_hunks_to_baseline(diff_state.baseline, baseline_hunks, current_content)
+    for _, snapshot in pairs(diff_state.change_snapshots) do
+      apply_hunks_to_baseline(snapshot, baseline_hunks, current_content)
+    end
+
     diff_state.baseline_hunks = nil
     diff_state.reference_cache =
       extract_references(diff_state.baseline, diff_state.reference)
@@ -941,6 +963,12 @@ function M.accept_single_hunk(buf, hunk_index)
     hunk = expand_hunk(hunk, diff_state.baseline, current_content)
   end
   apply_hunks_to_baseline(diff_state.baseline, { hunk }, current_content)
+
+  -- Keep snapshots in sync so rollback respects accepted hunks
+  for _, snapshot in pairs(diff_state.change_snapshots) do
+    apply_hunks_to_baseline(snapshot, { hunk }, current_content)
+  end
+
   diff_state.reference_cache =
     extract_references(diff_state.baseline, diff_state.reference)
 
@@ -1049,6 +1077,96 @@ function M.get_hunk_at_line(buf, line)
   end
 
   return nil
+end
+
+--- Get all buffers that have change snapshots for a given turn_id
+--- @param turn_id string
+--- @return integer[] bufs List of buffer handles
+local function get_buffers_for_turn(turn_id)
+  local bufs = {}
+  for buf, state in pairs(buffer_diff_state) do
+    if state.change_snapshots[turn_id] then
+      table.insert(bufs, buf)
+    end
+  end
+  return bufs
+end
+
+--- Rollback all changes associated with turn_id
+--- @param turn_id string
+--- @return boolean success
+function M.rollback(turn_id)
+  for _, buf in ipairs(get_buffers_for_turn(turn_id)) do
+    M.rollback_buf(buf, turn_id)
+  end
+  return true
+end
+
+--- Rollback all changes in buf associated with turn_id
+--- @param buf integer
+--- @param turn_id string
+--- @return boolean success
+function M.rollback_buf(buf, turn_id)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return false
+  end
+
+  local snapshot = diff_state.change_snapshots[turn_id]
+  if not snapshot then
+    return false
+  end
+
+  -- Find the position in the order list and remove it and everything after
+  local target_index = nil
+  for i, id in ipairs(diff_state.change_order) do
+    if id == turn_id then
+      target_index = i
+      break
+    end
+  end
+
+  if target_index then
+    for i = #diff_state.change_order, target_index, -1 do
+      local id = diff_state.change_order[i]
+      diff_state.change_snapshots[id] = nil
+      table.remove(diff_state.change_order, i)
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, snapshot)
+  diff_state.reference = vim.deepcopy(snapshot)
+  diff_state.reference_cache =
+    extract_references(diff_state.baseline, diff_state.reference)
+
+  M.update_diff(buf)
+  if not diff_state.reference_hunks then
+    cleanup_diff_state(buf)
+  else
+    redraw_buffer(buf)
+  end
+end
+
+--- Get the change snapshots for a buffer
+--- @param buf integer Buffer handle
+--- @return table<string, string[]>? snapshots Map of turn_id → snapshot
+function M.get_change_snapshots(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return nil
+  end
+  return diff_state.change_snapshots
+end
+
+--- Get the ordered list of turn_ids with changes for a buffer
+--- @param buf integer Buffer handle
+--- @return string[]? order
+function M.get_change_order(buf)
+  local diff_state = buffer_diff_state[buf]
+  if not diff_state then
+    return nil
+  end
+  return diff_state.change_order
 end
 
 function M.setup()

@@ -234,7 +234,7 @@ Notes:
       return #diff_lines
     end,
     on_accept = function()
-      diff.update_baseline(buf)
+      diff.update_baseline(buf, { turn_id = opts.turn_id })
       tracker.without_tracking(buf, conversation.id, function()
         vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, new_lines)
         vim.api.nvim_buf_call(buf, function()
