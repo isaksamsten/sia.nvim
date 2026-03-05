@@ -359,6 +359,7 @@ function ChatStrategy:on_complete(control)
               content = tool_result.result.content,
               _tool_call = tool_result.tool,
               kind = tool_result.result.kind,
+              display_content = tool_result.result.display_content,
               ephemeral = tool_result.result.kind == "failed"
                 or tool_result.result.ephemeral,
             },

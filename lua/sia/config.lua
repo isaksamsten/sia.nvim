@@ -718,6 +718,7 @@ end
 --- @field ephemeral boolean?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
+--- @field display_content string?
 --- TODO: Drop tool fields from instructions...
 
 --- @alias sia.config.ToolExecute fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult?), cancellable: sia.Cancellable?, turn_id: string?)

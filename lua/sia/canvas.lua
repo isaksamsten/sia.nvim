@@ -180,15 +180,45 @@ end
 --- @param model string?
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
+  local last_assistant_turn_id = nil
   for _, message in ipairs(messages) do
-    if
-      not (message.hide == true or message.role == "system" or message.role == "tool")
-    then
+    if message.hide == true or message.role == "system" or message.status then
+      goto continue
+    end
+
+    if message.role == "tool" then
+      if message.display_content then
+        local line_count = vim.api.nvim_buf_line_count(self.buf)
+        local start_line = line_count
+        vim.api.nvim_buf_set_lines(
+          self.buf,
+          start_line,
+          start_line,
+          false,
+          vim.split(message.display_content, "\n")
+        )
+        line_count = vim.api.nvim_buf_line_count(self.buf)
+        self:highlight_tool(start_line, line_count)
+        vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
+      end
+      goto continue
+    end
+
+    do
       local content = message.content
-      if content and type(content) == "string" then
+      local is_assistant = message.role == "assistant"
+
+      local skip_header = is_assistant
+        and message.turn_id
+        and message.turn_id == last_assistant_turn_id
+
+      if is_assistant and message.turn_id then
+        last_assistant_turn_id = message.turn_id
+      end
+
+      if not skip_header then
         local line_count = vim.api.nvim_buf_line_count(self.buf)
         local heading = "/you"
-        local is_assistant = message.role == "assistant"
         if is_assistant then
           heading = "/sia"
         end
@@ -223,7 +253,10 @@ function Canvas:render_messages(messages, model)
             self:_set_user_extmark(line_count + 2)
           end
         end
-        line_count = vim.api.nvim_buf_line_count(self.buf)
+      end
+
+      if content and type(content) == "string" then
+        local line_count = vim.api.nvim_buf_line_count(self.buf)
         vim.api.nvim_buf_set_lines(
           self.buf,
           line_count - 1,
@@ -233,6 +266,8 @@ function Canvas:render_messages(messages, model)
         )
       end
     end
+
+    ::continue::
   end
   vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()

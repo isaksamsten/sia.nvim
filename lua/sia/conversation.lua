@@ -20,6 +20,7 @@ end
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
 --- @field description string?
+--- @field display_content string?
 
 --- @class sia.conversation.Stats
 --- @field bar { percent: number, text: string?, icon: string?}?
@@ -97,6 +98,7 @@ end
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
 --- @field description string?
+--- @field display_content string?
 --- @field status ("outdated"|"failed"|"superseded"|"dropped")?
 local Message = {}
 Message.__index = Message
@@ -256,6 +258,7 @@ function Message:from_table(instruction, context)
   obj.kind = instruction.kind
 
   obj.ephemeral = instruction.ephemeral
+  obj.display_content = instruction.display_content
   if instruction.tool_calls then
     obj.tool_calls = instruction.tool_calls
   end
@@ -402,6 +405,7 @@ local function prepare_message(message, template_context, context_conf)
     meta = meta or {},
     description = description,
     content = content,
+    display_content = message.display_content,
     _tool_call = _tool_call,
     tool_calls = tool_calls,
   }
@@ -619,11 +623,14 @@ end
 --- @param message sia.Message
 --- @param status "outdated"|"failed"|"superseded"|"dropped"
 function Conversation:set_message_status(message, status)
-  if message.status then
-    return
-  end
+  local current_status_is_set = message.status ~= nil
   message.status = status
-  if message.context and message.context.buf and message.context.tick then
+  if
+    not current_status_is_set
+    and message.context
+    and message.context.buf
+    and message.context.tick
+  then
     tracker.untrack(
       message.context.buf,
       { id = self.id, pos = message.context.pos, global = message.context.global }
@@ -649,8 +656,6 @@ function Conversation:last_turn_id()
   end
   return nil
 end
-
-
 
 --- Rollback the conversation to the given turn.
 --- Marks the first message with the matching turn_id and all messages after it as "dropped".
