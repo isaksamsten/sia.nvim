@@ -205,15 +205,15 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
             new_start = 1,
           })
           if unified and unified ~= "" then
-            table.insert(preview_lines, "--- " .. path)
-            table.insert(preview_lines, "+++ " .. (change.move_path or path))
+            table.insert(preview_lines, "--- orig/" .. path)
+            table.insert(preview_lines, "+++ ai/" .. (change.move_path or path))
             for _, l in ipairs(vim.split(unified, "\n")) do
               table.insert(preview_lines, l)
             end
             table.insert(preview_lines, "")
           end
         elseif change.type == "delete" then
-          table.insert(preview_lines, "--- " .. path)
+          table.insert(preview_lines, "--- orig/" .. path)
           table.insert(preview_lines, "+++ /dev/null")
           table.insert(preview_lines, "")
         end

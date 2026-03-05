@@ -172,6 +172,8 @@ Use cases:
       end
 
       local diff_lines = vim.split(unified_diff, "\n")
+      table.insert(diff_lines, 1, "+++ ai/" .. args.target_file)
+      table.insert(diff_lines, 1, "--- orig/" .. args.target_file)
       vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, diff_lines)
       vim.bo[preview_buf].ft = "diff"
       return #diff_lines

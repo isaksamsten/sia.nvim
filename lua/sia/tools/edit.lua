@@ -232,6 +232,7 @@ Usage:
     })
     return
   end
+  local target_file = vim.fn.fnamemodify(args.target_file, ":~:.")
 
   if failed_matches[buf] == nil then
     failed_matches[buf] = 0
@@ -271,6 +272,8 @@ Usage:
                 new_start = span[1],
               }) or "", "\n")
 
+            table.insert(all_diffs, "--- orig/" .. target_file)
+            table.insert(all_diffs, "+++ ai/" .. target_file)
             for _, line in ipairs(unified_diff) do
               table.insert(all_diffs, line)
             end
@@ -343,6 +346,9 @@ Usage:
               old_start = span[1],
               new_start = span[1],
             }) or "", "\n")
+
+          table.insert(unified_diff, 1, "+++ ai/" .. target_file)
+          table.insert(unified_diff, 1, "--- orig/" .. target_file)
           if #unified_diff == 0 then
             return nil
           end

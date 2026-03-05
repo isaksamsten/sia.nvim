@@ -1,9 +1,5 @@
 local icons = require("sia.ui").icons
 
-local function failed_to_write()
-  return icons.error .. " Failed to write file"
-end
-
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
@@ -46,7 +42,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.path then
     callback({
       content = { "Error: No file path provided" },
-      display_content = failed_to_write(),
+      display_content = icons.error .. " Failed to write file",
       kind = "failed",
     })
     return
@@ -55,7 +51,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.content then
     callback({
       content = { "Error: No content provided" },
-      display_content = failed_to_write(),
+      display_content = icons.error .. " Failed to write file",
       kind = "failed",
     })
     return
@@ -81,6 +77,8 @@ For small, targeted changes, prefer the edit tool instead.]],
         end
 
         local diff_lines = vim.split(unified_diff, "\n")
+        table.insert(diff_lines, 1, "+++ ai/" .. args.path)
+        table.insert(diff_lines, 1, "--- orig/" .. args.path)
         vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, diff_lines)
         vim.bo[preview_buf].ft = "diff"
         return #diff_lines
@@ -106,7 +104,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       if not buf then
         callback({
           content = { "Error: Cannot create buffer for " .. args.path },
-          display_content = FAILED_TO_WRITE,
+          display_content = icons.error .. " Failed to write file",
           kind = "failed",
         })
         return
