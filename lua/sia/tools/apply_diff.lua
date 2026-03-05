@@ -72,7 +72,7 @@ end
 --- @return string[]
 local function summarize_commit(commit)
   local summary = {}
-  for path, change in pairs(commit.changes) do
+  for path, change in pairs(commit) do
     local rel = vim.fn.fnamemodify(path, ":.")
     if change.type == "add" then
       table.insert(summary, string.format("%s Created %s", icons.save, rel))
@@ -144,7 +144,6 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
     return
   end
 
-  -- Identify needed files and load them into buffers
   local paths = patch_mod.identify_files_needed(raw_input)
   local orig = {}
   local bufs = {}
@@ -178,9 +177,8 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   end
   local commit = commit_or_err
 
-  -- Build summary for display / confirmation
   local display_lines = summarize_commit(commit)
-  local change_count = vim.tbl_count(commit.changes)
+  local change_count = vim.tbl_count(commit)
   if change_count == 0 then
     callback({
       content = { "Patch produced no changes." },
@@ -198,7 +196,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   opts.user_input(prompt, {
     preview = function(preview_buf)
       local preview_lines = {}
-      for path, change in pairs(commit.changes) do
+      for path, change in pairs(commit) do
         if change.type == "update" or change.type == "add" then
           local old_text = change.old_content or ""
           local new_text = change.new_content or ""
@@ -228,7 +226,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
       return #preview_lines
     end,
     on_accept = function()
-      for path, change in pairs(commit.changes) do
+      for path, change in pairs(commit) do
         if change.type == "delete" then
           remove_file(path)
         elseif change.type == "add" then

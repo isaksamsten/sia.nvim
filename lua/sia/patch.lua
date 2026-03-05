@@ -2,10 +2,6 @@
 --- Ported from the canonical Python reference implementation.
 local M = {}
 
--- ──────────────────────────────────────────────────────────────────
--- Internal helpers
--- ──────────────────────────────────────────────────────────────────
-
 --- Section boundary prefixes.
 local SECTION_PREFIXES = {
   "@@",
@@ -14,6 +10,21 @@ local SECTION_PREFIXES = {
   "*** Delete File:",
   "*** Add File:",
   "*** End of File",
+}
+
+local HUNK_PREFIXES = {
+  "*** End Patch",
+  "*** Update File:",
+  "*** Delete File:",
+  "*** Add File:",
+  "*** End of File",
+}
+
+local ADD_PREFIXES = {
+  "*** End Patch",
+  "*** Update File:",
+  "*** Delete File:",
+  "*** Add File:",
 }
 
 --- Check if a line starts with any of the given prefixes.
@@ -207,17 +218,9 @@ local function parse_update_file(patch_lines, patch_index, file_text)
   local file_index = 0
   local total_fuzz = 0
 
-  local hunk_prefixes = {
-    "*** End Patch",
-    "*** Update File:",
-    "*** Delete File:",
-    "*** Add File:",
-    "*** End of File",
-  }
-
   while
     patch_index <= #patch_lines
-    and not starts_with_any(patch_lines[patch_index], hunk_prefixes)
+    and not starts_with_any(patch_lines[patch_index], HUNK_PREFIXES)
   do
     local def_str = ""
     local section_str = ""
@@ -301,15 +304,9 @@ end
 --- @return integer new_patch_index
 local function parse_add_file(patch_lines, patch_index)
   local add_lines = {}
-  local add_prefixes = {
-    "*** End Patch",
-    "*** Update File:",
-    "*** Delete File:",
-    "*** Add File:",
-  }
   while
     patch_index <= #patch_lines
-    and not starts_with_any(patch_lines[patch_index], add_prefixes)
+    and not starts_with_any(patch_lines[patch_index], ADD_PREFIXES)
   do
     local s = patch_lines[patch_index]
     if not vim.startswith(s, "+") then
@@ -468,21 +465,26 @@ function M.get_updated_file(file_text, action, path)
 
   return table.concat(dest_lines, "\n")
 end
+--- @class sia.Commit
+--- @field type "delete"|"add"|"update"
+--- @field old_content string
+--- @field new_content string
+--- @field move_path string?
 
 --- Convert a parsed patch into a commit (set of file changes).
 --- @param patch table
 --- @param orig table<string, string>
---- @return table commit {changes: table<string, FileChange>}
+--- @return table<string, sia.Commit> commit
 function M.patch_to_commit(patch, orig)
-  local commit = { changes = {} }
+  local commit = {}
   for path, action in pairs(patch.actions) do
     if action.type == "delete" then
-      commit.changes[path] = { type = "delete", old_content = orig[path] }
+      commit[path] = { type = "delete", old_content = orig[path] }
     elseif action.type == "add" then
-      commit.changes[path] = { type = "add", new_content = action.new_file }
+      commit[path] = { type = "add", new_content = action.new_file }
     elseif action.type == "update" then
       local new_content = M.get_updated_file(orig[path], action, path)
-      commit.changes[path] = {
+      commit[path] = {
         type = "update",
         old_content = orig[path],
         new_content = new_content,

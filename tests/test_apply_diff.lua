@@ -70,8 +70,8 @@ T["add file"]["creates new file"] = function()
     return { commit = commit, fuzz = fuzz }
   end)()]])
   eq(result.fuzz, 0)
-  eq(result.commit.changes["new.lua"].type, "add")
-  eq(result.commit.changes["new.lua"].new_content, "local M = {}\nreturn M")
+  eq(result.commit["new.lua"].type, "add")
+  eq(result.commit["new.lua"].new_content, "local M = {}\nreturn M")
 end
 
 T["add file"]["creates file with empty lines"] = function()
@@ -86,7 +86,7 @@ T["add file"]["creates file with empty lines"] = function()
     }, "\n")
     local p, fuzz = patch.text_to_patch(text, {})
     local commit = patch.patch_to_commit(p, {})
-    return commit.changes["new.lua"].new_content
+    return commit["new.lua"].new_content
   end)()]])
   eq(result, "line1\n\nline3")
 end
@@ -103,7 +103,7 @@ T["delete file"]["marks file for deletion"] = function()
     local orig = { ["old.lua"] = "content" }
     local p, fuzz = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["old.lua"]
+    return commit["old.lua"]
   end)()]])
   eq(result.type, "delete")
   eq(result.old_content, "content")
@@ -139,7 +139,7 @@ T["update file"]["simple single-line replacement"] = function()
     }, "\n")
     local p, fuzz = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return { content = commit.changes["a.lua"].new_content, fuzz = fuzz }
+    return { content = commit["a.lua"].new_content, fuzz = fuzz }
   end)()]])
   eq(result.content, "line1\nline2_new\nline3")
   eq(result.fuzz, 0)
@@ -159,7 +159,7 @@ T["update file"]["insert lines"] = function()
     }, "\n")
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["a.lua"].new_content
+    return commit["a.lua"].new_content
   end)()]])
   eq(result, "line1\nline2\nline3")
 end
@@ -178,7 +178,7 @@ T["update file"]["delete lines"] = function()
     }, "\n")
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["a.lua"].new_content
+    return commit["a.lua"].new_content
   end)()]])
   eq(result, "line1\nline3")
 end
@@ -202,7 +202,7 @@ T["update file"]["multiple hunks in same file"] = function()
     }, "\n")
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["a.lua"].new_content
+    return commit["a.lua"].new_content
   end)()]])
   eq(result, "a\nB\nc\nd\ne\nF")
 end
@@ -220,7 +220,7 @@ T["update file"]["@@ skip-ahead to context line"] = function()
     }, "\n")
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["a.lua"].new_content
+    return commit["a.lua"].new_content
   end)()]])
   eq(result, "header\na\nb\nc\nnew_footer")
 end
@@ -240,9 +240,9 @@ T["update file"]["move file"] = function()
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
     return {
-      type = commit.changes["old.lua"].type,
-      move_path = commit.changes["old.lua"].move_path,
-      new_content = commit.changes["old.lua"].new_content,
+      type = commit["old.lua"].type,
+      move_path = commit["old.lua"].move_path,
+      new_content = commit["old.lua"].new_content,
     }
   end)()]])
   eq(result.type, "update")
@@ -265,7 +265,7 @@ T["update file"]["fuzzy rstrip matching"] = function()
     }, "\n")
     local p, fuzz = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return { content = commit.changes["a.lua"].new_content, fuzz = fuzz }
+    return { content = commit["a.lua"].new_content, fuzz = fuzz }
   end)()]])
   eq(result.content, "line1  \nline2_new\nline3")
   -- fuzz > 0 indicates non-exact match
@@ -286,7 +286,7 @@ T["update file"]["End of File marker"] = function()
     }, "\n")
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
-    return commit.changes["a.lua"].new_content
+    return commit["a.lua"].new_content
   end)()]])
   eq(result, "first\nsecond\nnew_last")
 end
@@ -313,9 +313,9 @@ T["multiple files"]["update + add + delete"] = function()
     local p = patch.text_to_patch(text, orig)
     local commit = patch.patch_to_commit(p, orig)
     return {
-      keep = commit.changes["keep.lua"],
-      remove = commit.changes["remove.lua"],
-      brand_new = commit.changes["brand_new.lua"],
+      keep = commit["keep.lua"],
+      remove = commit["remove.lua"],
+      brand_new = commit["brand_new.lua"],
     }
   end)()]])
   eq(result.keep.type, "update")
