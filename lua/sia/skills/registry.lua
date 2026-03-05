@@ -152,7 +152,7 @@ end
 --- 1. They are listed in the project's config.json `skills` array
 --- 2. All their required `tools` are available in the conversation
 ---
---- @param conversation_tools table<string, any>? Map of tool name → truthy (e.g., conversation.tool_fn)
+--- @param conversation_tools table<string, any>?
 --- @param error_report boolean?
 --- @return sia.skills.registry.SkillDef[] skills
 function M.get_skills(conversation_tools, error_report)
