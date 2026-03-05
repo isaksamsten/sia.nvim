@@ -274,7 +274,6 @@ function OpenAIResponsesStream:finalize(turn_id)
 
   self.strategy.conversation:add_instruction(
     {
-      hide = true,
       role = "assistant",
       content = content,
     },
