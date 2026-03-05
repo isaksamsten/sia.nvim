@@ -1114,7 +1114,6 @@ M._raw_options = {
           local all = {
             tools.ask_user,
             tools.grep,
-            tools.edit,
             tools.write,
             tools.insert,
             tools.read,
@@ -1129,6 +1128,8 @@ M._raw_options = {
           }
           if model:api_name():match("gpt%-5") then
             table.insert(all, tools.apply_diff)
+          else
+            table.insert(all, tools.edit)
           end
           return all
         end,
