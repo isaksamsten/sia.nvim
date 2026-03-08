@@ -1,8 +1,8 @@
 local M = {}
 
 --- @class sia.Model
---- @field config table The model config with name and optional per-usage overrides
---- @field spec table The resolved model specification (base + alias params + local overrides)
+--- @field config table
+--- @field spec sia.config.ModelSpec|sia.config.EmbeddingSpec
 local Model = {}
 Model.__index = Model
 

@@ -550,10 +550,10 @@ local settings_proxy = setmetatable({}, {
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
 --- @field auto_continue boolean?
---- @field model table?
---- @field fast_model table?
---- @field plan_model table?
---- @field models table<string, table>?
+--- @field model sia.config.ModelSpec?
+--- @field fast_model sia.config.ModelSpec?
+--- @field plan_model sia.config.ModelSpec?
+--- @field models table<string, sia.config.ModelSpec>?
 --- @field aliases table<string, {name: string}>?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
@@ -713,7 +713,7 @@ end
 --- @field hide boolean?
 --- @field mode "v"|"n"|nil
 --- @field description ((fun(ctx:sia.Context?):string)|string)?
---- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.InstructionContent[])?
+--- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.Content[])?
 --- @field kind string?
 --- @field ephemeral boolean?
 --- @field tool_calls sia.ToolCall[]?
@@ -790,8 +790,28 @@ end
 --- @field args string[]|fun():string[]?
 --- @field shell sia.config.Shell?
 
---- @alias sia.config.Models table<string, [string, string]>
---- @alias sia.config.Embeddings table<string, [string, string]>
+--- @class sia.config.ModelSpec
+--- @field [1] string provider name
+--- @field [2] string provider model api name
+--- @field context_window integer?
+--- @field can_reason boolean?
+--- @field reasoning_effort string?
+--- @field pricing {input: number, output: number}?
+--- @field cache_multiplier {read: number, write: number}?
+--- @field support {image: boolean?}?
+--- @field max_tokens integer?
+--- @field response_format table?
+--- @field n integer?
+--- @field temperature number?
+
+--- @alias sia.config.Models table<string, sia.config.ModelSpec>
+
+--- @class sia.config.EmbeddingSpec
+--- @field [1] string Provider name
+--- @field [2] string API model name
+--- @field context_window integer?
+
+--- @alias sia.config.Embeddings table<string, sia.config.EmbeddingSpec>
 
 --- @class sia.config.Provider
 --- @field base_url string
@@ -803,7 +823,7 @@ end
 --- @field process_embeddings (fun(json:table):number[][])?
 --- @field prepare_messages fun(data: table, model:string, prompt:sia.PreparedMessage[])
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
---- @field prepare_parameters fun(data: table, model: table)?
+--- @field prepare_parameters fun(data: table, model: sia.Model)?
 --- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
 --- @field get_headers (fun(api_key:string?, messages:sia.PreparedMessage[]?):string[])?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
@@ -826,30 +846,28 @@ M._raw_options = {
       "gpt-5.2",
       can_reason = true,
       context_window = 400000,
+      support = { image = true },
     },
     ["openai/gpt-5.2-codex"] = {
       "openai_responses",
       "gpt-5.2-codex",
       can_reason = true,
       context_window = 400000,
+      support = { image = true },
     },
     ["openai/gpt-5.1"] = {
       "openai_responses",
       "gpt-5.1",
       can_reason = true,
       context_window = 400000,
+      support = { image = true },
     },
     ["openai/gpt-5.1-codex"] = {
       "openai_responses",
       "gpt-5.1-codex",
       can_reason = true,
       context_window = 400000,
-    },
-    ["openai/gpt-5"] = { "openai_responses", "gpt-5", context_window = 400000 },
-    ["openai/gpt-5-codex"] = {
-      "openai_responses",
-      "gpt-5-codex",
-      context_window = 400000,
+      support = { image = true },
     },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1", context_window = 1047576 },
     ["codex/gpt-5.3-codex"] = {
