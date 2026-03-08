@@ -16,4 +16,5 @@ return {
   memory = require("sia.tools.memory"),
   ask_user = require("sia.tools.ask_user"),
   apply_diff = require("sia.tools.apply_diff"),
+  read_image = require("sia.tools.read_image"),
 }

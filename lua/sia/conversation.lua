@@ -14,7 +14,7 @@ end
 --- @class sia.PreparedMessage
 --- @field turn_id string?
 --- @field role string
---- @field content (string|sia.InstructionContent[])?
+--- @field content (string|sia.Content[])?
 --- @field hide boolean
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
@@ -55,14 +55,29 @@ end
 --- @field completed_at number?
 --- @field detached_handle sia.DetachedProcess? handle for async/detached processes
 
---- @alias sia.CacheControl {type: "ephemeral"}
---- @alias sia.InstructionTextContent {type:"text", text: string, cache_control: sia.CacheControl?}
---- @alias sia.InstructionFileContent {type: "file", file: {filename: string, file_data: string}, cache_control: sia.CacheControl?}
---- @alias sia.InstructionImageContent {type: "image_url", image_url: {url: string, detail:"high"|"low"}, cache_control: sia.CacheControl?}
---- @alias sia.InstructionContent sia.InstructionTextContent|sia.InstructionFileContent|sia.InstructionImageContent
+--- @class sia.CacheControl
+--- @field type "ephemeral"
+
+--- @class sia.TextContent
+--- @field type"text"
+--- @field text string
+--- @field cache_control sia.CacheControl?
+
+--- @class sia.FileContent
+--- @field type "file"
+--- @field file { filename: string,  file_data: string, detail: "high"|"low"}
+--- @field cache_control sia.CacheControl?
+
+--- @class sia.ImageContent
+--- @field type "image"
+--- @field image  { url: string, detail: "high"|"low"}
+--- @field cache_control sia.CacheControl?
+
+--- @alias sia.Content sia.TextContent|sia.FileContent|sia.ImageContent
+
 --- @class sia.Prompt
 --- @field role sia.config.Role
---- @field content (string|sia.InstructionContent[])?
+--- @field content (string|sia.Content[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field tool_call_id string?
 
@@ -93,7 +108,7 @@ end
 --- @field hide boolean?
 --- @field kind string?
 --- @field ephemeral boolean?
---- @field content (string|sia.InstructionContent[])?
+--- @field content (string|sia.Content[])?
 --- @field tool_calls sia.ToolCall[]?
 --- @field _tool_call sia.ToolCall?
 --- @field meta table?
@@ -213,9 +228,9 @@ end
 
 --- @param instruction sia.config.Instruction
 --- @param context sia.Context?
---- @return (string|sia.InstructionContent[])?
+--- @return (string|sia.Content[])?
 local function make_content(instruction, context)
-  --- @type (string|sia.InstructionContent[])?
+  --- @type (string|sia.Content[])?
   local content
   if type(instruction.content) == "function" then
     content = generate_content(instruction.content --[[@as fun()]], context)
@@ -227,7 +242,7 @@ local function make_content(instruction, context)
     content = table.concat(tmp, "\n")
   elseif type(instruction.content) == "table" then
     local tmp = instruction.content
-    --- @cast tmp sia.InstructionContent[]
+    --- @cast tmp sia.Content[]
     content = tmp
   elseif instruction.content ~= nil and type(instruction.content) == "string" then
     content = instruction.content
@@ -324,7 +339,7 @@ function Message:new(instruction, context)
 end
 
 --- @param message sia.Message
---- @return (string|sia.InstructionContent[])?
+--- @return (string|sia.Content[])?
 local function get_message_content(message)
   if message.content then
     if message.status and message.status == "outdated" then

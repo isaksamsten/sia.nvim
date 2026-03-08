@@ -83,12 +83,10 @@ end
 --- @param default any? Default value if not found
 --- @return any
 function Model:get_param(key, default)
-  -- Check config overrides first
   if self.config[key] ~= nil then
     return self.config[key]
   end
 
-  -- Then check model spec
   if self.spec[key] ~= nil then
     return self.spec[key]
   end
@@ -102,13 +100,6 @@ function Model:get_all_params()
   local params = vim.tbl_extend("force", {}, self.spec)
   params = vim.tbl_extend("force", params, self.config)
   return params
-end
-
---- Get the full model spec (provider name, api name, and all params)
---- Useful for provider.prepare_parameters
---- @return table
-function Model:get_spec()
-  return self.spec
 end
 
 return M

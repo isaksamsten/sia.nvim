@@ -31,6 +31,7 @@ local icon_set = "emoji"
 --- @field bash_kill string
 --- @field papers string
 --- @field overloaded string
+--- @field image string
 --- @field agents string
 
 --- @type table<sia.IconSet, sia.Icons>
@@ -59,6 +60,7 @@ local icon_sets = {
     directory = "📂",
     bash_exec = "⚡",
     bash_kill = "⊘",
+    image = "🖼️",
     agents = "🤖 ",
     papers = "📚",
     overloaded = "⏳",
@@ -87,6 +89,7 @@ local icon_sets = {
     directory = " ",
     bash_exec = " ",
     bash_kill = " ",
+    image = "󰋩 ",
     papers = " ",
     agents = " ",
     overloaded = " ",
@@ -115,6 +118,7 @@ local icon_sets = {
     directory = "[DIR]",
     bash_exec = "[!]",
     bash_kill = "[K]",
+    image = "[IMG]",
     agents = "[A]",
     papers = "[PA]",
     overloaded = "[..]",

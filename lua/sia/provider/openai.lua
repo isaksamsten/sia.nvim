@@ -370,7 +370,26 @@ local M = {
         .iter(messages)
         --- @param m sia.PreparedMessage
         :map(function(m)
-          local message = { role = m.role, content = m.content }
+          --- @type string|table
+          local content = ""
+          if type(m.content) == "table" then
+            content = {}
+            for _, part in ipairs(m.content) do
+              if part.type == "image" then
+                table.insert(content, {
+                  type = "image_url",
+                  image_url = { url = part.image.url },
+                })
+              elseif part.type == "text" then
+                table.insert(content, { type = "text", text = part.text })
+              else
+                error("unsupported or unknown part")
+              end
+            end
+          else
+            content = m.content
+          end
+          local message = { role = m.role, content = content }
           if m._tool_call then
             message.tool_call_id = m._tool_call.id
           end
@@ -496,18 +515,46 @@ local M = {
       local input = {}
       while i <= #messages do
         local m = messages[i]
+
+        --- @type string|table
+        local content = ""
+        if type(m.content) == "table" then
+          content = {}
+          for _, part in ipairs(m.content) do
+            if part.type == "image" then
+              table.insert(content, {
+                type = "input_image",
+                detail = part.image.detail or "auto",
+                image_url = part.image.url,
+              })
+            elseif part.type == "text" then
+              table.insert(content, { type = "input_text", text = part.text })
+            elseif part.type == "file" then
+              table.insert(content, {
+                type = "input_file",
+                file_data = part.file.file_data,
+                detail = part.file.detail,
+                filename = part.file.filename,
+              })
+            else
+              error("unknown part")
+            end
+          end
+        else
+          content = m.content
+        end
         if m.role == "tool" then
           if m._tool_call.type == "custom" then
             table.insert(input, {
               type = "custom_tool_call_output",
               call_id = m._tool_call.call_id,
-              output = m.content,
+              output = content,
             })
           else
             table.insert(input, {
               type = "function_call_output",
               call_id = m._tool_call.call_id,
-              output = m.content,
+              output = content,
             })
           end
         elseif m.tool_calls then
@@ -543,7 +590,7 @@ local M = {
             end
             table.insert(input, item)
           else
-            table.insert(input, { role = m.role, content = m.content })
+            table.insert(input, { role = m.role, content = content })
           end
         end
         i = i + 1

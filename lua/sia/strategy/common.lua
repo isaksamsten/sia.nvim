@@ -1,6 +1,6 @@
 local M = {}
 --- @class sia.ToolResult
---- @field content string[]
+--- @field content string[]|sia.Content[]
 --- @field context sia.Context?
 --- @field kind string?
 --- @field display_content string?

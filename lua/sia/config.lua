@@ -869,6 +869,7 @@ M._raw_options = {
       "gpt-5.2",
       can_reason = true,
       context_window = 400000,
+      support = { image = true },
     },
     ["codex/gpt-5.1-codex"] = {
       "codex",
@@ -883,8 +884,18 @@ M._raw_options = {
       context_window = 400000,
     },
     ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1", context_window = 128000 },
-    ["copilot/gpt-5.2"] = { "copilot", "gpt-5.2", context_window = 128000 },
-    ["copilot/gpt-5-mini"] = { "copilot", "gpt-5-mini", context_window = 128000 },
+    ["copilot/gpt-5.2"] = {
+      "copilot",
+      "gpt-5.2",
+      context_window = 128000,
+      support = { image = true },
+    },
+    ["copilot/gpt-5-mini"] = {
+      "copilot",
+      "gpt-5-mini",
+      context_window = 128000,
+      support = { image = true },
+    },
     ["copilot/gpt-5.2-codex"] = {
       "copilot_responses",
       "gpt-5.2-codex",
@@ -894,11 +905,13 @@ M._raw_options = {
     ["copilot/claude-haiku-4.5"] = {
       "copilot",
       "claude-haiku-4.5",
+      support = { image = true },
       context_window = 128000,
     },
     ["copilot/claude-opus-4.6"] = {
       "copilot",
       "claude-opus-4.6",
+      support = { image = true },
       context_window = 128000,
     },
     ["copilot/claude-sonnet-4.5"] = {
@@ -910,6 +923,7 @@ M._raw_options = {
       "copilot",
       "claude-sonnet-4.6",
       context_window = 128000,
+      support = { image = true },
     },
     ["copilot/gemini-3-pro"] = {
       "copilot",
@@ -1130,6 +1144,9 @@ M._raw_options = {
             table.insert(all, tools.apply_diff)
           else
             table.insert(all, tools.edit)
+          end
+          if model:get_param("support", {}).image then
+            table.insert(all, tools.read_image)
           end
           return all
         end,
