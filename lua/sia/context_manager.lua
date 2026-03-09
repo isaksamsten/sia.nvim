@@ -14,7 +14,7 @@ local M = {}
 local function normalize_for_summary(msg)
   local parts = {}
 
-  if msg.content and msg.content ~= "" then
+  if msg.content and type(msg.content) == "string" and msg.content ~= "" then
     table.insert(parts, msg.content)
   end
 
@@ -207,6 +207,8 @@ local function message_bytes(message)
       for _, part in ipairs(message.content) do
         if part.text then
           bytes = bytes + #part.text
+        elseif part.image then
+          bytes = bytes + #part.image.url
         elseif part.file and part.file.file_data then
           bytes = bytes + #part.file.file_data
         end

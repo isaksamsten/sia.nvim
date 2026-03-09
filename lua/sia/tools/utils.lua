@@ -7,6 +7,7 @@ local M = {}
 M.tool_names = {
   view = "view",
   view_image = "view_image",
+  view_document = "view_document",
   grep = "grep",
   glob = "glob",
   edit = "edit",

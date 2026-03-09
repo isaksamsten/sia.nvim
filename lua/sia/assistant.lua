@@ -131,6 +131,7 @@ function M.execute_strategy(strategy)
           if status then
             local m_err = extract_error(json)
             if m_err then
+              vim.notify(vim.inspect(response), vim.log.levels.ERROR)
               error_initialize = true
               strategy.is_busy = false
               strategy:on_error()

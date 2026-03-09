@@ -798,7 +798,7 @@ end
 --- @field reasoning_effort string?
 --- @field pricing {input: number, output: number}?
 --- @field cache_multiplier {read: number, write: number}?
---- @field support {image: boolean?}?
+--- @field support {image: boolean?, document: boolean?}?
 --- @field max_tokens integer?
 --- @field response_format table?
 --- @field n integer?
@@ -846,28 +846,28 @@ M._raw_options = {
       "gpt-5.2",
       can_reason = true,
       context_window = 400000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["openai/gpt-5.2-codex"] = {
       "openai_responses",
       "gpt-5.2-codex",
       can_reason = true,
       context_window = 400000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["openai/gpt-5.1"] = {
       "openai_responses",
       "gpt-5.1",
       can_reason = true,
       context_window = 400000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["openai/gpt-5.1-codex"] = {
       "openai_responses",
       "gpt-5.1-codex",
       can_reason = true,
       context_window = 400000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1", context_window = 1047576 },
     ["codex/gpt-5.3-codex"] = {
@@ -875,38 +875,42 @@ M._raw_options = {
       "gpt-5.3-codex",
       can_reason = true,
       context_window = 400000,
+      support = { document = true },
     },
     ["codex/gpt-5.2-codex"] = {
       "codex",
       "gpt-5.2-codex",
       can_reason = true,
       context_window = 400000,
+      support = { document = true },
     },
     ["codex/gpt-5.2"] = {
       "codex",
       "gpt-5.2",
       can_reason = true,
       context_window = 400000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["codex/gpt-5.1-codex"] = {
       "codex",
       "gpt-5.1-codex",
       can_reason = true,
       context_window = 400000,
+      support = { document = true },
     },
     ["codex/gpt-5.1-codex-mini"] = {
       "codex",
       "gpt-5.1-codex-mini",
       can_reason = true,
       context_window = 400000,
+      support = { document = true },
     },
     ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1", context_window = 128000 },
     ["copilot/gpt-5.2"] = {
-      "copilot",
+      "copilot_responses",
       "gpt-5.2",
       context_window = 128000,
-      support = { image = true },
+      support = { image = true, document = true },
     },
     ["copilot/gpt-5-mini"] = {
       "copilot",
@@ -919,6 +923,7 @@ M._raw_options = {
       "gpt-5.2-codex",
       can_reason = true,
       context_window = 128000,
+      support = { document = true },
     },
     ["copilot/claude-haiku-4.5"] = {
       "copilot",
@@ -1166,6 +1171,9 @@ M._raw_options = {
           end
           if model:get_param("support", {}).image then
             table.insert(all, tools.view_image)
+          end
+          if model:get_param("support", {}).document then
+            table.insert(all, tools.view_document)
           end
           return all
         end,

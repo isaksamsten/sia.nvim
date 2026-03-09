@@ -17,4 +17,5 @@ return {
   ask_user = require("sia.tools.ask_user"),
   apply_diff = require("sia.tools.apply_diff"),
   view_image = require("sia.tools.view_image"),
+  view_document = require("sia.tools.view_document"),
 }
