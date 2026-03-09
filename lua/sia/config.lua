@@ -845,6 +845,13 @@ M._raw_options = {
   models = {
     ["zai/glm-4.5"] = { "zai", "GLM-4.5", context_window = 128000 },
     ["zai/glm-4.6"] = { "zai", "GLM-4.6", context_window = 128000 },
+    ["openai/gpt-5.4"] = {
+      "openai_responses",
+      "gpt-5.4",
+      can_reason = true,
+      context_window = 400000,
+      support = { image = true, document = true },
+    },
     ["openai/gpt-5.2"] = {
       "openai_responses",
       "gpt-5.2",
@@ -895,24 +902,23 @@ M._raw_options = {
       context_window = 400000,
       support = { image = true, document = true },
     },
-    ["codex/gpt-5.1-codex"] = {
+    ["codex/gpt-5.4"] = {
       "codex",
-      "gpt-5.1-codex",
+      "gpt-5.4",
       can_reason = true,
       context_window = 400000,
-      support = { document = true },
-    },
-    ["codex/gpt-5.1-codex-mini"] = {
-      "codex",
-      "gpt-5.1-codex-mini",
-      can_reason = true,
-      context_window = 400000,
-      support = { document = true },
+      support = { image = true, document = true },
     },
     ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1", context_window = 128000 },
     ["copilot/gpt-5.2"] = {
       "copilot_responses",
       "gpt-5.2",
+      context_window = 128000,
+      support = { image = true, document = true },
+    },
+    ["copilot/gpt-5.4"] = {
+      "copilot_responses",
+      "gpt-5.4",
       context_window = 128000,
       support = { image = true, document = true },
     },
