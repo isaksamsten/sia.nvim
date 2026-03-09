@@ -6,8 +6,9 @@ local ICONS = {
   agents = " ",
   tool = " ",
   queue = " ",
-  total_tokens = "󰚾 ",
+  total_tokens = "󰝪 ",
   price = " ",
+  context = " ",
 }
 
 local SPINNER_FRAMES = { "", "", "", "", "", "" }
@@ -206,7 +207,10 @@ local function context_budget_section(data)
   end
   local limit_str = common.format_token_count(budget.limit)
   local estimate_str = common.format_token_count(budget.estimated)
-  return section(hl, string.format("%s %s %s", estimate_str, visual, limit_str))
+  return section(
+    hl,
+    string.format("%s%s %s %s", ICONS.context, estimate_str, visual, limit_str)
+  )
 end
 
 --- @param data sia.WinbarData
@@ -215,11 +219,15 @@ local function format_right_metric(data)
   local bar = data.stats and data.stats.bar
   local parts = {}
 
+  parts[1] = section(
+    "NonText",
+    ICONS.total_tokens .. common.format_token_count(data.total_usage)
+  )
   if bar and bar.text and vim.startswith(vim.trim(bar.text), "$") then
-    table.insert(parts, "%#NonText#" .. ICONS.price .. vim.trim(bar.text))
+    table.insert(parts, section("NonText", ICONS.price .. vim.trim(bar.text)))
   elseif bar and bar.percent then
     local pct = math.floor(bar.percent * 100 + 0.5)
-    table.insert(parts, "%#NonText#" .. ICONS.price .. pct .. "%%")
+    table.insert(parts, section("NonText", ICONS.price .. pct .. "%%"))
   end
 
   local budget_part = context_budget_section(data)
@@ -228,7 +236,7 @@ local function format_right_metric(data)
   end
 
   if #parts > 0 then
-    return table.concat(parts, "%#NonText# · ")
+    return table.concat(parts, section("NonText", " · "))
   end
 
   return ""
@@ -284,6 +292,7 @@ end
 --- @field tool_status sia.WinbarToolStatus[]?
 --- @field status sia.WinbarStatus?
 --- @field context_budget { estimated: integer, limit: integer, percent: number }?
+--- @field total_usage integer
 --- @field spinner string?
 --- @field win integer
 --- @field buf integer
@@ -361,6 +370,7 @@ local function render_one(buf, entry)
     status = entry.status,
     tool_status = entry.tool_status,
     context_budget = entry.context_budget,
+    total_usage = entry.last_usage_total,
     spinner = SPINNER_FRAMES[entry.spinner_frame],
     win = win,
     buf = buf,
