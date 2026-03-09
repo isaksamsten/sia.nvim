@@ -150,7 +150,9 @@ function OpenAICompletionStream:finalize(turn_id)
     nil,
     {
       meta = {
-        empty_content = self.reasoning_opaque ~= nil or self.reasoning_text ~= nil,
+        empty_content = self.reasoning_opaque ~= nil
+          or self.reasoning_text ~= nil
+          or #self.pending_tool_calls > 0,
         reasoning_opaque = self.reasoning_opaque,
         reasoning_text = self.reasoning_text,
       },
@@ -263,7 +265,8 @@ function OpenAIResponsesStream:finalize(turn_id)
     }
   end
 
-  if reasoning == nil and self.content == "" then
+  local has_tool_calls = #self.pending_tool_calls > 0
+  if reasoning == nil and self.content == "" and not has_tool_calls then
     return nil
   end
 
@@ -279,7 +282,10 @@ function OpenAIResponsesStream:finalize(turn_id)
     },
     nil,
     {
-      meta = { reasoning = reasoning, empty_content = reasoning ~= nil },
+      meta = {
+        reasoning = reasoning,
+        empty_content = reasoning ~= nil or has_tool_calls,
+      },
       turn_id = turn_id,
     }
   )
@@ -383,7 +389,7 @@ local M = {
               elseif part.type == "text" then
                 table.insert(content, { type = "text", text = part.text })
               else
-                error("unsupported or unknown part")
+                error("unsupported or unknown part" .. vim.inspect(m.content))
               end
             end
           else

@@ -134,7 +134,7 @@ All paths MUST start with `/memories/`.
         table.insert(content, lines[i])
       end
 
-      local display_info = string.format("%s Viewed %s", icons.read, args.path)
+      local display_info = string.format("%s Viewed %s", icons.view, args.path)
       if args.view_range then
         display_info = display_info
           .. string.format(" (lines %d-%d)", start_line, end_line)

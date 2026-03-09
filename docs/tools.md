@@ -10,7 +10,7 @@ are included in the default chat action.
 
 ### File Operations
 
-- **★ read** - Read file contents with optional line offset and limit (up to
+- **★ view** - View file contents with optional line offset and limit (up to
   2000 lines by default, with line number display)
 - **★ write** - Write complete file contents to create new files or overwrite
   existing ones (ideal for large changes or new files)
@@ -114,7 +114,7 @@ require("sia").setup({
         local tools = require("sia.tools")
         local extra = require("sia.tools.extra")
         return {
-          tools.read,
+          tools.view,
           tools.grep,
           tools.glob,
           tools.bash,

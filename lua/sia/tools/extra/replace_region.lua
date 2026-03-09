@@ -36,7 +36,7 @@ return tool_utils.new_tool({
 This tool allows you to replace a contiguous line region with new text.
 
 IMPORTANT:
-- Always read the current state of the file right before using this tool.
+- Always view the current state of the file right before using this tool.
   This tool is line-based, so if the file changed, your start_line/end_line
   may be wrong and the edit will fail or affect the wrong text.
 

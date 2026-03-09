@@ -1,5 +1,7 @@
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
+local tool_names = tool_utils.tool_names
+
 
 --- Get the directory containing the fetch-page script (relative to plugin root).
 --- @return string
@@ -43,7 +45,7 @@ return tool_utils.new_tool({
   is_available = function()
     return vim.fn.executable("npm") == 1 and vim.fn.executable("node") == 1
   end,
-  system_prompt = [[- Fetches content from a specified URL using a headless browser
+  system_prompt = string.format([[- Fetches content from a specified URL using a headless browser
 - Cleans HTML with Mozilla Readability and converts to markdown
 - Downloads page images locally and takes a full-page screenshot
 - Returns the page content along with file paths to the output directory
@@ -52,11 +54,11 @@ return tool_utils.new_tool({
 Usage notes:
   - The URL must be a fully-formed valid URL (http:// or https://)
   - This tool is read-only and does not modify any project files
-  - When content is large, the result is truncated. Use the `read` tool on the
-    provided index.md path to read the full content.
-  - A screenshot is always saved. Use the `read_image` tool on the provided
+  - When content is large, the result is truncated. Use the `%s` tool on the
+    provided index.md path to view the full content.
+  - A screenshot is always saved. Use the `%s` tool on the provided
     screenshot.png path to view it when visual context would be helpful.
-  - Downloaded images are stored in the images/ subdirectory of the output.]],
+  - Downloaded images are stored in the images/ subdirectory of the output.]], tool_names.view, tool_names.view_image),
   parameters = {
     url = {
       type = "string",
@@ -175,8 +177,9 @@ Usage notes:
               table.insert(
                 content,
                 string.format(
-                  "Content: (truncated, %d chars total - use `read` tool on %s for full content)",
+                  "Content: (truncated, %d chars total - use `%s` tool on %s for full content)",
                   #markdown,
+                  tool_names.view,
                   index_path
                 )
               )

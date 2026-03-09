@@ -255,6 +255,17 @@ end
 
 function ChatStrategy:on_complete(control)
   if not self.writer then
+    if not self:buf_is_loaded() then
+      control.finish()
+      return
+    end
+    self:del_abort_keymap(self.buf)
+    self.canvas:clear_progress()
+    winbar.update_status(self.buf, {
+      message = "No response received from model",
+      status = "error",
+    })
+    vim.bo[self.buf].modifiable = false
     control.finish()
     return
   end

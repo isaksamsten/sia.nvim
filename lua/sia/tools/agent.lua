@@ -1,5 +1,6 @@
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
+local tool_names = tool_utils.tool_names
 
 local START_REPLY = [[
 Async agent launched successfully.
@@ -19,7 +20,8 @@ return tool_utils.new_tool({
   message = "Launching autonomous agent...",
   read_only = true,
   description = [[Launch a new agent to handle complex, multi-step tasks autonomously.]],
-  system_prompt = [[The task tool launches specialized agents (subprocesses) that
+  system_prompt = string.format(
+    [[The task tool launches specialized agents (subprocesses) that
 autonomously handle complex tasks. Each agent type has specific capabilities and tools
 available to it.
 
@@ -28,9 +30,9 @@ Use the `list` command to see what agent types and tools they have access to.
 When using the task tool, you must specify a subagent_type parameter to select which agent type to use.
 
 When NOT to use the task tool:
-- If you want to read a specific file path, use the read or grep tool instead of the task tool, to find the match more quickly
+- If you want to read a specific file path, use the %s or grep tool instead of the task tool, to find the match more quickly
 - If you are searching for a specific class definition like "class Foo", use the grep tool instead, to find the match more quickly
-- If you are searching for code within a specific file or set of 2-3 files, use the read tool instead of the task tool, to find the match more quickly
+- If you are searching for code within a specific file or set of 2-3 files, use the %s tool instead of the task tool, to find the match more quickly
 - Other tasks that are not related to the agent descriptions above
 
 
@@ -59,6 +61,9 @@ Usage notes:
   you need to launch both a code-reviewer agent and a test-runner agent in parallel, send
   a single message with both tool calls.
 ]],
+    tool_names.view,
+    tool_names.view
+  ),
   parameters = {
     command = {
       type = "string",

@@ -1,6 +1,6 @@
 return {
   agent = require("sia.tools.agent"),
-  read = require("sia.tools.read"),
+  view = require("sia.tools.view"),
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),
   edit = require("sia.tools.edit"),
@@ -16,5 +16,5 @@ return {
   memory = require("sia.tools.memory"),
   ask_user = require("sia.tools.ask_user"),
   apply_diff = require("sia.tools.apply_diff"),
-  read_image = require("sia.tools.read_image"),
+  view_image = require("sia.tools.view_image"),
 }

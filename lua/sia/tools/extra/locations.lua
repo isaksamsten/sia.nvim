@@ -8,7 +8,7 @@ return tool_utils.new_tool({
   system_prompt = [[SHOWS MULTIPLE LOCATIONS TO THE USER - creates a navigable quickfix list.
 
 This tool is for presenting multiple locations to the USER, NOT for reading code yourself.
-Use the read tool if you need to examine file contents.
+Use the view tool if you need to examine file contents.
 
 Use this for:
 - Multiple search results or error locations

@@ -36,7 +36,7 @@ This tool allows you to insert new content at a specified line number without
 needing to match existing text patterns.
 
 IMPORTANT:
-- Always read the current state of the file right before using this tool.
+- Always view the current state of the file right before using this tool.
   This tool is line-based, so if the file changed, your start_line/end_line
   may be wrong and the edit will fail or affect the wrong text.
 

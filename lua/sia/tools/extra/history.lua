@@ -188,7 +188,7 @@ Use this tool to:
       content = output,
       display_content = string.format(
         "%s Retrieved %d message(s)",
-        icons.read,
+        icons.view,
         #messages
       ),
     })

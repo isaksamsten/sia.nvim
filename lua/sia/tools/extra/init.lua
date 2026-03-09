@@ -1,5 +1,4 @@
 return {
-  unread = require("sia.tools.extra.unread"),
   replace_region = require("sia.tools.extra.replace_region"),
   rename = require("sia.tools.extra.rename"),
   remove = require("sia.tools.extra.remove"),

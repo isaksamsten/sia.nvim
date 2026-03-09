@@ -1,5 +1,29 @@
 local M = {}
 
+--- Global tool name map.
+--- Use these constants whenever referring to tool names in strings (prompts, messages, etc.)
+--- so that renaming a tool only requires changing one place.
+--- @type table<string, string>
+M.tool_names = {
+  view = "view",
+  view_image = "view_image",
+  grep = "grep",
+  glob = "glob",
+  edit = "edit",
+  insert = "insert",
+  write = "write",
+  bash = "bash",
+  agent = "agent",
+  diagnostics = "diagnostics",
+  webfetch = "webfetch",
+  websearch = "websearch",
+  read_todos = "read_todos",
+  write_todos = "write_todos",
+  memory = "memory",
+  ask_user = "ask_user",
+  apply_diff = "apply_diff",
+}
+
 --- TODO: refactor to only return the arguments..
 --- fun(t:table):table
 --- @param clear_args string[]

@@ -18,7 +18,7 @@
 ---   - Boolean expressions: {% if has_tools %}
 ---   - Comparisons: {% if count > 0 %}
 ---   - Logical operators: {% if has_tools and count > 0 %}
----   - Helper functions: {% if contains(tools, "read") %}
+---   - Helper functions: {% if contains(tools, "view") %}
 ---
 --- Loops support:
 ---   - Iterate over arrays: {% for tool in tools %}{{tool}}{% end %}

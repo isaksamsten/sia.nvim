@@ -291,9 +291,9 @@ System prompt for the agent goes here.
   - Example: `"Searches through code to find specific patterns, functions, or implementations"`
 
 - **`tools`** (required): Array of tool names the agent can use
-  - Available tools: `glob`, `grep`, `read`, `bash`, `fetch`, etc. The tools
+  - Available tools: `glob`, `grep`, `view`, `bash`, `fetch`, etc. The tools
     must be defined in `setup({..})`.
-  - Example: `["glob", "grep", "read"]`
+  - Example: `["glob", "grep", "view"]`
 
 - **`model`** (optional): Override the model for this agent
   - Defaults to `fast_model` if not specified

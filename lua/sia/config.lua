@@ -1104,7 +1104,7 @@ M._raw_options = {
         },
         tools = function()
           local tools = require("sia.tools")
-          return { tools.grep, tools.read, tools.glob }
+          return { tools.grep, tools.view, tools.glob }
         end,
       },
       diff = {
@@ -1124,7 +1124,7 @@ M._raw_options = {
         },
         tools = function()
           local tools = require("sia.tools")
-          return { tools.grep, tools.read, tools.glob }
+          return { tools.grep, tools.view, tools.glob }
         end,
       },
       --- @type sia.config.Action
@@ -1148,7 +1148,7 @@ M._raw_options = {
             tools.grep,
             tools.write,
             tools.insert,
-            tools.read,
+            tools.view,
             tools.glob,
             tools.agent,
             tools.diagnostics,
@@ -1165,7 +1165,7 @@ M._raw_options = {
             table.insert(all, tools.edit)
           end
           if model:get_param("support", {}).image then
-            table.insert(all, tools.read_image)
+            table.insert(all, tools.view_image)
           end
           return all
         end,
@@ -1195,7 +1195,7 @@ M._raw_options = {
           tools.edit,
           tools.write,
           tools.insert,
-          tools.read,
+          tools.view,
           tools.glob,
           tools.diagnostics,
           tools.bash,

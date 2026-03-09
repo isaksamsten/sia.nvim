@@ -1,10 +1,10 @@
-local read_tool = require("sia.tools.read")
+local view_tool = require("sia.tools.view")
 local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
 
-T["sia.tools.read"] = MiniTest.new_set()
+T["sia.tools.view"] = MiniTest.new_set()
 
 local function create_test_buffer(lines)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -65,7 +65,7 @@ local function create_mock_opts()
   }
 end
 
-T["sia.tools.read"]["read text file basic"] = function()
+T["sia.tools.view"]["view text file basic"] = function()
   local buf = create_test_buffer({ "line 1", "line 2", "line 3" })
   local restore_file_loader = mock_file_loader(buf, "test.txt")
   local restore_tracker = mock_tracker()
@@ -79,20 +79,20 @@ T["sia.tools.read"]["read text file basic"] = function()
     path = "test.txt",
   }
 
-  read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("context", result.kind)
   eq(3, #result.content)
   eq("     1\tline 1", result.content[1])
   eq("     2\tline 2", result.content[2])
   eq("     3\tline 3", result.content[3])
-  eq("📖 Read test.txt (3 lines)", result.display_content)
+  eq("📖 Viewed test.txt (3 lines)", result.display_content)
 
   restore_file_loader()
   restore_tracker()
 end
 
-T["sia.tools.read"]["read text file with offset and limit"] = function()
+T["sia.tools.view"]["view text file with offset and limit"] = function()
   local buf = create_test_buffer({ "line 1", "line 2", "line 3", "line 4", "line 5" })
   local restore_file_loader = mock_file_loader(buf, "test.txt")
   local restore_tracker = mock_tracker()
@@ -108,19 +108,19 @@ T["sia.tools.read"]["read text file with offset and limit"] = function()
     limit = 2,
   }
 
-  read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("context", result.kind)
   eq(2, #result.content)
   eq("     2\tline 2", result.content[1])
   eq("     3\tline 3", result.content[2])
-  eq("📖 Read lines 2-3 from test.txt", result.display_content)
+  eq("📖 Viewed lines 2-3 from test.txt", result.display_content)
 
   restore_file_loader()
   restore_tracker()
 end
 
-T["sia.tools.read"]["missing path parameter"] = function()
+T["sia.tools.view"]["missing path parameter"] = function()
   local result = nil
   local callback = function(res)
     result = res
@@ -128,13 +128,13 @@ T["sia.tools.read"]["missing path parameter"] = function()
 
   local args = {}
 
-  read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("Error: No file path was provided", result.content[1])
-  eq("❌ Failed to read", result.display_content)
+  eq("❌ Failed to view", result.display_content)
 end
 
-T["sia.tools.read"]["file not found"] = function()
+T["sia.tools.view"]["file not found"] = function()
   local result = nil
   local callback = function(res)
     result = res
@@ -144,13 +144,13 @@ T["sia.tools.read"]["file not found"] = function()
     path = "nonexistent.txt",
   }
 
-  read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq("Error: File cannot be found", result.content[1])
-  eq("❌ Failed to read", result.display_content)
+  eq("❌ Failed to view", result.display_content)
 end
 
-T["sia.tools.read"]["offset beyond end of file"] = function()
+T["sia.tools.view"]["offset beyond end of file"] = function()
   local buf = create_test_buffer({ "line 1", "line 2" })
   local restore_file_loader = mock_file_loader(buf, "test.txt")
   local restore_tracker = mock_tracker()
@@ -165,25 +165,26 @@ T["sia.tools.read"]["offset beyond end of file"] = function()
     offset = 10,
   }
 
-  read_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
 
   eq(true, vim.startswith(result.content[1], "Error: Offset 10 is beyond end of file"))
-  eq("❌ Failed to read", result.display_content)
+  eq("❌ Failed to view", result.display_content)
 
   restore_file_loader()
   restore_tracker()
 end
 
-T["sia.tools.read"]["tool metadata"] = function()
-  eq("read", read_tool.name)
-  eq("Reads a file from the local filesystem.", read_tool.description)
+T["sia.tools.view"]["tool metadata"] = function()
+  eq("view", view_tool.name)
+  eq("Views a file from the local filesystem.", view_tool.description)
 
-  local required = read_tool.required
+  local required = view_tool.required
   eq(true, vim.tbl_contains(required, "path"))
 
-  eq("string", read_tool.parameters.path.type)
-  eq("integer", read_tool.parameters.offset.type)
-  eq("integer", read_tool.parameters.limit.type)
+  eq("string", view_tool.parameters.path.type)
+  eq("integer", view_tool.parameters.offset.type)
+  eq("integer", view_tool.parameters.limit.type)
 end
 
 return T
+

@@ -140,6 +140,6 @@ Do not guess which file the user means—always check the workspace first.]],
 
   callback({
     content = content,
-    display_content = icons.view .. " Read current workspace",
+    display_content = icons.workspace .. " Read current workspace",
   })
 end)

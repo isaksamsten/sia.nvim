@@ -75,15 +75,23 @@ function AnthropicStream:finalize(turn_id)
     return nil
   end
 
-  if self.content == "" then
+  local has_tool_calls = #self.pending_tool_calls > 0
+  if self.content == "" and not has_tool_calls then
     return nil
   end
 
-  local content = vim.split(self.content, "\n")
+  local content
+  if self.content ~= "" then
+    content = vim.split(self.content, "\n")
+  end
+
   self.strategy.conversation:add_instruction({
     role = "assistant",
     content = content,
-  }, { turn_id = turn_id })
+  }, nil, {
+    meta = { empty_content = has_tool_calls },
+    turn_id = turn_id,
+  })
   return content
 end
 

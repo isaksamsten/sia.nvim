@@ -2,14 +2,15 @@ local utils = require("sia.utils")
 local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
+local tool_names = tool_utils.tool_names
 
---- Determine the kind of read and return display helpers
+--- Determine the kind of view and return display helpers
 --- @param path string
 --- @return { icon: string, label: fun(path: string): string }
-local function read_display(path)
+local function view_display(path)
   if tool_utils.is_tool_output_path(path) then
     return {
-      icon = icons.read_bash,
+      icon = icons.view_bash,
       label = function()
         return "tool output"
       end,
@@ -18,7 +19,7 @@ local function read_display(path)
 
   if require("sia.skills.registry").is_skill_path(path) then
     return {
-      icon = icons.read_skill,
+      icon = icons.view_skill,
       label = function(p)
         return "skill " .. vim.fn.fnamemodify(p, ":h:t")
       end,
@@ -26,29 +27,34 @@ local function read_display(path)
   end
 
   return {
-    icon = icons.read,
+    icon = icons.view,
     label = function(p)
       return vim.fn.fnamemodify(p, ":.")
     end,
   }
 end
 
+local outdated_tpl = string.format(
+  "Previously viewed %%s from %%s - file was modified, use %s tool to get current content",
+  tool_names.view
+)
+
 return tool_utils.new_tool({
-  name = "read",
+  name = tool_names.view,
   read_only = true,
   message = function(args)
     if args.path then
-      return "Reading " .. vim.fn.fnamemodify(args.path, ":t")
+      return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
     else
-      return "Reading..."
+      return "Viewing..."
     end
   end,
-  system_prompt = [[Reads a file from the local filesystem. By default, it reads up to
+  system_prompt = [[Views a file from the local filesystem. By default, it reads up to
 2000 lines starting from the beginning of the file. You can optionally specify a line
 offset and limit (especially handy for long files), but it`s RECOMMENDED TO READ THE
 WHOLE FILE by not providing these parameters. Any lines longer than 2000 characters
 will be truncated.]],
-  description = [[Reads a file from the local filesystem.]],
+  description = [[Views a file from the local filesystem.]],
   parameters = {
     path = { type = "string", description = "The file path" },
     offset = {
@@ -76,7 +82,7 @@ will be truncated.]],
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to read",
+      display_content = icons.error .. " Failed to view",
       kind = "failed",
     })
     return
@@ -85,7 +91,7 @@ will be truncated.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = { "Error: File cannot be found" },
-      display_content = icons.error .. " Failed to read",
+      display_content = icons.error .. " Failed to view",
       kind = "failed",
     })
     return
@@ -97,13 +103,13 @@ will be truncated.]],
   local confirm_message
   if args.offset then
     confirm_message = string.format(
-      "Read lines %d-%d from %s",
+      "View lines %d-%d from %s",
       args.offset,
       args.offset + limit - 1,
       args.path
     )
   else
-    confirm_message = string.format("Read %s (up to %d lines)", args.path, limit)
+    confirm_message = string.format("View %s (up to %d lines)", args.path, limit)
   end
 
   opts.user_input(confirm_message, {
@@ -115,7 +121,7 @@ will be truncated.]],
       if not buf then
         callback({
           content = { "Error: Cannot load " .. args.path },
-          display_content = icons.error .. " Failed to read",
+          display_content = icons.error .. " Failed to view",
           kind = "failed",
         })
         return
@@ -131,7 +137,7 @@ will be truncated.]],
               total_lines
             ),
           },
-          display_content = icons.error .. " Failed to read",
+          display_content = icons.error .. " Failed to view",
           kind = "failed",
         })
         return
@@ -152,13 +158,13 @@ will be truncated.]],
         pos = { offset, offset + #content - 1 }
       end
 
-      local display = read_display(args.path)
+      local display = view_display(args.path)
       local name = display.label(args.path)
 
       local display_content
       if args.offset or args.limit then
         display_content = string.format(
-          "%s Read lines %d-%d from %s",
+          "%s Viewed lines %d-%d from %s",
           display.icon,
           start_line,
           end_line,
@@ -166,7 +172,7 @@ will be truncated.]],
         )
       else
         display_content =
-          string.format("%s Read %s (%d lines)", display.icon, name, #content)
+          string.format("%s Viewed %s (%d lines)", display.icon, name, #content)
       end
 
       local outdated_message
@@ -174,19 +180,11 @@ will be truncated.]],
         local span = start_line ~= end_line
             and string.format("lines %d-%d", start_line, end_line)
           or string.format("line %d", start_line)
-        outdated_message = string.format(
-          "Previously read %s from %s - file was modified, use read tool to get current content",
-          span,
-          vim.fn.fnamemodify(args.path, ":.")
-        )
+        outdated_message = string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
       else
         local span = end_line > 1 and string.format("lines %d-%d", start_line, end_line)
           or string.format("line %d", start_line)
-        outdated_message = string.format(
-          "Previously read %s from %s - file was modified, use read tool to get current content",
-          span,
-          vim.fn.fnamemodify(args.path, ":.")
-        )
+        outdated_message = string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
       end
 
       callback({
@@ -203,3 +201,4 @@ will be truncated.]],
     end,
   })
 end)
+

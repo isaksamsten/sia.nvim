@@ -171,7 +171,7 @@ end
 T["context_manager"]["drop_oldest_tool_calls marks pairs as dropped"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000)
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000)
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
   local conversation = make_conversation(1000, {
@@ -203,7 +203,7 @@ end
 T["context_manager"]["drop_oldest_tool_calls drops oldest first and stops at target"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000)
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000)
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
@@ -235,7 +235,7 @@ end
 T["context_manager"]["outdated tool calls are droppable"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000, "outdated")
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "outdated")
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
@@ -262,7 +262,7 @@ end
 T["context_manager"]["outdated pairs are dropped before active ones"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000, "outdated")
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "outdated")
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
@@ -295,7 +295,7 @@ T["context_manager"]["prune_if_needed drops tool calls when over threshold"] = f
 
   -- Small context window: 2000 tokens
   -- Fill it to >85%: need ~1700+ tokens = ~6800+ bytes
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 3000)
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 3000)
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 3000)
 
   local conversation = make_conversation(2000, {
@@ -334,7 +334,7 @@ end
 T["context_manager"]["already-dropped pairs are not re-processed"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000, "dropped")
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "dropped")
   local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
@@ -356,7 +356,7 @@ end
 T["context_manager"]["superseded pairs are not droppable"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 2000, "superseded")
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "superseded")
 
   local conversation = make_conversation(10000, {
     { role = "system", content = string.rep("s", 100) },
@@ -375,7 +375,7 @@ end
 T["context_manager"]["estimate_tokens decreases after dropping"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 100, 4000)
+  local a1, t1 = make_tool_pair("tc1", "view", 100, 4000)
 
   local conversation = make_conversation(10000, {
     { role = "system", content = string.rep("s", 200) },
@@ -445,7 +445,7 @@ end
 T["context_manager"]["compact includes dropped messages in summarizer input"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 50, 200, "dropped")
+  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
   local tracker = mock_compaction("Summary of conversation")
 
   local conversation = make_conversation(50, {
@@ -471,10 +471,10 @@ T["context_manager"]["compact includes dropped messages in summarizer input"] = 
   local found_tool_result = false
   local found_tool_call = false
   for _, instr in ipairs(tracker.captured_instructions) do
-    if instr.content and instr.content:find("%[Tool result: read%]") then
+    if instr.content and instr.content:find("%[Tool result: view%]") then
       found_tool_result = true
     end
-    if instr.content and instr.content:find("%[Tool call: read") then
+    if instr.content and instr.content:find("%[Tool call: view") then
       found_tool_call = true
     end
   end
@@ -488,7 +488,7 @@ end
 T["context_manager"]["compact removes dropped messages after successful compaction"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 50, 200, "dropped")
+  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
   local tracker = mock_compaction("Summary of conversation")
 
   local conversation = make_conversation(50, {
@@ -530,7 +530,7 @@ end
 T["context_manager"]["compact removes superseded messages after successful compaction"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "read", 50, 200, "superseded")
+  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "superseded")
   local tracker = mock_compaction("Summary of conversation")
 
   local conversation = make_conversation(50, {
@@ -568,7 +568,7 @@ T["context_manager"]["compact normalizes tool calls to plain text"] = function()
       tool_calls = {
         {
           id = "toolu_anthropic_123",
-          ["function"] = { name = "read", arguments = '{"path":"foo.lua"}' },
+          ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
         },
       },
     }),
@@ -577,7 +577,7 @@ T["context_manager"]["compact normalizes tool calls to plain text"] = function()
       content = "file contents here",
       _tool_call = {
         id = "toolu_anthropic_123",
-        ["function"] = { name = "read", arguments = '{"path":"foo.lua"}' },
+        ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
       },
     }),
     make_message({ role = "assistant", content = "I read the file" }),
@@ -599,18 +599,18 @@ T["context_manager"]["compact normalizes tool calls to plain text"] = function()
   end
 
   -- Should contain the normalized tool call text
-  local found_read_call = false
-  local found_read_result = false
+  local found_view_call = false
+  local found_view_result = false
   for _, instr in ipairs(tracker.captured_instructions) do
-    if instr.content:find("%[Tool call: read") then
-      found_read_call = true
+    if instr.content:find("%[Tool call: view") then
+      found_view_call = true
     end
-    if instr.content:find("%[Tool result: read%]") then
-      found_read_result = true
+    if instr.content:find("%[Tool result: view%]") then
+      found_view_result = true
     end
   end
-  expect.equality(found_read_call, true)
-  expect.equality(found_read_result, true)
+  expect.equality(found_view_call, true)
+  expect.equality(found_view_result, true)
 
   tracker.restore()
 end
@@ -654,7 +654,7 @@ T["context_manager"]["compact does not include dropped messages in compact_ratio
   local cm = require("sia.context_manager")
 
   -- 4 dropped messages + 4 active non-system messages
-  local a1, t1 = make_tool_pair("tc1", "read", 50, 200, "dropped")
+  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
   local a2, t2 = make_tool_pair("tc2", "edit", 50, 200, "dropped")
   local tracker = mock_compaction("Summary")
 

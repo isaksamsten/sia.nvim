@@ -262,14 +262,14 @@ Guidelines:
 {% if has_tool('bash') %}
 - For long-running commands, use `async=true` to run them in the background and continue working while they execute
 {% end %}
-{% if has_tool('read') and has_tool('edit') %}
-- Use read to examine files before editing. You must use this tool instead of cat or sed.
+{% if has_tool('view') and has_tool('edit') %}
+- Use view to examine files before editing. You must use this tool instead of cat or sed.
 {% end %}
 {% if has_tool('write') %}
 - Use write only for new files or complete rewrites
 {% end %}
 {% if has_tool('insert') %}
-- Always read files before using insert
+- Always view files before using insert
 {% end %}
 - Be concise in your responses
  ]]

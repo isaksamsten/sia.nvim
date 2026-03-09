@@ -16,10 +16,10 @@ local icon_set = "emoji"
 --- @field replace string
 --- @field rename string
 --- @field search string
---- @field read string
---- @field read_bash string
---- @field read_skill string
 --- @field view string
+--- @field view_bash string
+--- @field view_skill string
+--- @field workspace string
 --- @field fetch string
 --- @field lsp string
 --- @field plan string
@@ -47,10 +47,10 @@ local icon_sets = {
     replace = "✂️",
     rename = "📁",
     search = "🔍",
-    read = "📖",
-    read_bash = "🖥️",
-    read_skill = "🧩",
-    view = "👁️",
+    view = "📖",
+    view_bash = "🖥️",
+    view_skill = "🧩",
+    workspace = "👁️",
     fetch = "📄",
     lsp = "🔧",
     plan = "📋",
@@ -76,10 +76,10 @@ local icon_sets = {
     replace = "",
     rename = " ",
     search = " ",
-    read = " ",
-    read_bash = " ",
-    read_skill = " ",
-    view = " ",
+    view = " ",
+    view_bash = " ",
+    view_skill = " ",
+    workspace = " ",
     fetch = "󰖟 ",
     lsp = " ",
     plan = " ",
@@ -105,10 +105,10 @@ local icon_sets = {
     replace = "[R]",
     rename = "[MV]",
     search = "[?]",
-    read = "[R]",
-    read_bash = "[$]",
-    read_skill = "[SK]",
-    view = "[V]",
+    view = "[R]",
+    view_bash = "[$]",
+    view_skill = "[SK]",
+    workspace = "[W]",
     fetch = "[F]",
     lsp = "[LSP]",
     plan = "[P]",

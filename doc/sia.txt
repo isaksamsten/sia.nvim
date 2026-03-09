@@ -1,4 +1,4 @@
-*sia.txt*             For Neovim >= 0.11            Last change: 2026 March 04
+*sia.txt*             For Neovim >= 0.11            Last change: 2026 March 09
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -1028,7 +1028,7 @@ are included in the default chat action.
 
 FILE OPERATIONS ~
 
-- **★ read** - Read file contents with optional line offset and limit (up to
+- **★ view** - View file contents with optional line offset and limit (up to
     2000 lines by default, with line number display)
 - **★ write** - Write complete file contents to create new files or overwrite
     existing ones (ideal for large changes or new files)
@@ -1143,7 +1143,7 @@ You can include any combination of core and extra tools in your custom actions:
             local tools = require("sia.tools")
             local extra = require("sia.tools.extra")
             return {
-              tools.read,
+              tools.view,
               tools.grep,
               tools.glob,
               tools.bash,
@@ -1480,9 +1480,9 @@ prompts tailored for particular tasks.
     - This is shown to the AI when it lists available agents
     - Example: `"Searches through code to find specific patterns, functions, or implementations"`
 - **tools** (required): Array of tool names the agent can use
-    - Available tools: `glob`, `grep`, `read`, `bash`, `fetch`, etc. The tools
+    - Available tools: `glob`, `grep`, `view`, `bash`, `fetch`, etc. The tools
         must be defined in `setup({..})`.
-    - Example: `["glob", "grep", "read"]`
+    - Example: `["glob", "grep", "view"]`
 - **model** (optional): Override the model for this agent
     - Defaults to `fast_model` if not specified
     - Example: `"openai/gpt-4.1"`

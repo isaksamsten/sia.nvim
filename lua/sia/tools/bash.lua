@@ -1,6 +1,7 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
+local tool_names = tool_utils.tool_names
 
 local STATUS_OUTPUT_TAIL_LINES = 20
 
@@ -410,7 +411,7 @@ bash(command="kill", id=1)
 
 When output exceeds the inline limit, the result includes truncated output along with
 the file path containing the full output. Output files are stored at predictable
-paths like `<tmpdir>/sia/bash/<id>/process_<n>_stdout`. You can use the `read` or
+paths like `<tmpdir>/sia/bash/<id>/process_<n>_stdout`. You can use the `%s` or
 `grep` tool on that path to inspect the full output.
 
 ## Security
@@ -432,8 +433,8 @@ Before executing a command, follow these steps:
   If not specified, commands will timeout after 120 seconds.
 - VERY IMPORTANT: You MUST avoid using search commands like `find` and
   `grep`. Instead use grep, glob, or task to search. You MUST avoid
-  read tools like `cat`, `head`, `tail`, and `ls`, and use read and
-  workspace to read files.
+  read tools like `cat`, `head`, `tail`, and `ls`, and use %s and
+  workspace to view files.
 - When issuing multiple commands, use the ';' or '&&' operator to separate
   them. DO NOT use newlines (newlines are ok in quoted strings).
 - All commands share the same persistent shell session. This means:
@@ -471,7 +472,9 @@ git commit -m "$(cat <<'EOF'
    it usually means a pre-commit hook is preventing the commit.
 
 6. Finally, run git status to make sure the commit succeeded.]],
-    table.concat(utils.BANNED_COMMANDS, ", ")
+    tool_names.view,
+    table.concat(utils.BANNED_COMMANDS, ", "),
+    tool_names.view
   ),
 
   parameters = {

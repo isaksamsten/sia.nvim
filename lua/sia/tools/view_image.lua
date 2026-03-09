@@ -1,5 +1,6 @@
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
+local tool_names = tool_utils.tool_names
 
 local SUPPORTED_EXTENSIONS = {
   png = "image/png",
@@ -22,20 +23,20 @@ local function get_mime_type(path)
 end
 
 return tool_utils.new_tool({
-  name = "read_image",
+  name = tool_names.view_image,
   read_only = true,
   message = function(args)
     if args.path then
-      return "Reading image " .. vim.fn.fnamemodify(args.path, ":t")
+      return "Viewing image " .. vim.fn.fnamemodify(args.path, ":t")
     else
-      return "Reading image..."
+      return "Viewing image..."
     end
   end,
-  system_prompt = [[Reads an image file from the local filesystem and returns it as an
+  system_prompt = [[Views an image file from the local filesystem and returns it as an
 image for visual analysis. Supports PNG, JPEG, GIF, and WebP formats. Use this tool
 when you need to view or analyze the contents of an image file. The image is returned
 as base64-encoded data that you can directly interpret.]],
-  description = "Reads an image file from the local filesystem.",
+  description = "Views an image file from the local filesystem.",
   parameters = {
     path = {
       type = "string",
@@ -53,7 +54,7 @@ as base64-encoded data that you can directly interpret.]],
   if not args.path then
     callback({
       content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to read image",
+      display_content = icons.error .. " Failed to view image",
       kind = "failed",
     })
     return
@@ -78,7 +79,7 @@ as base64-encoded data that you can directly interpret.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = { "Error: Image file cannot be found" },
-      display_content = icons.error .. " Failed to read image",
+      display_content = icons.error .. " Failed to view image",
       kind = "failed",
     })
     return
@@ -101,7 +102,7 @@ as base64-encoded data that you can directly interpret.]],
   end
 
   local filename = vim.fn.fnamemodify(args.path, ":t")
-  local confirm_message = string.format("Read image %s", args.path)
+  local confirm_message = string.format("View image %s", args.path)
 
   opts.user_input(confirm_message, {
     on_accept = function()
@@ -109,7 +110,7 @@ as base64-encoded data that you can directly interpret.]],
       if not file then
         callback({
           content = { "Error: Cannot open " .. args.path },
-          display_content = icons.error .. " Failed to read image",
+          display_content = icons.error .. " Failed to view image",
           kind = "failed",
         })
         return
@@ -121,7 +122,7 @@ as base64-encoded data that you can directly interpret.]],
       if not data or #data == 0 then
         callback({
           content = { "Error: Image file is empty" },
-          display_content = icons.error .. " Failed to read image",
+          display_content = icons.error .. " Failed to view image",
           kind = "failed",
         })
         return
@@ -142,7 +143,7 @@ as base64-encoded data that you can directly interpret.]],
       end
 
       local display_content = string.format(
-        "%s Read image %s%s",
+        "%s Viewed image %s%s",
         icons.image,
         vim.fn.fnamemodify(args.path, ":~:."),
         size_str and (" (" .. size_str .. ")") or ""
@@ -170,3 +171,4 @@ as base64-encoded data that you can directly interpret.]],
     end,
   })
 end)
+

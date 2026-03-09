@@ -106,10 +106,14 @@ Requirements:
     },
     capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
     mode = "insert",
-    tools = {
-      "grep",
-      "read",
-    },
+    tools = function()
+      local tools = require("sia.tools")
+      return {
+        tools.grep,
+        tools.view,
+      }
+    end,
+
     insert = {
       placement = function()
         local ft = vim.bo.ft

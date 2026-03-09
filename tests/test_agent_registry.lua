@@ -41,7 +41,7 @@ T["sia.agents.registry"]["parse_agent_file parses valid agent markdown"] = funct
       "description: A coding agent",
       "tools:",
       "  - bash",
-      "  - read",
+      "  - view",
       "model: openai/gpt-4.1",
       "require_confirmation: false",
       "---",
@@ -64,7 +64,7 @@ T["sia.agents.registry"]["parse_agent_file parses valid agent markdown"] = funct
   eq(vim.NIL, err)
   eq("coder", agent.name)
   eq("A coding agent", agent.description)
-  eq({ "bash", "read" }, agent.tools)
+  eq({ "bash", "view" }, agent.tools)
   eq("openai/gpt-4.1", agent.model)
   eq(false, agent.require_confirmation)
   eq(3, #agent.system_prompt)
@@ -81,7 +81,7 @@ T["sia.agents.registry"]["parse_agent_file uses name from parameter"] = function
       "---",
       "description: Code review agent",
       "tools:",
-      "  - read",
+      "  - view",
       "---",
       "Review code carefully.",
     }, filepath)
@@ -110,7 +110,7 @@ T["sia.agents.registry"]["parse_agent_file defaults require_confirmation to true
       "---",
       "description: Simple agent",
       "tools:",
-      "  - read",
+      "  - view",
       "---",
       "System prompt here.",
     }, filepath)
@@ -258,7 +258,7 @@ T["sia.agents.registry"]["get_agents loads global agents by name"] = function()
       "---",
       "description: Research agent",
       "tools:",
-      "  - read",
+      "  - view",
       "---",
       "You research topics.",
     }, tmpdir .. "/researcher.md")
@@ -306,7 +306,7 @@ T["sia.agents.registry"]["get_agents supports subdirectory names"] = function()
       "---",
       "description: Code review agent",
       "tools:",
-      "  - read",
+      "  - view",
       "---",
       "Review code carefully.",
     }, tmpdir .. "/code/review.md")
@@ -344,7 +344,7 @@ T["sia.agents.registry"]["get_agents local overrides global"] = function()
       "---",
       "description: Global researcher",
       "tools:",
-      "  - read",
+      "  - view",
       "---",
       "Global system prompt.",
     }, global_dir .. "/researcher.md")
@@ -356,7 +356,7 @@ T["sia.agents.registry"]["get_agents local overrides global"] = function()
       "---",
       "description: Local researcher (override)",
       "tools:",
-      "  - read",
+      "  - view",
       "  - bash",
       "---",
       "Local system prompt.",
@@ -383,7 +383,7 @@ T["sia.agents.registry"]["get_agents local overrides global"] = function()
   local result = child.lua_get("_G.result")
   eq("researcher", result.researcher.name)
   eq("Local researcher (override)", result.researcher.description)
-  eq({ "read", "bash" }, result.researcher.tools)
+  eq({ "view", "bash" }, result.researcher.tools)
 end
 
 -- ─── utils.parse_yaml_frontmatter ─────────────────────────────────────────────

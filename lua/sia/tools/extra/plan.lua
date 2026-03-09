@@ -7,7 +7,7 @@ return tool_utils.new_tool({
   read_only = true,
   description = [[Launch a planning agent that analyzes the current situation and creates a concrete actionable plan.
 
-The planning agent has access to exploration tools (glob, grep, read) to understand the
+The planning agent has access to exploration tools (glob, grep, view) to understand the
 codebase structure and requirements. It will return a detailed plan with specific,
 actionable steps that the main agent can implement.
 
@@ -43,7 +43,7 @@ Usage notes:
 the current codebase and create detailed, actionable implementation plans.
 
 Your responsibilities:
-1. Use the available tools (glob, grep, read) to explore and understand the current codebase structure
+1. Use the available tools (glob, grep, view) to explore and understand the current codebase structure
 2. Identify what files need to be created, modified, or removed
 3. Understand existing patterns and conventions in the codebase
 4. Create a step-by-step implementation plan with specific details
@@ -65,7 +65,7 @@ Make your plan concrete and actionable - each step should be specific enough tha
         tools = {
           "glob",
           "grep",
-          "read",
+          "view",
         },
       }, nil)
       local strategy = HiddenStrategy:new(conversation, {
