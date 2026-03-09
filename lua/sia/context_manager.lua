@@ -205,18 +205,15 @@ local function message_bytes(message)
       bytes = bytes + #message.content
     elseif type(message.content) == "table" then
       for _, part in ipairs(message.content) do
+        -- We only care about the text part: for images + files the number of bytes is
+        -- not a proxy for tokens
         if part.text then
           bytes = bytes + #part.text
-        elseif part.image then
-          bytes = bytes + #part.image.url
-        elseif part.file and part.file.file_data then
-          bytes = bytes + #part.file.file_data
         end
       end
     end
   end
 
-  -- Tool calls (assistant messages requesting tool use)
   if message.tool_calls then
     for _, tc in ipairs(message.tool_calls) do
       if tc["function"] then
@@ -229,7 +226,6 @@ local function message_bytes(message)
     end
   end
 
-  -- Tool call metadata (tool result messages)
   if message._tool_call then
     local tc = message._tool_call or {}
     local fn = tc["function"]
@@ -296,7 +292,7 @@ function M.get_budget(conversation)
   if not model then
     return nil
   end
-  local context_window = model:get_param("context_window")
+  local context_window = model.params.context_window
   if not context_window then
     return nil
   end
