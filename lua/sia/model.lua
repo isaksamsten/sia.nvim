@@ -3,6 +3,10 @@ local M = {}
 --- @class sia.Model
 --- @field config table
 --- @field spec sia.config.ModelSpec|sia.config.EmbeddingSpec
+--- @field api_name string
+--- @field provider_name string
+--- @field params table<string, boolean>
+--- @field support table
 local Model = {}
 Model.__index = Model
 
@@ -16,6 +20,7 @@ function Model:new(model_config)
     error("Model config must have a 'name' field")
   end
 
+  --- @type sia.config.ModelSpec
   local model_spec = config.options.models[model_config.name]
   if not model_spec then
     model_spec = config.options.embeddings[model_config.name]
@@ -27,6 +32,18 @@ function Model:new(model_config)
   local obj = setmetatable({}, self)
   obj.config = model_config
   obj.spec = model_spec
+  obj.provider_name = model_spec[1]
+  obj.api_name = model_spec[2]
+  obj.support = setmetatable({}, {
+    __index = function(_, key)
+      return obj.spec.support[key] or false
+    end,
+  })
+  obj.params = setmetatable({}, {
+    __index = function(_, key)
+      return obj.config[key] or obj.spec[key] or nil
+    end,
+  })
   return obj
 end
 
@@ -55,51 +72,15 @@ function Model:name()
   return self.config.name
 end
 
---- Get the provider name (e.g., "openai")
---- @return string
-function Model:provider_name()
-  return self.spec[1]
-end
-
---- Get the API model name (e.g., "gpt-4.1")
---- @return string
-function Model:api_name()
-  return self.spec[2]
-end
-
 --- Get the provider instance
 --- @return sia.config.Provider
 function Model:get_provider()
   local config = require("sia.config")
-  local provider = config.options.providers[self:provider_name()]
+  local provider = config.options.providers[self.provider_name]
   if not provider then
-    provider = require("sia.provider.defaults")[self:provider_name()]
+    provider = require("sia.provider.defaults")[self.provider_name]
   end
   return provider
-end
-
---- Get a parameter value, checking config overrides first, then model spec
---- @param key string Parameter name (e.g., "temperature", "pricing", "reasoning_effort")
---- @param default any? Default value if not found
---- @return any
-function Model:get_param(key, default)
-  if self.config[key] ~= nil then
-    return self.config[key]
-  end
-
-  if self.spec[key] ~= nil then
-    return self.spec[key]
-  end
-
-  return default
-end
-
---- Get all parameters from both config and spec, with config taking precedence
---- @return table
-function Model:get_all_params()
-  local params = vim.tbl_extend("force", {}, self.spec)
-  params = vim.tbl_extend("force", params, self.config)
-  return params
 end
 
 return M

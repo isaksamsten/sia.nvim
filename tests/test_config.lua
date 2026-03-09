@@ -168,7 +168,7 @@ T["resolve_aliases"]["resolves alias to real model with overrides"] = function()
   end)
 end
 
-T["resolve_aliases"]["alias params are available via Model:get_param"] = function()
+T["resolve_aliases"]["alias params are available via Model.params"] = function()
   with_mock_local_config({
     aliases = {
       ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
@@ -176,9 +176,9 @@ T["resolve_aliases"]["alias params are available via Model:get_param"] = functio
   }, function()
     local model = require("sia.model")
     local m = model.resolve("codex-high")
-    eq(m:provider_name(), "codex")
-    eq(m:api_name(), "gpt-5.3-codex")
-    eq(m:get_param("reasoning_effort"), "high")
+    eq(m.provider_name, "codex")
+    eq(m.api_name, "gpt-5.3-codex")
+    eq(m.params.reasoning_effort, "high")
   end)
 end
 

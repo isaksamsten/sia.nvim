@@ -40,19 +40,19 @@ end
 function M.prepare_parameters(data, model)
   local config = require("sia.config").options
 
-  local n = model:get_param("n")
+  local n = model.params.n
   if n then
     data.n = n
   end
 
-  local max_tokens = model:get_param("max_tokens")
+  local max_tokens = model.params.max_tokens
   if max_tokens then
     data.max_tokens = max_tokens
   end
 
-  local reasoning_effort = model:get_param("reasoning_effort")
-  if not reasoning_effort and not model:get_param("can_reason") then
-    data.temperature = model:get_param("temperature", config.settings.temperature)
+  local reasoning_effort = model.params.reasoning_effort
+  if not reasoning_effort and not model.params.can_reason then
+    data.temperature = model.params.temperature or config.settings.temperature
   end
 
   if reasoning_effort then
@@ -142,10 +142,10 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
     if conversation and conversation.model then
       local model = conversation.model
 
-      local pricing = model:get_param("pricing")
+      local pricing = model.params.pricing
       if pricing then
         cost = calculate_cost_from_pricing(pricing, usage.input, usage.output)
-        local cache_mult = model:get_param("cache_multiplier")
+        local cache_mult = model.params.cache_multiplier
         if cache_mult then
           if usage.cache_read then
             cost = cost
@@ -167,7 +167,7 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
           end
         end
       elseif builtin_pricing then
-        local actual_model_name = model:api_name()
+        local actual_model_name = model.api_name
         local builtin_price = builtin_pricing[actual_model_name]
         if builtin_price then
           cost = calculate_cost_from_pricing(builtin_price, usage.input, usage.output)

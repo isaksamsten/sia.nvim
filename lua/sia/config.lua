@@ -1164,15 +1164,15 @@ M._raw_options = {
             tools.read_todos,
             tools.memory,
           }
-          if model:api_name():match("gpt%-5") then
+          if model.api_name:match("gpt%-5") then
             table.insert(all, tools.apply_diff)
           else
             table.insert(all, tools.edit)
           end
-          if model:get_param("support", {}).image then
+          if model.support.image then
             table.insert(all, tools.view_image)
           end
-          if model:get_param("support", {}).document then
+          if model.support.document then
             table.insert(all, tools.view_document)
           end
           return all
@@ -1213,7 +1213,7 @@ M._raw_options = {
           tools.read_todos,
           tools.memory,
         }
-        if model:api_name():match("gpt%-5") then
+        if model.api_name:match("gpt%-5") then
           table.insert(all, tools.apply_diff)
         end
         return all

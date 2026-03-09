@@ -161,9 +161,9 @@ vim.api.nvim_create_user_command("SiaDebug", function()
   end
 
   local provider = chat.conversation.model:get_provider()
-  local data = { model = chat.conversation.model:api_name() }
+  local data = { model = chat.conversation.model.api_name }
   provider.prepare_parameters(data, chat.conversation.model)
-  provider.prepare_messages(data, chat.conversation.model:api_name(), result)
+  provider.prepare_messages(data, chat.conversation.model.api_name, result)
   provider.prepare_tools(data, chat.conversation.tools)
   local json_str = vim.json.encode(data)
   local pretty = json_str

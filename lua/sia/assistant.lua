@@ -99,7 +99,7 @@ function M.execute_strategy(strategy)
     local provider = model:get_provider()
 
     local data = {
-      model = model:api_name(),
+      model = model.api_name,
       stream = true,
     }
 
@@ -108,7 +108,7 @@ function M.execute_strategy(strategy)
     end
     local messages = strategy.conversation:prepare_messages()
     provider.prepare_tools(data, strategy.conversation.tools)
-    provider.prepare_messages(data, model:api_name(), messages)
+    provider.prepare_messages(data, model.api_name, messages)
 
     local extra_args = provider.get_headers
       and provider.get_headers(provider.api_key(), messages)
@@ -289,10 +289,10 @@ function M.fetch_response(conversation, callback)
   local provider = model:get_provider()
 
   local data = {
-    model = model:api_name(),
+    model = model.api_name,
   }
   local messages = conversation:prepare_messages()
-  provider.prepare_messages(data, model:api_name(), messages)
+  provider.prepare_messages(data, model.api_name, messages)
   if provider.prepare_parameters then
     provider.prepare_parameters(data, model)
   end
@@ -329,7 +329,7 @@ function M.fetch_embedding(strings, model, callback)
   local response = ""
   local provider = model:get_provider()
   local data = {
-    model = model:api_name(),
+    model = model.api_name,
   }
   provider.prepare_embedding(data, strings, model)
   call_provider(data, {

@@ -282,7 +282,7 @@ local M = {
     role = "system",
     template = true,
     content = [[
-{% if model:api_name():match("gpt%-5") %}
+{% if model.api_name:match("gpt%-5") %}
 ]] .. gpt_5_system .. [[
 {% else %}
 ]] .. minimal_prompt .. [[
@@ -405,7 +405,7 @@ If there are no tools available to read files, ask the user to add them with
 {% end %}
 </tools>
 
-{% if not (model.provider_name() == "copilot" and model.api_name():match("gemini")) %}
+{% if not (model.provider_name == "copilot" and model.api_name:match("gemini")) %}
 <use_parallel_tool_calls>
 For maximum efficiency, whenever you perform multiple independent operations,
 invoke all relevant tools simultaneously rather than sequentially. Prioritize

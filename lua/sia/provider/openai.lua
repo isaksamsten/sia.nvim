@@ -329,7 +329,7 @@ local M = {
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
 
-      local response_format = model:get_param("response_format")
+      local response_format = model.params.response_format
       if response_format then
         data.response_format = response_format
       end
@@ -602,7 +602,7 @@ local M = {
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
 
-      local response_format = model:get_param("response_format")
+      local response_format = model.params.response_format
       if response_format then
         data.text = data.text or {}
         if
@@ -626,7 +626,7 @@ local M = {
         data.reasoning_effort = nil
       end
       data.store = false
-      if model:get_param("can_reason") or model:get_param("reasoning_effort") then
+      if model.params.can_reason or model.params.reasoning_effort then
         data.temperature = nil
         data.include = { "reasoning.encrypted_content" }
       end
