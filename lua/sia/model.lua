@@ -6,7 +6,7 @@ local M = {}
 --- @field api_name string
 --- @field provider_name string
 --- @field params table<string, boolean>
---- @field support table
+--- @field support sia.config.Support
 local Model = {}
 Model.__index = Model
 
@@ -36,7 +36,7 @@ function Model:new(model_config)
   obj.api_name = model_spec[2]
   obj.support = setmetatable({}, {
     __index = function(_, key)
-      return obj.spec.support[key] or false
+      return obj.spec.support ~= nil and obj.spec.support[key] or false
     end,
   })
   obj.params = setmetatable({}, {

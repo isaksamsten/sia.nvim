@@ -729,7 +729,7 @@ end
 --- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
 --- @field message string|(fun(args:table):string)?
 --- @field parameters table<string, sia.ToolParameter>?
---- @field is_available (fun():boolean)?
+--- @field is_available (fun(support: sia.config.Support?):boolean)?
 --- @field required string[]?
 --- @field execute sia.config.ToolExecute
 --- @field custom sia.config.ToolCustom? if set, this is a custom tool with non-JSON output
@@ -790,6 +790,10 @@ end
 --- @field args string[]|fun():string[]?
 --- @field shell sia.config.Shell?
 
+--- @class sia.config.Support
+--- @field image boolean?
+--- @field document boolean?
+
 --- @class sia.config.ModelSpec
 --- @field [1] string provider name
 --- @field [2] string provider model api name
@@ -798,7 +802,7 @@ end
 --- @field reasoning_effort string?
 --- @field pricing {input: number, output: number}?
 --- @field cache_multiplier {read: number, write: number}?
---- @field support {image: boolean?, document: boolean?}?
+--- @field support sia.config.Support?
 --- @field max_tokens integer?
 --- @field response_format table?
 --- @field n integer?
@@ -1163,17 +1167,13 @@ M._raw_options = {
             tools.write_todos,
             tools.read_todos,
             tools.memory,
+            tools.view_image,
+            tools.view_document,
           }
           if model.api_name:match("gpt%-5") then
             table.insert(all, tools.apply_diff)
           else
             table.insert(all, tools.edit)
-          end
-          if model.support.image then
-            table.insert(all, tools.view_image)
-          end
-          if model.support.document then
-            table.insert(all, tools.view_document)
           end
           return all
         end,
@@ -1200,7 +1200,6 @@ M._raw_options = {
         local all = {
           tools.ask_user,
           tools.grep,
-          tools.edit,
           tools.write,
           tools.insert,
           tools.view,
@@ -1212,9 +1211,13 @@ M._raw_options = {
           tools.write_todos,
           tools.read_todos,
           tools.memory,
+          tools.view_image,
+          tools.view_document,
         }
         if model.api_name:match("gpt%-5") then
           table.insert(all, tools.apply_diff)
+        else
+          table.insert(all, tools.edit)
         end
         return all
       end,

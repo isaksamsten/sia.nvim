@@ -168,7 +168,7 @@ end
 ---@field name string
 ---@field description string
 ---@field read_only boolean?
----@field is_available (fun():boolean)?
+---@field is_available (fun(support: sia.config.Support?):boolean)?
 ---@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
@@ -406,6 +406,7 @@ M.new_tool = function(opts, execute)
   --- @type sia.config.Tool
   return {
     name = opts.name,
+    is_available = opts.is_available,
     message = opts.message,
     parameters = opts.parameters,
     custom = opts.custom,

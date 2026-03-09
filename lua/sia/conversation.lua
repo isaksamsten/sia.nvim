@@ -546,7 +546,7 @@ function Conversation:new(action, context)
       if
         tool ~= nil
         and obj.tool_fn[tool.name] == nil
-        and (tool.is_available == nil or tool.is_available())
+        and (tool.is_available == nil or tool.is_available(obj.model.support))
       then
         obj.tool_fn[tool.name] = {
           message = tool.message,

@@ -24,6 +24,9 @@ end
 
 return tool_utils.new_tool({
   name = tool_names.view_image,
+  is_available = function(support)
+    return support ~= nil and support.image == true
+  end,
   read_only = true,
   message = function(args)
     if args.path then
@@ -171,4 +174,3 @@ as base64-encoded data that you can directly interpret.]],
     end,
   })
 end)
-

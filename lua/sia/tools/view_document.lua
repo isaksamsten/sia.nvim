@@ -34,6 +34,9 @@ end
 
 return tool_utils.new_tool({
   name = tool_names.view_document,
+  is_available = function(support)
+    return support ~= nil and support.document == true
+  end,
   read_only = true,
   message = function(args)
     if args.path then
