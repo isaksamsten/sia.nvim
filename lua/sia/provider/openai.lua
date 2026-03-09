@@ -150,9 +150,7 @@ function OpenAICompletionStream:finalize(turn_id)
     nil,
     {
       meta = {
-        empty_content = self.reasoning_opaque ~= nil
-          or self.reasoning_text ~= nil
-          or #self.pending_tool_calls > 0,
+        empty_content = self.reasoning_opaque ~= nil or self.reasoning_text ~= nil,
         reasoning_opaque = self.reasoning_opaque,
         reasoning_text = self.reasoning_text,
       },
@@ -265,8 +263,7 @@ function OpenAIResponsesStream:finalize(turn_id)
     }
   end
 
-  local has_tool_calls = #self.pending_tool_calls > 0
-  if reasoning == nil and self.content == "" and not has_tool_calls then
+  if reasoning == nil and self.content == "" then
     return nil
   end
 
@@ -282,10 +279,7 @@ function OpenAIResponsesStream:finalize(turn_id)
     },
     nil,
     {
-      meta = {
-        reasoning = reasoning,
-        empty_content = reasoning ~= nil or has_tool_calls,
-      },
+      meta = { reasoning = reasoning, empty_content = reasoning ~= nil },
       turn_id = turn_id,
     }
   )
