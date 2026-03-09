@@ -1,4 +1,6 @@
 deps/**
+**/node_modules/
+scripts/**/package-lock.json
 
 # Generated intermediate doc (vimdoc source)
 doc/sia.md

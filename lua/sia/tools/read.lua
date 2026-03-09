@@ -7,11 +7,11 @@ local icons = require("sia.ui").icons
 --- @param path string
 --- @return { icon: string, label: fun(path: string): string }
 local function read_display(path)
-  if tool_utils.is_bash_output_path(path) then
+  if tool_utils.is_tool_output_path(path) then
     return {
       icon = icons.read_bash,
       label = function()
-        return "bash output"
+        return "tool output"
       end,
     }
   end
@@ -63,7 +63,7 @@ will be truncated.]],
   required = { "path" },
   auto_apply = function(args, _)
     if args.path then
-      if tool_utils.is_bash_output_path(args.path) then
+      if tool_utils.is_tool_output_path(args.path) then
         return 1
       end
       if require("sia.skills.registry").is_skill_path(args.path) then

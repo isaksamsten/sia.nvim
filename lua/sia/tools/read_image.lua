@@ -43,7 +43,10 @@ as base64-encoded data that you can directly interpret.]],
     },
   },
   required = { "path" },
-  auto_apply = function(_, _)
+  auto_apply = function(args, _)
+    if args.path and tool_utils.is_tool_output_path(args.path) then
+      return 1
+    end
     return nil
   end,
 }, function(args, _, callback, opts)

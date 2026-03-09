@@ -254,7 +254,7 @@ Usage:
     },
   },
   auto_apply = function(args, conversation)
-    if args.path and tool_utils.is_bash_output_path(args.path) then
+    if args.path and tool_utils.is_tool_output_path(args.path) then
       return 1
     end
     return conversation.auto_confirm_tools["grep"]

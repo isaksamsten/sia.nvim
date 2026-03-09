@@ -1,0 +1,17 @@
+{
+  "name": "@siavim/fetch-page",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fetch, clean, and convert web pages to markdown for sia.nvim",
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "hast-util-from-html": "^2.0.0",
+    "hast-util-to-mdast": "^10.0.0",
+    "linkedom": "^0.16.0",
+    "mdast-util-gfm-table": "^2.0.0",
+    "mdast-util-to-markdown": "^2.0.0",
+    "puppeteer": "^23.0.0"
+  }
+}
+

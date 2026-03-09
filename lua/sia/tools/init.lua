@@ -9,7 +9,7 @@ return {
   bash = require("sia.tools.bash"),
   task = require("sia.tools.agent"),
   diagnostics = require("sia.tools.diagnostics"),
-  fetch = require("sia.tools.fetch"),
+  webfetch = require("sia.tools.webfetch"),
   websearch = require("sia.tools.websearch"),
   read_todos = require("sia.tools.read_todos"),
   write_todos = require("sia.tools.write_todos"),
