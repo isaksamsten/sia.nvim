@@ -209,53 +209,6 @@ time, and Sia will respect your changes. This is useful if you want to:
 Todos help Sia stay focused on your goals and make it easier to resume work
 after interruptions or context switches.
 
-## Conversation History
-
-Sia can save and retrieve conversation history, allowing the AI assistant to
-learn from past interactions and build on previous work.
-
-**Saving conversations:**
-
-Use `:SiaSave` in any chat window to save the current conversation to
-`.sia/history/`. The conversation is saved as a structured JSON file that
-includes:
-
-- User and assistant messages from the conversation
-- Conversation metadata (name, creation date, model used)
-- Automatically generated table of contents with topic summaries
-- Optional semantic embeddings for intelligent search (requires `embedding_model` configuration)
-
-**Accessing saved conversations:**
-
-The AI assistant can use the `history` tool to access past conversations in three ways:
-
-1. **Browse all conversations** - View a table of contents for all saved conversations with topics and date ranges
-2. **View specific messages** - Retrieve exact messages by index from a particular conversation
-3. **Semantic search** - Search across all conversations using natural language queries (requires embeddings)
-
-**Configuration:**
-
-To enable semantic search across conversation history, configure an embedding model:
-
-```lua
-require("sia").setup({
-  settings = {
-    embedding_model = "openai/text-embedding-3-small",
-  }
-})
-```
-
-**Use cases:**
-
-- **Learn from past solutions**: "Find how we implemented authentication previously"
-- **Resume old work**: "What did we discuss about the database migration?"
-- **Reference decisions**: "Search for conversations about API design choices"
-- **Build on previous knowledge**: The assistant can reference past successful approaches
-
-**Note:** Add `.sia/history/` to your `.gitignore` if you don't want to commit
-conversation history, or commit it if you want to share knowledge with your
-team.
-
 ## Custom Agent Registry
 
 You can define custom agents that the AI can invoke using the `task` tool. Agents

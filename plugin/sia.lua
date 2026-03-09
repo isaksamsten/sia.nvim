@@ -438,57 +438,6 @@ end, {
   end,
 })
 
-vim.api.nvim_create_user_command("SiaSave", function()
-  local chat = require("sia.strategy").ChatStrategy.by_buf()
-  if not chat then
-    vim.notify("sia: no active chat for this buffer", vim.log.levels.WARN)
-    return
-  end
-
-  if not chat.conversation then
-    vim.notify("sia: conversation not found for current chat", vim.log.levels.WARN)
-    return
-  end
-
-  local embedding_model_name = require("sia.config").options.settings.embedding_model
-  local embedding_model
-  if embedding_model_name then
-    embedding_model = require("sia.model").resolve(embedding_model_name)
-  end
-  local history = require("sia.history")
-  local utils = require("sia.utils")
-
-  history.new_history(chat.conversation, {
-    embedding_model = embedding_model,
-    callback = function(obj)
-      if not obj then
-        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
-        return
-      end
-
-      local root = utils.detect_project_root(vim.fn.getcwd())
-      local history_dir = vim.fs.joinpath(root, ".sia", "history")
-
-      vim.fn.mkdir(history_dir, "p")
-
-      local filename =
-        string.format("%s.json", vim.fs.joinpath(history_dir, chat.conversation.uuid))
-
-      local ok, encoded = pcall(vim.json.encode, obj, { indent = true })
-      if not ok then
-        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
-        return
-      end
-
-      local write_ok = pcall(vim.fn.writefile, vim.split(encoded, "\n"), filename)
-      if not write_ok then
-        vim.notify("sia: failed to save conversation", vim.log.levels.ERROR)
-        return
-      end
-    end,
-  })
-end, {})
-
 vim.api.nvim_create_user_command("SiaBranch", function(args)
   local ChatStrategy = require("sia.strategy").ChatStrategy
   local chat = ChatStrategy.by_buf()

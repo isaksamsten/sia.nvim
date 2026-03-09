@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 - **Change review** — [inline diff with accept/reject](docs/changes.md) for AI-suggested edits
 - **Agent system** — [custom autonomous agents](docs/concepts.md#custom-agent-registry) for specialized tasks
 - **Project-level config** — [per-project models, permissions, and risk levels](docs/configuration.md#project-level-configuration)
-- **Persistent memory** — [agent memory](docs/concepts.md#agent-memory) and [conversation history](docs/concepts.md#conversation-history) across sessions
+- **Persistent memory** — [agent memory](docs/concepts.md#agent-memory)
 - **Cost tracking** — [real-time token usage and cost monitoring](docs/configuration.md#cost-tracking)
 
 ## Requirements

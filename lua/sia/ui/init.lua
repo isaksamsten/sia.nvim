@@ -25,7 +25,6 @@ local icon_set = "emoji"
 --- @field plan string
 --- @field locations string
 --- @field diagnostics string
---- @field history string
 --- @field directory string
 --- @field bash_exec string
 --- @field bash_kill string
@@ -57,7 +56,6 @@ local icon_sets = {
     plan = "📋",
     locations = "📝",
     diagnostics = "🩺",
-    history = "📚",
     directory = "📂",
     bash_exec = "⚡",
     bash_kill = "⊘",
@@ -87,7 +85,6 @@ local icon_sets = {
     plan = " ",
     locations = " ",
     diagnostics = " ",
-    history = " ",
     directory = " ",
     bash_exec = " ",
     bash_kill = " ",
@@ -117,7 +114,6 @@ local icon_sets = {
     plan = "[P]",
     locations = "[L]",
     diagnostics = "[DX]",
-    history = "[H]",
     directory = "[DIR]",
     bash_exec = "[!]",
     bash_kill = "[K]",

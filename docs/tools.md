@@ -94,13 +94,6 @@ These tools are available via direct `require` but not exported in
 - **paper** - Retrieve a specific research paper by its CORE ID
   (`require("sia.tools.extra.paper")`)
 
-### Advanced Capabilities
-
-- **history** - Access and search saved conversation history with search,
-  view, and table-of-contents modes (see
-  [Conversation History](concepts.md#conversation-history))
-- **plan** - Planning tool for task decomposition
-
 ## Adding Tools to Actions
 
 You can include any combination of core and extra tools in your custom actions:

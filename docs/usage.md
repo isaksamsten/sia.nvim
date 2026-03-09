@@ -133,8 +133,6 @@ Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending confirm.
 
 **Conversation Management:**
 
-- `SiaSave` - Save the current conversation to `.sia/history/` with automatic
-  table of contents generation
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
 - `SiaBranch <prompt>` - Create a new conversation branching from the current
   one. Copies the full conversation history and continues with the given prompt.
