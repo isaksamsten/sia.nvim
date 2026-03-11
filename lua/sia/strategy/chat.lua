@@ -305,19 +305,20 @@ function ChatStrategy:on_complete(control)
     end
 
     if not self.has_generated_name then
+      local fast_model =
+        require("sia.model").resolve(require("sia.config").options.settings.fast_model)
       local name_conv = require("sia.conversation").Conversation:new({
-        model = require("sia.config").options.settings.fast_model,
-        system = {
-          { role = "system", content = SUMMARIZE_PROMPT },
-        },
-        instructions = {
-          {
-            role = "user",
-            content = table.concat(
-              vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
-              "\n"
-            ),
-          },
+        model = fast_model,
+        temporary = true,
+      })
+      name_conv:add_instruction({
+        { role = "system", content = SUMMARIZE_PROMPT },
+        {
+          role = "user",
+          content = table.concat(
+            vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
+            "\n"
+          ),
         },
       })
       require("sia.assistant").fetch_response(name_conv, function(resp)

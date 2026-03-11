@@ -54,12 +54,15 @@ end
 --- @param opts { reason: string?, ratio: number?, on_complete: fun(content: string?)? }
 local compact_conversation = function(conversation, opts)
   opts = opts or {}
+  local model =
+    require("sia.model").resolve(require("sia.config").options.settings.fast_model)
   local new_conversation = require("sia.conversation").Conversation:new({
-    model = require("sia.config").options.settings.fast_model,
-    system = {
-      {
-        role = "system",
-        content = [[You are tasked with compacting a conversation by creating a
+    model = model,
+    temporary = true,
+  })
+  new_conversation:add_instruction({
+    role = "system",
+    content = [[You are tasked with compacting a conversation by creating a
 comprehensive summary that preserves all essential information for
 continuing the conversation.
 
@@ -89,10 +92,7 @@ and continue working on the project without losing important details.
 
 The summary will replace the conversation history, so ensure no critical
 information is lost.]],
-      },
-    },
-    instructions = {},
-  }, nil)
+  })
 
   local prepared = conversation:prepare_messages()
 
@@ -121,12 +121,12 @@ information is lost.]],
   end
 
   for _, m in ipairs(dropped_messages) do
-    new_conversation:add_instruction(normalize_for_summary(m), nil)
+    new_conversation:add_instruction(normalize_for_summary(m))
   end
 
   for i = 1, compact_count do
     local msg = non_system[i].message
-    new_conversation:add_instruction(normalize_for_summary(msg), nil)
+    new_conversation:add_instruction(normalize_for_summary(msg))
   end
 
   require("sia.assistant").fetch_response(new_conversation, function(content)

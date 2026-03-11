@@ -4,16 +4,19 @@ local icons = require("sia.ui").icons
 local Strategy = common.Strategy
 
 --- @class sia.HiddenStrategy : sia.Strategy
+--- @field buf number?
 --- @field conversation sia.Conversation
 --- @field private options sia.config.Hidden
 local HiddenStrategy = setmetatable({}, { __index = Strategy })
 HiddenStrategy.__index = HiddenStrategy
 
+--- @param buf number?
 --- @param conversation sia.Conversation
 --- @param options sia.config.Hidden
 --- @param cancellable sia.Cancellable?
-function HiddenStrategy:new(conversation, options, cancellable)
+function HiddenStrategy:new(buf, conversation, options, cancellable)
   local obj = setmetatable(Strategy:new(conversation, cancellable), self)
+  obj.buf = buf
   obj.options = options
   return obj
 end
@@ -29,7 +32,6 @@ function HiddenStrategy:on_request_start()
 end
 
 function HiddenStrategy:on_tools()
-  local notify = self.options.notify or default_notify
   return true
 end
 
@@ -41,13 +43,10 @@ function HiddenStrategy:on_content(input)
 end
 
 function HiddenStrategy:on_error()
-  local context = self.conversation.context
-  self.options.callback(context, nil)
+  self.options.callback(self.buf, nil)
 end
 
 function HiddenStrategy:on_complete(control)
-  local context = self.conversation.context
-
   local notify = self.options.notify or default_notify
   self:execute_tools({
     cancellable = self.cancellable,
@@ -82,13 +81,13 @@ function HiddenStrategy:on_complete(control)
 
       if opts.cancelled then
         control.finish()
-        self.options.callback(context, nil, control.usage)
+        self.options.callback(self.buf, nil, control.usage)
       else
         control.continue_execution()
       end
     end,
     handle_empty_toolset = function()
-      self.options.callback(context, control.content, control.usage)
+      self.options.callback(self.buf, control.content, control.usage)
       self.conversation:untrack_messages()
       vim.defer_fn(function()
         vim.cmd.echo()
@@ -99,14 +98,10 @@ function HiddenStrategy:on_complete(control)
 end
 
 function HiddenStrategy:on_cancel()
-  local context = self.conversation.context
-  if context then
-    self:del_abort_keymap(context.buf)
+  if self.buf then
+    self:del_abort_keymap(self.buf)
   end
-  self.options.callback(
-    self.conversation.context,
-    { "Operation was cancelled by user" }
-  )
+  self.options.callback(self.buf, { "Operation was cancelled by user" })
   vim.api.nvim_echo({ { "sia: cancelled", "DiagnosticWarn" } }, false, {})
 end
 

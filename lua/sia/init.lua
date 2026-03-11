@@ -508,6 +508,9 @@ end
 --- @param opts {context: sia.ActionContext, model: string?, named_prompt: boolean?}
 function M.execute_action(action, opts)
   local config = require("sia.config")
+  local Model = require("sia.model")
+  local Conversation = require("sia.conversation").Conversation
+  local Message = require("sia.conversation").Message
   local context = opts.context
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
@@ -526,22 +529,53 @@ function M.execute_action(action, opts)
         end
       end
     else
-      if opts.model then
-        action.model = opts.model
+      local model = Model.resolve(action.model or opts.model)
+      local conversation = Conversation:new({
+        model = model,
+        ignore_tool_confirm = false,
+        enable_supersede = true,
+        temporary = false,
+        tools = action.tools and action.tools(model),
+      })
+      for _, instruction in ipairs(action.system or {}) do
+        conversation:add_instruction(
+          instruction,
+          context,
+          { skip_capture_unless_needed = true }
+        )
       end
-      local conversation = require("sia.conversation").Conversation:new(action, context)
-      if conversation.mode == "diff" then
+      for _, instruction in ipairs(action.instructions or {}) do
+        conversation:add_instruction(
+          instruction,
+          context,
+          { skip_capture_unless_needed = true }
+        )
+      end
+
+      if action.mode == "diff" then
         local options =
           vim.tbl_deep_extend("force", config.options.settings.diff, action.diff or {})
-        strategy = require("sia.strategy").DiffStrategy:new(conversation, options)
-      elseif conversation.mode == "insert" then
+        strategy = require("sia.strategy").DiffStrategy:new(
+          context.buf,
+          context.win,
+          context.pos,
+          conversation,
+          options
+        )
+      elseif action.mode == "insert" then
         local options = vim.tbl_deep_extend(
           "force",
           config.options.settings.insert,
           action.insert or {}
         )
-        strategy = require("sia.strategy").InsertStrategy:new(conversation, options)
-      elseif conversation.mode == "hidden" then
+        strategy = require("sia.strategy").InsertStrategy:new(
+          context.buf,
+          context.pos,
+          context.cursor,
+          conversation,
+          options
+        )
+      elseif action.mode == "hidden" then
         local options = vim.tbl_deep_extend(
           "force",
           config.options.settings.hidden,
@@ -550,7 +584,8 @@ function M.execute_action(action, opts)
         if not options.callback then
           return
         end
-        strategy = require("sia.strategy").HiddenStrategy:new(conversation, options)
+        strategy =
+          require("sia.strategy").HiddenStrategy:new(context.buf, conversation, options)
       else
         local options =
           vim.tbl_deep_extend("force", config.options.settings.chat, action.chat or {})

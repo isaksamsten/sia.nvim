@@ -704,7 +704,7 @@ end
 --- @field winbar sia.config.Winbar?
 
 --- @class sia.config.Hidden
---- @field callback fun(ctx:sia.Context?, content:string[]?, usage:sia.Usage?)?
+--- @field callback fun(buf:number?, content:string[]?, usage:sia.Usage?)?
 --- @field notify fun(string)?
 
 --- @class sia.config.Instruction
@@ -1144,11 +1144,11 @@ M._raw_options = {
         mode = "chat",
         system = {
           "model_system",
+        },
+        instructions = {
           "system_info",
           "directory_structure",
           "agents_md",
-        },
-        instructions = {
           "visible_buffers",
           "current_context",
         },

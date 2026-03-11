@@ -60,10 +60,9 @@ T["strategy.chat"]["simple message"] = MiniTest.new_set({
 })
 T["strategy.chat"]["simple message"]["test correct output"] = function()
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
   local messages = strategy.conversation:get_messages()
@@ -77,11 +76,12 @@ end
 T["strategy.chat"]["simple message"]["test tracking context"] = function()
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_name(buf, "buffer " .. buf)
-  local conversation = Conversation:new({
-    instructions = {
-      { role = "user", kind = "context", content = "Here's the content of the file" },
-    },
-  }, { tick = tracker.ensure_tracked(buf), buf = buf, global = true })
+  local conversation =
+    Conversation:new({ model = require("sia.model").resolve("openai/test") })
+  conversation:add_instruction(
+    { role = "user", kind = "context", content = "Here's the content of the file" },
+    { tick = tracker.ensure_tracked(buf), buf = buf, global = true }
+  )
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
 
@@ -120,11 +120,11 @@ T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({
 })
 
 T["strategy.chat"]["is_busy flag management"]["is reset after successful completion"] = function()
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
   -- Should not be busy initially
@@ -137,11 +137,11 @@ T["strategy.chat"]["is_busy flag management"]["is reset after successful complet
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on init failure"] = function()
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
   vim.api.nvim_buf_delete(strategy.buf, { force = true })
@@ -152,11 +152,11 @@ T["strategy.chat"]["is_busy flag management"]["is reset on init failure"] = func
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = function()
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
   local buf = strategy.buf
 
@@ -185,11 +185,11 @@ T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = fu
     },
   })
 
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
   assistant.execute_strategy(strategy)
@@ -202,11 +202,11 @@ T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = fu
 end
 
 T["strategy.chat"]["is_busy flag management"]["prevents concurrent execution"] = function()
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
   -- Set busy flag manually
@@ -225,11 +225,11 @@ end
 T["strategy.chat"]["queued instructions"] = MiniTest.new_set()
 
 T["strategy.chat"]["queued instructions"]["are flushed between rounds"] = function()
+  local model = require("sia.model").resolve("openai/test")
   local conversation = Conversation:new({
-    instructions = {
-      { role = "system", content = "Ok" },
-    },
-  }, nil)
+    model = model,
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
   local strategy = ChatStrategy:new(conversation, { cmd = "split" })
 
   strategy:queue_instruction({ role = "user", content = "Queued follow-up" }, nil)

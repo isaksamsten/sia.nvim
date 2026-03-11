@@ -600,7 +600,7 @@ Apply them when the situation matches.
   },
   directory_structure = {
     {
-      role = "system",
+      role = "user",
       hide = true,
       description = "List the files in the current git repository.",
       content = function()
@@ -630,7 +630,7 @@ of the conversation. Use the glob tool to refresh your understanding.
   },
   agents_md = {
     {
-      role = "system",
+      role = "user",
       hide = true,
       description = "AGENTS.md",
       content = function()
@@ -662,7 +662,8 @@ read the latest version.
   }),
   insert_system = {
     role = "system",
-    content = [[You are in INSERT MODE. The filetype is {{filetype}}.
+    template = true,
+    content = [[You are in INSERT MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
@@ -696,7 +697,8 @@ Use tool calls if required to document the function or class.
   },
   diff_system = {
     role = "system",
-    content = [[You are in DIFF MODE. The filetype is {{filetype}}.
+    template = true,
+    content = [[You are in DIFF MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
@@ -730,7 +732,7 @@ Use tool calls if required to document the function or class.
   },
   system_info = {
     {
-      role = "system",
+      role = "user",
       hide = true,
       description = "System information",
       content = function()

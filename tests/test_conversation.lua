@@ -68,7 +68,7 @@ T["tool call filtering"]["under max limit should not filter"] = function()
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   for i = 1, 5 do
     conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"))
@@ -91,7 +91,7 @@ T["tool call filtering"]["exceeding max should filter to keep most recent"] = fu
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   local context = {
     clear_outdated_tool_input = function(tool)
@@ -127,7 +127,7 @@ T["tool call filtering"]["should permanently mark outdated tool calls"] = functi
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
   for i = 1, 5 do
     conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"))
     conv:add_instruction(create_tool_response_message("call_" .. i, "test_tool"))
@@ -154,7 +154,7 @@ T["tool call filtering"]["should respect excluded tools"] = function()
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   conv:add_instruction(create_tool_call_message("call_1", "regular_tool"))
   conv:add_instruction(create_tool_response_message("call_1", "test_tool"))
@@ -181,7 +181,7 @@ T["tool call filtering"]["should handle failed tool calls"] = function()
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   conv:add_instruction(create_tool_call_message("call_1", "test_tool"))
   conv:add_instruction(create_tool_response_message("call_1", "test_tool"))
@@ -213,7 +213,7 @@ T["tool call filtering"]["add and remove"] = function()
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   for i = 1, 5 do
     conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"))
@@ -243,7 +243,7 @@ T["tool call filtering"]["should only trigger when both conditions met"] = funct
     }
   end
 
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   for i = 1, 5 do
     conv:add_instruction(create_tool_call_message("call_" .. i, "test_tool"))
@@ -258,7 +258,7 @@ end
 T["empty assistant messages"] = MiniTest.new_set()
 
 T["empty assistant messages"]["should filter assistant with nil content and no tool_calls"] = function()
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   -- Simulate what happens during a tool-call-only response:
   -- The user asks something
@@ -273,9 +273,16 @@ T["empty assistant messages"]["should filter assistant with nil content and no t
 
   -- Then the tool execution adds the actual tool call + result pair
   conv:add_instruction({
-    { role = "assistant", tool_calls = {
-      { id = "call_1", type = "function", ["function"] = { name = "test", arguments = "{}" } },
-    } },
+    {
+      role = "assistant",
+      tool_calls = {
+        {
+          id = "call_1",
+          type = "function",
+          ["function"] = { name = "test", arguments = "{}" },
+        },
+      },
+    },
     {
       role = "tool",
       content = "result",
@@ -295,14 +302,18 @@ T["empty assistant messages"]["should filter assistant with nil content and no t
       -- Every assistant message should have either content or tool_calls
       local has_content = msg.content ~= nil
       local has_tool_calls = msg.tool_calls ~= nil and #msg.tool_calls > 0
-      eq(true, has_content or has_tool_calls, "assistant message has neither content nor tool_calls")
+      eq(
+        true,
+        has_content or has_tool_calls,
+        "assistant message has neither content nor tool_calls"
+      )
     end
   end
   eq(3, #messages)
 end
 
 T["empty assistant messages"]["should keep assistant with reasoning metadata"] = function()
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   conv:add_instruction({ role = "user", content = "Think about this" })
 
@@ -321,7 +332,7 @@ T["empty assistant messages"]["should keep assistant with reasoning metadata"] =
 end
 
 T["empty assistant messages"]["should keep assistant with reasoning"] = function()
-  local conv = Conversation:new({ instructions = {} }, nil)
+  local conv = Conversation:new({ temporary = true })
 
   conv:add_instruction({ role = "user", content = "Think about this" })
 

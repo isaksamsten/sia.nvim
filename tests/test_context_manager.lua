@@ -668,8 +668,9 @@ T["context_manager"]["compact does not include dropped messages in compact_ratio
     on_complete = function() end,
   })
 
-  -- All 4 dropped messages + 2 of the 4 active non-system = 6 instructions
-  expect.equality(#tracker.captured_instructions, 6)
+  -- All 4 dropped messages + 2 of the 4 active non-system = 6 instructions + System
+  -- prompt
+  expect.equality(#tracker.captured_instructions, 7)
 
   tracker.restore()
 end

@@ -128,31 +128,27 @@ Usage notes:
         local Conversation = require("sia.conversation").Conversation
         local new_conversation = Conversation:new({
           mode = "hidden",
-          model = agent_def.model or config.options.settings.fast_model,
-          system = {
-            {
-              role = "system",
-              content = agent_def.system_prompt,
-            },
-          },
-          instructions = {
-            { role = "user", content = args.task },
-          },
+          model = require("sia.model").resolve(
+            agent_def.model or config.options.settings.fast_model
+          ),
           ignore_tool_confirm = agent_def.require_confirmation == false,
-          tools = function()
-            return vim
-              .iter(agent_def.tools)
-              :filter(function(tool)
-                return tools[tool] ~= nil
-              end)
-              :map(function(tool)
-                return tools[tool]
-              end)
-              :totable()
-          end,
-        }, nil)
+          tools = vim
+            .iter(agent_def.tools)
+            :filter(function(tool)
+              return tools[tool] ~= nil
+            end)
+            :map(function(tool)
+              return tools[tool]
+            end)
+            :totable(),
+          temporary = true,
+        })
+        new_conversation:add_instruction({
+          role = "system",
+          content = agent_def.system_prompt,
+        }, { role = "user", content = args.task })
         new_conversation.name = conversation.name .. "-" .. agent.name
-        local strategy = HiddenStrategy:new(new_conversation, {
+        local strategy = HiddenStrategy:new(nil, new_conversation, {
           notify = function(msg)
             agent.progress = msg
           end,

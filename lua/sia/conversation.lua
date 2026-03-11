@@ -104,6 +104,7 @@ end
 --- @field turn_id string? identifier for the user turn that created this message
 --- @field role sia.config.Role
 --- @field context sia.Context?
+--- @field capture_context boolean
 --- @field template boolean
 --- @field hide boolean?
 --- @field kind string?
@@ -271,6 +272,8 @@ function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
   obj.role = instruction.role
   obj.kind = instruction.kind
+  obj.capture_context = type(instruction.content) == "function"
+    and debug.getinfo(instruction.content).nparams > 0
 
   obj.ephemeral = instruction.ephemeral
   obj.display_content = instruction.display_content
@@ -469,7 +472,6 @@ local CONVERSATION_ID = 1
 --- @field tools sia.config.Tool[]?
 --- @field name string
 --- @field model sia.Model
---- @field mode sia.config.ActionMode?
 --- @field todos  {buf: number?, items: sia.conversation.Todo[]}
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
@@ -491,14 +493,18 @@ function Conversation.add_pending_instruction(instruction, context)
   end
 end
 
---- @param action sia.config.Action
---- @param context sia.Context?
+--- @class sia.NewConversationArgs
+--- @field model sia.Model
+--- @field enable_supersede boolean?
+--- @field ignore_tool_confirm boolean?
+--- @field temporary boolean?
+--- @field tools sia.config.Tool[]?
+
+--- @param opts sia.NewConversationArgs
 --- @return sia.Conversation
-function Conversation:new(action, context)
+function Conversation:new(opts)
   local obj = setmetatable({}, self)
-  obj.context = context
-  obj.model = require("sia.model").resolve(action.model)
-  obj.mode = action.mode
+  obj.model = opts.model
   obj.name = ""
   obj.enable_supersede = true
   obj.id = CONVERSATION_ID
@@ -506,7 +512,7 @@ function Conversation:new(action, context)
   obj.uuid = make_uuid()
 
   obj.messages = {}
-  obj.ignore_tool_confirm = action.ignore_tool_confirm
+  obj.ignore_tool_confirm = opts.ignore_tool_confirm
   obj.auto_confirm_tools = {}
   obj.todos = {
     buf = nil,
@@ -517,30 +523,10 @@ function Conversation:new(action, context)
   obj.bash_processes = {}
   obj._prepared_messages = nil
 
-  for _, instruction in ipairs(action.system or {}) do
-    for _, message in ipairs(Message:new(instruction, context) or {}) do
-      table.insert(obj.messages, message)
-    end
-  end
-
-  for _, message in ipairs(Conversation.pending_messages) do
-    table.insert(obj.messages, message)
-  end
-  Conversation.pending_messages = {}
-
-  for _, instruction in ipairs(action.instructions or {}) do
-    obj:add_instruction(
-      instruction,
-      context,
-      { ignore_duplicates = true, mark_outdated = false }
-    )
-  end
-
   obj.tools = {}
   obj.tool_fn = {}
-  if action.tools then
-    local tools = action.tools(obj.model)
-    for _, tool in ipairs(tools) do
+  if opts.tools then
+    for _, tool in ipairs(opts.tools) do
       if
         tool ~= nil
         and obj.tool_fn[tool.name] == nil
@@ -585,9 +571,7 @@ function Conversation:deep_copy()
   obj.id = CONVERSATION_ID
   CONVERSATION_ID = CONVERSATION_ID + 1
 
-  obj.context = self.context and vim.deepcopy(self.context) or nil
   obj.model = self.model
-  obj.mode = self.mode
   obj.name = self.name
   obj.enable_supersede = self.enable_supersede
   obj.ignore_tool_confirm = self.ignore_tool_confirm
@@ -870,9 +854,11 @@ end
 --- Set mark_outdated = false to keep outdated messages
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
 --- @param context sia.Context?
---- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?, turn_id: string?}?
+--- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?, turn_id: string?, skip_capture_unless_needed: boolean?}?
 function Conversation:add_instruction(instruction, context, opts)
   opts = opts or {}
+  opts.skip_capture_unless_needed = opts.skip_capture_unless_needed == true
+
   -- We track per-kind updates to avoid two problems:
   -- 1) Self-supersession: a single instruction can expand into multiple messages of the same `kind`.
   --    If we ran `_update_overlapping_messages` for each message, the first inserted message could
@@ -882,6 +868,13 @@ function Conversation:add_instruction(instruction, context, opts)
   -- In short: run overlap updates at most once per message.kind for the current instruction batch.
   local done = {}
   for _, message in ipairs(Message:new(instruction, context) or {}) do
+    if
+      opts.skip_capture_unless_needed
+      and (message.capture_context == false or message.role == "system")
+    then
+      message.context = nil
+    end
+
     if
       message.kind
       and opts.ignore_duplicates ~= true
