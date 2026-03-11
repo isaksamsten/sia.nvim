@@ -166,6 +166,7 @@ end
 
 ---@class sia.NewToolOpts
 ---@field name string
+---@field module string?
 ---@field description string
 ---@field read_only boolean?
 ---@field is_available (fun(support: sia.config.Support?):boolean)?
@@ -406,6 +407,7 @@ M.new_tool = function(opts, execute)
   --- @type sia.config.Tool
   return {
     name = opts.name,
+    module = opts.module or ("sia.tools." .. opts.name),
     is_available = opts.is_available,
     message = opts.message,
     parameters = opts.parameters,

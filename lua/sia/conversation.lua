@@ -101,6 +101,7 @@ end
 --- @field end_line integer?
 
 --- @class sia.Message
+--- @field id string
 --- @field turn_id string? identifier for the user turn that created this message
 --- @field role sia.config.Role
 --- @field context sia.Context?
@@ -270,6 +271,7 @@ end
 --- @return sia.Message
 function Message:from_table(instruction, context)
   local obj = setmetatable({}, self)
+  obj.id = make_uuid()
   obj.role = instruction.role
   obj.kind = instruction.kind
   obj.capture_context = type(instruction.content) == "function"
@@ -479,6 +481,7 @@ local CONVERSATION_ID = 1
 --- @field usage_history sia.Usage[]
 --- @field agents table<integer, sia.conversation.Agent>
 --- @field bash_processes table<integer, sia.conversation.BashProcess>
+--- @field logger sia.history.HistoryLogger
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -510,6 +513,10 @@ function Conversation:new(opts)
   obj.id = CONVERSATION_ID
   CONVERSATION_ID = CONVERSATION_ID + 1
   obj.uuid = make_uuid()
+  obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
+  if obj.model then
+    obj.logger:created(obj.model)
+  end
 
   obj.messages = {}
   obj.ignore_tool_confirm = opts.ignore_tool_confirm
@@ -522,7 +529,6 @@ function Conversation:new(opts)
   obj.agents = {}
   obj.bash_processes = {}
   obj._prepared_messages = nil
-
   obj.tools = {}
   obj.tool_fn = {}
   if opts.tools then
@@ -540,6 +546,10 @@ function Conversation:new(opts)
         table.insert(obj.tools, tool)
       end
     end
+  end
+
+  if #obj.tools > 0 then
+    obj.logger:tools_registered(obj.tools)
   end
 
   return obj
@@ -627,6 +637,7 @@ function Conversation:set_message_status(message, status)
     and message.context.buf
     and message.context.tick
   then
+    self.logger:message_status_change(message)
     tracker.untrack(
       message.context.buf,
       { id = self.id, pos = message.context.pos, global = message.context.global }
@@ -713,6 +724,7 @@ function Conversation:destroy()
   end
 
   self.bash_processes = {}
+  self.logger:destroyed()
 end
 
 --- @param name string
@@ -891,6 +903,7 @@ function Conversation:add_instruction(instruction, context, opts)
     if opts.turn_id then
       message.turn_id = opts.turn_id
     end
+    self.logger:message_created(message)
   end
 
   if opts.mark_outdated ~= false then
@@ -965,6 +978,7 @@ end
 --- @param usage sia.Usage
 function Conversation:add_usage(usage)
   table.insert(self.usage_history, usage)
+  self.logger:usage_created(usage)
 end
 
 --- Get cumulative usage across all requests in this conversation

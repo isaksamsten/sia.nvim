@@ -201,7 +201,8 @@ function M.get_agents(error_report)
   end
 
   -- 2. Global agents fill in any gaps
-  local global_dir = get_default_agents_dir()
+  -- Use the exported function for the tests...
+  local global_dir = M._get_default_agents_dir()
   for name, agent in pairs(scan_agents_dir(global_dir, error_report)) do
     if enabled_set[name] and not agents[name] then
       agents[name] = agent

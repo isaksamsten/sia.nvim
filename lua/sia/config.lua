@@ -724,6 +724,7 @@ end
 --- @alias sia.config.ToolExecute fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult?), cancellable: sia.Cancellable?, turn_id: string?)
 --- @class sia.config.Tool
 --- @field name string
+--- @field module string?
 --- @field description string
 --- @field system_prompt string?
 --- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
@@ -783,6 +784,7 @@ end
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 --- @field ui sia.config.Settings.Ui?
 --- @field shell sia.config.Shell?
+--- @field history { enable: boolean? }?
 
 --- @class sia.config.Shell
 --- @field command string?
@@ -1050,6 +1052,7 @@ M._raw_options = {
     embedding_model = "openai/text-embedding-3-small",
     icons = "emoji",
     temperature = 0.3,
+    history = { enable = true },
     context = {
       max_tool = 200,
       keep = 20,

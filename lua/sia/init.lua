@@ -488,6 +488,9 @@ function M.setup(options)
   if config.options.settings.ui.diff.enable then
     require("sia.diff").setup()
   end
+  if config.options.settings.history.enable then
+    require("sia.history").setup()
+  end
 
   set_highlight_groups()
 
