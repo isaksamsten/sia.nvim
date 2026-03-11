@@ -109,6 +109,16 @@ local function get_default_agents_dir()
   return vim.fs.joinpath(config_dir, "sia", "agents")
 end
 
+--- Get the project-local agents directory (.sia/agents/) when available.
+--- @return string?
+local function get_project_agents_dir()
+  local project_root = vim.fs.root(0, ".sia")
+  if not project_root then
+    return nil
+  end
+  return vim.fs.joinpath(project_root, ".sia", "agents")
+end
+
 --- Recursively scan a directory for *.md agent files.
 --- Each file's name is its path relative to base_dir with .md stripped,
 --- e.g. base_dir/code/review.md → name "code/review".
@@ -181,9 +191,8 @@ function M.get_agents(error_report)
   local agents = {}
 
   -- 1. Local project agents take highest priority
-  local project_root = vim.fs.root(0, ".sia")
-  if project_root then
-    local local_dir = vim.fs.joinpath(project_root, ".sia", "agents")
+  local local_dir = get_project_agents_dir()
+  if local_dir then
     for name, agent in pairs(scan_agents_dir(local_dir, error_report)) do
       if enabled_set[name] then
         agents[name] = agent
@@ -192,7 +201,7 @@ function M.get_agents(error_report)
   end
 
   -- 2. Global agents fill in any gaps
-  local global_dir = M._get_default_agents_dir()
+  local global_dir = get_default_agents_dir()
   for name, agent in pairs(scan_agents_dir(global_dir, error_report)) do
     if enabled_set[name] and not agents[name] then
       agents[name] = agent
@@ -210,7 +219,6 @@ function M.get_agent(name)
   return M.get_agents()[name]
 end
 
--- Expose for testing
 M._parse_agent_file = parse_agent_file
 M._name_from_path = name_from_path
 M._get_default_agents_dir = get_default_agents_dir
