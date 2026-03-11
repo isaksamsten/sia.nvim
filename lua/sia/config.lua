@@ -745,7 +745,6 @@ end
 --- @field tools (fun(model: sia.Model):sia.config.Tool[])?
 --- @field ignore_tool_confirm boolean?
 --- @field model (string|{name: string})?
---- @field temperature number?
 --- @field input sia.config.ActionInput?
 --- @field mode sia.config.ActionMode?
 --- @field enabled (fun():boolean)|boolean?
@@ -1109,7 +1108,6 @@ M._raw_options = {
       insert = {
         mode = "insert",
         input = "require",
-        temperature = 0.2,
         system = { "insert_system" },
         instructions = {
           require("sia.instructions").current_buffer({
@@ -1125,7 +1123,6 @@ M._raw_options = {
       diff = {
         mode = "diff",
         input = "require",
-        temperature = 0.2,
         system = { "diff_system" },
         instructions = {
           require("sia.instructions").current_buffer({
@@ -1145,7 +1142,6 @@ M._raw_options = {
       --- @type sia.config.Action
       chat = {
         mode = "chat",
-        temperature = 0.1,
         system = {
           "model_system",
           "system_info",
@@ -1190,7 +1186,6 @@ M._raw_options = {
     --- @type sia.config.Action
     prose = {
       mode = "chat",
-      temperature = 0.3,
       system = {
         "prose_system",
         "system_info",

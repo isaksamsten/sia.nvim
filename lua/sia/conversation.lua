@@ -469,7 +469,6 @@ local CONVERSATION_ID = 1
 --- @field tools sia.config.Tool[]?
 --- @field name string
 --- @field model sia.Model
---- @field temperature number?
 --- @field mode sia.config.ActionMode?
 --- @field todos  {buf: number?, items: sia.conversation.Todo[]}
 --- @field ignore_tool_confirm boolean?
@@ -499,7 +498,6 @@ function Conversation:new(action, context)
   local obj = setmetatable({}, self)
   obj.context = context
   obj.model = require("sia.model").resolve(action.model)
-  obj.temperature = action.temperature
   obj.mode = action.mode
   obj.name = ""
   obj.enable_supersede = true
@@ -589,7 +587,6 @@ function Conversation:deep_copy()
 
   obj.context = self.context and vim.deepcopy(self.context) or nil
   obj.model = self.model
-  obj.temperature = self.temperature
   obj.mode = self.mode
   obj.name = self.name
   obj.enable_supersede = self.enable_supersede
