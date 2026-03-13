@@ -26,8 +26,10 @@ in the background without interrupting your workflow. This allows you to:
    󱇥 [conversation-name] Execute bash command 'git status'
    ```
 
-   Related requests are grouped by conversation and tool name, so parallel `view`
-   or `bash` calls collapse into a single summary instead of spamming the strip.
+Related requests are grouped by conversation and tool name, so parallel `view`
+or `bash` calls collapse into a single summary instead of spamming the strip.
+In the expanded view, those tool groups are nested under conversation headers so
+it is easier to scan mixed agent and chat approvals.
    The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or
    `SiaApproveWarn` highlight groups depending on the highest risk level in the
    visible group summary (all linked to `StatusLine` by default).
@@ -42,8 +44,8 @@ in the background without interrupting your workflow. This allows you to:
 `accept()` and `decline()` operate on whole input groups when possible, while
 `prompt()` and `preview()` let you drill into individual requests. The
 `expand()` view keeps the same top-of-screen placement as the default notifier,
-but grows downward into a focusable strip with horizontally packed groups,
-selected-item details, and built-in actions.
+but grows downward into a focusable strip with conversation headers,
+horizontally packed tool groups, selected-item details, and built-in actions.
 
 Inside the expanded view:
 
@@ -52,6 +54,7 @@ Inside the expanded view:
 - `a` / `d` - Accept or decline the selected item
 - `A` / `D` - Accept or decline the whole selected group
 - `p` / `v` - Open the normal prompt or preview for the selected item
+- `g?` - Show a cursor-relative help popup with the available mappings
 - `q` - Close the expanded view
 
 **Customizing Notifications:**

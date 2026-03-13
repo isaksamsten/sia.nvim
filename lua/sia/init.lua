@@ -2,7 +2,8 @@ local M = {}
 
 local highlight_groups = {
   SiaConfirm = { link = "NormalFloat" },
-  SiaConfirmSelected = { link = "NormalFloat" },
+  SiaConfirmItem = { link = "NonText" },
+  SiaConfirmSelectedItem = { link = "Normal" },
   SiaInsert = { link = "DiffAdd" },
   SiaInsertPostProcess = { link = "DiffChange" },
   SiaReplace = { link = "DiffChange" },

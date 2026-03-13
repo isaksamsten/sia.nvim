@@ -9,11 +9,27 @@ local RISK_ORDER = {
 local next_confirm_id = 0
 local detail_win = nil
 local detail_buf = nil
+local detail_help_win = nil
+local detail_help_buf = nil
 local detail_resize_autocmd = nil
+local detail_help_autocmd = nil
 local detail_ns = vim.api.nvim_create_namespace("sia_confirm_detail")
 local detail_selection = {
   group = 1,
   item = 1,
+}
+
+local DETAIL_HELP_LINES = {
+  "Confirm mappings",
+  "",
+  "h/l   move between groups",
+  "j/k   move between items",
+  "a/d   accept or decline item",
+  "A/D   accept or decline group",
+  "p     open prompt",
+  "v     preview item",
+  "<CR>  open prompt",
+  "q     close approvals",
 }
 
 --- @param level sia.RiskLevel
@@ -75,6 +91,11 @@ end
 --- @field level sia.RiskLevel
 --- @field batchable boolean
 --- @field items sia.PendingConfirmItem[]
+
+--- @class sia.PendingConfirmSection
+--- @field conversation sia.Conversation
+--- @field groups sia.PendingConfirmGroup[]
+--- @field grouped table<string, sia.PendingConfirmGroup>
 
 --- Global state for managing pending confirmations
 --- @class sia.PendingConfirm
@@ -206,14 +227,28 @@ local function group_key(confirm)
   )
 end
 
---- @return sia.PendingConfirmGroup[]
-local function get_groups()
-  local grouped = {}
-  local ordered = {}
+--- @return sia.PendingConfirmSection[]
+local function get_sections()
+  --- @type table<string, sia.PendingConfirmSection>
+  local sections = {}
+  --- @type sia.PendingConfirmSection[]
+  local ordered_sections = {}
 
   for _, confirm in ipairs(pending_confirms) do
+    local conversation_key = tostring(confirm.conversation.id)
+    local section = sections[conversation_key]
+    if not section then
+      section = {
+        conversation = confirm.conversation,
+        groups = {},
+        grouped = {},
+      }
+      sections[conversation_key] = section
+      table.insert(ordered_sections, section)
+    end
+
     local key = group_key(confirm)
-    local group = grouped[key]
+    local group = section.grouped[key]
     if not group then
       group = {
         key = key,
@@ -224,8 +259,8 @@ local function get_groups()
         batchable = confirm.kind == "input",
         items = {},
       }
-      grouped[key] = group
-      table.insert(ordered, group)
+      section.grouped[key] = group
+      table.insert(section.groups, group)
     else
       group.level = max_level(group.level, confirm.level)
       group.batchable = group.batchable and confirm.kind == "input"
@@ -236,6 +271,19 @@ local function get_groups()
       prompt = confirm.prompt,
       level = confirm.level,
     })
+  end
+
+  return ordered_sections
+end
+
+--- @return sia.PendingConfirmGroup[]
+local function get_groups()
+  local ordered_sections = get_sections()
+  local ordered = {}
+  for _, section in ipairs(ordered_sections) do
+    for _, group in ipairs(section.groups) do
+      table.insert(ordered, group)
+    end
   end
 
   return ordered
@@ -292,6 +340,8 @@ local select_item
 local apply_group_choice
 local apply_selected_item_choice
 local warn_group_action
+local close_detail_help
+local show_detail_help
 
 --- @param id integer
 --- @return integer?
@@ -356,8 +406,83 @@ local function ensure_detail_buffer()
   vim.keymap.set("n", "D", function()
     apply_group_choice("decline")
   end, { buffer = detail_buf, silent = true, desc = "Decline group" })
+  vim.keymap.set("n", "g?", function()
+    show_detail_help()
+  end, { buffer = detail_buf, silent = true, desc = "Show approval mappings" })
 
   return detail_buf
+end
+
+local function ensure_detail_help_buffer()
+  if detail_help_buf and vim.api.nvim_buf_is_valid(detail_help_buf) then
+    return detail_help_buf
+  end
+
+  detail_help_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(detail_help_buf, 0, -1, false, DETAIL_HELP_LINES)
+  vim.bo[detail_help_buf].buftype = "nofile"
+  vim.bo[detail_help_buf].bufhidden = "wipe"
+  vim.bo[detail_help_buf].swapfile = false
+  vim.bo[detail_help_buf].readonly = true
+  vim.bo[detail_help_buf].buflisted = false
+  vim.bo[detail_help_buf].filetype = "sia-confirm-help"
+  vim.bo[detail_help_buf].modifiable = false
+  return detail_help_buf
+end
+
+close_detail_help = function()
+  if detail_help_win and vim.api.nvim_win_is_valid(detail_help_win) then
+    vim.api.nvim_win_close(detail_help_win, true)
+  end
+  detail_help_win = nil
+
+  if detail_help_autocmd then
+    pcall(vim.api.nvim_del_autocmd, detail_help_autocmd)
+    detail_help_autocmd = nil
+  end
+end
+
+show_detail_help = function()
+  if not detail_win or not vim.api.nvim_win_is_valid(detail_win) then
+    return
+  end
+
+  if detail_help_win and vim.api.nvim_win_is_valid(detail_help_win) then
+    close_detail_help()
+    return
+  end
+
+  local buf = ensure_detail_help_buffer()
+  local width = 0
+  for _, line in ipairs(DETAIL_HELP_LINES) do
+    width = math.max(width, #line)
+  end
+
+  detail_help_win = vim.api.nvim_open_win(buf, false, {
+    relative = "cursor",
+    width = width,
+    height = #DETAIL_HELP_LINES,
+    row = 1,
+    col = 2,
+    style = "minimal",
+    border = "rounded",
+    focusable = false,
+    noautocmd = true,
+    zindex = 52,
+  })
+  vim.wo[detail_help_win].winhighlight = "NormalFloat:SiaConfirm,FloatBorder:SiaConfirm"
+
+  detail_help_autocmd = vim.api.nvim_create_autocmd({
+    "CursorMoved",
+    "BufLeave",
+    "WinLeave",
+  }, {
+    buffer = detail_buf,
+    once = true,
+    callback = function()
+      close_detail_help()
+    end,
+  })
 end
 
 --- @return sia.PendingConfirmGroup[]
@@ -489,42 +614,121 @@ select_item = function(delta)
 end
 
 --- @param width integer
---- @param groups sia.PendingConfirmGroup[]
+--- @param sections sia.PendingConfirmSection[]
 --- @return string[], table[]
-local function build_group_lines(width, groups)
-  local lines = { "" }
+local function build_group_lines(width, sections)
+  local lines = {}
   local spans = {}
-  local line = 1
-  local col = 0
+  local section_gap = 3
+  local group_index = 0
+  local blocks = {}
 
-  for idx, group in ipairs(groups) do
-    local token
-    if idx == detail_selection.group then
-      token = string.format("[%s:%s]", group.conversation.name, group_heading(group))
-    else
-      token = string.format("[%s:%s]", group.conversation.name, group_heading(group))
+  for _, section in ipairs(sections) do
+    local header = string.format("[%s]", section.conversation.name)
+    local token_lines = { "" }
+    local header_span = {
+      line = 1,
+      start_col = 0,
+      end_col = #header,
+      highlight = "SiaConfirmItem",
+    }
+    local block_spans = {}
+    local line = 1
+    local col = 0
+
+    for _, group in ipairs(section.groups) do
+      group_index = group_index + 1
+      local token = string.format("[%s]", group_heading(group))
+      local token_len = #token
+      local separator = col == 0 and "" or " "
+      local max_token_width = math.max(width - #header - section_gap, 20)
+
+      if col > 0 and col + 1 + token_len > max_token_width then
+        table.insert(token_lines, "")
+        line = #token_lines
+        col = 0
+        separator = ""
+      end
+
+      local start_col = col + #separator
+      token_lines[line] = token_lines[line] .. separator .. token
+      table.insert(block_spans, {
+        group = group_index,
+        line = line + 1,
+        start_col = start_col,
+        end_col = start_col + token_len,
+        highlight = group_index == detail_selection.group and get_highlight(
+          group.level
+        ) or "SiaConfirmItem",
+      })
+      if detail_selection.group == group_index then
+        header_span.highlight = "SiaConfirmSelectedItem"
+      end
+      col = start_col + token_len
     end
 
-    local token_len = #token
-    local separator = col == 0 and "" or " "
-    if col > 0 and col + 1 + token_len > width then
-      table.insert(lines, "")
-      line = line + 1
-      col = 0
-      separator = ""
+    local block_width = #header
+    for _, token_line in ipairs(token_lines) do
+      block_width = math.max(block_width, #token_line)
     end
-
-    local start_col = col + #separator
-    lines[line] = lines[line] .. separator .. token
-    table.insert(spans, {
-      group = idx,
-      line = line,
-      start_col = start_col,
-      end_col = start_col + token_len,
-      highlight = idx == detail_selection.group and "SiaConfirmSelected"
-        or get_highlight(group.level),
+    table.insert(block_spans, header_span)
+    table.insert(blocks, {
+      width = block_width,
+      header = header,
+      token_lines = token_lines,
+      spans = block_spans,
     })
-    col = start_col + token_len
+  end
+
+  local row_height = 0
+  local row_col = 0
+  local row_start = 1
+  for idx, block in ipairs(blocks) do
+    local total_width = row_col == 0 and block.width
+      or row_col + section_gap + block.width
+    if row_col > 0 and total_width > width then
+      row_height = math.max(row_height, 2)
+      for _ = 1, row_height do
+        table.insert(lines, "")
+      end
+      row_start = #lines + 1
+      row_col = 0
+      row_height = 0
+    end
+
+    local block_col = row_col == 0 and 0 or row_col + section_gap
+    local block_height = #block.token_lines + 1
+    row_height = math.max(row_height, block_height)
+
+    for offset = 0, block_height - 1 do
+      local line_idx = row_start + offset
+      lines[line_idx] = lines[line_idx] or ""
+      local target_col = block_col
+      if #lines[line_idx] < target_col then
+        lines[line_idx] = lines[line_idx]
+          .. string.rep(" ", target_col - #lines[line_idx])
+      end
+
+      local text = offset == 0 and block.header or block.token_lines[offset]
+      lines[line_idx] = lines[line_idx] .. text
+    end
+
+    for _, span in ipairs(block.spans) do
+      table.insert(spans, {
+        group = span.group,
+        line = row_start + span.line - 1,
+        start_col = block_col + span.start_col,
+        end_col = block_col + span.end_col,
+        highlight = span.highlight,
+      })
+    end
+
+    row_col = block_col + block.width
+    if idx == #blocks then
+      for _ = #lines + 1, row_start + row_height - 1 do
+        table.insert(lines, "")
+      end
+    end
   end
 
   return lines, spans
@@ -533,12 +737,13 @@ end
 --- @return string[], table[], sia.RiskLevel, [integer,integer]
 local function build_detail_lines()
   local groups = get_selected_groups()
+  local sections = get_sections()
   local selected_group = groups[detail_selection.group]
   local level = pending_level() or "info"
 
   local lines = {}
   local group_lines, group_highlights =
-    build_group_lines(math.max(vim.o.columns - 2, 20), groups)
+    build_group_lines(math.max(vim.o.columns - 2, 20), sections)
   for _, line in ipairs(group_lines) do
     table.insert(lines, line)
   end
@@ -557,32 +762,23 @@ local function build_detail_lines()
     local prefix = idx == detail_selection.item and ">" or " "
     local line = string.format("%s %d. %s", prefix, idx, item.prompt)
     table.insert(lines, line)
+    table.insert(highlights, {
+      line = #lines,
+      start_col = 0,
+      end_col = #line,
+      highlight = idx == detail_selection.item and get_highlight(item.level)
+        or "SiaConfirmItem",
+    })
     if idx == detail_selection.item then
-      table.insert(highlights, {
-        line = #lines,
-        start_col = 0,
-        end_col = #line,
-        highlight = "CursorLine",
-      })
       cursor = { #lines, 0 }
     end
   end
-  local help = "h/l group  j/k item  a/d item  A/D group  p prompt  v preview  q close"
-  if not selected_group.batchable and #selected_group.items > 1 then
-    help = "h/l group  j/k item  a/d item  p prompt  v preview  q close"
-  end
-  table.insert(lines, help)
-  table.insert(highlights, {
-    line = #lines,
-    start_col = 0,
-    end_col = #lines[#lines],
-    highlight = "NonText",
-  })
-
   return lines, highlights, level, cursor
 end
 
 clear_detail_window = function()
+  close_detail_help()
+
   if detail_win and vim.api.nvim_win_is_valid(detail_win) then
     vim.api.nvim_win_close(detail_win, true)
   end
@@ -600,6 +796,8 @@ refresh_detail_window = function()
   if not detail_win or not vim.api.nvim_win_is_valid(detail_win) then
     return
   end
+
+  close_detail_help()
 
   if #pending_confirms == 0 then
     clear_detail_window()
