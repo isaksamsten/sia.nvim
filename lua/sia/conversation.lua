@@ -269,8 +269,8 @@ end
 --- @param instruction sia.config.Instruction
 --- @param context sia.Context?
 --- @return sia.Message
-function Message:from_table(instruction, context)
-  local obj = setmetatable({}, self)
+function Message.from_table(instruction, context)
+  local obj = setmetatable({}, Message)
   obj.id = make_uuid()
   obj.role = instruction.role
   obj.kind = instruction.kind
@@ -306,7 +306,7 @@ end
 --- @param str string|string[]
 --- @param context sia.Context?
 --- @return sia.Message[]?
-function Message:from_string(str, context)
+function Message.from_string(str, context)
   if type(str) == "string" then
     local instruction = require("sia.config").options.instructions[str]
     if not instruction then
@@ -316,11 +316,11 @@ function Message:from_string(str, context)
       if vim.islist(instruction) then
         local messages = {}
         for _, step in ipairs(instruction) do
-          table.insert(messages, Message:from_table(step, context))
+          table.insert(messages, Message.from_table(step, context))
         end
         return messages
       end
-      return { Message:from_table(instruction, context) }
+      return { Message.from_table(instruction, context) }
     end
   end
 end
@@ -329,17 +329,17 @@ end
 --- @param instruction sia.config.Instruction|string|sia.config.Instruction[]
 --- @param context sia.Context?
 --- @return sia.Message[]?
-function Message:new(instruction, context)
+function Message.new(instruction, context)
   if type(instruction) == "string" then
-    return Message:from_string(instruction, context)
+    return Message.from_string(instruction, context)
   elseif vim.islist(instruction) then
     local messages = {}
     for _, step in ipairs(instruction) do
-      table.insert(messages, Message:from_table(step, context))
+      table.insert(messages, Message.from_table(step, context))
     end
     return messages
   else
-    return { Message:from_table(instruction, context) }
+    return { Message.from_table(instruction, context) }
   end
 end
 
@@ -491,7 +491,7 @@ Conversation.pending_messages = {}
 --- @param args sia.Context?
 --- @return boolean
 function Conversation.add_pending_instruction(instruction, context)
-  for _, message in ipairs(Message:new(instruction, context) or {}) do
+  for _, message in ipairs(Message.new(instruction, context) or {}) do
     table.insert(Conversation.pending_messages, message)
   end
 end
@@ -505,8 +505,8 @@ end
 
 --- @param opts sia.NewConversationArgs
 --- @return sia.Conversation
-function Conversation:new(opts)
-  local obj = setmetatable({}, self)
+function Conversation.new(opts)
+  local obj = setmetatable({}, Conversation)
   obj.model = opts.model
   obj.name = ""
   obj.enable_supersede = true
@@ -879,7 +879,7 @@ function Conversation:add_instruction(instruction, context, opts)
   --    an instruction yields many messages.
   -- In short: run overlap updates at most once per message.kind for the current instruction batch.
   local done = {}
-  for _, message in ipairs(Message:new(instruction, context) or {}) do
+  for _, message in ipairs(Message.new(instruction, context) or {}) do
     if
       opts.skip_capture_unless_needed
       and (message.capture_context == false or message.role == "system")
@@ -1101,3 +1101,7 @@ function Conversation:prepare_messages()
 end
 
 return { Message = Message, Conversation = Conversation, make_uuid = make_uuid }
+return {
+  new_conversation = Conversation.new,
+  fork_conversation = fork_conversation,
+}

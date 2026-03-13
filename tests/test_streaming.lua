@@ -8,13 +8,13 @@ local eq = MiniTest.expect.equality
 -- Minimal conversation stub
 local Conversation = {}
 Conversation.__index = Conversation
-function Conversation:new()
+function Conversation.new()
   local Model = require("sia.model")
   return setmetatable({
     _messages = { { role = "user", content = "hi", meta = {} } },
     model = Model.resolve("openai/gpt-4.1"),
     tool_fn = {},
-  }, self)
+  }, Conversation)
 end
 function Conversation:get_messages()
   return self._messages
@@ -36,9 +36,9 @@ end
 local TestStrategy = setmetatable({}, { __index = common.Strategy })
 TestStrategy.__index = TestStrategy
 
-function TestStrategy:new()
-  local obj = common.Strategy:new(Conversation:new())
-  setmetatable(obj, self)
+function TestStrategy.new()
+  local obj = common.Strategy.new(Conversation.new())
+  setmetatable(obj, TestStrategy)
   obj.cancellable = { is_cancelled = false }
   obj.reasoning = {}
   obj.contents = {}
@@ -123,7 +123,7 @@ T["assistant.streaming"] = MiniTest.new_set({
 })
 
 T["assistant.streaming"]["multi field delta processes all fields"] = function()
-  local strategy = TestStrategy:new()
+  local strategy = TestStrategy.new()
   assistant.execute_strategy(strategy)
 
   eq(true, strategy.completed)
@@ -177,7 +177,7 @@ T["assistant.streaming"]["handles partial data across stdout calls"] =
   })
 
 T["assistant.streaming"]["handles partial data across stdout calls"]["reconstructs split content"] = function()
-  local strategy = TestStrategy:new()
+  local strategy = TestStrategy.new()
   assistant.execute_strategy(strategy)
 
   eq(true, strategy.completed)
@@ -218,7 +218,7 @@ T["assistant.streaming"]["handles multiple events in single stdout call"] =
   })
 
 T["assistant.streaming"]["handles multiple events in single stdout call"]["processes all events"] = function()
-  local strategy = TestStrategy:new()
+  local strategy = TestStrategy.new()
   assistant.execute_strategy(strategy)
 
   eq(true, strategy.completed)
@@ -261,7 +261,7 @@ T["assistant.streaming"]["handles SSE event lines"] = MiniTest.new_set({
 })
 
 T["assistant.streaming"]["handles SSE event lines"]["ignores event lines and processes data"] = function()
-  local strategy = TestStrategy:new()
+  local strategy = TestStrategy.new()
   assistant.execute_strategy(strategy)
 
   eq(true, strategy.completed)

@@ -21,8 +21,8 @@ InsertStrategy.__index = InsertStrategy
 --- @param pos [integer, integer]
 --- @param conversation sia.Conversation
 --- @param options sia.config.Insert
-function InsertStrategy:new(buf, pos, cursor, conversation, options)
-  local obj = setmetatable(Strategy:new(conversation), self)
+function InsertStrategy.new(buf, pos, cursor, conversation, options)
+  local obj = setmetatable(Strategy.new(conversation), InsertStrategy)
   obj.conversation.enable_supersede = false
   obj.buf = buf
   obj.pos = pos

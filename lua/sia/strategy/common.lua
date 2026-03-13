@@ -146,8 +146,8 @@ Strategy.__index = Strategy
 --- @param conversation sia.Conversation
 --- @param cancellable sia.Cancellable?
 --- @return sia.Strategy
-function Strategy:new(conversation, cancellable)
-  local obj = setmetatable({}, self)
+function Strategy.new(conversation, cancellable)
+  local obj = setmetatable({}, Strategy)
   obj.conversation = conversation
   obj.pending_tools = {}
   obj.modified = {}

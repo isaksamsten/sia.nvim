@@ -387,17 +387,17 @@ T["context_manager"]["estimate_tokens decreases after dropping"] = function()
   expect.equality(before - after > 1000, true)
 end
 
---- Helper to mock sia.assistant.fetch_response and sia.conversation.Conversation:new
+--- Helper to mock sia.assistant.fetch_response and sia.conversation.Conversation.new
 --- for testing compact_conversation end-to-end.
 --- @param summary_response string the summary text the mock summarizer returns
 --- @return { captured_instructions: table[] } tracker to inspect what was sent to summarizer
 local function mock_compaction(summary_response)
   local tracker = { captured_instructions = {} }
 
-  -- Mock Conversation:new to return a lightweight object that captures instructions
+  -- Mock Conversation.new to return a lightweight object that captures instructions
   local real_conv = require("sia.conversation")
-  tracker._real_new = real_conv.Conversation.new
-  real_conv.Conversation.new = function(_, _, _)
+  tracker._real_new = real_conv.new_conversation
+  real_conv.new_conversation = function(_, _)
     return {
       add_instruction = function(_, instruction)
         table.insert(tracker.captured_instructions, instruction)
@@ -425,7 +425,7 @@ local function mock_compaction(summary_response)
   }
 
   tracker.restore = function()
-    real_conv.Conversation.new = tracker._real_new
+    real_conv.new_conversation = tracker._real_new
     assistant.fetch_response = tracker._real_fetch
     config.options.settings.context_management = tracker._old_context_management
   end

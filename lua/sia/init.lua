@@ -187,7 +187,7 @@ M.ui = {
 
   --- Show contexts in quickfix list
   contexts = function()
-    local chat = require("sia.strategy").ChatStrategy.by_buf()
+    local chat = require("sia.strategy").get_chat()
     if not chat then
       return
     end
@@ -215,7 +215,7 @@ M.ui = {
   --- @param opts table?
   messages = function(opts)
     opts = opts or {}
-    local chat = require("sia.strategy").ChatStrategy.by_buf()
+    local chat = require("sia.strategy").get_chat()
     if chat then
       local messages = chat.conversation:get_messages()
       if #messages == 0 then
@@ -313,8 +313,8 @@ M.chat = {
 
   reply = function()
     local buf = vim.api.nvim_get_current_buf()
-    local current = require("sia.strategy").ChatStrategy.by_buf(buf)
-    if current then
+    local chat = require("sia.strategy").get_chat()
+    if chat then
       vim.cmd("new")
       buf = vim.api.nvim_get_current_buf()
       local win = vim.api.nvim_get_current_win()
@@ -322,7 +322,7 @@ M.chat = {
       vim.bo[buf].bufhidden = "hide"
       vim.bo[buf].swapfile = false
       vim.bo[buf].ft = "markdown"
-      vim.api.nvim_buf_set_name(buf, "*sia reply*" .. current.conversation.name)
+      vim.api.nvim_buf_set_name(buf, "*sia reply*" .. chat.conversation.name)
       vim.api.nvim_win_set_height(win, 10)
 
       vim.keymap.set("n", "<CR>", function()
@@ -332,8 +332,8 @@ M.chat = {
           role = "user",
           content = lines,
         }
-        current.conversation:add_instruction(instruction, nil)
-        require("sia.assistant").execute_strategy(current)
+        chat.conversation:add_instruction(instruction, nil)
+        require("sia.assistant").execute_strategy(chat)
         vim.api.nvim_buf_delete(buf, { force = true })
       end, { buffer = buf })
       vim.keymap.set("n", "q", function()
@@ -512,15 +512,13 @@ end
 function M.execute_action(action, opts)
   local config = require("sia.config")
   local Model = require("sia.model")
-  local Conversation = require("sia.conversation").Conversation
-  local Message = require("sia.conversation").Message
+  local new_conversation = require("sia.conversation").new_conversation
   local context = opts.context
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
     local should_execute = true
     if not opts.named_prompt and (vim.bo[context.buf].filetype == "sia") then
-      strategy = require("sia.strategy").ChatStrategy.by_buf(context.buf)
-
+      strategy = require("sia.strategy").get_chat(context.buf)
       if strategy then
         local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
 
@@ -533,7 +531,7 @@ function M.execute_action(action, opts)
       end
     else
       local model = Model.resolve(action.model or opts.model)
-      local conversation = Conversation:new({
+      local conversation = new_conversation({
         model = model,
         ignore_tool_confirm = false,
         enable_supersede = true,
@@ -558,7 +556,7 @@ function M.execute_action(action, opts)
       if action.mode == "diff" then
         local options =
           vim.tbl_deep_extend("force", config.options.settings.diff, action.diff or {})
-        strategy = require("sia.strategy").DiffStrategy:new(
+        strategy = require("sia.strategy").new_diff(
           context.buf,
           context.win,
           context.pos,
@@ -571,7 +569,7 @@ function M.execute_action(action, opts)
           config.options.settings.insert,
           action.insert or {}
         )
-        strategy = require("sia.strategy").InsertStrategy:new(
+        strategy = require("sia.strategy").new_insert(
           context.buf,
           context.pos,
           context.cursor,
@@ -588,11 +586,11 @@ function M.execute_action(action, opts)
           return
         end
         strategy =
-          require("sia.strategy").HiddenStrategy:new(context.buf, conversation, options)
+          require("sia.strategy").new_hidden(context.buf, conversation, options)
       else
         local options =
           vim.tbl_deep_extend("force", config.options.settings.chat, action.chat or {})
-        strategy = require("sia.strategy").ChatStrategy:new(conversation, options)
+        strategy = require("sia.strategy").new_chat(conversation, options)
       end
     end
 

@@ -14,8 +14,8 @@ HiddenStrategy.__index = HiddenStrategy
 --- @param conversation sia.Conversation
 --- @param options sia.config.Hidden
 --- @param cancellable sia.Cancellable?
-function HiddenStrategy:new(buf, conversation, options, cancellable)
-  local obj = setmetatable(Strategy:new(conversation, cancellable), self)
+function HiddenStrategy.new(buf, conversation, options, cancellable)
+  local obj = setmetatable(Strategy.new(conversation, cancellable), HiddenStrategy)
   obj.buf = buf
   obj.options = options
   return obj

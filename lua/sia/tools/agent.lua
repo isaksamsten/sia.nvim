@@ -125,8 +125,8 @@ Usage notes:
         local tools = require("sia.tools")
 
         local HiddenStrategy = require("sia.strategy").HiddenStrategy
-        local Conversation = require("sia.conversation").Conversation
-        local new_conversation = Conversation:new({
+        local Conversation = require("sia.conversation")
+        local new_conversation = Conversation.new_conversation({
           mode = "hidden",
           model = require("sia.model").resolve(
             agent_def.model or config.options.settings.fast_model
@@ -148,7 +148,7 @@ Usage notes:
           content = agent_def.system_prompt,
         }, { role = "user", content = args.task })
         new_conversation.name = conversation.name .. "-" .. agent.name
-        local strategy = HiddenStrategy:new(nil, new_conversation, {
+        local strategy = HiddenStrategy.new(nil, new_conversation, {
           notify = function(msg)
             agent.progress = msg
           end,

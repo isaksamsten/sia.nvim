@@ -220,7 +220,7 @@ end
 function M.toggle(action)
   action = action or "toggle"
 
-  local chat = require("sia.strategy").ChatStrategy.by_buf()
+  local chat = require("sia.strategy").get_chat()
   if not chat then
     return
   end

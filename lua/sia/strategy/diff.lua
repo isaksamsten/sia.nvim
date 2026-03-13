@@ -22,8 +22,8 @@ DiffStrategy.__index = DiffStrategy
 --- @param pos [integer,integer]
 --- @param conversation sia.Conversation
 --- @param options sia.config.Diff
-function DiffStrategy:new(buf, win, pos, conversation, options)
-  local obj = setmetatable(Strategy:new(conversation), self)
+function DiffStrategy.new(buf, win, pos, conversation, options)
+  local obj = setmetatable(Strategy.new(conversation), DiffStrategy)
   vim.cmd(options.cmd)
   obj.target_win = vim.api.nvim_get_current_win()
   obj.target_buf = vim.api.nvim_get_current_buf()

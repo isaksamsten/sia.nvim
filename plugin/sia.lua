@@ -145,8 +145,7 @@ end, {
 })
 
 vim.api.nvim_create_user_command("SiaDebug", function()
-  local ChatStrategy = require("sia.strategy").ChatStrategy
-  local chat = ChatStrategy.by_buf()
+  local chat = require("sia.strategy").get_chat()
   if not chat or not chat.conversation or not chat.conversation.prepare_messages then
     vim.notify("sia: no active chat in this buffer", vim.log.levels.WARN)
     return
@@ -339,19 +338,7 @@ vim.api.nvim_create_user_command("SiaRollback", function(args)
 end, {
   nargs = "?",
   complete = function(arg_lead)
-    local ChatStrategy = require("sia.strategy").ChatStrategy
-    local chat = ChatStrategy.by_buf()
-    if not chat then
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(win)
-        local c = ChatStrategy.by_buf(buf)
-        if c then
-          chat = c
-          break
-        end
-      end
-    end
-
+    local chat = require("sia.strategy").get_chat()
     if not chat or not chat.conversation then
       return {}
     end
@@ -510,6 +497,8 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
     end
   end
 
+vim.api.nvim_create_user_command("SiaShell", function(args)
+  local chat = require("sia.strategy").get_chat()
   if not chat or not chat.conversation then
     vim.notify("sia: no active chat found", vim.log.levels.ERROR)
     return

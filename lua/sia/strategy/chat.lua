@@ -39,7 +39,8 @@ ChatStrategy._order = {}
 
 --- @param conversation sia.Conversation
 --- @param options sia.config.Chat
-function ChatStrategy:new(conversation, options)
+--- @return sia.ChatStrategy
+function ChatStrategy.new(conversation, options)
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_get_current_buf()
@@ -53,7 +54,7 @@ function ChatStrategy:new(conversation, options)
   vim.bo[buf].ft = "sia"
   vim.bo[buf].syntax = "markdown"
   vim.bo[buf].buftype = "nowrite"
-  local obj = setmetatable(Strategy:new(conversation), self)
+  local obj = setmetatable(Strategy.new(conversation), ChatStrategy)
   obj.buf = buf
   obj.writer = nil
   obj.options = options
@@ -307,7 +308,7 @@ function ChatStrategy:on_complete(control)
     if not self.has_generated_name then
       local fast_model =
         require("sia.model").resolve(require("sia.config").options.settings.fast_model)
-      local name_conv = require("sia.conversation").Conversation:new({
+      local name_conv = require("sia.conversation").new_conversation({
         model = fast_model,
         temporary = true,
       })
