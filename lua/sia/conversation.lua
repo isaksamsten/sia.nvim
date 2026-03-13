@@ -571,47 +571,6 @@ function Conversation:is_buf_valid(buf)
   return is_valid
 end
 
---- Create a deep copy of the conversation for branching
---- All messages with context will be marked as outdated to avoid tick tracking issues
---- @return sia.Conversation
-function Conversation:deep_copy()
-  local obj = setmetatable({}, getmetatable(self))
-
-  obj.uuid = make_uuid()
-  obj.id = CONVERSATION_ID
-  CONVERSATION_ID = CONVERSATION_ID + 1
-
-  obj.model = self.model
-  obj.name = self.name
-  obj.enable_supersede = self.enable_supersede
-  obj.ignore_tool_confirm = self.ignore_tool_confirm
-
-  obj.messages = {}
-  for _, message in ipairs(self.messages) do
-    local msg_copy = vim.deepcopy(message)
-    if msg_copy.context and msg_copy.context.tick then
-      msg_copy.status = "outdated"
-    end
-    table.insert(obj.messages, msg_copy)
-  end
-
-  obj.tools = vim.deepcopy(self.tools)
-  obj.tool_fn = vim.deepcopy(self.tool_fn)
-
-  obj.auto_confirm_tools = {}
-  obj._template_context = nil
-  obj.todos = {
-    buf = nil,
-    items = {},
-  }
-  obj.usage_history = {}
-  obj.agents = {}
-  obj.bash_processes = {}
-  obj._prepared_messages = nil
-
-  return obj
-end
-
 function Conversation:untrack_messages()
   for _, message in ipairs(self.messages) do
     if message.context and message.context.buf and message.context.tick then
@@ -659,6 +618,42 @@ function Conversation:last_turn_id()
     local message = self.messages[i]
     if message.turn_id and message.status ~= "dropped" then
       return message.turn_id
+    end
+  end
+  return nil
+end
+
+--- Get all active turn_ids in order.
+--- @return string[]
+function Conversation:turn_ids()
+  local ids = {}
+  local seen = {}
+  for _, message in ipairs(self.messages) do
+    if
+      message.turn_id
+      and not seen[message.turn_id]
+      and message.status ~= "dropped"
+    then
+      seen[message.turn_id] = true
+      table.insert(ids, message.turn_id)
+    end
+  end
+  return ids
+end
+
+--- Get all active messages before the given turn_id.
+--- Returns messages that are not dropped and appear before the first message
+--- with the matching turn_id.
+--- @param turn_id string
+--- @return sia.Message[]? messages nil if turn_id not found
+function Conversation:messages_until(turn_id)
+  local result = {}
+  for _, message in ipairs(self.messages) do
+    if message.turn_id == turn_id then
+      return result
+    end
+    if message.status ~= "dropped" then
+      table.insert(result, message)
     end
   end
   return nil
@@ -1100,7 +1095,38 @@ function Conversation:prepare_messages()
   return messages
 end
 
-return { Message = Message, Conversation = Conversation, make_uuid = make_uuid }
+--- Fork a conversation at the given turn_id.
+--- Creates a new Conversation with the same model and tools, containing only
+--- the messages before the specified turn. The forked conversation is independent
+--- of the source — no shared mutable state.
+--- @param source sia.Conversation
+--- @param turn_id string The turn to fork before (messages with this turn_id are excluded)
+--- @return sia.Conversation?
+local function fork_conversation(source, turn_id)
+  local messages = source:messages_until(turn_id)
+  if not messages then
+    return nil
+  end
+
+  local conversation = Conversation.new({
+    model = source.model,
+    ignore_tool_confirm = source.ignore_tool_confirm,
+    tools = source.tools,
+  })
+  conversation.enable_supersede = source.enable_supersede
+
+  for _, message in ipairs(messages) do
+    local msg_copy = vim.deepcopy(message)
+    if msg_copy.context and msg_copy.context.tick then
+      msg_copy.status = "outdated"
+    end
+    table.insert(conversation.messages, msg_copy)
+  end
+
+  conversation:_invalidate_cache()
+  return conversation
+end
+
 return {
   new_conversation = Conversation.new,
   fork_conversation = fork_conversation,

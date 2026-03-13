@@ -134,9 +134,10 @@ Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending confirm.
 **Conversation Management:**
 
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaBranch <prompt>` - Create a new conversation branching from the current
-  one. Copies the full conversation history and continues with the given prompt.
-  Optionally override the model with `-m`.
+- `SiaFork <prompt>` - Fork the current conversation into a new chat buffer.
+  Use `-t <turn_id>` to specify which turn to fork from (keeps messages before
+  that turn). Without `-t`, forks from the last turn. Tab-completion is
+  available for turn IDs.
 - `SiaDebug` - Show the current conversation's JSON payload in a new buffer
 
 **Shell Process Management:**

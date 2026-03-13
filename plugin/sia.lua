@@ -425,9 +425,9 @@ end, {
   end,
 })
 
-vim.api.nvim_create_user_command("SiaBranch", function(args)
-  local ChatStrategy = require("sia.strategy").ChatStrategy
-  local chat = ChatStrategy.by_buf()
+vim.api.nvim_create_user_command("SiaFork", function(args)
+  local fork_conversation = require("sia.conversation").fork_conversation
+  local chat = require("sia.strategy").get_chat()
 
   if not chat or not chat.conversation then
     vim.notify("sia: no active chat in this buffer", vim.log.levels.ERROR)
@@ -439,63 +439,55 @@ vim.api.nvim_create_user_command("SiaBranch", function(args)
     return
   end
 
-  -- Parse -m flag for model override
-  local model = find_and_remove_flag("-m", args.fargs)
-  if model and not require("sia.config").options.models[model] then
-    vim.notify("sia: model is not defined", vim.log.levels.ERROR)
-    return
+  local turn_id = find_and_remove_flag("-t", args.fargs)
+  if not turn_id then
+    turn_id = chat.conversation:last_turn_id()
+    if not turn_id then
+      vim.notify("sia: no turns to fork from", vim.log.levels.WARN)
+      return
+    end
   end
 
-  -- Get the prompt
   local prompt = table.concat(args.fargs, " ")
   if prompt == "" then
     vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
     return
   end
 
-  -- Deep copy the conversation
-  local branched_conversation = chat.conversation:deep_copy()
-
-  -- Override model if specified
-  if model then
-    local Model = require("sia.model")
-    branched_conversation.model = Model.resolve(model)
+  local forked = fork_conversation(chat.conversation, turn_id)
+  if not forked then
+    vim.notify(string.format("sia: turn '%s' not found", turn_id), vim.log.levels.ERROR)
+    return
   end
 
-  -- Create new chat strategy with the branched conversation
-  local new_strategy = ChatStrategy:new(branched_conversation, chat.options)
-
-  -- Add the prompt as a new user instruction
-  branched_conversation:add_instruction({
+  forked:add_instruction({
     role = "user",
     content = prompt,
   }, nil)
-
-  -- Execute the strategy
+  local new_strategy = require("sia.strategy").new_chat(forked, chat.options)
   require("sia.assistant").execute_strategy(new_strategy)
 end, {
   nargs = "+",
-  complete = function(arg_lead, cmd_line, cursor_pos)
-    return match_any_flag(string.sub(cmd_line, 1, cursor_pos)) or {}
+  complete = function(_, cmd_line, cursor_pos)
+    local prefix = string.sub(cmd_line, 1, cursor_pos)
+
+    local turn_match = string.match(prefix, "%-t%s+([%w-]*)$")
+    if turn_match then
+      local chat = require("sia.strategy").get_chat()
+      if chat and chat.conversation then
+        return vim
+          .iter(chat.conversation:turn_ids())
+          :filter(function(id)
+            return vim.startswith(id, turn_match)
+          end)
+          :totable()
+      end
+      return {}
+    end
+
+    return {}
   end,
 })
-
-vim.api.nvim_create_user_command("SiaShell", function(args)
-  local ChatStrategy = require("sia.strategy").ChatStrategy
-
-  -- Find the chat — prefer current buffer, fall back to visible chats
-  local chat = ChatStrategy.by_buf()
-  if not chat then
-    -- Try to find any visible chat
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      local buf = vim.api.nvim_win_get_buf(win)
-      local c = ChatStrategy.by_buf(buf)
-      if c then
-        chat = c
-        break
-      end
-    end
-  end
 
 vim.api.nvim_create_user_command("SiaShell", function(args)
   local chat = require("sia.strategy").get_chat()
