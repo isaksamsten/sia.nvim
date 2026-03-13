@@ -26,17 +26,33 @@ in the background without interrupting your workflow. This allows you to:
    󱇥 [conversation-name] Execute bash command 'git status'
    ```
 
-   The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn` highlight groups depending on the risk level (all linked to `StatusLine` by default).
+   Related requests are grouped by conversation and tool name, so parallel `view`
+   or `bash` calls collapse into a single summary instead of spamming the strip.
+   The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or
+   `SiaApproveWarn` highlight groups depending on the highest risk level in the
+   visible group summary (all linked to `StatusLine` by default).
 
 2. **Process confirm**: When you're ready, use one of these functions:
    - `require("sia").confirm.prompt()` - Shows the full confirm prompt
    - `require("sia").confirm.accept()` - Auto-accepts without showing prompt
    - `require("sia").confirm.decline()` - Auto-declines without showing prompt
    - `require("sia").confirm.preview()` - Preview without showing prompt
+   - `require("sia").confirm.expand()` - Open a detailed grouped view of pending approvals
 
-All functions will show a picker when multiple confirm are pending,
-allowing you to select which one to process. The difference is in the default
-action for a single pending confirm.
+`accept()` and `decline()` operate on whole input groups when possible, while
+`prompt()` and `preview()` let you drill into individual requests. The
+`expand()` view keeps the same top-of-screen placement as the default notifier,
+but grows downward into a focusable strip with horizontally packed groups,
+selected-item details, and built-in actions.
+
+Inside the expanded view:
+
+- `h` / `l` - Move between groups
+- `j` / `k` - Move between items in the selected group
+- `a` / `d` - Accept or decline the selected item
+- `A` / `D` - Accept or decline the whole selected group
+- `p` / `v` - Open the normal prompt or preview for the selected item
+- `q` - Close the expanded view
 
 **Customizing Notifications:**
 
@@ -122,6 +138,7 @@ require("sia").setup({
      { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool" },
      { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool" },
      { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool" },
+     { "<Leader>ae", mode = "n", function() require("sia").confirm.expand() end, desc = "Expand pending tools" },
    }
    ```
 

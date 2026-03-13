@@ -287,6 +287,8 @@ local function create_user_input_handler(
     if confirm_conf.async and confirm_conf.async.enable then
       require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
+        tool_name = tool_name,
+        kind = "input",
         on_accept = input_args.on_accept,
         on_cancel = function()
           callback({
@@ -366,6 +368,8 @@ local function create_user_choice_handler(
     if confirm_conf.async and confirm_conf.async.enable then
       require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
+        tool_name = tool_name,
+        kind = "choice",
         on_accept = prompt_user,
         on_cancel = function()
           callback({
@@ -414,7 +418,11 @@ M.new_tool = function(opts, execute)
     custom = opts.custom,
     system_prompt = opts.system_prompt,
     allow_parallel = function(conversation, args)
-      if conversation.ignore_tool_confirm and opts.read_only then
+      if opts.read_only and conversation.auto_confirm_tools then
+        return true
+      end
+
+      if opts.read_only and require("sia.config").options.settings.ui.confirm.async then
         return true
       end
 

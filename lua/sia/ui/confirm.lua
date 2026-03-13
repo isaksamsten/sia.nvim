@@ -1,15 +1,54 @@
 local M = {}
 
+local RISK_ORDER = {
+  safe = 1,
+  info = 2,
+  warn = 3,
+}
+
+local next_confirm_id = 0
+local detail_win = nil
+local detail_buf = nil
+local detail_resize_autocmd = nil
+local detail_ns = vim.api.nvim_create_namespace("sia_confirm_detail")
+local detail_selection = {
+  group = 1,
+  item = 1,
+}
+
 --- @param level sia.RiskLevel
 --- @return string
-local function get_icon(level)
-  if level == "safe" then
-    return ""
-  elseif level == "warn" then
-    return ""
-  else
-    return ""
+local function get_highlight(level)
+  if level == "warn" then
+    return "SiaApproveWarn"
+  elseif level == "safe" then
+    return "SiaApproveSafe"
   end
+  return "SiaApproveInfo"
+end
+
+--- @param level1 sia.RiskLevel
+--- @param level2 sia.RiskLevel
+--- @return sia.RiskLevel
+local function max_level(level1, level2)
+  if RISK_ORDER[level1] >= RISK_ORDER[level2] then
+    return level1
+  end
+  return level2
+end
+
+--- @param value integer
+--- @param minimum integer
+--- @param maximum integer
+--- @return integer
+local function clamp(value, minimum, maximum)
+  if value < minimum then
+    return minimum
+  end
+  if value > maximum then
+    return maximum
+  end
+  return value
 end
 
 --- @class sia.ConfirmNotifierOpts
@@ -17,15 +56,33 @@ end
 --- @field name string
 --- @field message string
 --- @field total integer?
+--- @field groups integer?
 
 --- @class sia.ConfirmNotifier
 --- @field show fun(args:sia.ConfirmNotifierOpts) Show/update the notification. Called whenever the message changes.
 --- @field clear fun() Clear/dismiss the notification
 
+--- @class sia.PendingConfirmItem
+--- @field id integer
+--- @field prompt string
+--- @field level sia.RiskLevel
+
+--- @class sia.PendingConfirmGroup
+--- @field key string
+--- @field conversation sia.Conversation
+--- @field tool_name string
+--- @field kind "input"|"choice"
+--- @field level sia.RiskLevel
+--- @field batchable boolean
+--- @field items sia.PendingConfirmItem[]
+
 --- Global state for managing pending confirmations
 --- @class sia.PendingConfirm
+--- @field id integer
 --- @field conversation sia.Conversation
 --- @field prompt string
+--- @field tool_name string
+--- @field kind "input"|"choice"
 --- @field level sia.RiskLevel
 --- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
@@ -48,23 +105,17 @@ function M.floating_notifier()
         vim.bo[notification_buf].bufhidden = "wipe"
       end
 
-      local icon = get_icon(args.level)
-      local content = string.format("%s [%s] %s", icon, args.name, args.message)
-      if args.total > 1 then
-        content = string.format("%s (+%d more)", content, args.total)
+      local content = string.format("[%s] %s", args.name, args.message)
+      if args.total and args.total > 1 then
+        content = string.format("%s (+%d more)", content, args.total - 1)
       end
-      local split = vim.split(content, "\n")
-
-      vim.api.nvim_buf_set_lines(notification_buf, 0, -1, false, { split[1] })
+      vim.api.nvim_buf_set_lines(notification_buf, 0, -1, false, { content })
 
       if not notification_win or not vim.api.nvim_win_is_valid(notification_win) then
-        local width = vim.o.columns
-        local height = 1
-
         notification_win = vim.api.nvim_open_win(notification_buf, false, {
           relative = "editor",
-          width = width,
-          height = height,
+          width = vim.o.columns,
+          height = 1,
           row = 0,
           col = 0,
           style = "minimal",
@@ -86,13 +137,7 @@ function M.floating_notifier()
         end
       end
 
-      if args.level == "warn" then
-        vim.wo[notification_win].winhighlight = "Normal:SiaApproveWarn"
-      elseif args.level == "safe" then
-        vim.wo[notification_win].winhighlight = "Normal:SiaApproveSafe"
-      else
-        vim.wo[notification_win].winhighlight = "Normal:SiaApproveInfo"
-      end
+      vim.wo[notification_win].winhighlight = "Normal:" .. get_highlight(args.level)
     end,
 
     clear = function()
@@ -122,9 +167,12 @@ function M.winbar_notifier()
         old_winbar = vim.wo[notification_win].winbar
       end
       local width = vim.fn.winwidth(notification_win)
-      local message = args.message
+      local message = string.format("[%s] %s", args.name, args.message)
+      if args.total and args.total > 1 then
+        message = string.format("%s (+%d more)", message, args.total - 1)
+      end
       if #message > width then
-        message = message:sub(1, width - 1) .. "…"
+        message = message:sub(1, width - 3) .. "..."
       end
       vim.wo[notification_win].winbar = message
     end,
@@ -141,40 +189,512 @@ end
 
 local default_notifier = M.floating_notifier()
 
+--- @return sia.ConfirmNotifier
+local function get_notifier()
+  local confirm_config = require("sia.config").options.settings.ui.confirm
+  return (confirm_config.async and confirm_config.async.notifier) or default_notifier
+end
+
+--- @param confirm sia.PendingConfirm
+--- @return string
+local function group_key(confirm)
+  return string.format(
+    "%s:%s:%s",
+    tostring(confirm.conversation.id),
+    confirm.tool_name or "tool",
+    confirm.kind or "input"
+  )
+end
+
+--- @return sia.PendingConfirmGroup[]
+local function get_groups()
+  local grouped = {}
+  local ordered = {}
+
+  for _, confirm in ipairs(pending_confirms) do
+    local key = group_key(confirm)
+    local group = grouped[key]
+    if not group then
+      group = {
+        key = key,
+        conversation = confirm.conversation,
+        tool_name = confirm.tool_name,
+        kind = confirm.kind,
+        level = confirm.level,
+        batchable = confirm.kind == "input",
+        items = {},
+      }
+      grouped[key] = group
+      table.insert(ordered, group)
+    else
+      group.level = max_level(group.level, confirm.level)
+      group.batchable = group.batchable and confirm.kind == "input"
+    end
+
+    table.insert(group.items, {
+      id = confirm.id,
+      prompt = confirm.prompt,
+      level = confirm.level,
+    })
+  end
+
+  return ordered
+end
+
+--- @param group sia.PendingConfirmGroup
+--- @return string
+local function group_heading(group)
+  if #group.items == 1 then
+    return group.tool_name
+  end
+  return string.format("%s (%d)", group.tool_name, #group.items)
+end
+
+--- @return sia.RiskLevel?
+local function pending_level()
+  if #pending_confirms == 0 then
+    return nil
+  end
+
+  local level = "safe"
+  for _, confirm in ipairs(pending_confirms) do
+    level = max_level(level, confirm.level)
+  end
+  return level
+end
+
+--- @return sia.ConfirmNotifierOpts?
+local function build_notifier_state()
+  if #pending_confirms == 0 then
+    return nil
+  end
+
+  local groups = get_groups()
+  local confirm = pending_confirms[1]
+
+  return {
+    level = confirm.level,
+    name = confirm.conversation.name,
+    message = confirm.prompt,
+    total = #pending_confirms,
+    groups = #groups,
+  }
+end
+
+local refresh_notifier
+local refresh_ui
+local refresh_detail_window
+local clear_detail_window
+local trigger_confirm
+local ensure_selection
+local select_group
+local select_item
+local apply_group_choice
+local apply_selected_item_choice
+local warn_group_action
+
+--- @param id integer
+--- @return integer?
+local function find_confirm_index(id)
+  for idx, confirm in ipairs(pending_confirms) do
+    if confirm.id == id then
+      return idx
+    end
+  end
+end
+
+local function ensure_detail_buffer()
+  if detail_buf and vim.api.nvim_buf_is_valid(detail_buf) then
+    return detail_buf
+  end
+
+  detail_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[detail_buf].buftype = "nofile"
+  vim.bo[detail_buf].bufhidden = "wipe"
+  vim.bo[detail_buf].swapfile = false
+  vim.bo[detail_buf].modifiable = false
+  vim.bo[detail_buf].readonly = true
+  vim.bo[detail_buf].buflisted = false
+  vim.bo[detail_buf].filetype = "sia-confirm"
+
+  vim.keymap.set("n", "q", function()
+    clear_detail_window()
+  end, { buffer = detail_buf, silent = true, desc = "Close approvals" })
+  vim.keymap.set("n", "<Esc>", function()
+    clear_detail_window()
+  end, { buffer = detail_buf, silent = true, desc = "Close approvals" })
+  vim.keymap.set("n", "h", function()
+    select_group(-1)
+  end, { buffer = detail_buf, silent = true, desc = "Previous group" })
+  vim.keymap.set("n", "l", function()
+    select_group(1)
+  end, { buffer = detail_buf, silent = true, desc = "Next group" })
+  vim.keymap.set("n", "j", function()
+    select_item(1)
+  end, { buffer = detail_buf, silent = true, desc = "Next item" })
+  vim.keymap.set("n", "k", function()
+    select_item(-1)
+  end, { buffer = detail_buf, silent = true, desc = "Previous item" })
+  vim.keymap.set("n", "a", function()
+    apply_selected_item_choice("accept")
+  end, { buffer = detail_buf, silent = true, desc = "Accept item" })
+  vim.keymap.set("n", "d", function()
+    apply_selected_item_choice("decline")
+  end, { buffer = detail_buf, silent = true, desc = "Decline item" })
+  vim.keymap.set("n", "p", function()
+    apply_selected_item_choice("prompt")
+  end, { buffer = detail_buf, silent = true, desc = "Prompt item" })
+  vim.keymap.set("n", "v", function()
+    apply_selected_item_choice("preview")
+  end, { buffer = detail_buf, silent = true, desc = "Preview item" })
+  vim.keymap.set("n", "<CR>", function()
+    apply_selected_item_choice("prompt")
+  end, { buffer = detail_buf, silent = true, desc = "Prompt item" })
+  vim.keymap.set("n", "A", function()
+    apply_group_choice("accept")
+  end, { buffer = detail_buf, silent = true, desc = "Accept group" })
+  vim.keymap.set("n", "D", function()
+    apply_group_choice("decline")
+  end, { buffer = detail_buf, silent = true, desc = "Decline group" })
+
+  return detail_buf
+end
+
+--- @return sia.PendingConfirmGroup[]
+local function get_selected_groups()
+  local groups = get_groups()
+  ensure_selection(groups)
+  return groups
+end
+
+ensure_selection = function(groups)
+  if #groups == 0 then
+    detail_selection.group = 1
+    detail_selection.item = 1
+    return
+  end
+
+  detail_selection.group = clamp(detail_selection.group, 1, #groups)
+  local selected_group = groups[detail_selection.group]
+  detail_selection.item = clamp(detail_selection.item, 1, #selected_group.items)
+end
+
+--- @return sia.PendingConfirmGroup?
+local function current_group()
+  local groups = get_selected_groups()
+  return groups[detail_selection.group]
+end
+
+--- @return sia.PendingConfirmItem?
+local function current_item()
+  local group = current_group()
+  if not group then
+    return nil
+  end
+  return group.items[detail_selection.item]
+end
+
+warn_group_action = function(group)
+  vim.notify(
+    string.format("sia: %s groups require item-level actions", group.tool_name),
+    vim.log.levels.WARN
+  )
+end
+
+trigger_confirm = function(idx, choice)
+  if #pending_confirms == 0 or not pending_confirms[idx] then
+    return
+  end
+
+  pending_confirms[idx].on_ready(idx, choice)
+end
+
+--- @param group sia.PendingConfirmGroup
+--- @param choice "accept"|"decline"
+local function trigger_group(group, choice)
+  local ids = vim
+    .iter(group.items)
+    :map(function(item)
+      return item.id
+    end)
+    :totable()
+
+  for _, id in ipairs(ids) do
+    local pending_idx = find_confirm_index(id)
+    if pending_idx then
+      trigger_confirm(pending_idx, choice)
+    end
+  end
+end
+
+apply_group_choice = function(choice)
+  local group = current_group()
+  if not group then
+    return
+  end
+
+  if not group.batchable and #group.items > 1 then
+    warn_group_action(group)
+    return
+  end
+
+  if #group.items == 1 then
+    detail_selection.item = 1
+    apply_selected_item_choice(choice)
+    return
+  end
+
+  if choice == "accept" then
+    trigger_group(group, "accept")
+  else
+    trigger_group(group, "decline")
+  end
+end
+
+apply_selected_item_choice = function(choice)
+  local item = current_item()
+  if not item then
+    return
+  end
+
+  local pending_idx = find_confirm_index(item.id)
+  if pending_idx then
+    trigger_confirm(pending_idx, choice)
+  end
+end
+
+select_group = function(delta)
+  local groups = get_groups()
+  if #groups == 0 then
+    return
+  end
+
+  ensure_selection(groups)
+  detail_selection.group = ((detail_selection.group - 1 + delta) % #groups) + 1
+  local group = groups[detail_selection.group]
+  detail_selection.item = clamp(detail_selection.item, 1, #group.items)
+  refresh_detail_window()
+end
+
+select_item = function(delta)
+  local groups = get_groups()
+  if #groups == 0 then
+    return
+  end
+
+  ensure_selection(groups)
+  local group = groups[detail_selection.group]
+  detail_selection.item = ((detail_selection.item - 1 + delta) % #group.items) + 1
+  refresh_detail_window()
+end
+
+--- @param width integer
+--- @param groups sia.PendingConfirmGroup[]
+--- @return string[], table[]
+local function build_group_lines(width, groups)
+  local lines = { "" }
+  local spans = {}
+  local line = 1
+  local col = 0
+
+  for idx, group in ipairs(groups) do
+    local token
+    if idx == detail_selection.group then
+      token = string.format("[%s:%s]", group.conversation.name, group_heading(group))
+    else
+      token = string.format("[%s:%s]", group.conversation.name, group_heading(group))
+    end
+
+    local token_len = #token
+    local separator = col == 0 and "" or " "
+    if col > 0 and col + 1 + token_len > width then
+      table.insert(lines, "")
+      line = line + 1
+      col = 0
+      separator = ""
+    end
+
+    local start_col = col + #separator
+    lines[line] = lines[line] .. separator .. token
+    table.insert(spans, {
+      group = idx,
+      line = line,
+      start_col = start_col,
+      end_col = start_col + token_len,
+      highlight = idx == detail_selection.group and "SiaConfirmSelected"
+        or get_highlight(group.level),
+    })
+    col = start_col + token_len
+  end
+
+  return lines, spans
+end
+
+--- @return string[], table[], sia.RiskLevel, [integer,integer]
+local function build_detail_lines()
+  local groups = get_selected_groups()
+  local selected_group = groups[detail_selection.group]
+  local level = pending_level() or "info"
+
+  local lines = {}
+  local group_lines, group_highlights =
+    build_group_lines(math.max(vim.o.columns - 2, 20), groups)
+  for _, line in ipairs(group_lines) do
+    table.insert(lines, line)
+  end
+  local highlights = {}
+  for _, hl in ipairs(group_highlights) do
+    table.insert(highlights, {
+      line = hl.line,
+      start_col = hl.start_col,
+      end_col = hl.end_col,
+      highlight = hl.highlight,
+    })
+  end
+
+  local cursor
+  for idx, item in ipairs(selected_group.items) do
+    local prefix = idx == detail_selection.item and ">" or " "
+    local line = string.format("%s %d. %s", prefix, idx, item.prompt)
+    table.insert(lines, line)
+    if idx == detail_selection.item then
+      table.insert(highlights, {
+        line = #lines,
+        start_col = 0,
+        end_col = #line,
+        highlight = "CursorLine",
+      })
+      cursor = { #lines, 0 }
+    end
+  end
+  local help = "h/l group  j/k item  a/d item  A/D group  p prompt  v preview  q close"
+  if not selected_group.batchable and #selected_group.items > 1 then
+    help = "h/l group  j/k item  a/d item  p prompt  v preview  q close"
+  end
+  table.insert(lines, help)
+  table.insert(highlights, {
+    line = #lines,
+    start_col = 0,
+    end_col = #lines[#lines],
+    highlight = "NonText",
+  })
+
+  return lines, highlights, level, cursor
+end
+
+clear_detail_window = function()
+  if detail_win and vim.api.nvim_win_is_valid(detail_win) then
+    vim.api.nvim_win_close(detail_win, true)
+  end
+  detail_win = nil
+
+  if detail_resize_autocmd then
+    pcall(vim.api.nvim_del_autocmd, detail_resize_autocmd)
+    detail_resize_autocmd = nil
+  end
+
+  refresh_notifier()
+end
+
+refresh_detail_window = function()
+  if not detail_win or not vim.api.nvim_win_is_valid(detail_win) then
+    return
+  end
+
+  if #pending_confirms == 0 then
+    clear_detail_window()
+    return
+  end
+
+  local buf = ensure_detail_buffer()
+  local lines, highlights, _, cursor = build_detail_lines()
+
+  vim.bo[buf].modifiable = true
+  vim.bo[buf].readonly = false
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_clear_namespace(buf, detail_ns, 0, -1)
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_set_extmark(buf, detail_ns, hl.line - 1, hl.start_col, {
+      end_col = hl.end_col,
+      hl_group = hl.highlight,
+    })
+  end
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+
+  local height = #lines
+  vim.api.nvim_win_set_config(detail_win, {
+    relative = "editor",
+    fixed = true,
+    width = vim.o.columns,
+    height = height,
+    row = 0,
+    col = 0,
+    style = "minimal",
+    focusable = true,
+    zindex = 51,
+  })
+  local target_cursor = cursor or { 1, 0 }
+  vim.api.nvim_win_set_cursor(detail_win, target_cursor)
+  vim.api.nvim_win_call(detail_win, function()
+    vim.fn.winrestview({
+      lnum = target_cursor[1],
+      col = target_cursor[2],
+      topline = target_cursor[1],
+      leftcol = 0,
+    })
+  end)
+  vim.wo[detail_win].winhighlight = "SiaConfirm:SiaConfirm"
+  vim.wo[detail_win].wrap = false
+  vim.wo[detail_win].cursorline = false
+end
+
+refresh_notifier = function()
+  local notifier = get_notifier()
+  if detail_win and vim.api.nvim_win_is_valid(detail_win) then
+    notifier.clear()
+    return
+  end
+
+  local state = build_notifier_state()
+  if state then
+    notifier.show(state)
+  else
+    notifier.clear()
+  end
+end
+
+refresh_ui = function()
+  refresh_notifier()
+  refresh_detail_window()
+end
+
 --- Show a pending confirmation notification to the user
 --- @param conversation sia.Conversation The conversation requesting confirmation
 --- @param prompt string The prompt to show to the user
---- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())? }
+--- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
 function M.show(conversation, prompt, opts)
-  local confirm_config = require("sia.config").options.settings.ui.confirm
-  local notifier = (confirm_config.async and confirm_config.async.notifier)
-    or default_notifier
+  next_confirm_id = next_confirm_id + 1
 
   local confirm = {
+    id = next_confirm_id,
     conversation = conversation,
     prompt = prompt,
+    tool_name = opts.tool_name or "tool",
+    kind = opts.kind or "input",
     level = opts.level,
   }
 
   confirm.on_ready = function(idx, choice)
     if choice ~= "preview" then
       table.remove(pending_confirms, idx)
-      if #pending_confirms > 0 then
-        local next_confirm = pending_confirms[1]
-        notifier.show({
-          level = next_confirm.level,
-          name = next_confirm.conversation.name,
-          message = next_confirm.prompt,
-          total = #pending_confirms,
-        })
-      else
-        notifier.clear()
-      end
     end
 
     if confirm.clear_preview then
       confirm.clear_preview()
     end
+
+    refresh_ui()
 
     if choice == "accept" then
       opts.on_accept()
@@ -188,47 +708,112 @@ function M.show(conversation, prompt, opts)
   end
 
   table.insert(pending_confirms, confirm)
-  local first_confirm = pending_confirms[1]
-  notifier.show({
-    level = first_confirm.level,
-    name = first_confirm.conversation.name,
-    message = first_confirm.prompt,
-    total = #pending_confirms,
-  })
+  refresh_ui()
 end
 
---- @param idx integer
+--- @param group sia.PendingConfirmGroup
+--- @return string
+local function group_picker_label(group)
+  local mode = group.batchable and "batch" or "item"
+  return string.format(
+    "[%s] %s (%s, %s)",
+    group.conversation.name,
+    group_heading(group),
+    group.level,
+    mode
+  )
+end
+
+--- @param group sia.PendingConfirmGroup
 --- @param choice "accept"|"decline"|"prompt"|"preview"
-local function trigger_confirm(idx, choice)
-  if #pending_confirms == 0 or not pending_confirms[idx] then
+local function pick_item(group, choice)
+  local items = {}
+  for _, item in ipairs(group.items) do
+    table.insert(items, item.prompt)
+  end
+
+  vim.ui.select(items, {
+    prompt = string.format("Select %s request:", group.tool_name),
+  }, function(_, idx)
+    if not idx then
+      return
+    end
+
+    detail_selection.group = clamp(detail_selection.group, 1, #get_groups())
+    detail_selection.item = idx
+    local pending_idx = find_confirm_index(group.items[idx].id)
+    if pending_idx then
+      trigger_confirm(pending_idx, choice)
+    end
+  end)
+end
+
+--- @param group sia.PendingConfirmGroup
+--- @param choice "accept"|"decline"|"prompt"|"preview"
+local function apply_choice(group, choice)
+  if #group.items == 1 then
+    local pending_idx = find_confirm_index(group.items[1].id)
+    if pending_idx then
+      trigger_confirm(pending_idx, choice)
+    end
     return
   end
 
-  pending_confirms[idx].on_ready(idx, choice)
+  if choice == "accept" or choice == "decline" then
+    if group.batchable then
+      if choice == "accept" then
+        trigger_group(group, "accept")
+      else
+        trigger_group(group, "decline")
+      end
+    else
+      pick_item(group, choice)
+    end
+    return
+  end
+
+  pick_item(group, choice)
 end
 
 --- Internal helper to trigger a confirmation with a specific choice
 --- @param choice "accept"|"decline"|"prompt"|"preview"
 local function trigger_pending_confirm(choice)
+  local groups = get_groups()
+  if #groups == 0 then
+    return
+  end
+
+  if detail_win and vim.api.nvim_win_is_valid(detail_win) then
+    if choice == "accept" or choice == "decline" then
+      apply_group_choice(choice)
+    else
+      apply_selected_item_choice(choice)
+    end
+    return
+  end
+
   if #pending_confirms == 1 then
     trigger_confirm(1, choice)
-  else
-    local items = {}
-    for _, confirm in ipairs(pending_confirms) do
-      table.insert(
-        items,
-        string.format("[%s] %s", confirm.conversation.name, confirm.prompt)
-      )
-    end
-
-    vim.ui.select(items, {
-      prompt = "Select confirmation:",
-    }, function(_, idx)
-      if idx then
-        trigger_confirm(idx, choice)
-      end
-    end)
+    return
   end
+
+  if #groups == 1 then
+    apply_choice(groups[1], choice)
+    return
+  end
+
+  local labels = {}
+  for _, group in ipairs(groups) do
+    table.insert(labels, group_picker_label(group))
+  end
+
+  vim.ui.select(labels, {
+    prompt = "Select approval group:",
+  }, function(_, idx)
+    if idx then
+      apply_choice(groups[idx], choice)
+    end
+  end)
 end
 
 --- Show the confirmation prompt to the user
@@ -269,6 +854,44 @@ function M.preview(opts)
   else
     trigger_pending_confirm("preview")
   end
+end
+
+--- Show grouped approval details in a focusable top window.
+function M.expand()
+  if #pending_confirms == 0 then
+    clear_detail_window()
+    return
+  end
+
+  local buf = ensure_detail_buffer()
+  if detail_win and vim.api.nvim_win_is_valid(detail_win) then
+    vim.api.nvim_set_current_win(detail_win)
+    refresh_detail_window()
+    return
+  end
+
+  detail_win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    fixed = true,
+    width = vim.o.columns,
+    height = 1,
+    row = 0,
+    col = 0,
+    style = "minimal",
+    focusable = true,
+    noautocmd = true,
+    zindex = 51,
+  })
+
+  if not detail_resize_autocmd then
+    detail_resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
+      callback = function()
+        refresh_detail_window()
+      end,
+    })
+  end
+
+  refresh_ui()
 end
 
 --- Get the count of pending confirmations

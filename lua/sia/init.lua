@@ -1,6 +1,8 @@
 local M = {}
 
 local highlight_groups = {
+  SiaConfirm = { link = "NormalFloat" },
+  SiaConfirmSelected = { link = "NormalFloat" },
   SiaInsert = { link = "DiffAdd" },
   SiaInsertPostProcess = { link = "DiffChange" },
   SiaReplace = { link = "DiffChange" },
@@ -44,6 +46,7 @@ M.confirm = {
   accept = require("sia.ui.confirm").accept,
   decline = require("sia.ui.confirm").decline,
   preview = require("sia.ui.confirm").preview,
+  expand = require("sia.ui.confirm").expand,
 }
 
 M.edit = {

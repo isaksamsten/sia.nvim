@@ -1,4 +1,4 @@
-*sia.txt*             For Neovim >= 0.11            Last change: 2026 March 11
+*sia.txt*             For Neovim >= 0.11            Last change: 2026 March 13
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -170,7 +170,7 @@ Configure Sia in your `init.lua`:
         embedding_model = "openai/text-embedding-3-small", -- Model for semantic embeddings
         temperature = 0.3,                   -- Creativity level (0-1)
         icons = "emoji",                     -- Icon set: "emoji" or a custom table
-    
+
         -- UI behavior
         ui = {
           diff = {
@@ -187,14 +187,14 @@ Configure Sia in your `init.lua`:
             },
           },
         },
-    
+
         -- File operations
         file_ops = {
           trash = true,                      -- Move deleted files to trash
           create_dirs_on_rename = true,      -- Create directories when renaming
           restrict_to_project_root = true,   -- Restrict file operations to project
         },
-    
+
         -- Default context settings
         context = {
           max_tool = 200,        -- Maximum tool calls before pruning occurs
@@ -202,7 +202,7 @@ Configure Sia in your `init.lua`:
           clear_input = true,    -- Whether to clear tool input parameters during pruning
           keep = 20,             -- Number of recent tool calls to keep after pruning
         },
-    
+
         -- Shell configuration for the bash tool
         shell = {
           command = "/bin/bash",
@@ -212,7 +212,7 @@ Configure Sia in your `init.lua`:
           --   return { "-lc" }
           -- end,
         },
-    
+
         -- Automatic context window management
         context_management = {
           prune_threshold = 0.85,    -- Start pruning at 85% of context window
@@ -220,7 +220,7 @@ Configure Sia in your `init.lua`:
           compact_ratio = 0.5,       -- Fraction of messages to compact (last resort)
         },
       },
-    
+
       -- Add custom actions (see Actions documentation)
       actions = {
         -- Your custom actions here
@@ -866,9 +866,10 @@ Add `!` (e.g., `SiaConfirm! accept`) to process only the first pending confirm.
 **Conversation Management:**
 
 - `SiaClear` - Remove outdated tool calls and their results from the conversation history
-- `SiaBranch <prompt>` - Create a new conversation branching from the current
-    one. Copies the full conversation history and continues with the given prompt.
-    Optionally override the model with `-m`.
+- `SiaFork <prompt>` - Fork the current conversation into a new chat buffer.
+    Use `-t <turn_id>` to specify which turn to fork from (keeps messages before
+    that turn). Without `-t`, forks from the last turn. Tab-completion is
+    available for turn IDs.
 - `SiaDebug` - Show the current conversation’s JSON payload in a new buffer
 
 **Shell Process Management:**
@@ -1184,9 +1185,11 @@ a floating window at the top of your screen:
     󱇥 [conversation-name] Execute bash command 'git status'
 <
 
+Related requests are grouped by conversation and tool name, so parallel `view`
+or `bash` calls collapse into a single summary instead of spamming the strip.
 The notification uses `SiaApproveInfo`, `SiaApproveSafe`, or `SiaApproveWarn`
-highlight groups depending on the risk level (all linked to `StatusLine` by
-default).
+highlight groups depending on the highest risk level in the visible group
+summary (all linked to `StatusLine` by default).
 
 
 2. **Process confirm**: When you’re ready, use one of these functions:
@@ -1195,12 +1198,24 @@ default).
 - `require("sia").confirm.accept()` - Auto-accepts without showing prompt
 - `require("sia").confirm.decline()` - Auto-declines without showing prompt
 - `require("sia").confirm.preview()` - Preview without showing prompt
+- `require("sia").confirm.expand()` - Open a detailed grouped view of pending approvals
 
 
 
-All functions will show a picker when multiple confirm are pending, allowing
-you to select which one to process. The difference is in the default action for
-a single pending confirm.
+`accept()` and `decline()` operate on whole input groups when possible, while
+`prompt()` and `preview()` let you drill into individual requests. The
+`expand()` view keeps the same top-of-screen placement as the default notifier,
+but grows downward into a focusable strip with horizontally packed groups,
+selected-item details, and built-in actions.
+
+Inside the expanded view:
+
+- `h` / `l` - Move between groups
+- `j` / `k` - Move between items in the selected group
+- `a` / `d` - Accept or decline the selected item
+- `A` / `D` - Accept or decline the whole selected group
+- `p` / `v` - Open the normal prompt or preview for the selected item
+- `q` - Close the expanded view
 
 **Customizing Notifications:**
 
@@ -1252,7 +1267,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
               enable = true,
               notifier = (function()
                 local notif_id = nil
-    
+
                 return {
                   show = function(args)
                     notif_id = vim.notify(args.message, vim.log.levels.INFO, {
@@ -1261,7 +1276,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
                       replace = notif_id,  -- Replace if exists, create if not
                     })
                   end,
-    
+
                   clear = function()
                     if notif_id then
                       vim.notify("", vim.log.levels.INFO, {
@@ -1287,6 +1302,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
       { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool" },
       { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool" },
       { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool" },
+      { "<Leader>ae", mode = "n", function() require("sia").confirm.expand() end, desc = "Expand pending tools" },
     }
 <
 
@@ -1301,7 +1317,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
           confirm = {
             use_vim_ui = false,  -- Use custom preview UI
             show_preview = true, -- Show detailed preview in prompts
-    
+
             async = {
               enable = true,     -- Enable non-blocking confirm mode
               -- notifier = { ... } -- Optional: customize notification display
@@ -1409,7 +1425,7 @@ prompts tailored for particular tasks.
     model: openai/gpt-5.2
     require_confirmation: false
     ---
-    
+
     System prompt for the agent goes here.
 <
 
@@ -1747,7 +1763,7 @@ These are typically used in the `system` array for specific modes:
       "current_context",  -- Built-in instruction
       { role = "user", content = "Explain this code" },
     }
-    
+
     -- By function call (for instructions with options)
     instructions = {
       require("sia.instructions").current_context({ show_line_numbers = false }),
@@ -1829,7 +1845,7 @@ This action generates a code summary and formats it as a comment block:
             post_process = function(args)
               local lines = args.lines
               local ft = vim.bo[args.buf].ft
-    
+
               local comment_start, comment_end
               if ft == "lua" then
                 comment_start = "-- "
@@ -1840,14 +1856,14 @@ This action generates a code summary and formats it as a comment block:
               else
                 comment_start = "// "
               end
-    
+
               local result = {}
               for _, line in ipairs(lines) do
                 if line:match("%S") then -- Skip empty lines
                   table.insert(result, comment_start .. line)
                 end
               end
-    
+
               return result
             end,
           },
@@ -1882,7 +1898,7 @@ This action suggests refactoring improvements and shows them in a diff view:
     - Better naming conventions
     - Reduced complexity
     - Design pattern improvements
-    
+
     Output the complete refactored code, maintaining all functionality.]],
             },
           },
