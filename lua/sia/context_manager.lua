@@ -51,7 +51,7 @@ end
 
 --- Compact a conversation by summarizing previous messages
 --- @param conversation sia.Conversation The conversation object to compact
---- @param opts { reason: string?, ratio: number?, on_complete: fun(content: string?)? }
+--- @param opts { ratio: number?, on_complete: fun(content: string?)? }
 local compact_conversation = function(conversation, opts)
   opts = opts or {}
   local model =
@@ -62,36 +62,38 @@ local compact_conversation = function(conversation, opts)
   })
   new_conversation:add_instruction({
     role = "system",
-    content = [[You are tasked with compacting a conversation by creating a
-comprehensive summary that preserves all essential information for
-continuing the conversation.
+    content = [[Provide a detailed prompt for continuing our conversation above.
+Focus on information that would be helpful for continuing the conversation, including
+what we did, what we're doing, which files we're working on, and what we're going to do
+next. The summary that you construct will be used so that another agent can read it and
+continue the work.
 
-CRITICAL REQUIREMENTS:
-1. Preserve ALL technical details: file paths, function names, class names,
-   variable names, configuration settings
-2. Maintain the chronological order of decisions and changes made
-3. Include specific code snippets or patterns that were discussed or implemented
-4. Preserve any architectural decisions, design patterns, or coding standards established
-5. Keep track of any bugs identified, solutions attempted, and their outcomes
-6. Maintain context about the codebase structure and relationships between components
+When constructing the summary, try to stick to this template:
 
-SUMMARY STRUCTURE:
-- **Project Context**: Brief description of the project and its purpose
-- **Files Modified**: List all files that were created, modified, or discussed
-  with specific changes
-- **Key Decisions**: Important architectural, design, or implementation
-  decisions made
-- **Code Changes**: Specific functions, classes, or code blocks that were added/modified
-- **Outstanding Issues**: Any unresolved problems, TODOs, or areas needing attention
-- **Technical Details**: Configuration changes, dependencies, or environment setup
+---
+## Goal
 
-OUTPUT FORMAT:
-Write a clear, structured summary using markdown formatting. Be concise but
-comprehensive - the summary should allow someone to understand the full context
-and continue working on the project without losing important details.
+[What goal(s) is the user trying to accomplish?]
 
-The summary will replace the conversation history, so ensure no critical
-information is lost.]],
+## Instructions
+
+- [What important instructions did the user give you that are relevant]
+- [If there is a plan or spec, include information about it so next agent can continue using it]
+
+## Discoveries
+
+[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
+
+## Accomplished
+
+[What work has been completed, what work is still in progress, and what work is left?]
+
+## Relevant files / directories
+
+[Construct a structured list of relevant files that have been read, edited, or created
+that pertain to the task at hand. If all the files in a directory are relevant, include
+the path to the directory.]
+]],
   })
 
   local prepared = conversation:prepare_messages()
@@ -107,7 +109,6 @@ information is lost.]],
     end
   end
 
-  -- Determine which non-dropped, non-system messages to compact
   local non_system = {}
   for i, message in ipairs(prepared) do
     if message.role ~= "system" then
@@ -164,23 +165,13 @@ information is lost.]],
         :totable()
       conversation:_invalidate_cache()
 
-      local summary_content
-      if opts.reason then
-        summary_content = string.format(
-          "This is a summary of a previous conversation (%s):\n\n%s",
-          opts.reason,
-          content
-        )
-      else
-        summary_content = string.format(
-          "This is a summary of the conversation which has been removed:\n %s",
-          content
-        )
-      end
-
       conversation:add_instruction({
         role = "user",
-        content = summary_content,
+        hide = true,
+        content = content,
+        meta = {
+          compaction = true,
+        },
       })
 
       if opts.on_complete then
@@ -199,14 +190,11 @@ end
 local function message_bytes(message)
   local bytes = 0
 
-  -- Content
   if message.content then
     if type(message.content) == "string" then
       bytes = bytes + #message.content
     elseif type(message.content) == "table" then
       for _, part in ipairs(message.content) do
-        -- We only care about the text part: for images + files the number of bytes is
-        -- not a proxy for tokens
         if part.text then
           bytes = bytes + #part.text
         end
@@ -239,7 +227,6 @@ local function message_bytes(message)
     end
   end
 
-  -- Role overhead (roughly ~10 tokens per message for framing)
   bytes = bytes + 40
 
   return bytes
@@ -315,7 +302,6 @@ local function find_droppable_tool_pairs(conversation)
   --- @type { assistant_idx: integer, tool_idx: integer, tool_call_id: string }[]
   local pairs_list = {}
 
-  -- Build a map from tool_call_id -> tool result message index
   --- @type table<string, integer>
   local tool_result_map = {}
   for i, message in ipairs(conversation.messages) do
@@ -324,7 +310,6 @@ local function find_droppable_tool_pairs(conversation)
     end
   end
 
-  -- Find assistant messages with tool_calls and their matching tool results
   for i, message in ipairs(conversation.messages) do
     if message.role == "assistant" and message.tool_calls then
       for _, tc in ipairs(message.tool_calls) do
@@ -332,7 +317,6 @@ local function find_droppable_tool_pairs(conversation)
           local tool_idx = tool_result_map[tc.id]
           local tool_name = tc["function"] and tc["function"].name
             or tc["custom"] and tc["custom"].name
-          -- Don't drop excluded tools or already-dropped ones
           if
             tool_idx
             and not vim.tbl_contains(exclude, tool_name)
@@ -366,15 +350,11 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
     return false
   end
 
-  -- Compute current tokens once, then subtract bytes as we drop messages
   local current_tokens = M.estimate_tokens(conversation)
   if current_tokens <= target_tokens then
     return false
   end
 
-  -- Pre-compute byte costs for the raw messages that will be dropped.
-  -- We use the raw Message objects (not PreparedMessage) to estimate bytes
-  -- without calling prepare_messages again.
   local dropped_any = false
   for _, pair in ipairs(droppable) do
     if current_tokens <= target_tokens then
@@ -386,7 +366,6 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
     local bytes_freed = 0
 
     if assistant_msg and assistant_msg.status ~= "dropped" then
-      -- Estimate bytes for the assistant message
       if assistant_msg.tool_calls then
         for _, tc in ipairs(assistant_msg.tool_calls) do
           if tc["function"] then
@@ -403,13 +382,12 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
           bytes_freed = bytes_freed + #assistant_msg.content
         end
       end
-      bytes_freed = bytes_freed + 40 -- overhead
+      bytes_freed = bytes_freed + 40
       conversation:set_message_status(assistant_msg, "dropped")
       dropped_any = true
     end
 
     if tool_msg and tool_msg.status ~= "dropped" then
-      -- Estimate bytes for the tool result message
       if tool_msg.content then
         if type(tool_msg.content) == "string" then
           bytes_freed = bytes_freed + #tool_msg.content
@@ -431,12 +409,11 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
           bytes_freed = bytes_freed + #(tc["custom"].input or "")
         end
       end
-      bytes_freed = bytes_freed + 40 -- overhead
+      bytes_freed = bytes_freed + 40
       conversation:set_message_status(tool_msg, "dropped")
       dropped_any = true
     end
 
-    -- Convert bytes freed to estimated tokens
     current_tokens = current_tokens - math.floor(bytes_freed / 4)
   end
 
@@ -498,19 +475,11 @@ function M.prune_if_needed(conversation, opts)
     return
   end
 
-  local reason = string.format(
-    "context window pressure: %dK/%dK tokens (%.0f%%)",
-    math.floor(current / 1000),
-    math.floor(budget.limit / 1000),
-    budget.percent * 100
-  )
-
   if opts.on_status then
     opts.on_status("Compacting conversation history")
   end
 
   compact_conversation(conversation, {
-    reason = reason,
     ratio = config.compact_ratio,
     on_complete = function(content)
       if opts.on_complete then
