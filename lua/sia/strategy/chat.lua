@@ -164,7 +164,7 @@ function ChatStrategy:on_round_start()
   context_manager.prune_if_needed(self.conversation, {
     on_complete = function(pruned, compacted)
       if compacted and self:buf_is_loaded() then
-        winbar.update_status(self.buf, nil)
+        winbar.clear_status(self.buf, 1000)
         self:redraw()
       end
       winbar.update_context_budget(

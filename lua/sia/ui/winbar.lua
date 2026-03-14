@@ -539,6 +539,14 @@ function M.update_status(buf, status)
   end
 end
 
+--- @param buf integer
+--- @param timeout integer?
+function M.clear_status(buf, timeout)
+  vim.defer_fn(function()
+    M.update_status(buf, nil)
+  end, timeout or 500)
+end
+
 --- Update context budget for a chat buffer
 --- @param buf integer
 --- @param budget { estimated: integer, limit: integer, percent: number }?
