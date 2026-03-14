@@ -37,6 +37,7 @@ it is easier to scan mixed agent and chat approvals.
 2. **Process confirm**: When you're ready, use one of these functions:
    - `require("sia").confirm.prompt()` - Shows the full confirm prompt
    - `require("sia").confirm.accept()` - Auto-accepts without showing prompt
+   - `require("sia").confirm.always()` - Persist an allow rule when supported, then execute
    - `require("sia").confirm.decline()` - Auto-declines without showing prompt
    - `require("sia").confirm.preview()` - Preview without showing prompt
    - `require("sia").confirm.expand()` - Open a detailed grouped view of pending approvals
@@ -53,6 +54,7 @@ Inside the expanded view:
 - `j` / `k` - Move between items in the selected group
 - `a` / `d` - Accept or decline the selected item
 - `A` / `D` - Accept or decline the whole selected group
+- `r` / `R` - Always allow the selected item or group when supported
 - `p` / `v` - Open the normal prompt or preview for the selected item
 - `g?` - Show a cursor-relative help popup with the available mappings
 - `q` - Close the expanded view
@@ -140,6 +142,7 @@ require("sia").setup({
    keys = {
      { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool" },
      { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool" },
+     { "<Leader>aA", mode = "n", function() require("sia").confirm.always() end, desc = "Always allow pending tool" },
      { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool" },
      { "<Leader>ae", mode = "n", function() require("sia").confirm.expand() end, desc = "Expand pending tools" },
    }
