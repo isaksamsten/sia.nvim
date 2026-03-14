@@ -132,17 +132,13 @@ the path to the directory.]
 
   require("sia.assistant").fetch_response(new_conversation, function(content)
     if content then
-      if compact_count >= #non_system then
-        conversation:clear_user_instructions()
-      else
-        local dropped = 0
-        for _, m in ipairs(conversation.messages) do
-          if m.role ~= "system" and m.status ~= "dropped" then
-            conversation:set_message_status(m, "dropped")
-            dropped = dropped + 1
-            if dropped >= compact_count then
-              break
-            end
+      local dropped = 0
+      for _, m in ipairs(conversation.messages) do
+        if m.role ~= "system" and m.status ~= "dropped" then
+          conversation:set_message_status(m, "dropped")
+          dropped = dropped + 1
+          if dropped >= compact_count then
+            break
           end
         end
       end
