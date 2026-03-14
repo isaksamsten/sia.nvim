@@ -329,7 +329,7 @@ local copilot_extra_header = function(_, messages)
   table.insert(args, "--header")
   local initiator = "user"
   local last = messages[#messages]
-  if last and last.role == "tool" then
+  if last and (last.role == "tool" or (last.meta and last.meta.compaction)) then
     initiator = "agent"
   end
   table.insert(args, "X-Initiator: " .. initiator)
