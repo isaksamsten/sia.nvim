@@ -909,6 +909,18 @@ function M.show(conversation, prompt, opts)
   refresh_ui()
 end
 
+--- @param id integer
+function M.clear(id)
+  local new_pending_confirm = {}
+  for _, pending in ipairs(pending_confirms) do
+    if pending.conversation.id ~= id then
+      table.insert(new_pending_confirm, pending)
+    end
+  end
+  pending_confirms = new_pending_confirm
+  refresh_ui()
+end
+
 --- @param group sia.PendingConfirmGroup
 --- @return string
 local function group_picker_label(group)

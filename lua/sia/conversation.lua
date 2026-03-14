@@ -704,7 +704,6 @@ function Conversation:clear_user_instructions()
   self:_invalidate_cache()
 end
 
---- Clean up all conversation resources (shell, processes)
 function Conversation:destroy()
   self:untrack_messages()
   for _, proc in ipairs(self.bash_processes) do
@@ -719,6 +718,8 @@ function Conversation:destroy()
   end
 
   self.bash_processes = {}
+
+  require("sia.ui.confirm").clear(self.id)
   self.logger:destroyed()
 end
 
