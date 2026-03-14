@@ -25,9 +25,7 @@ When defining custom actions, you can configure the following options:
 - `instructions` - Array of instructions (strings or instruction objects) to send to the model
 - `system` - Array of system-level instructions (optional)
 - `model` - Override the default model for this action (optional)
-- `temperature` - Override the default temperature (optional)
 - `tools` - Function `(model) -> tool[]` returning tools available to the action (optional)
-- `ignore_tool_confirm` - Skip confirmation prompts for tool usage (optional)
 - `input` - How to handle user input: `"require"` (prompt must include user text) or `"ignore"` (user text is not used). If omitted, user text is optional.
 - `range` - Whether a range/selection is required (default: `false`)
 - `capture` - Function to automatically capture context (e.g., using treesitter)
