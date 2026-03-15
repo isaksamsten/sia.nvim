@@ -45,6 +45,7 @@ end
 M.confirm = {
   prompt = require("sia.ui.confirm").prompt,
   accept = require("sia.ui.confirm").accept,
+  always = require("sia.ui.confirm").always,
   decline = require("sia.ui.confirm").decline,
   preview = require("sia.ui.confirm").preview,
   expand = require("sia.ui.confirm").expand,

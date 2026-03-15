@@ -1,7 +1,16 @@
 local M = {}
 
---- @type table<string, {mtime: integer, json: table}?>
+--- @type table<string, {mtime: string, json: table}?>
 local config_cache = {}
+
+--- @type table<string, {mtime: string, json: table}?>
+local auto_config_cache = {}
+
+--- @param stat {mtime:{sec:integer?, nsec:integer?}}
+--- @return string
+local function cache_mtime(stat)
+  return string.format("%s:%s", stat.mtime.sec or 0, stat.mtime.nsec or 0)
+end
 
 local validate = {
   permissions = function(permission)
@@ -49,6 +58,56 @@ local validate = {
       return true
     end
 
+    local validate_tool_perms
+    validate_tool_perms = function(tool_perms, path, section_name)
+      if type(tool_perms) ~= "table" then
+        return false, path .. " must be an object, got " .. type(tool_perms)
+      end
+
+      if section_name == "allow" and vim.islist(tool_perms) then
+        for i, rule in ipairs(tool_perms) do
+          local ok, err =
+            validate_tool_perms(rule, string.format("%s[%d]", path, i), section_name)
+          if not ok then
+            return false, err
+          end
+        end
+        return true
+      end
+
+      if not tool_perms.arguments then
+        return false, path .. " must have an 'arguments' field"
+      end
+
+      if type(tool_perms.arguments) ~= "table" then
+        return false,
+          path .. ".arguments must be an object, got " .. type(tool_perms.arguments)
+      end
+
+      for param_name, patterns in pairs(tool_perms.arguments) do
+        local arg_path = path .. ".arguments." .. param_name
+        local ok, err = validate_permission_patterns(patterns, arg_path)
+        if not ok then
+          return false, err
+        end
+      end
+
+      if section_name == "allow" and tool_perms.choice ~= nil then
+        if
+          type(tool_perms.choice) ~= "number"
+          or tool_perms.choice < 1
+          or tool_perms.choice ~= math.floor(tool_perms.choice)
+        then
+          return false,
+            path .. ".choice must be a positive integer, got " .. type(
+              tool_perms.choice
+            )
+        end
+      end
+
+      return true
+    end
+
     for section_name, section in pairs(permission) do
       if type(section) ~= "table" then
         return false,
@@ -56,62 +115,10 @@ local validate = {
       end
 
       for tool_name, tool_perms in pairs(section) do
-        if type(tool_perms) ~= "table" then
-          return false,
-            "permission."
-              .. section_name
-              .. "."
-              .. tool_name
-              .. " must be an object, got "
-              .. type(tool_perms)
-        end
-
-        if not tool_perms.arguments then
-          return false,
-            "permission."
-              .. section_name
-              .. "."
-              .. tool_name
-              .. " must have an 'arguments' field"
-        end
-
-        if type(tool_perms.arguments) ~= "table" then
-          return false,
-            "permission."
-              .. section_name
-              .. "."
-              .. tool_name
-              .. ".arguments must be an object, got "
-              .. type(tool_perms.arguments)
-        end
-
-        for param_name, patterns in pairs(tool_perms.arguments) do
-          local path = "permission."
-            .. section_name
-            .. "."
-            .. tool_name
-            .. ".arguments."
-            .. param_name
-          local ok, err = validate_permission_patterns(patterns, path)
-          if not ok then
-            return false, err
-          end
-        end
-
-        if section_name == "allow" and tool_perms.choice ~= nil then
-          if
-            type(tool_perms.choice) ~= "number"
-            or tool_perms.choice < 1
-            or tool_perms.choice ~= math.floor(tool_perms.choice)
-          then
-            return false,
-              "permission."
-                .. section_name
-                .. "."
-                .. tool_name
-                .. ".choice must be a positive integer, got "
-                .. type(tool_perms.choice)
-          end
+        local path = "permission." .. section_name .. "." .. tool_name
+        local ok, err = validate_tool_perms(tool_perms, path, section_name)
+        if not ok then
+          return false, err
         end
       end
     end
@@ -562,66 +569,43 @@ local settings_proxy = setmetatable({}, {
 --- @field skills_extras string[]?
 --- @field agents string[]?
 
---- @return sia.LocalConfig?
-function M.get_local_config()
-  local root = vim.fs.root(0, ".sia")
-  if not root then
-    return nil
-  end
-
-  local local_config = vim.fs.joinpath(root, ".sia", "config.json")
-  local stat = vim.uv.fs_stat(local_config)
-  if not stat then
-    return nil
-  end
-
-  local cache = config_cache[root]
-  if cache and stat.mtime.sec == cache.mtime then
-    return cache.json
-  end
-
+--- @param local_config string
+--- @return table?, string?
+local function read_local_config_file(local_config)
   local read_ok, file_content = pcall(vim.fn.readfile, local_config)
   if not read_ok then
-    vim.notify(
-      string.format(
-        "sia: failed to read config file %s: %s",
-        local_config,
-        file_content
-      ),
-      vim.log.levels.ERROR
-    )
-    return nil
+    return nil,
+      string.format("failed to read config file %s: %s", local_config, file_content)
   end
 
+  local content = table.concat(file_content, " ")
+  local decode_ok, json = pcall(vim.json.decode, content)
+  if not decode_ok then
+    return nil, string.format("invalid json %s: %s", local_config, json)
+  end
+
+  if type(json) ~= "table" then
+    return nil, string.format("%s expect json object, got %s", local_config, type(json))
+  end
+
+  return json
+end
+
+--- @param json table
+--- @param local_config string
+--- @return boolean, string?
+local function validate_local_config_json(json, local_config)
   local has_failed = false
+  local error_message = nil
+
   local function validate_with(fun, ...)
     if not has_failed then
       local ok, err = fun(...)
       if not ok then
-        vim.notify(
-          string.format("sia: %s: %s", local_config, err),
-          vim.log.levels.ERROR
-        )
+        error_message = string.format("%s: %s", local_config, err)
         has_failed = true
       end
     end
-  end
-  local content = table.concat(file_content, " ")
-  local decode_ok, json = pcall(vim.json.decode, content)
-  if not decode_ok then
-    vim.notify(
-      string.format("sia: invalid json %s: %s", local_config, json),
-      vim.log.levels.ERROR
-    )
-    has_failed = true
-  end
-
-  if not has_failed and type(json) ~= "table" then
-    vim.notify(
-      string.format("sia: %s expect json object, got %s", local_config, type(json)),
-      vim.log.levels.ERROR
-    )
-    has_failed = true
   end
 
   validate_with(validate.permissions, json.permission)
@@ -648,16 +632,196 @@ function M.get_local_config()
     return true
   end)
 
-  if has_failed then
+  return not has_failed, error_message
+end
+
+--- @return string?
+local function get_local_config_root()
+  return vim.fs.root(0, ".sia")
+end
+
+--- @param root string
+--- @return string
+local function local_config_path(root)
+  return vim.fs.joinpath(root, ".sia", "config.json")
+end
+
+--- @param root string
+--- @return string
+local function auto_config_path(root)
+  return vim.fs.joinpath(root, ".sia", "auto.json")
+end
+
+--- @return string
+function M.get_local_config_path()
+  local root = get_local_config_root()
+  if not root then
+    root = require("sia.utils").detect_project_root(vim.fn.getcwd())
+  end
+  return local_config_path(root)
+end
+
+--- @return string
+function M.get_auto_config_path()
+  local root = get_local_config_root()
+  if not root then
+    root = require("sia.utils").detect_project_root(vim.fn.getcwd())
+  end
+  return auto_config_path(root)
+end
+
+--- @param root string?
+function M.invalidate_local_config(root)
+  if root then
+    config_cache[root] = nil
+    auto_config_cache[root] = nil
+    return
+  end
+
+  config_cache = {}
+  auto_config_cache = {}
+end
+
+--- @param mutator fun(json: table)
+--- @return table?, string?
+function M.update_auto_config(mutator)
+  local auto_path = M.get_auto_config_path()
+  local root = vim.fn.fnamemodify(auto_path, ":h:h")
+  local json = {}
+  local stat = vim.uv.fs_stat(auto_path)
+  if stat then
+    local existing, _ = read_local_config_file(auto_path)
+    -- Just drop the auto config if it can't be parsed
+    json = existing or {}
+  end
+
+  local updated = vim.deepcopy(json)
+  mutator(updated)
+  local ok, err = validate_local_config_json(vim.deepcopy(updated), auto_path)
+  if not ok then
+    return nil, err
+  end
+
+  vim.fn.mkdir(vim.fn.fnamemodify(auto_path, ":h"), "p")
+  local write_ok, write_err =
+    pcall(vim.fn.writefile, { vim.json.encode(updated) }, auto_path)
+  if not write_ok then
+    return nil,
+      string.format("failed to write auto config file %s: %s", auto_path, write_err)
+  end
+
+  M.invalidate_local_config(root)
+  return updated, auto_path
+end
+
+--- Merge permission.allow rules from auto.json into the local config.
+--- Auto rules are appended to user rules; user deny/ask take precedence.
+--- @param user_json table? The user's config.json (may be nil)
+--- @param auto_json table The auto.json content
+--- @return table The merged config
+local function merge_auto_permissions(user_json, auto_json)
+  local merged = user_json and vim.deepcopy(user_json) or {}
+
+  local auto_perm = auto_json.permission
+  if not auto_perm then
+    return merged
+  end
+
+  merged.permission = merged.permission or {}
+
+  for section_name, section in pairs(auto_perm) do
+    if section_name == "allow" then
+      merged.permission.allow = merged.permission.allow or {}
+      for tool_name, auto_rules in pairs(section) do
+        local existing = merged.permission.allow[tool_name]
+        if existing == nil then
+          merged.permission.allow[tool_name] = vim.deepcopy(auto_rules)
+        else
+          local existing_list = vim.islist(existing) and existing or { existing }
+          local auto_list = vim.islist(auto_rules) and auto_rules or { auto_rules }
+          for _, auto_rule in ipairs(auto_list) do
+            local found = false
+            for _, ex_rule in ipairs(existing_list) do
+              if vim.deep_equal(ex_rule, auto_rule) then
+                found = true
+                break
+              end
+            end
+            if not found then
+              table.insert(existing_list, vim.deepcopy(auto_rule))
+            end
+          end
+          merged.permission.allow[tool_name] = existing_list
+        end
+      end
+    else
+      merged.permission[section_name] = merged.permission[section_name]
+        or vim.deepcopy(section)
+    end
+  end
+
+  return merged
+end
+
+--- @return sia.LocalConfig?
+function M.get_local_config()
+  local root = get_local_config_root()
+  if not root then
     return nil
   end
 
-  json.model = normalize_model_config(json.model)
-  json.fast_model = normalize_model_config(json.fast_model)
-  json.plan_model = normalize_model_config(json.plan_model)
+  local user_config_file = local_config_path(root)
+  local auto_config_file = auto_config_path(root)
+  local user_stat = vim.uv.fs_stat(user_config_file)
+  local auto_stat = vim.uv.fs_stat(auto_config_file)
 
-  config_cache[root] = { mtime = stat.mtime.sec, json = json }
-  return json
+  if not user_stat and not auto_stat then
+    return nil
+  end
+
+  local user_mtime = user_stat and cache_mtime(user_stat) or "nil"
+  local auto_mtime = auto_stat and cache_mtime(auto_stat) or "nil"
+  local combined_mtime = user_mtime .. "+" .. auto_mtime
+
+  local cache = config_cache[root]
+  if cache and combined_mtime == cache.mtime then
+    return cache.json
+  end
+
+  local user_json = nil
+  if user_stat then
+    local json, err = read_local_config_file(user_config_file)
+    if not json then
+      vim.notify("sia: " .. err, vim.log.levels.ERROR)
+      return nil
+    end
+    user_json = json
+  end
+
+  local auto_json = nil
+  if auto_stat then
+    auto_json, _ = read_local_config_file(auto_config_file)
+  end
+
+  local merged
+  if auto_json then
+    merged = merge_auto_permissions(user_json, auto_json)
+  else
+    merged = user_json or {}
+  end
+
+  local ok, validation_err = validate_local_config_json(merged, user_config_file)
+  if not ok then
+    vim.notify("sia: " .. validation_err, vim.log.levels.ERROR)
+    return nil
+  end
+
+  merged.model = normalize_model_config(merged.model)
+  merged.fast_model = normalize_model_config(merged.fast_model)
+  merged.plan_model = normalize_model_config(merged.plan_model)
+
+  config_cache[root] = { mtime = combined_mtime, json = merged }
+  return merged
 end
 
 --- @class sia.config.Settings.Ui

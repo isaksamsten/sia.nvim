@@ -171,6 +171,7 @@ end
 ---@field read_only boolean?
 ---@field is_available (fun(support: sia.config.Support?):boolean)?
 ---@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
+---@field persist_allow (fun(args: table, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
 ---@field message string|(fun(args:table):string)?
 ---@field system_prompt string?
 ---@field required string[]?
@@ -225,6 +226,127 @@ local function handle_user_response(resp, level, opts)
   end
 end
 
+--- @param text string
+--- @return string
+local function escape_vim_pattern(text)
+  return (text:gsub("([\\.^$~%[%]%(%){%}%-%+%*%?%|])", "\\%1"))
+end
+
+--- @param path string?
+--- @return {label: string, pattern: string}[]
+function M.path_allow_candidates(path)
+  if type(path) ~= "string" or path == "" then
+    return {}
+  end
+
+  local display_path = vim.fn.fnamemodify(path, ":.")
+  if display_path == "" then
+    display_path = path
+  end
+
+  local dir = vim.fn.fnamemodify(display_path, ":h")
+  local basename = vim.fn.fnamemodify(display_path, ":t")
+
+  local is_dotfile = basename:match("^%.[^.]+$") ~= nil
+  local ext = (not is_dotfile) and basename:match("%.([^.]+)$") or nil
+  local escaped_ext = ext and escape_vim_pattern(ext) or nil
+
+  local candidates = {}
+
+  -- 1. Exact path
+  table.insert(candidates, {
+    label = display_path,
+    pattern = "^" .. escape_vim_pattern(display_path) .. "$",
+  })
+
+  -- 2. Any file with the same extension in the same directory (skip for dotfiles
+  --    and extensionless files, and when the file is already at the project root)
+  if escaped_ext and dir ~= "." then
+    table.insert(candidates, {
+      label = dir .. "/*." .. ext,
+      pattern = "^" .. escape_vim_pattern(dir) .. "/[^/]+\\." .. escaped_ext .. "$",
+    })
+  end
+
+  -- 3. Any file with the same extension anywhere in the project
+  if escaped_ext then
+    table.insert(candidates, {
+      label = "**/*." .. ext,
+      pattern = "[^/]+\\." .. escaped_ext .. "$",
+    })
+  end
+
+  return candidates
+end
+
+--- Build a list of allow-rule candidates for a path-based argument.
+--- @param arg_name string
+--- @param path string?
+--- @return sia.PermissionAllowCandidate[]
+function M.path_allow_rules(arg_name, path)
+  local candidates = M.path_allow_candidates(path)
+  local rules = {}
+  for _, c in ipairs(candidates) do
+    table.insert(rules, {
+      label = c.label,
+      rule = {
+        arguments = {
+          [arg_name] = { c.pattern },
+        },
+      },
+    })
+  end
+  return rules
+end
+
+--- @param tool_name string
+--- @param args table
+--- @param conversation sia.Conversation
+--- @param persist_allow (fun(args: table, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
+--- @param on_done fun()
+local function persist_always_approval(
+  tool_name,
+  args,
+  conversation,
+  persist_allow,
+  on_done
+)
+  if not persist_allow then
+    conversation.auto_confirm_tools[tool_name] = 1
+    on_done()
+    return
+  end
+  local candidates = persist_allow(args, conversation)
+  if not candidates or #candidates == 0 then
+    conversation.auto_confirm_tools[tool_name] = 1
+    on_done()
+    return
+  end
+
+  local permissions = require("sia.permissions")
+  if #candidates == 1 then
+    permissions.persist_allow_rule(tool_name, candidates[1].rule)
+    on_done()
+    return
+  end
+  table.insert(candidates, 1, { label = "All for this conversation" })
+
+  vim.ui.select(candidates, {
+    prompt = "Select allow rule scope:",
+    format_item = function(item)
+      return item.label
+    end,
+    --- @param choice sia.PermissionAllowCandidate?
+  }, function(choice)
+    if not choice or choice.rule == nil then
+      conversation.auto_confirm_tools[tool_name] = 1
+    else
+      permissions.persist_allow_rule(tool_name, choice.rule)
+    end
+    on_done()
+  end)
+end
+
 --- Create a user_input handler for tool execution
 --- @param tool_name string
 --- @param args table
@@ -237,7 +359,8 @@ local function create_user_input_handler(
   args,
   conversation,
   callback,
-  permission
+  permission,
+  persist_allow
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
   local ignore_confirm = conversation.ignore_tool_confirm
@@ -269,7 +392,14 @@ local function create_user_input_handler(
         handle_user_response(resp, resolved_level, {
           on_accept = function(mode)
             if mode == "always" then
-              conversation.auto_confirm_tools[tool_name] = 1
+              persist_always_approval(
+                tool_name,
+                args,
+                conversation,
+                persist_allow,
+                input_args.on_accept
+              )
+              return
             end
             input_args.on_accept()
           end,
@@ -284,12 +414,26 @@ local function create_user_input_handler(
       end)
     end
 
+    local on_always = nil
+    if require("sia.risk").allows_auto_confirm(resolved_level) then
+      on_always = function()
+        persist_always_approval(
+          tool_name,
+          args,
+          conversation,
+          persist_allow,
+          input_args.on_accept
+        )
+      end
+    end
+
     if confirm_conf.async and confirm_conf.async.enable then
       require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
         tool_name = tool_name,
         kind = "input",
         on_accept = input_args.on_accept,
+        on_always = on_always,
         on_cancel = function()
           callback({
             content = cancellation_message(tool_name),
@@ -418,11 +562,22 @@ M.new_tool = function(opts, execute)
     custom = opts.custom,
     system_prompt = opts.system_prompt,
     allow_parallel = function(conversation, args)
-      if opts.read_only and conversation.auto_confirm_tools then
+      if
+        opts.read_only
+        and (
+          (
+            conversation.auto_confirm_tools
+            and conversation.auto_confirm_tools[opts.name]
+          ) or conversation.ignore_tool_confirm
+        )
+      then
         return true
       end
 
-      if opts.read_only and require("sia.config").options.settings.ui.confirm.async then
+      if
+        opts.read_only
+        and require("sia.config").options.settings.ui.confirm.async.enable
+      then
         return true
       end
 
@@ -462,8 +617,14 @@ M.new_tool = function(opts, execute)
         return
       end
 
-      local user_input =
-        create_user_input_handler(opts.name, args, conversation, callback, permission)
+      local user_input = create_user_input_handler(
+        opts.name,
+        args,
+        conversation,
+        callback,
+        permission,
+        opts.persist_allow
+      )
       local user_choice =
         create_user_choice_handler(opts.name, args, conversation, callback, permission)
 

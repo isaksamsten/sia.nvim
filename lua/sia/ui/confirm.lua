@@ -26,11 +26,19 @@ local DETAIL_HELP_LINES = {
   "j/k   move between items",
   "a/d   accept or decline item",
   "A/D   accept or decline group",
+  "r/R   allow item or group always",
   "p     open prompt",
   "v     preview item",
   "<CR>  open prompt",
   "q     close approvals",
 }
+
+--- Remove newlines from a string to ensure it's safe for set_lines
+--- @param str string
+--- @return string
+local function sanitize_newlines(str)
+  return str:gsub("\n", " "):gsub("\r", " ")
+end
 
 --- @param level sia.RiskLevel
 --- @return string
@@ -82,6 +90,7 @@ end
 --- @field id integer
 --- @field prompt string
 --- @field level sia.RiskLevel
+--- @field always boolean
 
 --- @class sia.PendingConfirmGroup
 --- @field key string
@@ -90,6 +99,7 @@ end
 --- @field kind "input"|"choice"
 --- @field level sia.RiskLevel
 --- @field batchable boolean
+--- @field always_batchable boolean
 --- @field items sia.PendingConfirmItem[]
 
 --- @class sia.PendingConfirmSection
@@ -105,7 +115,8 @@ end
 --- @field tool_name string
 --- @field kind "input"|"choice"
 --- @field level sia.RiskLevel
---- @field on_ready fun(idx: integer, choice:"accept"|"decline"|"prompt"|"preview")
+--- @field supports_always boolean
+--- @field on_ready fun(idx: integer, choice:"accept"|"always"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
 --- @type sia.PendingConfirm[]
@@ -126,7 +137,8 @@ function M.floating_notifier()
         vim.bo[notification_buf].bufhidden = "wipe"
       end
 
-      local content = string.format("[%s] %s", args.name, args.message)
+      local content =
+        sanitize_newlines(string.format("[%s] %s", args.name, args.message))
       if args.total and args.total > 1 then
         content = string.format("%s (+%d more)", content, args.total - 1)
       end
@@ -188,7 +200,8 @@ function M.winbar_notifier()
         old_winbar = vim.wo[notification_win].winbar
       end
       local width = vim.fn.winwidth(notification_win)
-      local message = string.format("[%s] %s", args.name, args.message)
+      local message =
+        sanitize_newlines(string.format("[%s] %s", args.name, args.message))
       if args.total and args.total > 1 then
         message = string.format("%s (+%d more)", message, args.total - 1)
       end
@@ -257,6 +270,7 @@ local function get_sections()
         kind = confirm.kind,
         level = confirm.level,
         batchable = confirm.kind == "input",
+        always_batchable = confirm.kind == "input" and confirm.supports_always,
         items = {},
       }
       section.grouped[key] = group
@@ -264,12 +278,16 @@ local function get_sections()
     else
       group.level = max_level(group.level, confirm.level)
       group.batchable = group.batchable and confirm.kind == "input"
+      group.always_batchable = group.always_batchable
+        and confirm.kind == "input"
+        and confirm.supports_always
     end
 
     table.insert(group.items, {
       id = confirm.id,
       prompt = confirm.prompt,
       level = confirm.level,
+      always = confirm.supports_always,
     })
   end
 
@@ -406,6 +424,12 @@ local function ensure_detail_buffer()
   vim.keymap.set("n", "D", function()
     apply_group_choice("decline")
   end, { buffer = detail_buf, silent = true, desc = "Decline group" })
+  vim.keymap.set("n", "r", function()
+    apply_selected_item_choice("always")
+  end, { buffer = detail_buf, silent = true, desc = "Always allow item" })
+  vim.keymap.set("n", "R", function()
+    apply_group_choice("always")
+  end, { buffer = detail_buf, silent = true, desc = "Always allow group" })
   vim.keymap.set("n", "g?", function()
     show_detail_help()
   end, { buffer = detail_buf, silent = true, desc = "Show approval mappings" })
@@ -526,8 +550,24 @@ warn_group_action = function(group)
   )
 end
 
+local function warn_always_item_action()
+  vim.notify("sia: selected request does not support always-allow", vim.log.levels.WARN)
+end
+
+local function warn_always_group_action(group)
+  vim.notify(
+    string.format("sia: %s groups require item-level always-allow actions", group.tool_name),
+    vim.log.levels.WARN
+  )
+end
+
 trigger_confirm = function(idx, choice)
   if #pending_confirms == 0 or not pending_confirms[idx] then
+    return
+  end
+
+  if choice == "always" and not pending_confirms[idx].supports_always then
+    warn_always_item_action()
     return
   end
 
@@ -535,7 +575,7 @@ trigger_confirm = function(idx, choice)
 end
 
 --- @param group sia.PendingConfirmGroup
---- @param choice "accept"|"decline"
+--- @param choice "accept"|"always"|"decline"
 local function trigger_group(group, choice)
   local ids = vim
     .iter(group.items)
@@ -558,6 +598,11 @@ apply_group_choice = function(choice)
     return
   end
 
+  if choice == "always" and #group.items > 1 and not group.always_batchable then
+    warn_always_group_action(group)
+    return
+  end
+
   if not group.batchable and #group.items > 1 then
     warn_group_action(group)
     return
@@ -571,6 +616,8 @@ apply_group_choice = function(choice)
 
   if choice == "accept" then
     trigger_group(group, "accept")
+  elseif choice == "always" then
+    trigger_group(group, "always")
   else
     trigger_group(group, "decline")
   end
@@ -579,6 +626,11 @@ end
 apply_selected_item_choice = function(choice)
   local item = current_item()
   if not item then
+    return
+  end
+
+  if choice == "always" and not item.always then
+    warn_always_item_action()
     return
   end
 
@@ -870,7 +922,7 @@ end
 --- Show a pending confirmation notification to the user
 --- @param conversation sia.Conversation The conversation requesting confirmation
 --- @param prompt string The prompt to show to the user
---- @param opts { level: sia.RiskLevel, on_accept: fun(), on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
+--- @param opts { level: sia.RiskLevel, on_accept: fun(), on_always: fun()?, on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
 function M.show(conversation, prompt, opts)
   next_confirm_id = next_confirm_id + 1
 
@@ -881,6 +933,7 @@ function M.show(conversation, prompt, opts)
     tool_name = opts.tool_name or "tool",
     kind = opts.kind or "input",
     level = opts.level,
+    supports_always = type(opts.on_always) == "function",
   }
 
   confirm.on_ready = function(idx, choice)
@@ -896,6 +949,8 @@ function M.show(conversation, prompt, opts)
 
     if choice == "accept" then
       opts.on_accept()
+    elseif choice == "always" and opts.on_always then
+      opts.on_always()
     elseif choice == "prompt" then
       opts.on_prompt()
     elseif choice == "preview" and opts.on_preview then
@@ -935,7 +990,7 @@ local function group_picker_label(group)
 end
 
 --- @param group sia.PendingConfirmGroup
---- @param choice "accept"|"decline"|"prompt"|"preview"
+--- @param choice "accept"|"always"|"decline"|"prompt"|"preview"
 local function pick_item(group, choice)
   local items = {}
   for _, item in ipairs(group.items) do
@@ -959,7 +1014,7 @@ local function pick_item(group, choice)
 end
 
 --- @param group sia.PendingConfirmGroup
---- @param choice "accept"|"decline"|"prompt"|"preview"
+--- @param choice "accept"|"always"|"decline"|"prompt"|"preview"
 local function apply_choice(group, choice)
   if #group.items == 1 then
     local pending_idx = find_confirm_index(group.items[1].id)
@@ -969,10 +1024,12 @@ local function apply_choice(group, choice)
     return
   end
 
-  if choice == "accept" or choice == "decline" then
-    if group.batchable then
+  if choice == "accept" or choice == "always" or choice == "decline" then
+    if group.batchable and (choice ~= "always" or group.always_batchable) then
       if choice == "accept" then
         trigger_group(group, "accept")
+      elseif choice == "always" then
+        trigger_group(group, "always")
       else
         trigger_group(group, "decline")
       end
@@ -986,7 +1043,7 @@ local function apply_choice(group, choice)
 end
 
 --- Internal helper to trigger a confirmation with a specific choice
---- @param choice "accept"|"decline"|"prompt"|"preview"
+--- @param choice "accept"|"always"|"decline"|"prompt"|"preview"
 local function trigger_pending_confirm(choice)
   local groups = get_groups()
   if #groups == 0 then
@@ -994,7 +1051,7 @@ local function trigger_pending_confirm(choice)
   end
 
   if detail_win and vim.api.nvim_win_is_valid(detail_win) then
-    if choice == "accept" or choice == "decline" then
+    if choice == "accept" or choice == "always" or choice == "decline" then
       apply_group_choice(choice)
     else
       apply_selected_item_choice(choice)
@@ -1043,6 +1100,16 @@ function M.accept(opts)
     trigger_confirm(1, "accept")
   else
     trigger_pending_confirm("accept")
+  end
+end
+
+--- Always allow the pending confirmation
+function M.always(opts)
+  opts = opts or {}
+  if opts.first then
+    trigger_confirm(1, "always")
+  else
+    trigger_pending_confirm("always")
   end
 end
 

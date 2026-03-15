@@ -126,6 +126,7 @@ conversation that is started.
 
 - `SiaConfirm prompt` - Show the confirm prompt for pending tool operations
 - `SiaConfirm accept` - Auto-accept the pending tool operation
+- `SiaConfirm always` - Persist an allow rule for supported operations, then execute
 - `SiaConfirm decline` - Auto-decline the pending tool operation
 - `SiaConfirm preview` - Preview the pending tool operation
 
@@ -209,6 +210,7 @@ keys = {
   -- Tool approval (async mode)
   -- { "<Leader>ac", mode = "n", function() require("sia").confirm.prompt() end, desc = "Confirm pending tool", },
   -- { "<Leader>ay", mode = "n", function() require("sia").confirm.accept() end, desc = "Accept pending tool", },
+  -- { "<Leader>aA", mode = "n", function() require("sia").confirm.always() end, desc = "Always allow pending tool", },
   -- { "<Leader>an", mode = "n", function() require("sia").confirm.decline() end, desc = "Decline pending tool", },
   { "ga", mode = "n", function() require("sia").edit.accept() end, desc = "Accept edit", },
   { "gx", mode = "n", function() require("sia").edit.accept() end, desc = "Reject edit", },

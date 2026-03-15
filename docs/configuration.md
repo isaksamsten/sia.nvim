@@ -278,6 +278,7 @@ to control tool access:
 
 - Each tool permission must have an `arguments` field
 - `arguments`: Object mapping parameter names to pattern arrays
+- `allow` entries may be either a single rule object or an array of rule objects
 - `choice` (allow rules only): Auto-selection index for multi-choice prompts (default: 1)
 
 **Pattern Format**:
@@ -309,6 +310,33 @@ Patterns are Vim regex strings using very magic mode (`\v`):
           "command": ["^git status$", "^git diff", "^git log"]
         }
       }
+    }
+  }
+}
+```
+
+**Persist approvals from opt-in tools:**
+
+When an opt-in tool prompt is answered with `always`, Sia appends an allow rule to
+`.sia/auto.json`. If a tool already has one allow rule, Sia promotes it to an array
+so multiple persisted rules can coexist.
+
+```json
+{
+  "permission": {
+    "allow": {
+      "view": [
+        {
+          "arguments": {
+            "path": ["^lua/sia/[^/]+\\.lua$"]
+          }
+        },
+        {
+          "arguments": {
+            "path": ["^tests/[^/]+\\.lua$"]
+          }
+        }
+      ]
     }
   }
 }

@@ -67,6 +67,9 @@ will be truncated.]],
     },
   },
   required = { "path" },
+  persist_allow = function(args)
+    return tool_utils.path_allow_rules("path", args.path)
+  end,
   auto_apply = function(args, _)
     if args.path then
       if tool_utils.is_tool_output_path(args.path) then

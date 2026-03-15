@@ -364,6 +364,8 @@ vim.api.nvim_create_user_command("SiaConfirm", function(args)
     approval.prompt({ first = args.bang })
   elseif command == "accept" then
     approval.accept({ first = args.bang })
+  elseif command == "always" then
+    approval.always({ first = args.bang })
   elseif command == "decline" then
     approval.decline({ first = args.bang })
   elseif command == "preview" then
@@ -375,7 +377,7 @@ end, {
   nargs = 1,
   bang = true,
   complete = function(arg_lead)
-    local commands = { "prompt", "accept", "decline", "preview", "expand" }
+    local commands = { "prompt", "accept", "always", "decline", "preview", "expand" }
     return vim.iter(commands)
       :filter(function(command)
         return vim.startswith(command, arg_lead)

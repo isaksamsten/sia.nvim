@@ -258,4 +258,30 @@ T["override_action"]["get correct chat action with override"] = function()
   end)
 end
 
+T["validate_permissions"] = MiniTest.new_set()
+
+T["validate_permissions"]["accepts multiple allow rules for a single tool"] = function()
+  local success, result = load_config({
+    permission = {
+      allow = {
+        view = {
+          {
+            arguments = {
+              path = { "^lua/sia/[^/]+\\.lua$" },
+            },
+          },
+          {
+            arguments = {
+              path = { "^tests/[^/]+\\.lua$" },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  eq(success, true)
+  eq(type(result.permission.allow.view), "table")
+end
+
 return T

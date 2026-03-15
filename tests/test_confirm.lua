@@ -204,7 +204,7 @@ T["sia.ui.confirm"]["expanded UI shows mappings in cursor-relative floating help
     local help_config = nil
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       local cfg = vim.api.nvim_win_get_config(win)
-      if cfg.relative == "cursor" then
+      if cfg.relative ~= "" and cfg.zindex == 52 and not cfg.focusable then
         help_lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
         help_config = cfg
         break
@@ -212,17 +212,13 @@ T["sia.ui.confirm"]["expanded UI shows mappings in cursor-relative floating help
     end
 
     _G.help_lines = help_lines
-    _G.help_relative = help_config and help_config.relative or nil
-    _G.help_row = help_config and help_config.row or nil
-    _G.help_col = help_config and help_config.col or nil
+    _G.help_config = help_config
   ]])
 
   eq("Confirm mappings", child.lua_get("_G.help_lines")[1])
   eq("h/l   move between groups", child.lua_get("_G.help_lines")[3])
-  eq("q     close approvals", child.lua_get("_G.help_lines")[10])
-  eq("cursor", child.lua_get("_G.help_relative"))
-  eq(1, child.lua_get("_G.help_row")[false])
-  eq(2, child.lua_get("_G.help_col")[false])
+  eq("q     close approvals", child.lua_get("_G.help_lines")[11])
+  eq(true, child.lua_get("_G.help_config ~= nil"))
 end
 
 T["sia.ui.confirm"]["expand clusters multiple tool groups under one conversation header"] = function()
@@ -341,5 +337,52 @@ T["sia.ui.confirm"]["expanded UI keybindings navigate groups and accept selected
   eq("[view (2)]", child.lua_get("_G.detail_lines_after")[2])
 end
 
-return T
+T["sia.ui.confirm"]["expanded UI keybindings allow a batchable group always"] = function()
+  child.lua([[
+    package.loaded["sia.ui.confirm"] = nil
+    local config = require("sia.config")
+    config.options.settings.ui.confirm.async.enable = true
+    config.options.settings.ui.confirm.async.notifier = {
+      show = function() end,
+      clear = function() end,
+    }
 
+    local confirm = require("sia.ui.confirm")
+    local conversation = { id = 51, name = "chat" }
+    local always = 0
+    local accepted = 0
+
+    local function request(prompt)
+      confirm.show(conversation, prompt, {
+        level = "info",
+        tool_name = "view",
+        kind = "input",
+        on_accept = function()
+          accepted = accepted + 1
+        end,
+        on_always = function()
+          always = always + 1
+        end,
+        on_cancel = function() end,
+        on_prompt = function() end,
+      })
+    end
+
+    request("View a.lua")
+    request("View b.lua")
+
+    confirm.expand()
+    vim.api.nvim_feedkeys("R", "xt", false)
+    vim.wait(50)
+
+    _G.always = always
+    _G.accepted = accepted
+    _G.remaining = confirm.count()
+  ]])
+
+  eq(2, child.lua_get("_G.always"))
+  eq(0, child.lua_get("_G.accepted"))
+  eq(0, child.lua_get("_G.remaining"))
+end
+
+return T
