@@ -28,9 +28,15 @@ local highlight_groups = {
   SiaTodoPending = { link = "Comment" },
   SiaTodoDone = { link = "DiagnosticOk" },
   SiaTodoSkipped = { link = "NonText" },
-  SiaAgentRunning = { link = "DiagnosticHint" },
-  SiaAgentCompleted = { link = "DiagnosticOk" },
-  SiaAgentFailed = { link = "DiagnosticError" },
+  SiaStatusActive = { link = "DiagnosticHint" },
+  SiaStatusDone = { link = "DiagnosticOk" },
+  SiaStatusFailed = { link = "DiagnosticError" },
+  SiaStatusTag = { link = "Type" },
+  SiaStatusMuted = { link = "NonText" },
+  SiaStatusLabel = { link = "Identifier" },
+  SiaStatusValue = { link = "Normal" },
+  SiaStatusPath = { link = "Directory" },
+  SiaStatusCode = { link = "String" },
 }
 
 local function set_highlight_groups()

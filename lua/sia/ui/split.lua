@@ -69,7 +69,6 @@ local function create_split(chat_win)
     panel_win = vim.api.nvim_get_current_win()
   end
 
-  -- Restore focus
   if vim.api.nvim_win_is_valid(current_win) then
     vim.api.nvim_set_current_win(current_win)
   end
@@ -83,7 +82,6 @@ end
 --- @param is_vertical boolean
 local function size_to_content(panel_win, buf, is_vertical)
   if is_vertical then
-    -- Vertical splits use a fixed 20% width; already set in create_split
     return
   end
   local line_count = vim.api.nvim_buf_line_count(buf)
@@ -121,20 +119,14 @@ local function setup_cleanup(self, chat_buf, chat_win)
   self._autocmds[chat_buf] = id
 end
 
---- Apply standard panel window options.
---- @param win integer
-local function set_win_options(win)
-  vim.wo[win].wrap = true
-  vim.wo[win].number = false
-  vim.wo[win].relativenumber = false
-  vim.wo[win].signcolumn = "no"
-end
-
 --- Open (or reuse) the panel, displaying the given buffer.
 --- Does nothing if no valid chat window is found.
 --- @param chat_buf integer
 --- @param buf integer       the buffer to show in the panel
-function Panel:open(chat_buf, buf)
+--- @param opts { size: "auto"|integer, vertical: boolean, wrap: boolean?}?
+function Panel:open(chat_buf, buf, opts)
+  opts = opts or {}
+  local is_vertical = opts.vertical == true
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
     return
   end
@@ -144,11 +136,7 @@ function Panel:open(chat_buf, buf)
     return
   end
 
-  local chat_width = vim.api.nvim_win_get_width(chat_win)
-  local is_vertical = chat_width >= (vim.o.columns - 2)
-
   if self:is_open(chat_buf) then
-    -- Reuse existing window, just swap the buffer
     local win = self._windows[chat_buf]
     vim.api.nvim_win_set_buf(win, buf)
     size_to_content(win, buf, is_vertical)
@@ -158,8 +146,15 @@ function Panel:open(chat_buf, buf)
   local panel_win = create_split(chat_win)
 
   vim.api.nvim_win_set_buf(panel_win, buf)
-  set_win_options(panel_win)
-  size_to_content(panel_win, buf, is_vertical)
+  if opts.size == nil or opts.size == "auto" then
+    size_to_content(panel_win, buf, is_vertical)
+  else
+    vim.api.nvim_win_set_height(panel_win, opts.size --[[@as integer]])
+  end
+  vim.wo[panel_win].wrap = opts.wrap or false
+  vim.wo[panel_win].number = false
+  vim.wo[panel_win].relativenumber = false
+  vim.wo[panel_win].signcolumn = "no"
 
   self._windows[chat_buf] = panel_win
   setup_cleanup(self, chat_buf, chat_win)
@@ -177,4 +172,3 @@ function Panel:toggle(chat_buf, buf)
 end
 
 return M
-

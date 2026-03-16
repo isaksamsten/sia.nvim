@@ -556,6 +556,6 @@ or config will take precedence.
 | `SiaTodoPending`    | `Comment`         | Pending todo items    |
 | `SiaTodoDone`       | `DiagnosticOk`    | Completed todo items  |
 | `SiaTodoSkipped`    | `NonText`         | Skipped todo items    |
-| `SiaAgentRunning`   | `DiagnosticHint`  | Running agent tasks   |
+| `SiaStatusActive`   | `DiagnosticHint`  | Running agent tasks   |
 | `SiaAgentCompleted` | `DiagnosticOk`    | Completed agent tasks |
 | `SiaAgentFailed`    | `DiagnosticError` | Failed agent tasks    |

@@ -41,6 +41,7 @@ end
 --- @field error string?
 --- @field name string
 --- @field task string
+--- @field started_at number
 --- @field usage sia.Usage?
 --- @field cancellable sia.Cancellable?
 --- @field get_preview fun(self: sia.conversation.Agent): string[]
@@ -1008,6 +1009,7 @@ function Conversation:new_agent(name, task)
     name = name,
     task = task,
     status = "running",
+    started_at = vim.uv.hrtime() / 1e9,
     cancellable = { is_cancelled = false },
   }, Agent)
   table.insert(self.agents, instance)
