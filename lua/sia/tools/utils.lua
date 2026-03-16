@@ -31,7 +31,6 @@ M.tool_names = {
 --- @return fun(t:sia.ToolCall):sia.ToolCall
 function M.gen_clear_outdated_tool_input(clear_args)
   local function clear_outdated_tool_input(tool)
-    -- For custom (freeform) tools, prune the raw input
     if tool.type == "custom" and tool.custom then
       return {
         id = tool.id,
@@ -636,46 +635,6 @@ M.new_tool = function(opts, execute)
       })
     end,
   }
-end
-
---- Base directory for all sia tool output temp files (includes PID to avoid
---- collisions between Neovim instances).
----
---- Layout:
----   /tmp/sia/<pid>/bash/<conversation_id>/   - bash tool output
----   /tmp/sia/<pid>/web/<conversation_id>/   - fetch tool output
---- @type string
-local SIA_OUTPUT_DIR =
-  vim.fs.joinpath(vim.uv.os_tmpdir() or "/tmp", "sia", tostring(vim.uv.os_getpid()))
-
---- @type string
-local BASH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "bash")
-
---- @type string
-local FETCH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "web")
-
---- Get the bash output directory for a specific conversation
---- @param conversation_id integer
---- @return string
-function M.get_bash_output_dir(conversation_id)
-  return vim.fs.joinpath(BASH_OUTPUT_DIR, tostring(conversation_id))
-end
-
---- Get the fetch output directory for a specific conversation
---- @param conversation_id integer
---- @return string
-function M.get_fetch_output_dir(conversation_id)
-  return vim.fs.joinpath(FETCH_OUTPUT_DIR, tostring(conversation_id))
-end
-
---- Check if a file path is under any sia tool output directory.
---- Paths under this directory are trusted and can be read without confirmation.
---- @param path string
---- @return boolean
-function M.is_tool_output_path(path)
-  local resolved = vim.fn.resolve(path)
-  local base = vim.fn.resolve(SIA_OUTPUT_DIR)
-  return vim.startswith(resolved, base .. "/") or resolved == base
 end
 
 return M

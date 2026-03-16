@@ -1,5 +1,6 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
+local tool_utils = require("sia.tools.utils")
 
 math.randomseed(os.time())
 
@@ -41,6 +42,9 @@ end
 --- @field name string
 --- @field task string
 --- @field usage sia.Usage?
+--- @field cancellable sia.Cancellable?
+--- @field get_preview fun(self: sia.conversation.Agent): string[]
+--- @field cancel fun(self: sia.conversation.Agent): string[]?, string?
 
 --- @class sia.conversation.BashProcess
 --- @field id integer
@@ -54,6 +58,9 @@ end
 --- @field started_at number
 --- @field completed_at number?
 --- @field detached_handle sia.DetachedProcess? handle for async/detached processes
+--- @field _conversation_id integer?
+--- @field get_preview fun(self: sia.conversation.BashProcess, opts?: { tail_lines?: integer }): string[]
+--- @field stop fun(self: sia.conversation.BashProcess): string[]?, string?
 
 --- @class sia.CacheControl
 --- @field type "ephemeral"
@@ -119,6 +126,275 @@ end
 --- @field status ("outdated"|"failed"|"superseded"|"dropped")?
 local Message = {}
 Message.__index = Message
+
+local STATUS_OUTPUT_TAIL_LINES = 20
+
+local Agent = {}
+Agent.__index = Agent
+
+local BashProcess = {}
+BashProcess.__index = BashProcess
+
+--- @param text string?
+--- @param n integer
+--- @return string[]
+local function tail_lines(text, n)
+  if not text or text == "" then
+    return {}
+  end
+
+  local lines = vim.split(text, "\n", { plain = true })
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+
+  if #lines <= n then
+    return lines
+  end
+
+  local result = {}
+  for i = #lines - n + 1, #lines do
+    table.insert(result, lines[i])
+  end
+  return result
+end
+
+--- @param path string?
+--- @return string
+local function read_output_file(path)
+  if not path or vim.fn.filereadable(path) ~= 1 then
+    return ""
+  end
+  return table.concat(vim.fn.readfile(path), "\n")
+end
+
+--- @param conversation_id integer?
+--- @param proc_id integer
+--- @param stream "stdout"|"stderr"
+--- @param content string?
+--- @return string?
+local function write_bash_output(content, conversation_id, proc_id, stream)
+  if not content or content == "" or not conversation_id then
+    return nil
+  end
+
+  local dir = require("sia.utils").dirs.bash(conversation_id)
+  vim.fn.mkdir(dir, "p")
+  local path = vim.fs.joinpath(dir, string.format("process_%d_%s", proc_id, stream))
+  vim.fn.writefile(vim.split(content, "\n", { plain = true }), path)
+  return path
+end
+
+--- @param content string[]
+--- @param stdout string?
+--- @param stderr string?
+--- @param tail_line_count integer
+--- @param header_prefix string
+--- @param empty_message string?
+local function append_output_sections(
+  content,
+  stdout,
+  stderr,
+  tail_line_count,
+  header_prefix,
+  empty_message
+)
+  local stdout_tail = tail_lines(stdout, tail_line_count)
+  local stderr_tail = tail_lines(stderr, tail_line_count)
+
+  if #stdout_tail > 0 then
+    table.insert(content, "")
+    table.insert(
+      content,
+      string.format(
+        "%s stdout (last %d lines):",
+        header_prefix,
+        math.min(#stdout_tail, tail_line_count)
+      )
+    )
+    vim.list_extend(content, stdout_tail)
+  end
+
+  if #stderr_tail > 0 then
+    table.insert(content, "")
+    table.insert(
+      content,
+      string.format(
+        "%s stderr (last %d lines):",
+        header_prefix,
+        math.min(#stderr_tail, tail_line_count)
+      )
+    )
+    vim.list_extend(content, stderr_tail)
+  end
+
+  if #stdout_tail == 0 and #stderr_tail == 0 and empty_message then
+    table.insert(content, empty_message)
+  end
+end
+
+--- @return string[]
+function Agent:get_preview()
+  local content = {
+    string.format("Agent ID: %d", self.id),
+    string.format("Agent: %s", self.name),
+    string.format("Status: %s", self.status),
+    string.format("Task: %s", self.task),
+  }
+
+  if self.status == "running" then
+    if self.progress and #self.progress > 0 then
+      table.insert(content, string.format("Progress: %s", self.progress))
+    end
+    if self.cancellable and self.cancellable.is_cancelled then
+      table.insert(content, "Cancellation requested: yes")
+    end
+  elseif self.status == "completed" and self.result then
+    table.insert(content, "")
+    table.insert(content, "Result:")
+    vim.list_extend(content, self.result)
+  elseif self.status == "failed" and self.error then
+    table.insert(content, "")
+    table.insert(content, string.format("Error: %s", self.error))
+  end
+
+  return content
+end
+
+--- @return string[]? content
+--- @return string? err
+function Agent:cancel()
+  if self.status ~= "running" then
+    return nil, string.format("Agent %d is already %s", self.id, self.status)
+  end
+
+  if not self.cancellable then
+    return nil, string.format("Agent %d cannot be cancelled", self.id)
+  end
+
+  if self.cancellable.is_cancelled then
+    return nil,
+      string.format("Cancellation has already been requested for agent %d", self.id)
+  end
+
+  self.cancellable.is_cancelled = true
+  self.progress = "Cancellation requested"
+
+  return {
+    string.format("Cancellation requested for agent %d.", self.id),
+    string.format("Agent: %s", self.name),
+    string.format("Task: %s", self.task),
+  }
+end
+
+--- @param opts? { tail_lines?: integer }
+--- @return string[]
+function BashProcess:get_preview(opts)
+  opts = opts or {}
+  local tail_line_count = opts.tail_lines or STATUS_OUTPUT_TAIL_LINES
+  local content = {
+    string.format("Process ID: %d", self.id),
+    string.format("Command: %s", self.command),
+    string.format("Status: %s", self.status),
+  }
+
+  if self.status == "running" then
+    table.insert(
+      content,
+      string.format("Running for: %.1fs", (vim.uv.hrtime() / 1e9) - self.started_at)
+    )
+
+    if not self.detached_handle then
+      table.insert(content, "Output preview is unavailable for synchronous processes.")
+      return content
+    end
+
+    local output = self.detached_handle.get_output()
+    append_output_sections(
+      content,
+      output.stdout,
+      output.stderr,
+      tail_line_count,
+      "Recent",
+      "No output yet."
+    )
+    return content
+  end
+
+  table.insert(content, string.format("Exit code: %d", self.code or -1))
+  if self.interrupted then
+    table.insert(content, "Interrupted: yes")
+  end
+  if self.stdout_file then
+    table.insert(content, string.format("Full stdout: %s", self.stdout_file))
+  end
+  if self.stderr_file then
+    table.insert(content, string.format("Full stderr: %s", self.stderr_file))
+  end
+
+  append_output_sections(
+    content,
+    read_output_file(self.stdout_file),
+    read_output_file(self.stderr_file),
+    tail_line_count,
+    "Recent",
+    "No output captured."
+  )
+
+  return content
+end
+
+--- @return string[]? content
+--- @return string? err
+function BashProcess:stop()
+  if self.status ~= "running" then
+    return nil,
+      string.format(
+        "Process %d is already %s (exit code: %s)",
+        self.id,
+        self.status,
+        tostring(self.code)
+      )
+  end
+
+  if not self.detached_handle then
+    return nil,
+      string.format(
+        "Error: Process %d is a synchronous process and cannot be killed",
+        self.id
+      )
+  end
+
+  local output = self.detached_handle.get_output()
+  self.detached_handle.kill()
+  self.detached_handle = nil
+
+  self.status = "failed"
+  self.code = 143
+  self.interrupted = true
+  self.completed_at = vim.uv.hrtime() / 1e9
+  self.stdout_file =
+    write_bash_output(output.stdout, self._conversation_id, self.id, "stdout")
+  self.stderr_file =
+    write_bash_output(output.stderr, self._conversation_id, self.id, "stderr")
+
+  local content = {
+    string.format("Process %d terminated.", self.id),
+    string.format("Command: %s", self.command),
+    string.format("Ran for: %.1fs", self.completed_at - self.started_at),
+  }
+
+  append_output_sections(
+    content,
+    output.stdout,
+    output.stderr,
+    STATUS_OUTPUT_TAIL_LINES,
+    "Final",
+    "No output captured."
+  )
+
+  return content
+end
 
 --- @param generator fun(context: sia.Context?):string?
 --- @param context sia.Context?
@@ -488,8 +764,7 @@ Conversation.__index = Conversation
 Conversation.pending_messages = {}
 
 --- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
---- @param args sia.Context?
---- @return boolean
+--- @param context sia.Context?
 function Conversation.add_pending_instruction(instruction, context)
   for _, message in ipairs(Message.new(instruction, context) or {}) do
     table.insert(Conversation.pending_messages, message)
@@ -728,17 +1003,20 @@ end
 --- @return sia.conversation.Agent
 function Conversation:new_agent(name, task)
   local task_id = #self.agents + 1
-  local instance = {
+  local instance = setmetatable({
     id = task_id,
     name = name,
     task = task,
     status = "running",
-  }
+    cancellable = { is_cancelled = false },
+  }, Agent)
   table.insert(self.agents, instance)
   return instance
 end
 
 --- @return sia.conversation.Agent
+--- @param id integer
+--- @return sia.conversation.Agent?
 function Conversation:get_agent(id)
   return self.agents[id]
 end
@@ -748,13 +1026,14 @@ end
 --- @return sia.conversation.BashProcess
 function Conversation:new_bash_process(command, description)
   local proc_id = #self.bash_processes + 1
-  local instance = {
+  local instance = setmetatable({
     id = proc_id,
     command = command,
     description = description,
     status = "running",
     started_at = vim.uv.hrtime() / 1e9,
-  }
+    _conversation_id = self.id,
+  }, BashProcess)
   table.insert(self.bash_processes, instance)
   return instance
 end

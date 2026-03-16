@@ -3,8 +3,6 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
-local STATUS_OUTPUT_TAIL_LINES = 20
-
 local ASYNC_START_REPLY = [[
 Async bash process launched successfully.
 processId: %d (This is an internal ID for your use, do not mention it to the user.)
@@ -16,70 +14,6 @@ continue working on them now. Wait to call bash(command="wait") until either:
   bash(command="wait") to idle and wait for the result (do not use
   "wait" unless you completely run out of things to do as it will waste time).
 ]]
-
---- Get the last N lines of a string, stripping trailing empty lines
---- @param text string
---- @param n integer
---- @return string[]
-local function tail_lines(text, n)
-  if not text or text == "" then
-    return {}
-  end
-  local lines = vim.split(text, "\n", { plain = true })
-  -- Strip trailing empty lines
-  while #lines > 0 and lines[#lines] == "" do
-    table.remove(lines)
-  end
-  if #lines <= n then
-    return lines
-  end
-  local result = {}
-  local start = #lines - n + 1
-  for i = start, #lines do
-    table.insert(result, lines[i])
-  end
-  return result
-end
-
---- Append recent output from a running detached process to a content table
---- @param proc sia.conversation.BashProcess
---- @param content string[]
-local function append_live_output(proc, content)
-  if not proc.detached_handle then
-    return
-  end
-  local output = proc.detached_handle.get_output()
-  local stdout_tail = tail_lines(output.stdout, STATUS_OUTPUT_TAIL_LINES)
-  local stderr_tail = tail_lines(output.stderr, STATUS_OUTPUT_TAIL_LINES)
-
-  if #stdout_tail > 0 then
-    table.insert(content, "")
-    table.insert(
-      content,
-      string.format(
-        "Recent stdout (last %d lines):",
-        math.min(#stdout_tail, STATUS_OUTPUT_TAIL_LINES)
-      )
-    )
-    vim.list_extend(content, stdout_tail)
-  end
-
-  if #stderr_tail > 0 then
-    table.insert(content, "")
-    table.insert(
-      content,
-      string.format(
-        "Recent stderr (last %d lines):",
-        math.min(#stderr_tail, STATUS_OUTPUT_TAIL_LINES)
-      )
-    )
-    vim.list_extend(content, stderr_tail)
-  end
-
-  if #stdout_tail == 0 and #stderr_tail == 0 then
-    table.insert(content, "No output yet.")
-  end
-end
 
 --- Ensure the shell is initialized for the conversation
 --- @param conversation sia.Conversation
@@ -104,7 +38,7 @@ local function write_temp_output(content, conversation_id, proc_id, stream)
   if not content or content == "" then
     return nil
   end
-  local dir = tool_utils.get_bash_output_dir(conversation_id)
+  local dir = require("sia.utils").dirs.bash(conversation_id)
   vim.fn.mkdir(dir, "p")
   local path = vim.fs.joinpath(dir, string.format("process_%d_%s", proc_id, stream))
   vim.fn.writefile(vim.split(content, "\n", { plain = true }), path)
@@ -530,7 +464,6 @@ git commit -m "$(cat <<'EOF'
     end
 
     if args.async then
-      -- Async mode: launch and return process ID immediately
       launch_command(args, conversation, opts, function(proc, err)
         if err then
           callback({
@@ -551,7 +484,6 @@ git commit -m "$(cat <<'EOF'
         })
       end, nil)
     else
-      -- Synchronous mode (default): launch and wait for result
       launch_command(args, conversation, opts, function(_, err)
         if err then
           callback({
@@ -560,9 +492,7 @@ git commit -m "$(cat <<'EOF'
             kind = "failed",
           })
         end
-        -- Result will be returned via on_completed
       end, function(proc)
-        -- Process completed — return result directly
         vim.schedule(function()
           return_completed_result(proc, conversation, callback)
         end)
@@ -590,30 +520,7 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
-    local content = {
-      string.format("Process ID: %d", proc.id),
-      string.format("Command: %s", proc.command),
-      string.format("Status: %s", proc.status),
-    }
-
-    if proc.status ~= "running" then
-      table.insert(content, string.format("Exit code: %d", proc.code or -1))
-      if proc.interrupted then
-        table.insert(content, "Interrupted: yes")
-      end
-      if proc.stdout_file then
-        table.insert(content, string.format("Full stdout: %s", proc.stdout_file))
-      end
-      if proc.stderr_file then
-        table.insert(content, string.format("Full stderr: %s", proc.stderr_file))
-      end
-    else
-      local elapsed = (vim.uv.hrtime() / 1e9) - proc.started_at
-      table.insert(content, string.format("Running for: %.1fs", elapsed))
-      append_live_output(proc, content)
-    end
-
-    callback({ content = content })
+    callback({ content = proc:get_preview() })
   elseif args.command == "wait" then
     if not args.id then
       callback({
@@ -635,16 +542,14 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
-    -- If already completed, return result immediately
     if proc.status ~= "running" then
       return_completed_result(proc, conversation, callback)
       return
     end
 
     local wait_timeout = args.wait_timeout
-    local start_time = vim.uv.hrtime() / 1e6 -- milliseconds
+    local start_time = vim.uv.hrtime() / 1e6
 
-    -- Poll until complete or wait_timeout expires
     local function poll()
       local current_proc = conversation:get_bash_process(args.id)
       if not current_proc then
@@ -659,11 +564,9 @@ git commit -m "$(cat <<'EOF'
         return
       end
 
-      -- Check if wait_timeout has expired
       if wait_timeout then
         local elapsed = (vim.uv.hrtime() / 1e6) - start_time
         if elapsed >= wait_timeout then
-          -- Return partial output
           local content = {
             string.format("Process %d is still running.", current_proc.id),
             string.format("Command: %s", current_proc.command),
@@ -676,7 +579,10 @@ git commit -m "$(cat <<'EOF'
               wait_timeout / 1000
             ),
           }
-          append_live_output(current_proc, content)
+          local preview = current_proc:get_preview()
+          for i = 5, #preview do
+            table.insert(content, preview[i])
+          end
           callback({ content = content })
           return
         end
@@ -706,91 +612,25 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
-    if proc.status ~= "running" then
+    local content, err = proc:stop()
+    if err then
       callback({
-        content = {
-          string.format(
-            "Process %d is already %s (exit code: %s)",
-            args.id,
-            proc.status,
-            tostring(proc.code)
-          ),
-        },
+        content = { err },
+        display_content = icons.error .. " Failed to execute command",
+        kind = "failed",
       })
       return
     end
 
-    -- Kill the detached process
-    if proc.detached_handle then
-      -- Get partial output before killing
-      local output = proc.detached_handle.get_output()
-      proc.detached_handle.kill()
-
-      -- Update process record
-      proc.status = "failed"
-      proc.code = 143
-      proc.interrupted = true
-      proc.completed_at = vim.uv.hrtime() / 1e9
-
-      -- Save partial output to temp files
-      local temp_dir = vim.fn.tempname()
-      vim.fn.mkdir(temp_dir, "p")
-      local stdout_file = temp_dir .. "/process_" .. args.id .. "_stdout"
-      local stderr_file = temp_dir .. "/process_" .. args.id .. "_stderr"
-      vim.fn.writefile(vim.split(output.stdout, "\n", { plain = true }), stdout_file)
-      vim.fn.writefile(vim.split(output.stderr, "\n", { plain = true }), stderr_file)
-      proc.stdout_file = stdout_file
-      proc.stderr_file = stderr_file
-
-      local elapsed = proc.completed_at - proc.started_at
-      local content = {
-        string.format("Process %d terminated.", args.id),
-        string.format("Command: %s", proc.command),
-        string.format("Ran for: %.1fs", elapsed),
-      }
-
-      local stdout_tail = tail_lines(output.stdout, STATUS_OUTPUT_TAIL_LINES)
-      if #stdout_tail > 0 then
-        table.insert(content, "")
-        table.insert(
-          content,
-          string.format("Final stdout (last %d lines):", #stdout_tail)
-        )
-        vim.list_extend(content, stdout_tail)
-      end
-
-      local stderr_tail = tail_lines(output.stderr, STATUS_OUTPUT_TAIL_LINES)
-      if #stderr_tail > 0 then
-        table.insert(content, "")
-        table.insert(
-          content,
-          string.format("Final stderr (last %d lines):", #stderr_tail)
-        )
-        vim.list_extend(content, stderr_tail)
-      end
-
-      callback({
-        content = content,
-        display_content = string.format(
-          "%s Killed process %d: %s",
-          icons.bash_kill,
-          args.id,
-          format_command(proc.command)
-        ),
-      })
-    else
-      -- Sync process — can't be killed (it's running inside the shell queue)
-      callback({
-        content = {
-          string.format(
-            "Error: Process %d is a synchronous process and cannot be killed",
-            args.id
-          ),
-        },
-        display_content = icons.error .. " Failed to execute command",
-        kind = "failed",
-      })
-    end
+    callback({
+      content = content or { "Process is not running" },
+      display_content = string.format(
+        "%s Killed process %d: %s",
+        icons.bash_kill,
+        args.id,
+        format_command(proc.command)
+      ),
+    })
   else
     callback({
       content = { string.format("Error: Unknown command '%s'", args.command) },

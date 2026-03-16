@@ -1,5 +1,43 @@
 local M = {}
 
+--- @type string
+local SIA_OUTPUT_DIR =
+  vim.fs.joinpath(vim.uv.os_tmpdir() or "/tmp", "sia", tostring(vim.uv.os_getpid()))
+
+--- @type string
+local BASH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "bash")
+
+--- @type string
+local FETCH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "web")
+
+--- @param conversation_id integer
+--- @return string
+local function get_bash_output_dir(conversation_id)
+  return vim.fs.joinpath(BASH_OUTPUT_DIR, tostring(conversation_id))
+end
+
+--- @param conversation_id integer
+--- @return string
+local function get_fetch_output_dir(conversation_id)
+  return vim.fs.joinpath(FETCH_OUTPUT_DIR, tostring(conversation_id))
+end
+
+--- Check if a file path is under any sia tool output directory.
+--- Paths under this directory are trusted and can be read without confirmation.
+--- @param path string
+--- @return boolean
+local function is_tool_output_path(path)
+  local resolved = vim.fn.resolve(path)
+  local base = vim.fn.resolve(SIA_OUTPUT_DIR)
+  return vim.startswith(resolved, base .. "/") or resolved == base
+end
+
+M.dirs = {
+  bash = get_bash_output_dir,
+  fetch = get_fetch_output_dir,
+  is_safe = is_tool_output_path,
+}
+
 --- @param files string[]
 --- @param opts {max_count: integer?, max_sort: integer?}?
 function M.limit_files(files, opts)

@@ -2,7 +2,6 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
-
 --- Get the directory containing the fetch-page script (relative to plugin root).
 --- @return string
 local function get_script_dir()
@@ -45,7 +44,8 @@ return tool_utils.new_tool({
   is_available = function()
     return vim.fn.executable("npm") == 1 and vim.fn.executable("node") == 1
   end,
-  system_prompt = string.format([[- Fetches content from a specified URL using a headless browser
+  system_prompt = string.format(
+    [[- Fetches content from a specified URL using a headless browser
 - Cleans HTML with Mozilla Readability and converts to markdown
 - Downloads page images locally and takes a full-page screenshot
 - Returns the page content along with file paths to the output directory
@@ -58,7 +58,10 @@ Usage notes:
     provided index.md path to view the full content.
   - A screenshot is always saved. Use the `%s` tool on the provided
     screenshot.png path to view it when visual context would be helpful.
-  - Downloaded images are stored in the images/ subdirectory of the output.]], tool_names.view, tool_names.view_image),
+  - Downloaded images are stored in the images/ subdirectory of the output.]],
+    tool_names.view,
+    tool_names.view_image
+  ),
   parameters = {
     url = {
       type = "string",
@@ -114,7 +117,7 @@ Usage notes:
           return
         end
 
-        local fetch_dir = tool_utils.get_fetch_output_dir(conversation.id)
+        local fetch_dir = require("sia.utils").dirs.fetch(conversation.id)
         local fetch_id = tostring(vim.uv.hrtime())
         local output_dir = vim.fs.joinpath(fetch_dir, fetch_id)
         vim.fn.mkdir(output_dir, "p")

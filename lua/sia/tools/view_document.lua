@@ -63,7 +63,7 @@ view or analyze the contents of a document file.]],
     return tool_utils.path_allow_rules("path", args.path)
   end,
   auto_apply = function(args, _)
-    if args.path and tool_utils.is_tool_output_path(args.path) then
+    if args.path and require("sia.utils").dirs.is_safe(args.path) then
       return 1
     end
     return nil

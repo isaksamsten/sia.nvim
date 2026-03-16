@@ -8,7 +8,7 @@ local tool_names = tool_utils.tool_names
 --- @param path string
 --- @return { icon: string, label: fun(path: string): string }
 local function view_display(path)
-  if tool_utils.is_tool_output_path(path) then
+  if require("sia.utils").dirs.is_safe(path) then
     return {
       icon = icons.view_bash,
       label = function()
@@ -72,7 +72,7 @@ will be truncated.]],
   end,
   auto_apply = function(args, _)
     if args.path then
-      if tool_utils.is_tool_output_path(args.path) then
+      if require("sia.utils").dirs.is_safe(args.path) then
         return 1
       end
       if require("sia.skills.registry").is_skill_path(args.path) then
@@ -183,11 +183,13 @@ will be truncated.]],
         local span = start_line ~= end_line
             and string.format("lines %d-%d", start_line, end_line)
           or string.format("line %d", start_line)
-        outdated_message = string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
+        outdated_message =
+          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
       else
         local span = end_line > 1 and string.format("lines %d-%d", start_line, end_line)
           or string.format("line %d", start_line)
-        outdated_message = string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
+        outdated_message =
+          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
       end
 
       callback({
@@ -204,4 +206,3 @@ will be truncated.]],
     end,
   })
 end)
-

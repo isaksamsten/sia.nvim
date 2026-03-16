@@ -157,9 +157,14 @@ Usage notes:
               if reply then
                 agent.status = "completed"
                 agent.result = reply
+                agent.progress = nil
               else
                 agent.status = "failed"
-                agent.error = "No response (or cancelled)"
+                agent.error = agent.cancellable
+                    and agent.cancellable.is_cancelled
+                    and "Cancelled"
+                  or "No response"
+                agent.progress = nil
               end
               agent.usage = usage
             else
@@ -167,7 +172,7 @@ Usage notes:
               agent.error = "not started"
             end
           end,
-        }, opts.cancellable)
+        }, agent.cancellable)
         require("sia.assistant").execute_strategy(strategy)
 
         callback({
@@ -203,25 +208,8 @@ Usage notes:
       return
     end
 
-    local content = {
-      string.format("Agent ID: %d", agent.id),
-      string.format("Agent: %s", agent.name),
-      string.format("Status: %s", agent.status),
-      string.format("Task: %s", agent.task),
-    }
-
-    if agent.status == "completed" and agent.result then
-      table.insert(content, "")
-      table.insert(content, "Result:")
-      for _, line in ipairs(agent.result) do
-        table.insert(content, line)
-      end
-    elseif agent.status == "failed" and agent.error then
-      table.insert(content, "")
-      table.insert(content, string.format("Error: %s", agent.error))
-    end
-
-    callback({ content = content })
+    --- @cast agent sia.conversation.Agent
+    callback({ content = agent:get_preview() })
   elseif args.command == "wait" then
     if not args.id then
       callback({ content = { "Error: 'id' parameter is required for 'wait' command" } })

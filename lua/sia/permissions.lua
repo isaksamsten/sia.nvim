@@ -119,7 +119,6 @@ function M.persist_allow_rule(name, rule)
     return nil
   end
 
-  print(vim.inspect(rule))
   local updated, path = require("sia.config").update_auto_config(function(json)
     json.permission = json.permission or {}
     json.permission.allow = json.permission.allow or {}
@@ -147,7 +146,6 @@ function M.persist_allow_rule(name, rule)
     end
 
     json.permission.allow[name] = { existing, new_rule }
-    print("done!")
   end)
 
   if not updated then

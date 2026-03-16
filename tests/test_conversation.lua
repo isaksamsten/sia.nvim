@@ -352,4 +352,81 @@ T["empty assistant messages"]["should keep assistant with reasoning"] = function
   eq("assistant", messages[2].role)
 end
 
+T["tracked instances"] = MiniTest.new_set()
+
+T["tracked instances"]["agent instances expose preview and cancel methods"] = function()
+  local conv = require("sia.conversation").new_conversation({ temporary = true })
+  local agent = conv:new_agent("code/review", "Inspect the repository")
+  agent.progress = "Analyzing..."
+
+  local preview = agent:get_preview()
+  eq("Agent ID: 1", preview[1])
+  eq("Agent: code/review", preview[2])
+  eq("Status: running", preview[3])
+  eq("Task: Inspect the repository", preview[4])
+  eq("Progress: Analyzing...", preview[5])
+
+  local content, err = agent:cancel()
+  eq(nil, err)
+  eq(true, agent.cancellable.is_cancelled)
+  eq("Cancellation requested", agent.progress)
+  eq("Cancellation requested for agent 1.", content[1])
+  eq("Agent: code/review", content[2])
+  eq("Task: Inspect the repository", content[3])
+end
+
+T["tracked instances"]["bash process instances expose preview and stop methods"] = function()
+  local conv = require("sia.conversation").new_conversation({ temporary = true })
+  local proc = conv:new_bash_process("make test", "Run tests")
+  local killed = false
+
+  proc.detached_handle = {
+    process = {},
+    get_output = function()
+      return {
+        stdout = table.concat({ "alpha", "beta", "" }, "\n"),
+        stderr = table.concat({ "warn", "" }, "\n"),
+      }
+    end,
+    is_done = function()
+      return false
+    end,
+    kill = function()
+      killed = true
+    end,
+  }
+
+  local preview = proc:get_preview({ tail_lines = 1 })
+  eq("Process ID: 1", preview[1])
+  eq("Command: make test", preview[2])
+  eq("Status: running", preview[3])
+  eq(true, vim.tbl_contains(preview, "Recent stdout (last 1 lines):"))
+  eq(true, vim.tbl_contains(preview, "beta"))
+  eq(true, vim.tbl_contains(preview, "Recent stderr (last 1 lines):"))
+  eq(true, vim.tbl_contains(preview, "warn"))
+
+  local content, err = proc:stop()
+  eq(nil, err)
+  eq(true, killed)
+  eq("failed", proc.status)
+  eq(143, proc.code)
+  eq(true, proc.interrupted)
+  eq(true, proc.completed_at >= proc.started_at)
+  eq(1, vim.fn.filereadable(proc.stdout_file))
+  eq(1, vim.fn.filereadable(proc.stderr_file))
+  eq("Process 1 terminated.", content[1])
+  eq("Command: make test", content[2])
+
+  local completed_preview = proc:get_preview({ tail_lines = 1 })
+  eq("Process ID: 1", completed_preview[1])
+  eq("Command: make test", completed_preview[2])
+  eq("Status: failed", completed_preview[3])
+  eq("Exit code: 143", completed_preview[4])
+  eq("Interrupted: yes", completed_preview[5])
+  eq(true, vim.tbl_contains(completed_preview, "beta"))
+  eq(true, vim.tbl_contains(completed_preview, "Recent stdout (last 1 lines):"))
+  eq(true, vim.tbl_contains(completed_preview, "Recent stderr (last 1 lines):"))
+  eq(true, vim.tbl_contains(completed_preview, "warn"))
+end
+
 return T
