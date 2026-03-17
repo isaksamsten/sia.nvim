@@ -97,11 +97,10 @@ function OpenAICompletionStream:process_stream_chunk(obj)
         end
         -- Used by reasoning models...
         if delta.reasoning_opaque then
-          self.reasoning_opaque = (self.reasoning_opaque or "")
-            .. delta.reasoning_opaque
+          self.reasoning_opaque = delta.reasoning_opaque
         end
         if delta.reasoning_text then
-          self.reasoning_text = (self.reasoning_text or "") .. delta.reasoning_text
+          self.reasoning_text = delta.reasoning_text
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
           if not self.strategy:on_tools() then

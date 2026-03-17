@@ -993,6 +993,7 @@ end
 --- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
 --- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.PreparedMessage[]? ):string[])?
 --- @field translate_http_error (fun(code: integer):string?)?
+--- @field on_http_error (fun(code: integer):boolean)?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 --- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
 
