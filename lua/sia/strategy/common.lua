@@ -114,6 +114,18 @@ function StreamRenderer:is_empty()
   return self.start_col == self.column and self.start_line == self.line
 end
 
+--- Shift all line positions by `delta`. Useful when lines are inserted
+--- above the renderer's current write position.
+--- @param delta integer
+function StreamRenderer:shift(delta)
+  if delta == 0 then
+    return
+  end
+  self.start_line = self.start_line + delta
+  self.line = self.line + delta
+  self.temporary_line = self.temporary_line + delta
+end
+
 --- @param content string The string content to append to the buffer.
 --- @param temporary boolean?
 function StreamRenderer:append(content, temporary)

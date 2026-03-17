@@ -8,6 +8,101 @@ local SUMMARIZE_PROMPT = [[Summarize the interaction. Make it suitable for a
 buffer name in neovim using three to five words separated by
 spaces. Only output the name, nothing else.]]
 
+--- @class sia.chat.AssistantTurnRenderer
+--- @field canvas sia.Canvas
+--- @field buf integer
+--- @field content_writer sia.StreamRenderer
+--- @field reasoning_writer sia.StreamRenderer?
+local AssistantTurnRenderer = {}
+AssistantTurnRenderer.__index = AssistantTurnRenderer
+
+--- @param opts { canvas: sia.Canvas, buf: integer, line: integer }
+--- @return sia.chat.AssistantTurnRenderer
+function AssistantTurnRenderer.new(opts)
+  local obj = {
+    canvas = opts.canvas,
+    buf = opts.buf,
+    content_writer = StreamRenderer:new({
+      canvas = opts.canvas,
+      line = opts.line,
+      column = 0,
+      temporary = false,
+    }),
+    reasoning_writer = nil,
+  }
+  return setmetatable(obj, AssistantTurnRenderer)
+end
+
+--- @return sia.StreamRenderer
+function AssistantTurnRenderer:_ensure_reasoning_writer()
+  if self.reasoning_writer then
+    return self.reasoning_writer
+  end
+
+  local insert_at = self.content_writer.start_line
+  local current_line =
+    vim.api.nvim_buf_get_lines(self.buf, insert_at, insert_at + 1, false)[1]
+  local reuse_placeholder = self.content_writer:is_empty() and current_line == ""
+
+  if reuse_placeholder then
+    self.canvas:append_text_at(insert_at, 0, ">| ")
+    self.canvas:insert_lines_at(insert_at + 1, { "" })
+  else
+    self.canvas:insert_lines_at(insert_at, { ">| ", "" })
+  end
+
+  self.content_writer:shift(1)
+  self.reasoning_writer = StreamRenderer:new({
+    canvas = self.canvas,
+    line = insert_at,
+    column = 3,
+    temporary = false,
+  })
+  return self.reasoning_writer
+end
+
+--- @param content string
+function AssistantTurnRenderer:append_content(content)
+  if content ~= "" then
+    self.content_writer:append(content)
+  end
+end
+
+--- @param content string
+function AssistantTurnRenderer:append_reasoning(content)
+  if content == "" then
+    return
+  end
+
+  local writer = self:_ensure_reasoning_writer()
+  local index = 1
+  while index <= #content do
+    local newline = content:find("\n", index, true)
+    local substring = newline and content:sub(index, newline - 1) or content:sub(index)
+    if #substring > 0 then
+      writer:append_substring(substring)
+    end
+
+    if newline then
+      writer:append_newline()
+      self.content_writer:shift(1)
+      writer:append_substring(">| ")
+    end
+
+    index = (newline or #content) + 1
+  end
+end
+
+--- @param content string
+function AssistantTurnRenderer:append_tool_result(content)
+  self.content_writer:append_newline_if_needed()
+  local line = self.content_writer.line
+  self.content_writer:append(content)
+  self.content_writer:append_newline()
+  self.canvas:highlight_tool(line, self.content_writer.line)
+  self.content_writer:append_newline_if_needed()
+end
+
 --- @class sia.ToolCall
 --- @field id string
 --- @field type "function"|"custom"
@@ -26,7 +121,7 @@ spaces. Only output the name, nothing else.]]
 --- @field total_tokens integer?
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
---- @field private writer sia.StreamRenderer?
+--- @field private turn_renderer sia.chat.AssistantTurnRenderer?
 --- @field private queued_instructions {instruction: sia.config.Instruction|string|sia.config.Instruction[], context: sia.Context?}[]
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
@@ -51,12 +146,22 @@ function ChatStrategy.new(conversation, options)
       vim.wo[win][wo] = value
     end
   end
+  if not (options.wo and options.wo.foldmethod ~= nil) then
+    vim.wo[win].foldmethod = "expr"
+    vim.wo[win].foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
+  end
+  if not (options.wo and options.wo.foldenable ~= nil) then
+    vim.wo[win].foldenable = true
+  end
+  if not (options.wo and options.wo.foldlevel ~= nil) then
+    vim.wo[win].foldlevel = 0
+  end
   vim.bo[buf].ft = "sia"
   vim.bo[buf].syntax = "markdown"
   vim.bo[buf].buftype = "nowrite"
   local obj = setmetatable(Strategy.new(conversation), ChatStrategy)
   obj.buf = buf
-  obj.writer = nil
+  obj.turn_renderer = nil
   obj.options = options
   obj.queued_instructions = {}
 
@@ -203,11 +308,17 @@ function ChatStrategy:on_stream_start()
     return false
   end
   self:set_abort_keymap(self.buf)
-  self.writer = StreamRenderer:new({
+  local last_line = vim.api.nvim_buf_line_count(self.buf) - 1
+  local last_text =
+    vim.api.nvim_buf_get_lines(self.buf, last_line, last_line + 1, false)[1]
+  if last_text ~= "" then
+    self.canvas:insert_lines_at(last_line + 1, { "" })
+    last_line = last_line + 1
+  end
+  self.turn_renderer = AssistantTurnRenderer.new({
     canvas = self.canvas,
-    line = vim.api.nvim_buf_line_count(self.buf) - 1,
-    column = 0,
-    temporary = false,
+    buf = self.buf,
+    line = last_line,
   })
   return true
 end
@@ -215,9 +326,6 @@ end
 function ChatStrategy:on_content(input)
   if not self:buf_is_loaded() then
     return false
-  end
-  if input.content and input.content ~= "" then
-    self.writer:append(input.content)
   end
   if input.reasoning then
     local content = input.reasoning.content
@@ -227,8 +335,13 @@ function ChatStrategy:on_content(input)
     if header then
       winbar.update_status(self.buf, { message = header })
     else
-      winbar.update_status(self.buf, { message = "Thinking..." })
+      if content and content ~= "" and self.turn_renderer then
+        self.turn_renderer:append_reasoning(content)
+      end
     end
+  end
+  if input.content and input.content ~= "" and self.turn_renderer then
+    self.turn_renderer:append_content(input.content)
   end
   if input.tool_calls then
     self.pending_tools = input.tool_calls
@@ -258,7 +371,7 @@ function ChatStrategy:on_cancel()
 end
 
 function ChatStrategy:on_complete(control)
-  if not self.writer then
+  if not self.turn_renderer then
     if not self:buf_is_loaded() then
       control.finish()
       return
@@ -281,7 +394,7 @@ function ChatStrategy:on_complete(control)
 
   self.canvas:scroll_to_bottom()
   local handle_cleanup = function()
-    self.writer = nil
+    self.turn_renderer = nil
     if not self:buf_is_loaded() then
       control.finish()
       return
@@ -361,12 +474,8 @@ function ChatStrategy:on_complete(control)
       winbar.update_tool_status(self.buf, nil)
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
-          if tool_result.result.display_content then
-            self.writer:append_newline_if_needed()
-            local line = self.writer.line
-            self.writer:append(tool_result.result.display_content)
-            self.writer:append_newline()
-            self.canvas:highlight_tool(line, self.writer.line)
+          if tool_result.result.display_content and self.turn_renderer then
+            self.turn_renderer:append_tool_result(tool_result.result.display_content)
           end
           self.conversation:add_instruction({
             { role = "assistant", tool_calls = { tool_result.tool } },
@@ -380,7 +489,6 @@ function ChatStrategy:on_complete(control)
                 or tool_result.result.ephemeral,
             },
           }, tool_result.result.context, { turn_id = control.turn_id })
-          self.writer:append_newline_if_needed()
         end
       end
 

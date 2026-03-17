@@ -247,4 +247,362 @@ T["strategy.chat"]["queued instructions"]["are flushed between rounds"] = functi
   )
 end
 
+T["strategy.chat"]["reasoning rendering"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                reasoning_text = "Plan the change\nCheck the edge cases",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "Done",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["reasoning rendering"]["inserts folded reasoning into the buffer and preserves it on redraw"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  assistant.execute_strategy(strategy)
+
+  local expected = {
+    "/sia",
+    "",
+    ">| Plan the change",
+    ">| Check the edge cases",
+    "Done",
+  }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  local win = strategy:get_win()
+  vim.api.nvim_set_current_win(win)
+  eq("expr", vim.wo[win].foldmethod)
+  eq(3, vim.fn.foldclosed(3))
+
+  strategy:redraw()
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq(3, vim.fn.foldclosed(3))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["chunked reasoning"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                reasoning_text = "First ",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                reasoning_text = "chunk\nSecond line",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "Result",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["chunked reasoning"]["assembles reasoning from multiple deltas"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  assistant.execute_strategy(strategy)
+
+  local expected = {
+    "/sia",
+    "",
+    ">| First chunk",
+    ">| Second line",
+    "Result",
+  }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["reasoning only"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                reasoning_text = "I thought about it",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  assistant.execute_strategy(strategy)
+
+  local expected = {
+    "/sia",
+    "",
+    ">| I thought about it",
+    "",
+  }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+local child = MiniTest.new_child_neovim()
+
+T["strategy.chat"]["multi-turn reasoning"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      child.restart({ "-u", "assets/minimal.lua" })
+      child.lua([[
+        vim.notify = function() end
+      ]])
+    end,
+    post_once = function()
+      child.stop()
+    end,
+  },
+})
+
+T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool use"] = function()
+  child.lua([[
+    local mock = require("tests.mock")
+    local assistant = require("sia.assistant")
+    local ChatStrategy = require("sia.strategy").ChatStrategy
+    local Conversation = require("sia.conversation")
+
+    local call_count = 0
+    mock.mock_fn_jobstart_custom(function(_, job_opts)
+      call_count = call_count + 1
+      local rounds = {
+        {
+          {
+            choices = {
+              {
+                delta = {
+                  reasoning_text = "Let me check",
+                  tool_calls = {
+                    {
+                      index = 0,
+                      id = "call_1",
+                      type = "function",
+                      ["function"] = { name = "test_tool", arguments = '{"q":"x"}' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          { choices = { { delta = { reasoning_text = "Now I know" } } } },
+          { choices = { { delta = { content = "The answer" } } } },
+        },
+      }
+      local round = rounds[call_count]
+      if round then
+        for _, datum in ipairs(round) do
+          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+        end
+      end
+      job_opts.on_stdout(1, {
+        "data: " .. vim.json.encode({
+          choices = { { delta = {} } },
+          usage = { total_tokens = 10 * call_count },
+        }),
+      }, 10)
+      job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+      job_opts.on_exit(1, 0, nil)
+      return 1
+    end)
+
+    local source_buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_win_set_buf(0, source_buf)
+
+    local conversation = Conversation.new_conversation({
+      model = require("sia.model").resolve("openai/gpt-4.1"),
+    })
+    conversation:add_instruction({ role = "system", content = "Ok" })
+
+    conversation.tool_fn["test_tool"] = {
+      action = function(_args, _conv, callback)
+        callback({ content = { "tool result" }, kind = "ok" })
+      end,
+    }
+
+    _G._test_strategy = ChatStrategy.new(conversation, { cmd = "split" })
+    assistant.execute_strategy(_G._test_strategy)
+  ]])
+
+  child.lua([[
+    _G._test_lines = vim.api.nvim_buf_get_lines(_G._test_strategy.buf, 0, -1, false)
+  ]])
+
+  local lines = child.lua_get("_G._test_lines")
+  local expected = {
+    "/sia",
+    "",
+    ">| Let me check",
+    ">| Now I know",
+    "The answer",
+  }
+  eq(expected, lines)
+end
+
+T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted by turn 2 reasoning"] = function()
+  child.lua([[
+      local mock = require("tests.mock")
+      local assistant = require("sia.assistant")
+      local ChatStrategy = require("sia.strategy").ChatStrategy
+      local Conversation = require("sia.conversation")
+
+      local call_count = 0
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        call_count = call_count + 1
+        local rounds = {
+          {
+            { choices = { { delta = { reasoning_text = "First thought" } } } },
+            {
+              choices = {
+                {
+                  delta = {
+                    content = "First content",
+                    tool_calls = {
+                      {
+                        index = 0,
+                        id = "call_1",
+                        type = "function",
+                        ["function"] = { name = "test_tool", arguments = "{}" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          {
+            { choices = { { delta = { reasoning_text = "Second thought" } } } },
+            { choices = { { delta = { content = "Second content" } } } },
+          },
+        }
+        local round = rounds[call_count]
+        if round then
+          for _, datum in ipairs(round) do
+            job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+          end
+        end
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 10 * call_count },
+          }),
+        }, 10)
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+
+      local source_buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_win_set_buf(0, source_buf)
+
+      local conversation = Conversation.new_conversation({
+        model = require("sia.model").resolve("openai/gpt-4.1"),
+      })
+      conversation:add_instruction({ role = "system", content = "Ok" })
+
+      conversation.tool_fn["test_tool"] = {
+        action = function(_args, _conv, callback)
+          callback({ content = { "tool result" }, kind = "ok" })
+        end,
+      }
+
+      _G._test_strategy = ChatStrategy.new(conversation, { cmd = "split" })
+      assistant.execute_strategy(_G._test_strategy)
+    ]])
+
+  child.lua([[
+      _G._test_lines = vim.api.nvim_buf_get_lines(_G._test_strategy.buf, 0, -1, false)
+    ]])
+
+  local lines = child.lua_get("_G._test_lines")
+  local expected = {
+    "/sia",
+    "",
+    ">| First thought",
+    "First content",
+    ">| Second thought",
+    "Second content",
+  }
+  eq(expected, lines)
+end
+
 return T
