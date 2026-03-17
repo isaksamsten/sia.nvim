@@ -11,7 +11,7 @@ local ERROR_API_KEY_MISSING = -100
 
 --- @class sia.ProviderOpts
 --- @field on_stdout (fun(job:number, response: string[], _:any?):nil)
---- @field on_exit (fun( _: any, code:number, _:any?):nil)
+--- @field on_exit (fun( _: any, code:number, _:any?, http_status:number?):nil)
 --- @field base_url string
 --- @field chat_endpoint string
 --- @field extra_args string[]?
@@ -44,27 +44,30 @@ local function call_provider(data, opts)
     error("Failed to write request to temp file")
   end
   table.insert(args, "@" .. tmpfile)
+
+  -- Write the HTTP status code to stderr so it doesn't mix with the SSE stream on stdout
+  table.insert(args, "--write-out")
+  table.insert(args, "%{stderr}%{http_code}")
+
+  local http_status = nil
   return vim.fn.jobstart(args, {
     clear_env = true,
-    on_stderr = function(_, a, _) end,
-    on_stdout = opts.on_stdout,
-    on_exit = opts.on_exit,
-  })
-end
-
-local function extract_error(json)
-  if json.error then
-    return json.error
-  end
-
-  if vim.islist(json) then
-    for _, part in ipairs(json) do
-      if part.error then
-        return part.error
+    on_stderr = function(_, data_lines, _)
+      for _, line in ipairs(data_lines) do
+        local code = line:match("^(%d%d%d)$")
+        if code then
+          http_status = tonumber(code)
+        end
       end
-    end
-  end
-  return nil
+    end,
+    on_stdout = opts.on_stdout,
+    on_exit = function(jobid, code, event)
+      vim.fn.delete(tmpfile)
+      if opts.on_exit then
+        opts.on_exit(jobid, code, event, http_status)
+      end
+    end,
+  })
 end
 
 --- @param strategy sia.Strategy
@@ -84,14 +87,9 @@ function M.execute_strategy(strategy)
     if is_initial then
       if not strategy:on_request_start() then
         strategy.is_busy = false
-        strategy:on_error()
+        strategy:on_error("Failed to start request")
         return
       end
-      vim.api.nvim_exec_autocmds("User", {
-        pattern = "SiaInit",
-        --- @diagnostic disable-next-line: undefined-field
-        data = { buf = strategy.buf },
-      })
     end
     strategy:on_round_start()
 
@@ -111,10 +109,9 @@ function M.execute_strategy(strategy)
     provider.prepare_messages(data, model.api_name, messages)
 
     local extra_args = provider.get_headers
-      and provider.get_headers(provider.api_key(), messages)
+      and provider.get_headers(model, provider.api_key(), messages)
     local first_on_stdout = true
     local pending_data = "" -- Buffer for data that spans multiple callbacks
-    local error_initialize = false
 
     local stream = provider.new_stream(strategy)
     local job = call_provider(data, {
@@ -124,27 +121,11 @@ function M.execute_strategy(strategy)
       on_stdout = function(job_id, responses, _)
         if first_on_stdout then
           first_on_stdout = false
-          local response = table.concat(responses, " ")
-          local status, json = pcall(vim.json.decode, response, {
-            luanil = { object = true },
-          })
-          if status then
-            local m_err = extract_error(json)
-            if m_err then
-              vim.notify(vim.inspect(response), vim.log.levels.ERROR)
-              error_initialize = true
-              strategy.is_busy = false
-              strategy:on_error()
-              vim.fn.jobstop(job_id)
-            end
-          end
-          if not error_initialize then
-            if not strategy:on_stream_start() then
-              strategy.is_busy = false
-              strategy:on_error()
-              vim.fn.jobstop(job_id)
-              return
-            end
+          if not strategy:on_stream_start() then
+            strategy.is_busy = false
+            strategy:on_error("Stream initalization failed")
+            vim.fn.jobstop(job_id)
+            return
           end
         end
 
@@ -213,21 +194,31 @@ function M.execute_strategy(strategy)
           end
         end
       end,
-      on_exit = function(jobid, code, _)
+      on_exit = function(jobid, code, _, http_status)
         if timer then
           timer:stop()
           timer:close()
-        end
-        if error_initialize then
-          return
         end
 
         if code == ERROR_API_KEY_MISSING or code == 143 or code == 137 then
           if code == 143 or code == 137 then
             strategy:on_cancel()
           else
-            strategy:on_error()
+            strategy:on_error("Provider requires an API key")
           end
+          strategy.is_busy = false
+          return
+        end
+
+        if http_status and http_status ~= 200 then
+          local message
+          if provider.translate_http_error then
+            message = provider.translate_http_error(http_status)
+          end
+          if not message then
+            message = string.format("HTTP %d error from provider", http_status)
+          end
+          strategy:on_error(message)
           strategy.is_busy = false
           return
         end
@@ -299,7 +290,7 @@ function M.fetch_response(conversation, callback)
   call_provider(data, {
     base_url = provider.base_url,
     chat_endpoint = provider.chat_endpoint,
-    extra_args = provider.get_headers(provider.api_key(), messages),
+    extra_args = provider.get_headers(model, provider.api_key(), messages),
     on_stdout = function(_, resp, _)
       if data ~= nil then
         response = response .. table.concat(resp, " ")
@@ -335,7 +326,7 @@ function M.fetch_embedding(strings, model, callback)
   call_provider(data, {
     base_url = provider.base_url,
     chat_endpoint = provider.embedding_endpoint,
-    extra_args = provider.get_headers(provider.api_key()),
+    extra_args = provider.get_headers(model, provider.api_key()),
     on_stdout = function(_, resp, _)
       if data ~= nil then
         response = response .. table.concat(resp, " ")

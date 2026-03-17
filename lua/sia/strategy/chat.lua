@@ -188,11 +188,14 @@ function ChatStrategy:on_round_start()
   )
 end
 
-function ChatStrategy:on_error()
+function ChatStrategy:on_error(error)
   if not self:buf_is_loaded() then
     return
   end
-  winbar.update_status(self.buf, { message = "Internal error", status = "error" })
+  winbar.update_status(
+    self.buf,
+    { message = error or "Internal error", status = "error" }
+  )
 end
 
 function ChatStrategy:on_stream_start()
@@ -224,7 +227,7 @@ function ChatStrategy:on_content(input)
     if header then
       winbar.update_status(self.buf, { message = header })
     else
-      self.writer:append(content, true)
+      winbar.update_status(self.buf, { message = "Thinking..." })
     end
   end
   if input.tool_calls then

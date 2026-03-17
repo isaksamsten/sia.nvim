@@ -124,7 +124,6 @@ Usage notes:
         local agent = conversation:new_agent(args.agent, args.task)
         local tools = require("sia.tools")
 
-        local HiddenStrategy = require("sia.strategy").HiddenStrategy
         local Conversation = require("sia.conversation")
         local new_conversation = Conversation.new_conversation({
           mode = "hidden",
@@ -148,25 +147,25 @@ Usage notes:
           content = agent_def.system_prompt,
         }, { role = "user", content = args.task })
         new_conversation.name = conversation.name .. "-" .. agent.name
-        local strategy = HiddenStrategy.new(nil, new_conversation, {
+        local strategy = require("sia.strategy").new_hidden(nil, new_conversation, {
           notify = function(msg)
             agent.progress = msg
           end,
-          callback = function(_, reply, usage)
+          callback = function(_, result)
             if agent then
-              if reply then
+              if
+                not result.error
+                and not (agent.cancellable and agent.cancellable.is_cancelled)
+              then
                 agent.status = "completed"
-                agent.result = reply
+                agent.result = result.content or { "No response" }
                 agent.progress = nil
               else
                 agent.status = "failed"
-                agent.error = agent.cancellable
-                    and agent.cancellable.is_cancelled
-                    and "Cancelled"
-                  or "No response"
+                agent.error = result.error
                 agent.progress = nil
               end
-              agent.usage = usage
+              agent.usage = result.usage
             else
               agent.status = "failed"
               agent.error = "not started"

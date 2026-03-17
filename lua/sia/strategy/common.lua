@@ -226,8 +226,9 @@ function Strategy:on_complete(control) end
 ---
 --- Use for: Cleanup, showing error messages to user
 ---
+--- @param error string?
 --- @return nil This is a notification callback
-function Strategy:on_error() end
+function Strategy:on_error(error) end
 
 --- Called when the user cancels the operation (typically via the abort keymap).
 ---

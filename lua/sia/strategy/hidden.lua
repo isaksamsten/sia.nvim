@@ -42,8 +42,8 @@ function HiddenStrategy:on_content(input)
   return true
 end
 
-function HiddenStrategy:on_error()
-  self.options.callback(self.buf, nil)
+function HiddenStrategy:on_error(error)
+  self.options.callback(self.buf, { error = error or "Internal error" })
 end
 
 function HiddenStrategy:on_complete(control)
@@ -81,13 +81,16 @@ function HiddenStrategy:on_complete(control)
 
       if opts.cancelled then
         control.finish()
-        self.options.callback(self.buf, nil, control.usage)
+        self.options.callback(self.buf, { usage = control.usage })
       else
         control.continue_execution()
       end
     end,
     handle_empty_toolset = function()
-      self.options.callback(self.buf, control.content, control.usage)
+      self.options.callback(
+        self.buf,
+        { content = control.content, usage = control.usage }
+      )
       self.conversation:untrack_messages()
       vim.defer_fn(function()
         vim.cmd.echo()
@@ -101,7 +104,7 @@ function HiddenStrategy:on_cancel()
   if self.buf then
     self:del_abort_keymap(self.buf)
   end
-  self.options.callback(self.buf, { "Operation was cancelled by user" })
+  self.options.callback(self.buf, {})
   vim.api.nvim_echo({ { "sia: cancelled", "DiagnosticWarn" } }, false, {})
 end
 

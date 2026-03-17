@@ -51,7 +51,7 @@ end
 function TestStrategy:on_stream_start()
   return true
 end
-function TestStrategy:on_error()
+function TestStrategy:on_error(_)
   self.error = true
 end
 function TestStrategy:on_content(input)
