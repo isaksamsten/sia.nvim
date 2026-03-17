@@ -8,6 +8,10 @@ local COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
 local COPILOT_USER_URL = "https://api.github.com/copilot_internal/user"
 local OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
+local _api_token = nil
+local _oauth_token = nil
+local invalidate_api_token
+
 ---@return string
 local function get_cache_dir()
   local cache_dir = vim.fn.stdpath("cache") .. "/sia"
@@ -206,11 +210,8 @@ local function authorize(callback)
 
       if token_data.access_token then
         save_cached_oauth_token(token_data.access_token)
-        -- Clear cached API token so the new OAuth token is used for the next exchange
-        local token_cache = get_token_cache_path()
-        if vim.fn.filereadable(token_cache) == 1 then
-          vim.fn.delete(token_cache)
-        end
+        invalidate_api_token()
+        _oauth_token = token_data.access_token
         finish({ oauth_token = token_data.access_token })
         return
       end
@@ -242,74 +243,82 @@ local function authorize(callback)
   poll((interval_seconds * 1000) + OAUTH_POLLING_SAFETY_MARGIN_MS)
 end
 
----Get a valid GitHub Copilot API key by:
----1. Looking up the OAuth token from cache
----2. Exchanging the OAuth token for a temporary API token via /copilot_internal/v2/token
----@return function(): string? Function that returns a valid Copilot API token or nil if unsuccessful
-local function copilot_api_key()
-  local token = nil
-  local oauth = nil
+---@return table?
+local function load_cached_api_token()
+  local cached = load_json_file(get_token_cache_path())
+  if cached and cached.token and cached.expires_at then
+    cached.expires_at = tonumber(cached.expires_at)
+    return cached
+  end
+  return nil
+end
 
-  ---@return table?
-  local function load_cached_api_token()
-    local cached = load_json_file(get_token_cache_path())
-    if cached and cached.token and cached.expires_at then
-      cached.expires_at = tonumber(cached.expires_at)
-      return cached
-    end
+---@param token_data table
+local function save_cached_api_token(token_data)
+  save_json_file(get_token_cache_path(), token_data)
+end
+
+--- Invalidate the cached Copilot API token (both in-memory and on disk).
+--- Called when the server rejects the token (e.g., 401).
+invalidate_api_token = function()
+  _api_token = nil
+  local token_cache = get_token_cache_path()
+  if vim.fn.filereadable(token_cache) == 1 then
+    vim.fn.delete(token_cache)
+  end
+end
+
+---Get a valid GitHub Copilot API key.
+---Uses shared module-level state so all providers see the same token.
+---@return string?
+local function get_copilot_api_key()
+  if
+    _api_token
+    and _api_token.expires_at
+    and _api_token.expires_at - 60 > os.time()
+  then
+    return _api_token.token
+  end
+
+  _api_token = load_cached_api_token()
+  if
+    _api_token
+    and _api_token.expires_at
+    and _api_token.expires_at - 60 > os.time()
+  then
+    return _api_token.token
+  end
+
+  _oauth_token = get_oauth_token(_oauth_token)
+  if not _oauth_token then
+    vim.notify("sia: run :SiaAuth copilot to authorize", vim.log.levels.WARN)
     return nil
   end
 
-  ---@param token_data table
-  local function save_cached_api_token(token_data)
-    save_json_file(get_token_cache_path(), token_data)
+  local json = curl_json_sync({
+    "curl",
+    "--silent",
+    "--header",
+    "Authorization: Bearer " .. _oauth_token,
+    "--header",
+    "Content-Type: application/json",
+    "--header",
+    "Accept: application/json",
+    COPILOT_TOKEN_URL,
+  })
+
+  if json and json.token and json.expires_at then
+    _api_token = {
+      token = json.token,
+      expires_at = tonumber(json.expires_at),
+    }
+    if _api_token.expires_at then
+      save_cached_api_token(_api_token)
+    end
+    return _api_token.token
   end
 
-  ---@return string?
-  return function()
-    -- Check in-memory cache first
-    if token and token.expires_at and token.expires_at - 60 > os.time() then
-      return token.token
-    end
-
-    -- Check disk cache
-    token = load_cached_api_token()
-    if token and token.expires_at and token.expires_at - 60 > os.time() then
-      return token.token
-    end
-
-    -- Need to fetch a new token
-    oauth = get_oauth_token(oauth)
-    if not oauth then
-      vim.notify("sia: run :SiaAuth copilot to authorize", vim.log.levels.WARN)
-      return nil
-    end
-
-    local json = curl_json_sync({
-      "curl",
-      "--silent",
-      "--header",
-      "Authorization: Bearer " .. oauth,
-      "--header",
-      "Content-Type: application/json",
-      "--header",
-      "Accept: application/json",
-      COPILOT_TOKEN_URL,
-    })
-
-    if json and json.token and json.expires_at then
-      token = {
-        token = json.token,
-        expires_at = tonumber(json.expires_at),
-      }
-      if token.expires_at then
-        save_cached_api_token(token)
-      end
-      return token.token
-    end
-
-    return nil
-  end
+  return nil
 end
 
 --- @param model sia.Model
@@ -354,7 +363,7 @@ end
 --- @param callback fun(stats: sia.conversation.Stats?)
 --- @param conversation sia.Conversation
 local function get_stats(callback, conversation)
-  local oauth = get_oauth_token()
+  local oauth = get_oauth_token(_oauth_token)
   if not oauth then
     callback()
     return
@@ -424,31 +433,43 @@ local function get_stats(callback, conversation)
   )
 end
 
+--- Handle HTTP errors from the Copilot API.
+--- On 401, invalidate the cached token and signal a retry.
+--- @param http_status integer
+--- @return boolean should_retry
+local function copilot_on_http_error(http_status)
+  if http_status == 401 then
+    invalidate_api_token()
+    return true
+  end
+  return false
+end
+
 local completion =
   openai.completion_compatible("https://api.githubcopilot.com/", "chat/completions", {
-    api_key = copilot_api_key(),
+    api_key = get_copilot_api_key,
     get_headers = copilot_extra_header,
     prepare_parameters = function(data, model)
-      -- Copilot Claude models require max_tokens
       if model.api_name:match("claude") and not data.max_tokens then
         data.max_tokens = 4096
       end
     end,
   })
 completion.get_stats = get_stats
+completion.on_http_error = copilot_on_http_error
 
 local responses =
   openai.responses_compatible("https://api.githubcopilot.com/", "responses", {
-    api_key = copilot_api_key(),
+    api_key = get_copilot_api_key,
     get_headers = copilot_extra_header,
     prepare_parameters = function(data, model)
-      -- Copilot Claude models require max_tokens
       if model.api_name:match("claude") and not data.max_tokens then
         data.max_tokens = 4096
       end
     end,
   })
 responses.get_stats = get_stats
+responses.on_http_error = copilot_on_http_error
 
 return {
   completion = completion,

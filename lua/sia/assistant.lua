@@ -1,6 +1,7 @@
 local M = {}
 
 local ERROR_API_KEY_MISSING = -100
+local MAX_RETRIES = 1
 --- @class sia.Usage
 --- @field total integer?
 --- @field input integer?
@@ -82,6 +83,7 @@ function M.execute_strategy(strategy)
   local usage
 
   local turn_id = strategy.conversation:new_turn()
+  local auth_retries = 0
   local function execute_round(is_initial)
     local timer
     if is_initial then
@@ -211,6 +213,16 @@ function M.execute_strategy(strategy)
         end
 
         if http_status and http_status ~= 200 then
+          if
+            provider.on_http_error
+            and auth_retries < MAX_RETRIES
+            and provider.on_http_error(http_status)
+          then
+            auth_retries = auth_retries + 1
+            execute_round(false)
+            return
+          end
+
           local message
           if provider.translate_http_error then
             message = provider.translate_http_error(http_status)
