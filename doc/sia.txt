@@ -169,7 +169,7 @@ Configure Sia in your `init.lua`:
         plan_model = "openai/o3-mini",       -- Model for planning and reasoning
         embedding_model = "openai/text-embedding-3-small", -- Model for semantic embeddings
         icons = "emoji",                     -- Icon set: "emoji" or a custom table
-
+    
         -- UI behavior
         ui = {
           diff = {
@@ -186,14 +186,14 @@ Configure Sia in your `init.lua`:
             },
           },
         },
-
+    
         -- File operations
         file_ops = {
           trash = true,                      -- Move deleted files to trash
           create_dirs_on_rename = true,      -- Create directories when renaming
           restrict_to_project_root = true,   -- Restrict file operations to project
         },
-
+    
         -- Default context settings
         context = {
           max_tool = 200,        -- Maximum tool calls before pruning occurs
@@ -201,7 +201,7 @@ Configure Sia in your `init.lua`:
           clear_input = true,    -- Whether to clear tool input parameters during pruning
           keep = 20,             -- Number of recent tool calls to keep after pruning
         },
-
+    
         -- Shell configuration for the bash tool
         shell = {
           command = "/bin/bash",
@@ -211,7 +211,7 @@ Configure Sia in your `init.lua`:
           --   return { "-lc" }
           -- end,
         },
-
+    
         -- Automatic context window management
         context_management = {
           prune_threshold = 0.85,    -- Start pruning at 85% of context window
@@ -219,7 +219,7 @@ Configure Sia in your `init.lua`:
           compact_ratio = 0.5,       -- Fraction of messages to compact (last resort)
         },
       },
-
+    
       -- Add custom actions (see Actions documentation)
       actions = {
         -- Your custom actions here
@@ -1597,7 +1597,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
               enable = true,
               notifier = (function()
                 local notif_id = nil
-
+    
                 return {
                   show = function(args)
                     notif_id = vim.notify(args.message, vim.log.levels.INFO, {
@@ -1606,7 +1606,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
                       replace = notif_id,  -- Replace if exists, create if not
                     })
                   end,
-
+    
                   clear = function()
                     if notif_id then
                       vim.notify("", vim.log.levels.INFO, {
@@ -1648,7 +1648,7 @@ The `notifier` must implement the `sia.ConfirmNotifier` interface:
           confirm = {
             use_vim_ui = false,  -- Use custom preview UI
             show_preview = true, -- Show detailed preview in prompts
-
+    
             async = {
               enable = true,     -- Enable non-blocking confirm mode
               -- notifier = { ... } -- Optional: customize notification display
@@ -1756,7 +1756,7 @@ prompts tailored for particular tasks.
     model: openai/gpt-5.2
     require_confirmation: false
     ---
-
+    
     System prompt for the agent goes here.
 <
 
@@ -2092,7 +2092,7 @@ These are typically used in the `system` array for specific modes:
       "current_context",  -- Built-in instruction
       { role = "user", content = "Explain this code" },
     }
-
+    
     -- By function call (for instructions with options)
     instructions = {
       require("sia.instructions").current_context({ show_line_numbers = false }),
@@ -2174,7 +2174,7 @@ This action generates a code summary and formats it as a comment block:
             post_process = function(args)
               local lines = args.lines
               local ft = vim.bo[args.buf].ft
-
+    
               local comment_start, comment_end
               if ft == "lua" then
                 comment_start = "-- "
@@ -2185,14 +2185,14 @@ This action generates a code summary and formats it as a comment block:
               else
                 comment_start = "// "
               end
-
+    
               local result = {}
               for _, line in ipairs(lines) do
                 if line:match("%S") then -- Skip empty lines
                   table.insert(result, comment_start .. line)
                 end
               end
-
+    
               return result
             end,
           },
@@ -2227,7 +2227,7 @@ This action suggests refactoring improvements and shows them in a diff view:
     - Better naming conventions
     - Reduced complexity
     - Design pattern improvements
-
+    
     Output the complete refactored code, maintaining all functionality.]],
             },
           },
