@@ -294,6 +294,7 @@ T["strategy.chat"]["reasoning rendering"]["inserts folded reasoning into the buf
     "",
     ">| Plan the change",
     ">| Check the edge cases",
+    "",
     "Done",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -366,6 +367,7 @@ T["strategy.chat"]["chunked reasoning"]["assembles reasoning from multiple delta
     "",
     ">| First chunk",
     ">| Second line",
+    "",
     "Result",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -410,6 +412,7 @@ T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = func
     "/sia",
     "",
     ">| I thought about it",
+    "",
     "",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -512,7 +515,9 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
     "/sia",
     "",
     ">| Let me check",
+    "",
     ">| Now I know",
+    "",
     "The answer",
   }
   eq(expected, lines)
@@ -598,8 +603,11 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
     "/sia",
     "",
     ">| First thought",
+    "",
     "First content",
+    "",
     ">| Second thought",
+    "",
     "Second content",
   }
   eq(expected, lines)

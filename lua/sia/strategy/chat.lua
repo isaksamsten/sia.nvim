@@ -46,12 +46,12 @@ function AssistantTurnRenderer:_ensure_reasoning_writer()
 
   if reuse_placeholder then
     self.canvas:append_text_at(insert_at, 0, ">| ")
-    self.canvas:insert_lines_at(insert_at + 1, { "" })
+    self.canvas:insert_lines_at(insert_at + 1, { "", "" })
   else
-    self.canvas:insert_lines_at(insert_at, { ">| ", "" })
+    self.canvas:insert_lines_at(insert_at, { ">| ", "", "" })
   end
 
-  self.content_writer:shift(1)
+  self.content_writer:shift(2)
   self.reasoning_writer = StreamRenderer:new({
     canvas = self.canvas,
     line = insert_at,
@@ -312,8 +312,8 @@ function ChatStrategy:on_stream_start()
   local last_text =
     vim.api.nvim_buf_get_lines(self.buf, last_line, last_line + 1, false)[1]
   if last_text ~= "" then
-    self.canvas:insert_lines_at(last_line + 1, { "" })
-    last_line = last_line + 1
+    self.canvas:insert_lines_at(last_line + 1, { "", "" })
+    last_line = last_line + 2
   end
   self.turn_renderer = AssistantTurnRenderer.new({
     canvas = self.canvas,
@@ -334,10 +334,9 @@ function ChatStrategy:on_content(input)
 
     if header then
       winbar.update_status(self.buf, { message = header })
-    else
-      if content and content ~= "" and self.turn_renderer then
-        self.turn_renderer:append_reasoning(content)
-      end
+    end
+    if content and content ~= "" and self.turn_renderer then
+      self.turn_renderer:append_reasoning(content)
     end
   end
   if input.content and input.content ~= "" and self.turn_renderer then

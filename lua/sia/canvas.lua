@@ -321,14 +321,8 @@ function Canvas:render_messages(messages, model)
         local reasoning = format_reasoning_lines(extract_reasoning_text(message))
         if reasoning then
           local line_count = vim.api.nvim_buf_line_count(self.buf)
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            line_count,
-            line_count,
-            false,
-            reasoning
-          )
-          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+          vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, reasoning)
+          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
         end
       end
 
