@@ -936,7 +936,6 @@ end
 --- @field fast_model string
 --- @field plan_model string
 --- @field embedding_model string?
---- @field temperature number
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field context_management sia.config.ContextManagement?
@@ -965,10 +964,11 @@ end
 --- @field [1] string provider name
 --- @field [2] string provider model api name
 --- @field context_window integer?
+--- @field response_format table?
 --- @field pricing {input: number, output: number}?
 --- @field cache_multiplier {read: number, write: number}?
 --- @field support sia.config.Support?
---- @field [string] any?
+--- @field provider_params table<string, any>?
 
 --- @alias sia.config.Models table<string, sia.config.ModelSpec>
 
@@ -1097,13 +1097,15 @@ M._raw_options = {
     ["copilot/claude-opus-4.6"] = {
       "copilot",
       "claude-opus-4.6",
-      max_tokens = 16000,
-      top_p = 1,
-      thinking_budget = 4000,
-      thinking = { type = "adaptive" },
-      output_config = { effort = "high" },
       support = { image = true, reasoning = true, adaptive_thinking = true },
       context_window = 128000,
+      provider_params = {
+        top_p = 1,
+        max_tokens = 16000,
+        thinking_budget = 4000,
+        thinking = { type = "adaptive" },
+        output_config = { effort = "high" },
+      },
     },
     ["copilot/claude-sonnet-4.5"] = {
       "copilot",
@@ -1114,12 +1116,14 @@ M._raw_options = {
       "copilot",
       "claude-sonnet-4.6",
       context_window = 128000,
-      max_tokens = 16000,
-      top_p = 1,
-      thinking_budget = 4000,
-      thinking = { type = "adaptive" },
-      output_config = { effort = "high" },
       support = { image = true, adaptive_thinking = true, reasoning = true },
+      provider_params = {
+        top_p = 1,
+        max_tokens = 16000,
+        thinking_budget = 4000,
+        thinking = { type = "adaptive" },
+        output_config = { effort = "high" },
+      },
     },
     ["copilot/gemini-3-pro"] = {
       "copilot",
@@ -1213,7 +1217,6 @@ M._raw_options = {
     plan_model = "openai/gpt-5.2",
     embedding_model = "openai/text-embedding-3-small",
     icons = "emoji",
-    temperature = 0.3,
     history = { enable = true },
     context = {
       max_tool = 200,
@@ -1431,12 +1434,20 @@ M.options = setmetatable({}, {
 
         local spec = vim.tbl_extend("force", {}, base_spec)
         if model_overrides and model_overrides[base_name] then
-          spec = vim.tbl_extend("force", spec, model_overrides[base_name])
+          local overrides = model_overrides[base_name]
+          if overrides.provider_params and spec.provider_params then
+            overrides = vim.tbl_extend("force", {}, overrides)
+            overrides.provider_params =
+              vim.tbl_extend("force", spec.provider_params, overrides.provider_params)
+          end
+          spec = vim.tbl_extend("force", spec, overrides)
         end
 
         if alias_params then
           for k, v in pairs(alias_params) do
-            if k ~= "name" then
+            if k == "provider_params" and spec.provider_params then
+              spec.provider_params = vim.tbl_extend("force", spec.provider_params, v)
+            elseif k ~= "name" then
               spec[k] = v
             end
           end

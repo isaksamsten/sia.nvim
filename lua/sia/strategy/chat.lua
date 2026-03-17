@@ -216,7 +216,7 @@ function ChatStrategy:on_content(input)
   if not self:buf_is_loaded() then
     return false
   end
-  if input.content then
+  if input.content and input.content ~= "" then
     self.writer:append(input.content)
   end
   if input.reasoning then

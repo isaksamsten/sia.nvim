@@ -14,7 +14,6 @@ require("sia").setup({
     fast_model = "openai/gpt-4.1-mini", -- Fast model for quick tasks
     plan_model = "openai/o3-mini",       -- Model for planning and reasoning
     embedding_model = "openai/text-embedding-3-small", -- Model for semantic embeddings
-    temperature = 0.3,                   -- Creativity level (0-1)
     icons = "emoji",                     -- Icon set: "emoji" or a custom table
 
     -- UI behavior
@@ -137,14 +136,188 @@ pruning are disabled for that model — conversations will grow without limits.
 The winbar is enabled by default in chat windows. You can customize or disable
 it via the `settings.chat.winbar` option (set to `nil` to disable).
 
-### Extended Thinking for Claude Models (Copilot)
+### Provider Parameters Reference
+
+Provider-specific parameters are configured via the `provider_params` field in
+model specs, model overrides, or aliases. These parameters are merged directly
+into the API request body, so you can pass any parameter supported by the
+underlying API.
+
+Below are common parameters for each provider API type.
+
+#### OpenAI Completion API
+
+Used by: `openai`
+
+| Parameter          | Type      | Description                                                                                        |
+| ------------------ | --------- | -------------------------------------------------------------------------------------------------- |
+| `temperature`      | `number`  | Sampling temperature (0–2). Higher values are more creative. Not compatible with reasoning models. |
+| `max_tokens`       | `integer` | Maximum number of output tokens.                                                                   |
+| `top_p`            | `number`  | Nucleus sampling threshold (0–1).                                                                  |
+| `n`                | `integer` | Number of completions to generate.                                                                 |
+| `reasoning_effort` | `string`  | Reasoning depth for reasoning models (o1, o3, etc.): `"low"`, `"medium"`, `"high"`.                |
+
+**Example** — lower temperature for a specific model:
+
+```json
+{
+  "models": {
+    "openai/gpt-4.1": {
+      "provider_params": { "temperature": 0.1 }
+    }
+  }
+}
+```
+
+**Example** — configure a reasoning model:
+
+```json
+{
+  "models": {
+    "openai/o3": {
+      "provider_params": { "reasoning_effort": "medium" }
+    }
+  }
+}
+```
+
+#### OpenAI Responses API
+
+Used by: `openai_responses`, `codex`
+
+The Responses API uses a different parameter format for reasoning compared to
+the Completion API.
+
+| Parameter     | Type      | Description                                                       |
+| ------------- | --------- | ----------------------------------------------------------------- |
+| `temperature` | `number`  | Sampling temperature (0–2). Not compatible with reasoning models. |
+| `max_tokens`  | `integer` | Maximum number of output tokens.                                  |
+| `top_p`       | `number`  | Nucleus sampling threshold (0–1).                                 |
+| `reasoning`   | `object`  | Reasoning configuration for reasoning models (see below).         |
+
+The `reasoning` object accepts:
+
+| Field     | Type     | Description                                           |
+| --------- | -------- | ----------------------------------------------------- |
+| `effort`  | `string` | Reasoning depth: `"low"`, `"medium"`, `"high"`.       |
+| `summary` | `string` | Reasoning summary style: `"concise"` or `"detailed"`. |
+
+**Example** — configure a Codex reasoning model:
+
+```json
+{
+  "models": {
+    "codex/gpt-5.3-codex": {
+      "provider_params": {
+        "reasoning": { "effort": "medium" }
+      }
+    }
+  }
+}
+```
+
+#### Anthropic API
+
+Used by: `anthropic`, `claude_code`
+
+**General parameters:**
+
+| Parameter     | Type      | Description                                                 |
+| ------------- | --------- | ----------------------------------------------------------- |
+| `temperature` | `number`  | Sampling temperature (0–1).                                 |
+| `max_tokens`  | `integer` | Maximum output tokens. Defaults to `4096` if not set.       |
+| `top_p`       | `number`  | Nucleus sampling threshold (0–1).                           |
+| `top_k`       | `integer` | Top-k sampling: only consider the top k most likely tokens. |
+
+**Extended thinking parameters:**
+
+Claude models support extended thinking, which gives the model enhanced
+reasoning capabilities. Thinking can be configured in two modes:
+
+- **Adaptive** (recommended for Opus 4.6 and Sonnet 4.6): The model
+  dynamically decides when and how much to think. Use the `effort` parameter
+  to guide thinking depth.
+- **Manual** (older models, or when precise budget control is needed): You
+  set an explicit token budget with `budget_tokens`.
+
+| Parameter  | Type     | Description                                                                                                                                                                                                 |
+| ---------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thinking` | `object` | Thinking mode configuration (see below).                                                                                                                                                                    |
+| `effort`   | `object` | Output effort level: `{ "effort": "low" \| "medium" \| "high" \| "max" }`. Controls overall token spend including thinking depth, response thoroughness, and tool call frequency. `"max"` is Opus 4.6 only. |
+
+The `thinking` object accepts:
+
+| Field           | Type      | Description                                                                                           |
+| --------------- | --------- | ----------------------------------------------------------------------------------------------------- |
+| `type`          | `string`  | `"adaptive"` (recommended for Opus/Sonnet 4.6), `"enabled"` (manual), or `"disabled"`.                |
+| `budget_tokens` | `integer` | Maximum thinking tokens (manual mode only). Must be less than `max_tokens`. Deprecated on 4.6 models. |
+
+> **Note**: When thinking is enabled, `max_tokens` must be set and covers
+> both thinking and response tokens.
+
+**Example** — adaptive thinking with medium effort:
+
+```json
+{
+  "models": {
+    "anthropic/claude-sonnet-4.6": {
+      "provider_params": {
+        "max_tokens": 16000,
+        "thinking": { "type": "adaptive" },
+        "output_config": { "effort": "medium" }
+      }
+    }
+  }
+}
+```
+
+**Example** — manual thinking with a fixed budget:
+
+```json
+{
+  "models": {
+    "anthropic/claude-sonnet-4.5": {
+      "provider_params": {
+        "max_tokens": 16000,
+        "thinking": { "type": "enabled", "budget_tokens": 4000 }
+      }
+    }
+  }
+}
+```
+
+#### Copilot
+
+The Copilot provider routes to different API formats depending on the model:
+
+- **GPT-5+ models** use the **Responses API** (same parameters as
+  [OpenAI Responses API](#openai-responses-api))
+- **Anthropic models** (Claude) use the **OpenAI Completion API** format
+  (same parameters as [OpenAI Completion API](#openai-completion-api))
+- **Gemini models** use the **OpenAI Completion API** format
+
+Claude models accessed through Copilot support extended thinking via
+Copilot-specific parameters passed in `provider_params`:
+
+| Parameter         | Type      | Description                                                |
+| ----------------- | --------- | ---------------------------------------------------------- |
+| `thinking_budget` | `integer` | Token budget for internal reasoning (e.g., `4000`).        |
+| `thinking`        | `object`  | Thinking mode: `{ "type": "adaptive" }`.                   |
+| `max_tokens`      | `integer` | Maximum output tokens — required when thinking is enabled. |
+| `top_p`           | `number`  | Sampling parameter — typically `1` with thinking.          |
+| `output_config`   | `object`  | Output configuration: `{ "effort": "high" }`.              |
+
+See [Extended Thinking for Claude Models](#extended-thinking-for-claude-models-copilot)
+above for full configuration examples.
+
+##### Extended Thinking for Claude Models (Copilot)
 
 Claude models accessed through the Copilot provider (e.g., `copilot/claude-sonnet-4.6`,
 `copilot/claude-opus-4.6`) support **extended thinking**, which allows the model to
 reason more deeply before responding. This is not enabled by default — you must
 configure it in your project's `.sia/config.json`.
 
-Extended thinking requires several parameters to work together:
+Extended thinking requires several parameters grouped under `provider_params`:
 
 | Parameter         | Description                                                    |
 | ----------------- | -------------------------------------------------------------- |
@@ -154,36 +327,38 @@ Extended thinking requires several parameters to work together:
 | `top_p`           | Sampling parameter — typically set to `1` with thinking        |
 | `output_config`   | Output configuration (e.g., `{ "effort": "high" }`)            |
 
-**Using `models` overrides** (recommended — applies to all conversations using
-that model):
+**Using `models` overrides** (recommended):
 
 ```json
 {
   "models": {
     "copilot/claude-sonnet-4.6": {
-      "max_tokens": 16000,
-      "top_p": 1,
-      "thinking_budget": 4000,
-      "thinking": { "type": "adaptive" },
-      "output_config": { "effort": "high" }
+      "provider_params": {
+        "max_tokens": 16000,
+        "top_p": 1,
+        "thinking_budget": 4000,
+        "thinking": { "type": "adaptive" },
+        "output_config": { "effort": "high" }
+      }
     }
   }
 }
 ```
 
-**Using `aliases`** (creates a separate model name you can switch to with
-`:Sia -m`):
+**Using `aliases`**:
 
 ```json
 {
   "aliases": {
     "sonnet-thinking": {
       "name": "copilot/claude-sonnet-4.6",
-      "max_tokens": 16000,
-      "top_p": 1,
-      "thinking_budget": 8000,
-      "thinking": { "type": "adaptive" },
-      "output_config": { "effort": "high" }
+      "provider_params": {
+        "max_tokens": 16000,
+        "top_p": 1,
+        "thinking_budget": 8000,
+        "thinking": { "type": "adaptive" },
+        "output_config": { "effort": "high" }
+      }
     }
   }
 }
@@ -191,26 +366,20 @@ that model):
 
 Then use it with `:Sia -m sonnet-thinking your prompt here`.
 
-**Using `model` override** (sets the project default model with thinking
-enabled):
+#### OpenRouter
 
-```json
-{
-  "model": {
-    "name": "copilot/claude-sonnet-4.6",
-    "max_tokens": 16000,
-    "top_p": 1,
-    "thinking_budget": 4000,
-    "thinking": { "type": "adaptive" },
-    "output_config": { "effort": "high" }
-  }
-}
-```
+Used by: `openrouter`
 
-> **Note**: The `thinking_budget` controls how many tokens the model can use for
-> internal reasoning. Higher values allow deeper thinking but increase latency
-> and token usage. The `"adaptive"` thinking type lets the model decide how much
-> reasoning is needed for each request.
+OpenRouter uses the OpenAI Completion API format. The same parameters apply as
+[OpenAI Completion API](#openai-completion-api): `temperature`, `max_tokens`,
+`top_p`, `reasoning_effort`, etc.
+
+#### Gemini API
+
+Used by: `gemini` (via OpenAI-compatible endpoint)
+
+Gemini uses the same parameters as the [OpenAI Completion API](#openai-completion-api):
+`temperature`, `max_tokens`, `top_p`, etc.
 
 ### Customizing Winbar Display
 
@@ -250,7 +419,7 @@ specific project:
   "model": "copilot/gpt-5-mini",
   "fast_model": {
     "name": "openai/gpt-4.1-mini",
-    "temperature": 0.1
+    "provider_params": { "temperature": 0.1 }
   },
   "plan_model": "openai/o3-mini",
   "auto_continue": true,
@@ -318,13 +487,13 @@ specific project:
 
 - **`model`**: Override the default model for this project. Can be specified as:
   - String: `"openai/gpt-4.1"` (uses default settings)
-  - Object: `{ "name": "openai/gpt-4.1", "temperature": 0.7 }` (override model-specific parameters like temperature, pricing, or provider-specific options)
+  - Object: `{ "name": "openai/gpt-4.1", "provider_params": { "temperature": 0.7 } }` (override provider-specific parameters)
 - **`fast_model` / `plan_model`**: Override the fast/plan models. Same format
   as `model`.
 - **`models`**: Override parameters for specific models by name (e.g.,
-  `{ "openai/gpt-5.1": { "reasoning_effort": "medium" } }`).
+  `{ "openai/gpt-5.1": { "provider_params": { "reasoning_effort": "medium" } } }`).
 - **`aliases`**: Rename model with different parameters e.g.,
-  `{ "codex-high": { "name": "codex/gpt-5.3-codex", "reasoning_effort": "high" }`
+  `{ "codex-high": { "name": "codex/gpt-5.3-codex", "provider_params": { "reasoning_effort": "high" } }`
   and then use as `Sia -m codex-high ....`
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)

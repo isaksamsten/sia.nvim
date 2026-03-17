@@ -110,7 +110,7 @@ function M.execute_strategy(strategy)
 
     local extra_args = provider.get_headers
       and provider.get_headers(model, provider.api_key(), messages)
-    local first_on_stdout = true
+    local first_response = nil
     local pending_data = "" -- Buffer for data that spans multiple callbacks
 
     local stream = provider.new_stream(strategy)
@@ -119,8 +119,8 @@ function M.execute_strategy(strategy)
       chat_endpoint = provider.chat_endpoint,
       extra_args = extra_args,
       on_stdout = function(job_id, responses, _)
-        if first_on_stdout then
-          first_on_stdout = false
+        if first_response == nil then
+          first_response = responses
           if not strategy:on_stream_start() then
             strategy.is_busy = false
             strategy:on_error("Stream initalization failed")
@@ -218,6 +218,7 @@ function M.execute_strategy(strategy)
           if not message then
             message = string.format("HTTP %d error from provider", http_status)
           end
+          vim.notify(vim.inspect(first_response), vim.log.levels.ERROR)
           strategy:on_error(message)
           strategy.is_busy = false
           return

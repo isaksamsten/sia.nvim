@@ -6,6 +6,7 @@ local M = {}
 --- @field api_name string
 --- @field provider_name string
 --- @field params table<string, any>
+--- @field provider_params table<string, any>
 --- @field support sia.config.Support
 local Model = {}
 Model.__index = Model
@@ -39,11 +40,12 @@ function Model:new(model_config)
       return obj.spec.support ~= nil and obj.spec.support[key] or false
     end,
   })
-  obj.params = setmetatable({}, {
-    __index = function(_, key)
-      return obj.config[key] or obj.spec[key] or nil
-    end,
-  })
+  obj.params = vim.tbl_extend("force", obj.spec or {}, obj.config or {})
+  obj.provider_params = vim.tbl_extend(
+    "force",
+    obj.spec.provider_params or {},
+    obj.config.provider_params or {}
+  )
   return obj
 end
 

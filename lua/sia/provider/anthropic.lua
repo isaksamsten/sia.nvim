@@ -140,6 +140,7 @@ return {
   end,
   prepare_parameters = function(data, model)
     common.prepare_parameters(data, model)
+    -- Set required default value
     if not data.max_tokens then
       data.max_tokens = 4096
     end

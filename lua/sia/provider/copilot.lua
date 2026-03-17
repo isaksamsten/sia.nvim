@@ -268,13 +268,13 @@ local function copilot_api_key()
   ---@return string?
   return function()
     -- Check in-memory cache first
-    if token and token.expires_at and token.expires_at > os.time() then
+    if token and token.expires_at and token.expires_at - 60 > os.time() then
       return token.token
     end
 
     -- Check disk cache
     token = load_cached_api_token()
-    if token and token.expires_at and token.expires_at > os.time() then
+    if token and token.expires_at and token.expires_at - 60 > os.time() then
       return token.token
     end
 
@@ -341,7 +341,10 @@ local copilot_extra_header = function(model, _, messages)
   table.insert(args, "--header")
   table.insert(args, "x-interaction-type: conversation-agent")
 
-  if model.support.reasoning and model.api_name:match("claude") then
+  if
+    model.support.reasoning
+    and (model.api_name:match("claude") and not model.support.adaptive_thinking)
+  then
     table.insert(args, "--header")
     table.insert(args, "anthropic-beta: interleaved-thinking-2025-05-14")
   end
@@ -425,16 +428,10 @@ local completion =
   openai.completion_compatible("https://api.githubcopilot.com/", "chat/completions", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
-    --- @param model sia.Model
     prepare_parameters = function(data, model)
-      data.top_p = model.params.top_p
-      if model.support.reasoning then
-        data.thinking_budget = model.params.thinking_budget
-        if model.params.thinking then
-          data.thinking = model.params.thinking
-          data.thinking.display = "summarized"
-        end
-        data.output_config = model.params.output_config
+      -- Copilot Claude models require max_tokens
+      if model.api_name:match("claude") and not data.max_tokens then
+        data.max_tokens = 4096
       end
     end,
   })
@@ -444,6 +441,12 @@ local responses =
   openai.responses_compatible("https://api.githubcopilot.com/", "responses", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
+    prepare_parameters = function(data, model)
+      -- Copilot Claude models require max_tokens
+      if model.api_name:match("claude") and not data.max_tokens then
+        data.max_tokens = 4096
+      end
+    end,
   })
 responses.get_stats = get_stats
 

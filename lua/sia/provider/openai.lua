@@ -632,17 +632,9 @@ local M = {
       end
 
       if model.support.reasoning then
-        data.temperature = nil
-
-        --- Patch sia reasoning_effort for responses API
-        if data.reasoning_effort then
-          data.reasoning = { effort = data.reasoning_effort, summary = "concise" }
-          data.reasoning_effort = nil
-        end
-
-        data.store = false
         data.include = { "reasoning.encrypted_content" }
       end
+      data.store = false
     end,
     prepare_tools = function(data, tools)
       if not tools then

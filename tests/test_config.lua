@@ -76,14 +76,17 @@ T["validate_aliases"] = MiniTest.new_set()
 T["validate_aliases"]["accepts valid alias"] = function()
   local config = {
     aliases = {
-      ["fast-codex"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "low" },
+      ["fast-codex"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "low" },
+      },
     },
   }
   local success, result = load_config(config)
   eq(success, true)
   eq(type(result.aliases), "table")
   eq(result.aliases["fast-codex"].name, "codex/gpt-5.3-codex")
-  eq(result.aliases["fast-codex"].reasoning_effort, "low")
+  eq(result.aliases["fast-codex"].provider_params.reasoning_effort, "low")
 end
 
 T["validate_aliases"]["accepts empty aliases"] = function()
@@ -108,7 +111,7 @@ end
 T["validate_aliases"]["rejects alias without name field"] = function()
   local config = {
     aliases = {
-      ["my-alias"] = { reasoning_effort = "high" },
+      ["my-alias"] = { provider_params = { reasoning_effort = "high" } },
     },
   }
   local success, err = load_config(config)
@@ -141,7 +144,10 @@ end
 T["validate_aliases"]["allows alias as default model"] = function()
   local config = {
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
     model = "codex-high",
   }
@@ -155,7 +161,10 @@ T["resolve_aliases"] = MiniTest.new_set()
 T["resolve_aliases"]["resolves alias to real model with overrides"] = function()
   with_mock_local_config({
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
   }, function()
     local config = require("sia.config")
@@ -163,36 +172,42 @@ T["resolve_aliases"]["resolves alias to real model with overrides"] = function()
     -- Should resolve to the underlying model's spec
     eq(spec[1], "codex")
     eq(spec[2], "gpt-5.3-codex")
-    -- Alias params are merged in
-    eq(spec.reasoning_effort, "high")
+    -- Alias provider_params are merged in
+    eq(spec.provider_params.reasoning_effort, "high")
   end)
 end
 
-T["resolve_aliases"]["alias params are available via Model.params"] = function()
+T["resolve_aliases"]["alias params are available via Model.provider_params"] = function()
   with_mock_local_config({
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
   }, function()
     local model = require("sia.model")
     local m = model.resolve("codex-high")
     eq(m.provider_name, "codex")
     eq(m.api_name, "gpt-5.3-codex")
-    eq(m.params.reasoning_effort, "high")
+    eq(m.provider_params.reasoning_effort, "high")
   end)
 end
 
 T["resolve_aliases"]["non-alias model passes through unchanged"] = function()
   with_mock_local_config({
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
   }, function()
     local config = require("sia.config")
     local spec = config.options.models["codex/gpt-5.3-codex"]
     eq(spec[1], "codex")
     eq(spec[2], "gpt-5.3-codex")
-    eq(spec.reasoning_effort, nil)
+    eq(spec.provider_params, nil)
   end)
 end
 
@@ -208,40 +223,48 @@ end
 T["resolve_aliases"]["alias combined with model overrides"] = function()
   with_mock_local_config({
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
     models = {
-      ["codex/gpt-5.3-codex"] = { temperature = 0.5 },
+      ["codex/gpt-5.3-codex"] = { provider_params = { temperature = 0.5 } },
     },
   }, function()
     local config = require("sia.config")
     local spec = config.options.models["codex-high"]
     eq(spec[1], "codex")
     eq(spec[2], "gpt-5.3-codex")
-    eq(spec.reasoning_effort, "high")
-    eq(spec.temperature, 0.5)
+    eq(spec.provider_params.reasoning_effort, "high")
+    eq(spec.provider_params.temperature, 0.5)
   end)
 end
 
 T["resolve_aliases"]["alias params take precedence over local model overrides"] = function()
   with_mock_local_config({
     aliases = {
-      ["codex-high"] = { name = "codex/gpt-5.3-codex", reasoning_effort = "high" },
+      ["codex-high"] = {
+        name = "codex/gpt-5.3-codex",
+        provider_params = { reasoning_effort = "high" },
+      },
     },
     models = {
-      ["codex/gpt-5.3-codex"] = { reasoning_effort = "low", temperature = 0.5 },
+      ["codex/gpt-5.3-codex"] = {
+        provider_params = { reasoning_effort = "low", temperature = 0.5 },
+      },
     },
   }, function()
     local config = require("sia.config")
     -- Alias pins reasoning_effort = "high", overriding the local override "low"
     local spec = config.options.models["codex-high"]
-    eq(spec.reasoning_effort, "high")
-    eq(spec.temperature, 0.5)
+    eq(spec.provider_params.reasoning_effort, "high")
+    eq(spec.provider_params.temperature, 0.5)
 
     -- Non-alias access gets the local override
     local base_spec = config.options.models["codex/gpt-5.3-codex"]
-    eq(base_spec.reasoning_effort, "low")
-    eq(base_spec.temperature, 0.5)
+    eq(base_spec.provider_params.reasoning_effort, "low")
+    eq(base_spec.provider_params.temperature, 0.5)
   end)
 end
 
