@@ -1,12 +1,14 @@
 local M = {}
 
 --- @class sia.Model
---- @field config table
---- @field spec sia.config.ModelSpec|sia.config.EmbeddingSpec
+--- @field name string
 --- @field api_name string
 --- @field provider_name string
---- @field params table<string, any>
---- @field provider_params table<string, any>
+--- @field context_window integer?
+--- @field response_format table?
+--- @field pricing {input: number, output: number}?
+--- @field cache_multiplier {read: number, write: number}?
+--- @field options table<string, any>
 --- @field support sia.config.Support
 local Model = {}
 Model.__index = Model
@@ -31,21 +33,20 @@ function Model:new(model_config)
   end
 
   local obj = setmetatable({}, self)
-  obj.config = model_config
-  obj.spec = model_spec
+  obj.name = model_config.name
   obj.provider_name = model_spec[1]
   obj.api_name = model_spec[2]
   obj.support = setmetatable({}, {
     __index = function(_, key)
-      return obj.spec.support ~= nil and obj.spec.support[key] or false
+      return model_spec.support ~= nil and model_spec.support[key] or false
     end,
   })
-  obj.params = vim.tbl_extend("force", obj.spec or {}, obj.config or {})
-  obj.provider_params = vim.tbl_extend(
-    "force",
-    obj.spec.provider_params or {},
-    obj.config.provider_params or {}
-  )
+  obj.context_window = model_spec.context_window
+  obj.response_format = model_spec.response_format
+  obj.pricing = model_spec.pricing
+  obj.cache_multiplier = model_spec.cache_multiplier
+  obj.options =
+    vim.tbl_extend("force", model_spec.options or {}, model_config.options or {})
   return obj
 end
 
@@ -66,12 +67,6 @@ function M.resolve(model_config)
   end
 
   return Model:new(model_config)
-end
-
---- Get the model name (e.g., "openai/gpt-4.1")
---- @return string
-function Model:name()
-  return self.config.name
 end
 
 --- Get the provider instance

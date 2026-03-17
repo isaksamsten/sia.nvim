@@ -37,11 +37,11 @@ function M.apply_prompt_caching(messages)
   end
 end
 
---- Merge provider_params into the request data.
+--- Merge options into the request data.
 --- @param data table
 --- @param model sia.Model
 function M.prepare_parameters(data, model)
-  for k, v in pairs(model.provider_params) do
+  for k, v in pairs(model.options) do
     data[k] = v
   end
 end
@@ -128,10 +128,10 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
     if conversation and conversation.model then
       local model = conversation.model
 
-      local pricing = model.params.pricing
+      local pricing = model.pricing
       if pricing then
         cost = calculate_cost_from_pricing(pricing, usage.input, usage.output)
-        local cache_mult = model.params.cache_multiplier
+        local cache_mult = model.cache_multiplier
         if cache_mult then
           if usage.cache_read then
             cost = cost

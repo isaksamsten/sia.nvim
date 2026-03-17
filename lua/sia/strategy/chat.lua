@@ -70,7 +70,7 @@ function ChatStrategy.new(conversation, options)
   local messages = conversation:get_messages()
   obj.canvas:render_messages(
     vim.list_slice(messages, 1, #messages - 1),
-    obj.conversation.model:name()
+    obj.conversation.model.name
   )
   obj.assistant_extmark = nil
 
@@ -103,7 +103,7 @@ function ChatStrategy:redraw()
   self.canvas:clear()
   self.canvas:render_messages(
     self.conversation:get_messages(),
-    self.conversation.model:name()
+    self.conversation.model.name
   )
 end
 
@@ -134,7 +134,7 @@ function ChatStrategy:flush_queued_instructions()
   if self:buf_is_loaded() then
     local prepared = self.conversation:prepare_messages()
     local new_messages = vim.list_slice(prepared, before_count + 1)
-    self.canvas:render_messages(new_messages, self.conversation.model:name())
+    self.canvas:render_messages(new_messages, self.conversation.model.name)
   end
 
   self.queued_instructions = {}
@@ -147,8 +147,8 @@ function ChatStrategy:on_request_start()
     return false
   end
   local model = self.conversation.model
-  self.canvas:render_messages({ self.conversation:last_message() }, model:name())
-  self.assistant_extmark = self.canvas:render_assistant_header(model:name())
+  self.canvas:render_messages({ self.conversation:last_message() }, model.name)
+  self.assistant_extmark = self.canvas:render_assistant_header(model.name)
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
@@ -184,7 +184,7 @@ function ChatStrategy:on_round_start()
 
   self.canvas:update_assistant_extmark(
     self.assistant_extmark,
-    { model = self.conversation.model:name() }
+    { model = self.conversation.model.name }
   )
 end
 
@@ -294,7 +294,7 @@ function ChatStrategy:on_complete(control)
     if control.usage then
       self.canvas:update_assistant_extmark(self.assistant_extmark, {
         usage = control.usage,
-        model = self.conversation.model:name(),
+        model = self.conversation.model.name,
         status_text = control.turn_id:sub(1, 5),
       })
     end
@@ -303,7 +303,7 @@ function ChatStrategy:on_complete(control)
     local has_flushed = self:flush_queued_instructions()
     if has_flushed then
       self.assistant_extmark =
-        self.canvas:render_assistant_header(self.conversation.model:name())
+        self.canvas:render_assistant_header(self.conversation.model.name)
       control.continue_execution()
       return
     end
@@ -390,7 +390,7 @@ function ChatStrategy:on_complete(control)
             local has_flushed = self:flush_queued_instructions()
             if has_flushed then
               self.assistant_extmark =
-                self.canvas:render_assistant_header(self.conversation.model:name())
+                self.canvas:render_assistant_header(self.conversation.model.name)
             end
             control.continue_execution()
           end,
@@ -406,7 +406,7 @@ function ChatStrategy:on_complete(control)
         local has_flushed = self:flush_queued_instructions()
         if has_flushed then
           self.assistant_extmark =
-            self.canvas:render_assistant_header(self.conversation.model:name())
+            self.canvas:render_assistant_header(self.conversation.model.name)
         end
         control.continue_execution()
       end

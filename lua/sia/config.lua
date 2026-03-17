@@ -968,7 +968,7 @@ end
 --- @field pricing {input: number, output: number}?
 --- @field cache_multiplier {read: number, write: number}?
 --- @field support sia.config.Support?
---- @field provider_params table<string, any>?
+--- @field options table<string, any>?
 
 --- @alias sia.config.Models table<string, sia.config.ModelSpec>
 
@@ -1099,7 +1099,7 @@ M._raw_options = {
       "claude-opus-4.6",
       support = { image = true, reasoning = true, adaptive_thinking = true },
       context_window = 128000,
-      provider_params = {
+      options = {
         top_p = 1,
         max_tokens = 16000,
         thinking_budget = 4000,
@@ -1117,7 +1117,7 @@ M._raw_options = {
       "claude-sonnet-4.6",
       context_window = 128000,
       support = { image = true, adaptive_thinking = true, reasoning = true },
-      provider_params = {
+      options = {
         top_p = 1,
         max_tokens = 16000,
         thinking_budget = 4000,
@@ -1435,18 +1435,17 @@ M.options = setmetatable({}, {
         local spec = vim.tbl_extend("force", {}, base_spec)
         if model_overrides and model_overrides[base_name] then
           local overrides = model_overrides[base_name]
-          if overrides.provider_params and spec.provider_params then
+          if overrides.options and spec.options then
             overrides = vim.tbl_extend("force", {}, overrides)
-            overrides.provider_params =
-              vim.tbl_extend("force", spec.provider_params, overrides.provider_params)
+            overrides.options = vim.tbl_extend("force", spec.options, overrides.options)
           end
           spec = vim.tbl_extend("force", spec, overrides)
         end
 
         if alias_params then
           for k, v in pairs(alias_params) do
-            if k == "provider_params" and spec.provider_params then
-              spec.provider_params = vim.tbl_extend("force", spec.provider_params, v)
+            if k == "options" and spec.options then
+              spec.options = vim.tbl_extend("force", spec.options, v)
             elseif k ~= "name" then
               spec[k] = v
             end

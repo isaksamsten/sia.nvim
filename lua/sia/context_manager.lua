@@ -275,7 +275,7 @@ function M.get_budget(conversation)
   if not model then
     return nil
   end
-  local context_window = model.params.context_window
+  local context_window = model.context_window
   if not context_window then
     return nil
   end

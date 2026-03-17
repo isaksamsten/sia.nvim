@@ -138,7 +138,7 @@ it via the `settings.chat.winbar` option (set to `nil` to disable).
 
 ### Provider Parameters Reference
 
-Provider-specific parameters are configured via the `provider_params` field in
+Provider-specific parameters are configured via the `options` field in
 model specs, model overrides, or aliases. These parameters are merged directly
 into the API request body, so you can pass any parameter supported by the
 underlying API.
@@ -163,7 +163,7 @@ Used by: `openai`
 {
   "models": {
     "openai/gpt-4.1": {
-      "provider_params": { "temperature": 0.1 }
+      "options": { "temperature": 0.1 }
     }
   }
 }
@@ -175,7 +175,7 @@ Used by: `openai`
 {
   "models": {
     "openai/o3": {
-      "provider_params": { "reasoning_effort": "medium" }
+      "options": { "reasoning_effort": "medium" }
     }
   }
 }
@@ -208,7 +208,7 @@ The `reasoning` object accepts:
 {
   "models": {
     "codex/gpt-5.3-codex": {
-      "provider_params": {
+      "options": {
         "reasoning": { "effort": "medium" }
       }
     }
@@ -261,7 +261,7 @@ The `thinking` object accepts:
 {
   "models": {
     "anthropic/claude-sonnet-4.6": {
-      "provider_params": {
+      "options": {
         "max_tokens": 16000,
         "thinking": { "type": "adaptive" },
         "output_config": { "effort": "medium" }
@@ -277,7 +277,7 @@ The `thinking` object accepts:
 {
   "models": {
     "anthropic/claude-sonnet-4.5": {
-      "provider_params": {
+      "options": {
         "max_tokens": 16000,
         "thinking": { "type": "enabled", "budget_tokens": 4000 }
       }
@@ -297,7 +297,7 @@ The Copilot provider routes to different API formats depending on the model:
 - **Gemini models** use the **OpenAI Completion API** format
 
 Claude models accessed through Copilot support extended thinking via
-Copilot-specific parameters passed in `provider_params`:
+Copilot-specific parameters passed in `options`:
 
 | Parameter         | Type      | Description                                                |
 | ----------------- | --------- | ---------------------------------------------------------- |
@@ -317,7 +317,7 @@ Claude models accessed through the Copilot provider (e.g., `copilot/claude-sonne
 reason more deeply before responding. This is not enabled by default — you must
 configure it in your project's `.sia/config.json`.
 
-Extended thinking requires several parameters grouped under `provider_params`:
+Extended thinking requires several parameters grouped under `options`:
 
 | Parameter         | Description                                                    |
 | ----------------- | -------------------------------------------------------------- |
@@ -333,7 +333,7 @@ Extended thinking requires several parameters grouped under `provider_params`:
 {
   "models": {
     "copilot/claude-sonnet-4.6": {
-      "provider_params": {
+      "options": {
         "max_tokens": 16000,
         "top_p": 1,
         "thinking_budget": 4000,
@@ -352,7 +352,7 @@ Extended thinking requires several parameters grouped under `provider_params`:
   "aliases": {
     "sonnet-thinking": {
       "name": "copilot/claude-sonnet-4.6",
-      "provider_params": {
+      "options": {
         "max_tokens": 16000,
         "top_p": 1,
         "thinking_budget": 8000,
@@ -419,7 +419,7 @@ specific project:
   "model": "copilot/gpt-5-mini",
   "fast_model": {
     "name": "openai/gpt-4.1-mini",
-    "provider_params": { "temperature": 0.1 }
+    "options": { "temperature": 0.1 }
   },
   "plan_model": "openai/o3-mini",
   "auto_continue": true,
@@ -487,13 +487,13 @@ specific project:
 
 - **`model`**: Override the default model for this project. Can be specified as:
   - String: `"openai/gpt-4.1"` (uses default settings)
-  - Object: `{ "name": "openai/gpt-4.1", "provider_params": { "temperature": 0.7 } }` (override provider-specific parameters)
+  - Object: `{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }` (override provider-specific parameters)
 - **`fast_model` / `plan_model`**: Override the fast/plan models. Same format
   as `model`.
 - **`models`**: Override parameters for specific models by name (e.g.,
-  `{ "openai/gpt-5.1": { "provider_params": { "reasoning_effort": "medium" } } }`).
+  `{ "openai/gpt-5.1": { "options": { "reasoning_effort": "medium" } } }`).
 - **`aliases`**: Rename model with different parameters e.g.,
-  `{ "codex-high": { "name": "codex/gpt-5.3-codex", "provider_params": { "reasoning_effort": "high" } }`
+  `{ "codex-high": { "name": "codex/gpt-5.3-codex", "options": { "reasoning_effort": "high" } }`
   and then use as `Sia -m codex-high ....`
 - **`auto_continue`**: Automatically continue execution when tools are
   cancelled (default: false)

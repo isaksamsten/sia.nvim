@@ -23,7 +23,7 @@ end
 local function make_conversation(context_window, messages)
   return {
     model = {
-      params = { context_window = context_window },
+      context_window = context_window,
     },
     tools = {},
     messages = messages,
@@ -112,7 +112,7 @@ end
 T["context_manager"]["get_budget returns nil when no context_window"] = function()
   local cm = require("sia.context_manager")
   local conversation = {
-    model = { params = {} },
+    model = {},
     tools = {},
     messages = {},
     prepare_messages = function(_)

@@ -338,7 +338,7 @@ local M = {
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
 
-      local response_format = model.params.response_format
+      local response_format = model.response_format
       if response_format then
         data.response_format = response_format
       end
@@ -612,7 +612,7 @@ local M = {
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
 
-      local response_format = model.params.response_format
+      local response_format = model.response_format
       if response_format then
         data.text = data.text or {}
         if
