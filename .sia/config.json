@@ -1,14 +1,29 @@
 {
   "model": "copilot/gpt-4.1",
   "models": {
-    "openai/gpt-5.1": { "reasoning_effort": "medium" },
-    "codex/gpt-5.3-codex": { "reasoning_effort": "medium" }
+    "copilot/gpt-5.4": {
+      "options": {
+        "reasoning": { "effort": "medium", "summary": "concise" }
+      }
+    },
+    "openai/gpt-5.2": {
+      "options": { "reasoning": { "effort": "medium" } }
+    },
+    "codex/gpt-5.3-codex": {
+      "options": { "reasoning": { "effort": "medium" } }
+    },
+    "openai/gpt-5.4": {
+      "options": { "reasoning": { "effort": "medium" } }
+    }
   },
   "aliases": {
-    "codex-high": { "name": "codex/gpt-5.3-codex", "reasoning_effort": "high" },
+    "codex-high": {
+      "name": "codex/gpt-5.3-codex",
+      "options": { "reasoning": { "effort": "medium" } }
+    },
     "codex-medium": {
       "name": "codex/gpt-5.3-codex",
-      "reasoning_effort": "medium"
+      "options": { "reasoning": { "effort": "medium" } }
     }
   },
   "auto_continue": true,
@@ -39,7 +54,7 @@
           "glob": ["\\.lua$"]
         }
       },
-      "read": {
+      "view": {
         "arguments": {
           "path": ["\\.lua$", "README\\.md$"]
         }
