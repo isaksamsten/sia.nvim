@@ -312,7 +312,8 @@ local function copilot_api_key()
   end
 end
 
-local copilot_extra_header = function(_, messages)
+--- @param model sia.Model
+local copilot_extra_header = function(model, _, messages)
   local args = {}
   table.insert(args, "--header")
   table.insert(args, "Copilot-Integration-Id: vscode-chat")
@@ -333,6 +334,17 @@ local copilot_extra_header = function(_, messages)
     initiator = "agent"
   end
   table.insert(args, "X-Initiator: " .. initiator)
+  table.insert(args, "--header")
+  table.insert(args, "openai-intent: conversation-agent")
+  table.insert(args, "--header")
+  table.insert(args, "x-github-api-version: 2025-10-01")
+  table.insert(args, "--header")
+  table.insert(args, "x-interaction-type: conversation-agent")
+
+  if model.support.reasoning and model.api_name:match("claude") then
+    table.insert(args, "--header")
+    table.insert(args, "anthropic-beta: interleaved-thinking-2025-05-14")
+  end
   return args
 end
 
@@ -413,6 +425,18 @@ local completion =
   openai.completion_compatible("https://api.githubcopilot.com/", "chat/completions", {
     api_key = copilot_api_key(),
     get_headers = copilot_extra_header,
+    --- @param model sia.Model
+    prepare_parameters = function(data, model)
+      data.top_p = model.params.top_p
+      if model.support.reasoning then
+        data.thinking_budget = model.params.thinking_budget
+        if model.params.thinking then
+          data.thinking = model.params.thinking
+          data.thinking.display = "summarized"
+        end
+        data.output_config = model.params.output_config
+      end
+    end,
   })
 completion.get_stats = get_stats
 

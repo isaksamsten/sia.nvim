@@ -5,7 +5,7 @@ local M = {}
 --- @field spec sia.config.ModelSpec|sia.config.EmbeddingSpec
 --- @field api_name string
 --- @field provider_name string
---- @field params table<string, boolean>
+--- @field params table<string, any>
 --- @field support sia.config.Support
 local Model = {}
 Model.__index = Model

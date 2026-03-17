@@ -137,6 +137,81 @@ pruning are disabled for that model — conversations will grow without limits.
 The winbar is enabled by default in chat windows. You can customize or disable
 it via the `settings.chat.winbar` option (set to `nil` to disable).
 
+### Extended Thinking for Claude Models (Copilot)
+
+Claude models accessed through the Copilot provider (e.g., `copilot/claude-sonnet-4.6`,
+`copilot/claude-opus-4.6`) support **extended thinking**, which allows the model to
+reason more deeply before responding. This is not enabled by default — you must
+configure it in your project's `.sia/config.json`.
+
+Extended thinking requires several parameters to work together:
+
+| Parameter         | Description                                                    |
+| ----------------- | -------------------------------------------------------------- |
+| `thinking_budget` | Token budget for the model's internal reasoning (e.g., `4000`) |
+| `thinking`        | Thinking mode configuration (e.g., `{ "type": "adaptive" }`)   |
+| `max_tokens`      | Maximum output tokens — must be set when thinking is enabled   |
+| `top_p`           | Sampling parameter — typically set to `1` with thinking        |
+| `output_config`   | Output configuration (e.g., `{ "effort": "high" }`)            |
+
+**Using `models` overrides** (recommended — applies to all conversations using
+that model):
+
+```json
+{
+  "models": {
+    "copilot/claude-sonnet-4.6": {
+      "max_tokens": 16000,
+      "top_p": 1,
+      "thinking_budget": 4000,
+      "thinking": { "type": "adaptive" },
+      "output_config": { "effort": "high" }
+    }
+  }
+}
+```
+
+**Using `aliases`** (creates a separate model name you can switch to with
+`:Sia -m`):
+
+```json
+{
+  "aliases": {
+    "sonnet-thinking": {
+      "name": "copilot/claude-sonnet-4.6",
+      "max_tokens": 16000,
+      "top_p": 1,
+      "thinking_budget": 8000,
+      "thinking": { "type": "adaptive" },
+      "output_config": { "effort": "high" }
+    }
+  }
+}
+```
+
+Then use it with `:Sia -m sonnet-thinking your prompt here`.
+
+**Using `model` override** (sets the project default model with thinking
+enabled):
+
+```json
+{
+  "model": {
+    "name": "copilot/claude-sonnet-4.6",
+    "max_tokens": 16000,
+    "top_p": 1,
+    "thinking_budget": 4000,
+    "thinking": { "type": "adaptive" },
+    "output_config": { "effort": "high" }
+  }
+}
+```
+
+> **Note**: The `thinking_budget` controls how many tokens the model can use for
+> internal reasoning. Higher values allow deeper thinking but increase latency
+> and token usage. The `"adaptive"` thinking type lets the model decide how much
+> reasoning is needed for each request.
+
 ### Customizing Winbar Display
 
 The winbar is rendered by calling three functions: `left`, `center`, and `right`. Each

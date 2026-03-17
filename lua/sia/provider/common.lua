@@ -37,6 +37,8 @@ function M.apply_prompt_caching(messages)
   end
 end
 
+--- @param data table
+--- @param model sia.Model
 function M.prepare_parameters(data, model)
   local config = require("sia.config").options
 
@@ -50,13 +52,10 @@ function M.prepare_parameters(data, model)
     data.max_tokens = max_tokens
   end
 
-  local reasoning_effort = model.params.reasoning_effort
-  if not reasoning_effort and not model.params.can_reason then
+  if model.support.reasoning then
+    data.reasoning_effort = model.params.reasoning_effort
+  else
     data.temperature = model.params.temperature or config.settings.temperature
-  end
-
-  if reasoning_effort then
-    data.reasoning_effort = reasoning_effort
   end
 end
 

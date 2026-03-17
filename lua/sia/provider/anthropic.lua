@@ -85,13 +85,17 @@ function AnthropicStream:finalize(turn_id)
     content = vim.split(self.content, "\n")
   end
 
-  self.strategy.conversation:add_instruction({
-    role = "assistant",
-    content = content,
-  }, nil, {
-    meta = { empty_content = has_tool_calls },
-    turn_id = turn_id,
-  })
+  self.strategy.conversation:add_instruction(
+    {
+      role = "assistant",
+      content = content,
+    },
+    nil,
+    {
+      meta = { empty_content = has_tool_calls },
+      turn_id = turn_id,
+    }
+  )
   return content
 end
 
@@ -228,7 +232,7 @@ return {
     end
     common.apply_prompt_caching(data.messages)
   end,
-  get_headers = function(api_key, _)
+  get_headers = function(model, api_key, _)
     return {
       "--header",
       "anthropic-version: 2023-06-01",

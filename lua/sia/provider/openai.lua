@@ -1,6 +1,14 @@
 local common = require("sia.provider.common")
-local get_headers = function(api_key, _)
+local get_headers = function(_, api_key, _)
   return { "--header", string.format("Authorization: Bearer %s", api_key) }
+end
+
+local HTTP_ERROR_CODE = {
+  [402] = "This request requires more credits",
+}
+
+local function translate_http_error(code)
+  return HTTP_ERROR_CODE[code]
 end
 
 -- OpenAI Model Pricing (per 1M tokens, USD)
@@ -87,12 +95,13 @@ function OpenAICompletionStream:process_stream_chunk(obj)
           end
           self.content = self.content .. delta.content
         end
-        -- Used by the gemini-3-pro model
+        -- Used by reasoning models...
         if delta.reasoning_opaque then
-          self.reasoning_opaque = delta.reasoning_opaque
+          self.reasoning_opaque = (self.reasoning_opaque or "")
+            .. delta.reasoning_opaque
         end
         if delta.reasoning_text then
-          self.reasoning_text = delta.reasoning_text
+          self.reasoning_text = (self.reasoning_text or "") .. delta.reasoning_text
         end
         if delta.tool_calls and delta.tool_calls ~= "" then
           if not self.strategy:on_tools() then
@@ -599,6 +608,7 @@ local M = {
       data.instructions = #instructions > 0 and table.concat(instructions, "\n") or nil
       data.input = input
     end,
+    --- @param model sia.Model
     prepare_parameters = function(data, model)
       common.prepare_parameters(data, model)
 
@@ -621,13 +631,16 @@ local M = {
         end
       end
 
-      if data.reasoning_effort then
-        data.reasoning = { effort = data.reasoning_effort, summary = "concise" }
-        data.reasoning_effort = nil
-      end
-      data.store = false
-      if model.params.can_reason or model.params.reasoning_effort then
+      if model.support.reasoning then
         data.temperature = nil
+
+        --- Patch sia reasoning_effort for responses API
+        if data.reasoning_effort then
+          data.reasoning = { effort = data.reasoning_effort, summary = "concise" }
+          data.reasoning_effort = nil
+        end
+
+        data.store = false
         data.include = { "reasoning.encrypted_content" }
       end
     end,
@@ -661,6 +674,7 @@ local M = {
         end)
         :totable()
     end,
+    translate_http_error = translate_http_error,
     new_stream = OpenAIResponsesStream.new,
     get_stats = get_stats,
   },
@@ -671,7 +685,7 @@ local M = {
 --- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])?
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])?
 --- @field prepare_parameters fun(data: table, model: table)?
---- @field get_headers (fun(api_key:string?, messages:sia.Message[]):string[])?
+--- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.Message[]):string[])?
 
 --- @param base_url string
 --- @param opts sia.openai.CompatibleOpts
@@ -694,10 +708,10 @@ function M.completion_compatible(base_url, chat_endpoint, opts)
         opts.prepare_messages(data, model, messages)
       end
     end,
-    get_headers = function(api_key, messages)
-      local headers = M.completion.get_headers(api_key, messages)
+    get_headers = function(model, api_key, messages)
+      local headers = M.completion.get_headers(model, api_key, messages)
       if opts.get_headers then
-        for _, header in ipairs(opts.get_headers(api_key, messages)) do
+        for _, header in ipairs(opts.get_headers(model, api_key, messages)) do
           table.insert(headers, header)
         end
       end
@@ -736,10 +750,10 @@ function M.responses_compatible(base_url, chat_endpoint, opts)
         opts.prepare_messages(data, model, messages)
       end
     end,
-    get_headers = function(api_key, messages)
-      local headers = M.responses.get_headers(api_key, messages)
+    get_headers = function(model, api_key, messages)
+      local headers = M.responses.get_headers(model, api_key, messages)
       if opts.get_headers then
-        for _, header in ipairs(opts.get_headers(api_key, messages)) do
+        for _, header in ipairs(opts.get_headers(model, api_key, messages)) do
           table.insert(headers, header)
         end
       end
@@ -753,6 +767,12 @@ function M.responses_compatible(base_url, chat_endpoint, opts)
     end,
     prepare_tools = function(data, tools)
       M.responses.prepare_tools(data, tools)
+    end,
+    translate_http_error = function(code)
+      if opts.translate_http_error then
+        return opts.translate_http_error(code)
+      end
+      return M.responses.translate_http_error(code)
     end,
     new_stream = M.responses.new_stream,
   }

@@ -609,7 +609,7 @@ end
 --- Build the Codex responses provider using OpenAI responses as base
 local codex = openai.responses_compatible(CODEX_API_BASE, CODEX_CHAT_ENDPOINT, {
   api_key = codex_api_key,
-  get_headers = function(api_key, messages)
+  get_headers = function(model, api_key, messages)
     -- We handle all headers ourselves, return extras beyond Authorization
     local headers = {}
     local account_id = get_account_id()

@@ -868,7 +868,7 @@ end
 --- @field winbar sia.config.Winbar?
 
 --- @class sia.config.Hidden
---- @field callback fun(buf:number?, content:string[]?, usage:sia.Usage?)?
+--- @field callback fun(buf:number?, opts: { error: string?, content:string[]?, usage:sia.Usage?})?
 --- @field notify fun(string)?
 
 --- @class sia.config.Instruction
@@ -958,20 +958,17 @@ end
 --- @class sia.config.Support
 --- @field image boolean?
 --- @field document boolean?
+--- @field reasoning boolean?
+--- @field [string] boolean?
 
 --- @class sia.config.ModelSpec
 --- @field [1] string provider name
 --- @field [2] string provider model api name
 --- @field context_window integer?
---- @field can_reason boolean?
---- @field reasoning_effort string?
 --- @field pricing {input: number, output: number}?
 --- @field cache_multiplier {read: number, write: number}?
 --- @field support sia.config.Support?
---- @field max_tokens integer?
---- @field response_format table?
---- @field n integer?
---- @field temperature number?
+--- @field [string] any?
 
 --- @alias sia.config.Models table<string, sia.config.ModelSpec>
 
@@ -994,7 +991,8 @@ end
 --- @field prepare_tools fun(data: table, tools:sia.Tool[])
 --- @field prepare_parameters fun(data: table, model: sia.Model)?
 --- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
---- @field get_headers (fun(api_key:string?, messages:sia.PreparedMessage[]?):string[])?
+--- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.PreparedMessage[]? ):string[])?
+--- @field translate_http_error (fun(code: integer):string?)?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
 --- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
 
@@ -1013,64 +1011,55 @@ M._raw_options = {
     ["openai/gpt-5.4"] = {
       "openai_responses",
       "gpt-5.4",
-      can_reason = true,
       context_window = 400000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["openai/gpt-5.2"] = {
       "openai_responses",
       "gpt-5.2",
-      can_reason = true,
       context_window = 400000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["openai/gpt-5.2-codex"] = {
       "openai_responses",
       "gpt-5.2-codex",
-      can_reason = true,
       context_window = 400000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["openai/gpt-5.1"] = {
       "openai_responses",
       "gpt-5.1",
-      can_reason = true,
       context_window = 400000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["openai/gpt-5.1-codex"] = {
       "openai_responses",
       "gpt-5.1-codex",
-      can_reason = true,
       context_window = 400000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["openai/gpt-4.1"] = { "openai", "gpt-4.1", context_window = 1047576 },
     ["codex/gpt-5.3-codex"] = {
       "codex",
       "gpt-5.3-codex",
-      can_reason = true,
       context_window = 400000,
-      support = { document = true },
+      support = { document = true, reasoning = true },
     },
     ["codex/gpt-5.2-codex"] = {
       "codex",
       "gpt-5.2-codex",
-      can_reason = true,
       context_window = 400000,
-      support = { document = true },
+      support = { document = true, reasoning = true },
     },
     ["codex/gpt-5.2"] = {
       "codex",
       "gpt-5.2",
-      can_reason = true,
       context_window = 400000,
       support = { image = true, document = true },
     },
     ["codex/gpt-5.4"] = {
       "codex",
       "gpt-5.4",
-      can_reason = true,
       context_window = 400000,
       support = { image = true, document = true },
     },
@@ -1079,13 +1068,13 @@ M._raw_options = {
       "copilot_responses",
       "gpt-5.2",
       context_window = 128000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["copilot/gpt-5.4"] = {
       "copilot_responses",
       "gpt-5.4",
       context_window = 128000,
-      support = { image = true, document = true },
+      support = { image = true, document = true, reasoning = true },
     },
     ["copilot/gpt-5-mini"] = {
       "copilot",
@@ -1096,20 +1085,24 @@ M._raw_options = {
     ["copilot/gpt-5.2-codex"] = {
       "copilot_responses",
       "gpt-5.2-codex",
-      can_reason = true,
       context_window = 128000,
-      support = { document = true },
+      support = { document = true, reasoning = true },
     },
     ["copilot/claude-haiku-4.5"] = {
       "copilot",
       "claude-haiku-4.5",
-      support = { image = true },
+      support = { image = true, reasoning = true },
       context_window = 128000,
     },
     ["copilot/claude-opus-4.6"] = {
       "copilot",
       "claude-opus-4.6",
-      support = { image = true },
+      max_tokens = 16000,
+      top_p = 1,
+      thinking_budget = 4000,
+      thinking = { type = "adaptive" },
+      output_config = { effort = "high" },
+      support = { image = true, reasoning = true, adaptive_thinking = true },
       context_window = 128000,
     },
     ["copilot/claude-sonnet-4.5"] = {
@@ -1121,7 +1114,12 @@ M._raw_options = {
       "copilot",
       "claude-sonnet-4.6",
       context_window = 128000,
-      support = { image = true },
+      max_tokens = 16000,
+      top_p = 1,
+      thinking_budget = 4000,
+      thinking = { type = "adaptive" },
+      output_config = { effort = "high" },
+      support = { image = true, adaptive_thinking = true, reasoning = true },
     },
     ["copilot/gemini-3-pro"] = {
       "copilot",
