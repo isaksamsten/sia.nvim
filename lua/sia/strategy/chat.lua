@@ -148,24 +148,14 @@ function ChatStrategy.new(conversation, options)
   local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_win_set_buf(win, buf)
 
+  vim.bo[buf].buftype = "nowrite"
+  vim.bo[buf].ft = "sia"
+
   if options.wo then
     for wo, value in pairs(options.wo) do
       vim.wo[win][wo] = value
     end
   end
-  if not (options.wo and options.wo.foldmethod ~= nil) then
-    vim.wo[win].foldmethod = "expr"
-    vim.wo[win].foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
-  end
-  if not (options.wo and options.wo.foldenable ~= nil) then
-    vim.wo[win].foldenable = true
-  end
-  if not (options.wo and options.wo.foldlevel ~= nil) then
-    vim.wo[win].foldlevel = 0
-  end
-  vim.bo[buf].ft = "sia"
-  vim.bo[buf].syntax = "markdown"
-  vim.bo[buf].buftype = "nowrite"
   local obj = setmetatable(Strategy.new(conversation), ChatStrategy)
   obj.buf = buf
   obj.turn_renderer = nil
