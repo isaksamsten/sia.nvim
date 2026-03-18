@@ -322,7 +322,12 @@ function Canvas:render_messages(messages, model)
         if reasoning then
           local line_count = vim.api.nvim_buf_line_count(self.buf)
           vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, reasoning)
-          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
+          local has_content = content and type(content) == "string" and content ~= ""
+          if has_content then
+            vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
+          else
+            vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+          end
         end
       end
 
@@ -418,6 +423,14 @@ function Canvas:append_newline_at(line)
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, line + 1, line + 1, false, { "" })
     self:update_progress_position()
+  end
+end
+
+function Canvas:remove_line_at(line)
+  local buf = self.buf
+  if vim.api.nvim_buf_is_loaded(buf) then
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, line, line + 1, false, {})
   end
 end
 

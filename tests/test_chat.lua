@@ -372,6 +372,10 @@ T["strategy.chat"]["chunked reasoning"]["assembles reasoning from multiple delta
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
 
+  -- Redraw should produce the same layout
+  strategy:redraw()
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
   ChatStrategy.remove(strategy.buf)
 end
 
@@ -413,8 +417,11 @@ T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = func
     "",
     ">| I thought about it",
     "",
-    "",
   }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  -- Redraw should produce the same layout
+  strategy:redraw()
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
 
   ChatStrategy.remove(strategy.buf)
@@ -611,6 +618,206 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
     "Second content",
   }
   eq(expected, lines)
+end
+
+-- Test that empty string deltas don't produce extra empty lines in the chat buffer
+T["strategy.chat"]["empty deltas rendering"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                content = "Hello",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = " World",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["empty deltas rendering"]["empty delta between content does not add lines"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  assistant.execute_strategy(strategy)
+  eq(
+    { "/sia", "", "Hello World" },
+    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  )
+  ChatStrategy.remove(strategy.buf)
+end
+
+-- Test empty deltas mixed with newlines
+T["strategy.chat"]["empty deltas with newlines"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                content = "Line 1\n",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "Line 2",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["empty deltas with newlines"]["no extra empty lines between content lines"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  assistant.execute_strategy(strategy)
+  eq(
+    { "/sia", "", "Line 1", "Line 2" },
+    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  )
+  ChatStrategy.remove(strategy.buf)
+end
+
+-- Test standalone newline deltas produce exactly the right number of empty lines
+T["strategy.chat"]["standalone newline deltas"] = MiniTest.new_set({
+  hooks = {
+    pre_once = function()
+      mock.mock_fn_jobstart({
+        {
+          choices = {
+            {
+              delta = {
+                content = "Before",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "\n\n",
+              },
+            },
+          },
+        },
+        {
+          choices = {
+            {
+              delta = {
+                content = "After",
+              },
+            },
+          },
+        },
+      })
+    end,
+    post_once = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["strategy.chat"]["standalone newline deltas"]["produce exactly one blank line"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/test"),
+  })
+  conversation:add_instruction({ role = "system", content = "Ok" })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  assistant.execute_strategy(strategy)
+  eq(
+    { "/sia", "", "Before", "", "After" },
+    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  )
+  ChatStrategy.remove(strategy.buf)
+end
+
+-- Test StreamRenderer:append("") directly - the lowest level defense
+T["strategy.chat"]["StreamRenderer append empty"] = function()
+  local StreamRenderer = require("sia.strategy.common").StreamRenderer
+  local Canvas = require("sia.canvas").Canvas
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "existing" })
+  vim.bo[buf].modifiable = true
+
+  local canvas = Canvas:new(buf)
+  local renderer = StreamRenderer:new({ canvas = canvas, line = 0, column = 8 })
+
+  -- Append empty string should be a no-op
+  renderer:append("")
+  eq({ "existing" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+  eq(0, renderer.line)
+  eq(8, renderer.column)
+
+  -- Append real content should work
+  renderer:append(" text")
+  eq({ "existing text" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+
+  -- Another empty append should still be a no-op
+  renderer:append("")
+  eq({ "existing text" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+
+  vim.api.nvim_buf_delete(buf, { force = true })
 end
 
 return T

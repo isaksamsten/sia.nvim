@@ -88,6 +88,7 @@ function OpenAICompletionStream:process_stream_chunk(obj)
           if not self:on_content({ reasoning = { content = reasoning } }) then
             return true
           end
+          self.reasoning_text = (self.reasoning_text or "") .. reasoning
         end
         if delta.content and delta.content ~= "" then
           if not self:on_content({ content = delta.content }) then
@@ -99,9 +100,7 @@ function OpenAICompletionStream:process_stream_chunk(obj)
         if delta.reasoning_opaque then
           self.reasoning_opaque = delta.reasoning_opaque
         end
-        if delta.reasoning_text then
-          self.reasoning_text = delta.reasoning_text
-        end
+
         if delta.tool_calls and delta.tool_calls ~= "" then
           if not self.strategy:on_tools() then
             return true

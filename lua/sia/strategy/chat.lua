@@ -103,6 +103,13 @@ function AssistantTurnRenderer:append_tool_result(content)
   self.content_writer:append_newline_if_needed()
 end
 
+--- Clean up the layout after a turn is complete.
+function AssistantTurnRenderer:finalize()
+  if self.reasoning_writer and self.content_writer:is_empty() then
+    self.canvas:remove_line_at(self.content_writer.line)
+  end
+end
+
 --- @class sia.ToolCall
 --- @field id string
 --- @field type "function"|"custom"
@@ -393,6 +400,9 @@ function ChatStrategy:on_complete(control)
 
   self.canvas:scroll_to_bottom()
   local handle_cleanup = function()
+    if self.turn_renderer then
+      self.turn_renderer:finalize()
+    end
     self.turn_renderer = nil
     if not self:buf_is_loaded() then
       control.finish()

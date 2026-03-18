@@ -270,4 +270,123 @@ T["assistant.streaming"]["handles SSE event lines"]["ignores event lines and pro
   -- that event: lines don't corrupt data: line processing
 end
 
+-- Test that empty string content deltas are filtered at the provider level
+T["assistant.streaming"]["empty content deltas"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        -- Simulate empty content deltas interspersed with real content
+        job_opts.on_stdout(1, {
+          'data: {"choices":[{"delta":{"content":"Hello"}}]}',
+          'data: {"choices":[{"delta":{"content":""}}]}',
+          'data: {"choices":[{"delta":{"content":" World"}}]}',
+        }, 10)
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 5 },
+          }),
+        }, 10)
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["empty content deltas"]["are filtered by openai provider"] = function()
+  local strategy = TestStrategy.new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  -- The empty "" delta should NOT appear in the strategy's contents
+  eq(false, vim.tbl_contains(strategy.contents, ""))
+  -- Real content should still come through
+  eq(true, vim.tbl_contains(strategy.contents, "Hello"))
+  eq(true, vim.tbl_contains(strategy.contents, " World"))
+end
+
+-- Test empty content deltas between newlines
+T["assistant.streaming"]["empty content deltas between newlines"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        job_opts.on_stdout(1, {
+          'data: {"choices":[{"delta":{"content":"Line 1\\n"}}]}',
+          'data: {"choices":[{"delta":{"content":""}}]}',
+          'data: {"choices":[{"delta":{"content":"Line 2"}}]}',
+        }, 10)
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 5 },
+          }),
+        }, 10)
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["empty content deltas between newlines"]["do not add extra content"] = function()
+  local strategy = TestStrategy.new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  eq(false, vim.tbl_contains(strategy.contents, ""))
+  eq(true, vim.tbl_contains(strategy.contents, "Line 1\n"))
+  eq(true, vim.tbl_contains(strategy.contents, "Line 2"))
+end
+
+-- Test that a standalone "\n" delta IS passed through (it's legitimate content)
+T["assistant.streaming"]["standalone newline deltas"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        job_opts.on_stdout(1, {
+          'data: {"choices":[{"delta":{"content":"Line 1"}}]}',
+          'data: {"choices":[{"delta":{"content":"\\n"}}]}',
+          'data: {"choices":[{"delta":{"content":"\\n"}}]}',
+          'data: {"choices":[{"delta":{"content":"Line 3"}}]}',
+        }, 10)
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 5 },
+          }),
+        }, 10)
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["standalone newline deltas"]["are passed through as content"] = function()
+  local strategy = TestStrategy.new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  -- "\n" is legitimate content and should be passed through
+  eq(true, vim.tbl_contains(strategy.contents, "Line 1"))
+  eq(true, vim.tbl_contains(strategy.contents, "\n"))
+  eq(true, vim.tbl_contains(strategy.contents, "Line 3"))
+end
+
 return T
