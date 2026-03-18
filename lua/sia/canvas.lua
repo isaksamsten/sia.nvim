@@ -138,6 +138,22 @@ function M.blockquote_foldexpr(lnum)
   return 0
 end
 
+--- @return string
+function M.blockquote_foldtext()
+  local foldstart = vim.v.foldstart
+  local foldend = vim.v.foldend
+  local num_lines = foldend - foldstart + 1
+
+  local first_line = vim.fn.getline(foldstart)
+  local preview = first_line:gsub("^>|%s?", "")
+  local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
+  if #preview > max_width then
+    preview = preview:sub(1, max_width) .. "…"
+  end
+
+  return string.format("%s  (%d lines)", preview, num_lines)
+end
+
 function Canvas:get_win()
   return vim.fn.bufwinid(self.buf)
 end
