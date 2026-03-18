@@ -120,7 +120,9 @@ Usage notes:
       string.format("Launch %s agent with task: %s", args.agent, args.task)
     opts.user_input(confirm_message, {
       on_accept = function()
-        local agent = require("sia.agents").spawn(args.agent, args.task, conversation)
+        local agent = require("sia.agents").spawn(args.agent, args.task, conversation, {
+          source = "tool",
+        })
 
         if not agent then
           callback({

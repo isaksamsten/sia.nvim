@@ -366,13 +366,9 @@ T["tracked instances"]["agent instances expose preview and cancel methods"] = fu
   eq("Task: Inspect the repository", preview[4])
   eq("Progress: Analyzing...", preview[5])
 
-  local content, err = agent:cancel()
-  eq(nil, err)
+  agent:cancel()
   eq(true, agent.cancellable.is_cancelled)
   eq("Cancellation requested", agent.progress)
-  eq("Cancellation requested for agent 1.", content[1])
-  eq("Agent: code/review", content[2])
-  eq("Task: Inspect the repository", content[3])
 end
 
 T["tracked instances"]["bash process instances expose preview and stop methods"] = function()

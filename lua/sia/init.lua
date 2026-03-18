@@ -636,6 +636,7 @@ function M.execute_action(action, opts)
 
     if strategy and should_execute then
       --- @cast strategy sia.Strategy
+      strategy.conversation:attach_completed_agents()
       require("sia.assistant").execute_strategy(strategy)
     end
   end

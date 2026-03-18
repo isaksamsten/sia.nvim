@@ -7,6 +7,7 @@ local M = {}
 --- The agent is tracked on `parent_conversation.agents[]`.
 ---
 --- @class sia.agents.SpawnOpts
+--- @field source "tool"|"user"? Source of the spawn (default: "user")
 --- @field on_complete (fun(agent: sia.conversation.Agent))? Called when the agent finishes (success or failure)
 --- @field on_progress (fun(agent: sia.conversation.Agent, msg: string))? Called on progress updates
 
@@ -26,7 +27,7 @@ function M.spawn(agent_name, task, parent_conversation, opts)
     return nil
   end
 
-  local agent = parent_conversation:new_agent(agent_name, task)
+  local agent = parent_conversation:new_agent(agent_name, task, opts.source or "user")
   local tools = require("sia.tools")
 
   local Conversation = require("sia.conversation")
@@ -61,6 +62,14 @@ function M.spawn(agent_name, task, parent_conversation, opts)
       end
     end,
     callback = function(_, result)
+      if agent.status == "cancelled" then
+        result.error = "Cancelled by user"
+        if opts.on_complete then
+          opts.on_complete(agent)
+        end
+        return
+      end
+
       if
         not result.error
         and not (agent.cancellable and agent.cancellable.is_cancelled)

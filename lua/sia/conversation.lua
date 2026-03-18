@@ -35,7 +35,8 @@ end
 
 --- @class sia.conversation.Agent
 --- @field id integer
---- @field status "running"|"completed"|"failed"
+--- @field source "tool"|"user"
+--- @field status "running"|"completed"|"failed"|"attached"|"cancelled"
 --- @field progress string?
 --- @field result string[]?
 --- @field error string?
@@ -262,30 +263,21 @@ function Agent:get_preview()
   return content
 end
 
---- @return string[]? content
---- @return string? err
 function Agent:cancel()
   if self.status ~= "running" then
-    return nil, string.format("Agent %d is already %s", self.id, self.status)
+    return
   end
 
   if not self.cancellable then
-    return nil, string.format("Agent %d cannot be cancelled", self.id)
+    return
   end
 
   if self.cancellable.is_cancelled then
-    return nil,
-      string.format("Cancellation has already been requested for agent %d", self.id)
+    return
   end
 
   self.cancellable.is_cancelled = true
   self.progress = "Cancellation requested"
-
-  return {
-    string.format("Cancellation requested for agent %d.", self.id),
-    string.format("Agent: %s", self.name),
-    string.format("Task: %s", self.task),
-  }
 end
 
 --- @param opts? { tail_lines?: integer }
@@ -1126,13 +1118,15 @@ end
 
 --- @param name string
 --- @param task string
+--- @param source "tool"|"user"
 --- @return sia.conversation.Agent
-function Conversation:new_agent(name, task)
+function Conversation:new_agent(name, task, source)
   local task_id = #self.agents + 1
   local instance = setmetatable({
     id = task_id,
     name = name,
     task = task,
+    source = source or "tool",
     status = "running",
     started_at = vim.uv.hrtime() / 1e9,
     cancellable = { is_cancelled = false },
@@ -1146,6 +1140,37 @@ end
 --- @return sia.conversation.Agent?
 function Conversation:get_agent(id)
   return self.agents[id]
+end
+
+--- Attach completed user-spawned agents as hidden context messages.
+--- Marks attached agents with status "attached" so they are only injected once.
+--- @return boolean any_attached True if any agents were attached
+function Conversation:attach_completed_agents()
+  local attached_any = false
+  for _, agent in ipairs(self.agents) do
+    if agent.source == "user" and agent.status == "completed" and agent.result then
+      local content = {
+        string.format(
+          "Background agent '%s' (id: %d) completed with the following result:",
+          agent.name,
+          agent.id
+        ),
+        string.format("Task: %s", agent.task),
+        "",
+      }
+      vim.list_extend(content, agent.result)
+
+      self:add_instruction({
+        role = "user",
+        content = table.concat(content, "\n"),
+        hide = true,
+        description = string.format("agent result: %s", agent.name),
+      })
+      agent.status = "attached"
+      attached_any = true
+    end
+  end
+  return attached_any
 end
 
 --- @param command string

@@ -609,10 +609,7 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
   if subcommand == "stop" then
     local id = tonumber(args.fargs[2])
     if not id then
-      vim.notify(
-        "sia: process ID required. usage: SiaShell stop <id>",
-        vim.log.levels.ERROR
-      )
+      vim.notify("sia: process ID required", vim.log.levels.ERROR)
       return
     end
 
@@ -716,6 +713,142 @@ end, {
         for _, proc in ipairs(chat.conversation.bash_processes) do
           if proc.status == "running" then
             local id_str = tostring(proc.id)
+            if vim.startswith(id_str, arg_lead) then
+              table.insert(ids, id_str)
+            end
+          end
+        end
+        return ids
+      end
+    end
+
+    return {}
+  end,
+})
+
+vim.api.nvim_create_user_command("SiaAgent", function(args)
+  local subcommand = args.fargs[1]
+  local chat = require("sia.strategy").get_chat()
+  if not chat then
+    return
+  end
+
+  if subcommand == "start" then
+    local agent_name = args.fargs[2]
+    if not agent_name then
+      vim.notify(
+        "sia: agent name required. usage: SiaAgent start <name> <task>",
+        vim.log.levels.ERROR
+      )
+      return
+    end
+
+    local task = table.concat(vim.list_slice(args.fargs, 3), " ")
+    if task == "" then
+      vim.notify(
+        "sia: task required. usage: SiaAgent start <name> <task>",
+        vim.log.levels.ERROR
+      )
+      return
+    end
+
+    local winbar = require("sia.ui.winbar")
+    local icons = require("sia.ui").icons
+    local agent = require("sia.agents").spawn(agent_name, task, chat.conversation, {
+      on_complete = function(agent)
+        if chat:buf_is_loaded() then
+          local status_msg
+          if agent.status == "completed" then
+            status_msg = {
+              message = string.format("%s %s completed", icons.success, agent.name),
+              status = "info",
+            }
+          else
+            status_msg = {
+              message = string.format(
+                "%s %s failed %s",
+                icons.error,
+                agent.name,
+                agent.error or ""
+              ),
+              status = "error",
+            }
+          end
+          winbar.update_status(chat.buf, status_msg)
+          winbar.clear_status(chat.buf, 5000)
+        end
+      end,
+    })
+
+    if not agent then
+      vim.notify("sia: agent not found", vim.log.levels.ERROR)
+      return
+    end
+
+    vim.api.nvim_echo({
+      {
+        string.format("%s started (id: %d)", agent_name, agent.id),
+        "SiaProgress",
+      },
+    }, false, {})
+  elseif subcommand == "cancel" then
+    local id = tonumber(args.fargs[2])
+    if not id then
+      return
+    end
+
+    local agent = chat.conversation:get_agent(id)
+    if not agent then
+      vim.notify(string.format("sia: agent %d not found", id), vim.log.levels.ERROR)
+      return
+    end
+
+    if agent.status == "completed" then
+      agent.status = "cancelled"
+    elseif agent.status == "running" then
+      agent:cancel()
+      agent.status = "cancelled"
+    end
+  else
+    vim.notify(
+      "sia: unknown subcommand '"
+        .. tostring(subcommand)
+        .. "'. use 'start <name> <task>' or 'cancel <id>'",
+      vim.log.levels.ERROR
+    )
+  end
+end, {
+  nargs = "+",
+  complete = function(arg_lead, cmd_line, cursor_pos)
+    local prefix = string.sub(cmd_line, 1, cursor_pos)
+
+    if prefix:match("SiaAgent%s%w*$") then
+      local subcommands = { "start", "cancel" }
+      return vim.tbl_filter(function(cmd)
+        return vim.startswith(cmd, arg_lead)
+      end, subcommands)
+    end
+
+    if prefix:match("SiaAgent%s+start%s+[%w/%-_]*$") then
+      local registry = require("sia.agents.registry")
+      local agents = registry.get_agents(false)
+      local names = vim.tbl_keys(agents)
+      table.sort(names)
+      return vim.tbl_filter(function(name)
+        return vim.startswith(name, arg_lead)
+      end, names)
+    end
+
+    if prefix:match("SiaAgent%s+cancel%s") then
+      local chat = require("sia.strategy").get_chat()
+      if chat and chat.conversation then
+        local ids = {}
+        for _, agent in ipairs(chat.conversation.agents) do
+          if
+            agent.source == "user"
+            and (agent.status == "running" or agent.status == "completed")
+          then
+            local id_str = tostring(agent.id)
             if vim.startswith(id_str, arg_lead) then
               table.insert(ids, id_str)
             end

@@ -932,34 +932,20 @@ end
 
 --- @param conversation sia.Conversation
 --- @param meta table
---- @return string?, string?
 function M._run_action(conversation, meta)
   if meta.kind == "agent" then
     local agent = conversation:get_agent(meta.id)
     if not agent then
-      return nil, string.format("Agent %d no longer exists", meta.id)
+      return
     end
-    local content, err = agent:cancel()
-    if err then
-      return nil, err
-    end
-    return content and content[1]
-      or string.format("Cancellation requested for agent %d", meta.id)
-  end
-
-  if meta.kind == "bash" then
+    agent:cancel()
+  elseif meta.kind == "bash" then
     local proc = conversation:get_bash_process(meta.id)
     if not proc then
-      return nil, string.format("Process %d no longer exists", meta.id)
+      return
     end
-    local content, err = proc:stop()
-    if err then
-      return nil, err
-    end
-    return content and content[1] or string.format("Process %d terminated", meta.id)
+    proc:stop()
   end
-
-  return nil, "Selected line has no action"
 end
 
 --- @param buf integer
@@ -978,13 +964,7 @@ local function cancel_current(buf)
     return
   end
 
-  local message, err = M._run_action(state.conversation, meta)
-  if err then
-    vim.notify(err, vim.log.levels.WARN)
-  elseif message then
-    vim.notify(message, vim.log.levels.INFO)
-  end
-
+  M._run_action(state.conversation, meta)
   M.schedule_render()
 end
 

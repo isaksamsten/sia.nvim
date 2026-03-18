@@ -170,9 +170,8 @@ function M.is_range_commend(cmd_line)
   end
   return false
 end
---- Check if the command line contains a bang (!) after the command name.
---- Useful in custom completion functions where `args.bang` is not available.
---- @param cmd_line string The full command line string (e.g., "Sia! /foo" or "'<,'>Sia!")
+
+--- @param cmd_line string
 --- @return boolean
 function M.is_bang_command(cmd_line)
   return cmd_line:match("%S+!") ~= nil
