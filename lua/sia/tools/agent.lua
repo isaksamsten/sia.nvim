@@ -85,7 +85,6 @@ Usage notes:
   },
   required = { "command" },
 }, function(args, conversation, callback, opts)
-  local config = require("sia.config")
   local registry = require("sia.agents.registry")
 
   if args.command == "start" then
@@ -121,58 +120,15 @@ Usage notes:
       string.format("Launch %s agent with task: %s", args.agent, args.task)
     opts.user_input(confirm_message, {
       on_accept = function()
-        local agent = conversation:new_agent(args.agent, args.task)
-        local tools = require("sia.tools")
+        local agent = require("sia.agents").spawn(args.agent, args.task, conversation)
 
-        local Conversation = require("sia.conversation")
-        local new_conversation = Conversation.new_conversation({
-          mode = "hidden",
-          model = require("sia.model").resolve(
-            agent_def.model or config.options.settings.fast_model
-          ),
-          ignore_tool_confirm = agent_def.require_confirmation == false,
-          tools = vim
-            .iter(agent_def.tools)
-            :filter(function(tool)
-              return tools[tool] ~= nil
-            end)
-            :map(function(tool)
-              return tools[tool]
-            end)
-            :totable(),
-          temporary = true,
-        })
-        new_conversation:add_instruction({
-          role = "system",
-          content = agent_def.system_prompt,
-        }, { role = "user", content = args.task })
-        new_conversation.name = conversation.name .. "-" .. agent.name
-        local strategy = require("sia.strategy").new_hidden(nil, new_conversation, {
-          notify = function(msg)
-            agent.progress = msg
-          end,
-          callback = function(_, result)
-            if agent then
-              if
-                not result.error
-                and not (agent.cancellable and agent.cancellable.is_cancelled)
-              then
-                agent.status = "completed"
-                agent.result = result.content or { "No response" }
-                agent.progress = nil
-              else
-                agent.status = "failed"
-                agent.error = result.error
-                agent.progress = nil
-              end
-              agent.usage = result.usage
-            else
-              agent.status = "failed"
-              agent.error = "not started"
-            end
-          end,
-        }, agent.cancellable)
-        require("sia.assistant").execute_strategy(strategy)
+        if not agent then
+          callback({
+            content = { string.format("Agent %s not found", args.agent) },
+            kind = "failed",
+          })
+          return
+        end
 
         callback({
           content = vim.split(string.format(START_REPLY, agent.id), "\n"),
