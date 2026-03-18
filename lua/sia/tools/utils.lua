@@ -23,6 +23,7 @@ M.tool_names = {
   memory = "memory",
   ask_user = "ask_user",
   apply_diff = "apply_diff",
+  exit_mode = "exit_mode",
 }
 
 --- TODO: refactor to only return the arguments..
@@ -537,11 +538,19 @@ M.new_tool = function(opts, execute)
   --- @param conversation sia.Conversation
   --- @return sia.PermissionOpts?
   local resolve_permission = function(args, conversation)
-    local permission = require("sia.permissions").get_permission(opts.name, args)
+    local permissions = require("sia.permissions")
+    if conversation.active_mode then
+      local mode_permission =
+        permissions.resolve_mode_permission(conversation.active_mode, opts.name, args)
+      if mode_permission then
+        return mode_permission
+      end
+    end
 
+    local permission = permissions.resolve_permissions(opts.name, args)
     if permission then
       return permission
-    elseif not permission or not permission.ask then
+    elseif not permission then
       if conversation.auto_confirm_tools[opts.name] then
         return { auto_allow = conversation.auto_confirm_tools[opts.name] }
       else
@@ -599,18 +608,10 @@ M.new_tool = function(opts, execute)
       local permission = resolve_permission(args, conversation)
       if permission and permission.deny then
         callback({
-          content = {
-            "OPERATION BLOCKED BY LOCAL CONFIGURATION",
+          content = permission.reason or {
+            "OPERATION BLOCKED",
             "",
-            string.format(
-              "The USER's local configuration denies executing the %s operation with the provided parameters.",
-              opts.name
-            ),
-            "",
-            "IMPORTANT: Do not proceed with alternative approaches. Instead:",
-            "1. Acknowledge that this operation is denied by policy",
-            "2. Ask the USER if they want to adjust permissions or choose a different approach",
-            "3. Wait for their guidance before taking any further action",
+            string.format("The %s operation was denied.", opts.name),
           },
         })
         return

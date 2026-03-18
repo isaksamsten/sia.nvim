@@ -308,7 +308,7 @@ T["permissions (nil treated as empty)"]["allow supports multiple persisted rules
       { foo = "foo" }
     )
     local bar_choice =
-      require("sia.permissions").get_permission("dummy", { foo = "bar" })
+      require("sia.permissions").resolve_permissions("dummy", { foo = "bar" })
     local baz_choice = tool.allow_parallel(
       { ignore_tool_confirm = false, auto_confirm_tools = {} },
       { foo = "baz" }
@@ -451,8 +451,9 @@ T["permissions (nil treated as empty)"]["persist_allow_rule appends tool-specifi
     eq("^tests/[^/]+\\.lua$", raw.permission.allow.view[2].arguments.path[1])
 
     local view_permission =
-      permissions.get_permission("view", { path = "tests/test_permissions.lua" })
-    local miss_permission = permissions.get_permission("view", { path = "README.md" })
+      permissions.resolve_permissions("view", { path = "tests/test_permissions.lua" })
+    local miss_permission =
+      permissions.resolve_permissions("view", { path = "README.md" })
     eq(1, view_permission.auto_allow)
     eq(nil, miss_permission)
   end)

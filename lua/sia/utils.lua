@@ -170,6 +170,14 @@ function M.is_range_commend(cmd_line)
   end
   return false
 end
+--- Check if the command line contains a bang (!) after the command name.
+--- Useful in custom completion functions where `args.bang` is not available.
+--- @param cmd_line string The full command line string (e.g., "Sia! /foo" or "'<,'>Sia!")
+--- @return boolean
+function M.is_bang_command(cmd_line)
+  return cmd_line:match("%S+!") ~= nil
+end
+
 --- @class sia.utils.WithChatStrategy
 --- @field on_select fun(strategy: sia.ChatStrategy):nil
 --- @field on_none (fun():boolean)?
@@ -291,6 +299,24 @@ function M.glob_pattern_to_files(patterns)
   return files
 end
 
+--- @class sia.ModeEntry
+--- @field name string
+--- @field user_input string|nil
+
+--- Parse a @mode prefix from the first word of user input.
+--- Only matches if the first non-whitespace word starts with @.
+--- @param text string
+--- @return string? mode_name
+--- @return string rest The text without the @mode prefix
+function M.parse_mode_prefix(text)
+  local mode = text:match("^@(%w[%w_-]*)%s*")
+  if mode then
+    local rest = text:sub(#mode + 2):gsub("^%s+", "")
+    return mode, rest
+  end
+  return nil, text
+end
+
 --- Resolves a given prompt based on configuration options and context.
 --- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
 --- based on the current file type and provided options.
@@ -298,13 +324,17 @@ end
 --- @param argument string[]
 --- @param opts sia.ActionContext
 --- @return sia.config.Action?
---- @return boolean named prompt
+--- @return boolean
+--- @return sia.ModeEntry?
 function M.resolve_action(argument, opts)
   local config = require("sia.config")
+  --- @type sia.config.Action
   local action
-  local named
+  local new_action
+  local mode_entry = nil
+
   if vim.startswith(argument[1], "/") and vim.bo.ft ~= "sia" then
-    action = vim.deepcopy(config.options.actions[argument[1]:sub(2)])
+    action = vim.deepcopy(config.options.actions[argument[1]:sub(2)]) --[[@as sia.config.Action]]
     if action == nil then
       vim.api.nvim_echo({
         { "sia: action '" .. argument[1] .. "' does not exist", "ErrorMsg" },
@@ -322,28 +352,66 @@ function M.resolve_action(argument, opts)
       return nil, true
     end
 
-    named = true
-    if #argument > 1 and not (action.input and action.input == "ignore") then
-      table.insert(
-        action.instructions,
-        { role = "user", content = table.concat(argument, " ", 2) }
-      )
+    new_action = true
+    if
+      action.mode == "chat"
+      and #argument > 1
+      and not (action.input and action.input == "ignore")
+    then
+      if
+        #argument >= 2
+        and vim.startswith(argument[2], "@")
+        and action.mode == "chat"
+      then
+        local mode_name = argument[2]:sub(2)
+        if mode_name == "default" or (action.modes and action.modes[mode_name]) then
+          --- @type sia.ModeEntry
+          mode_entry = {
+            name = mode_name,
+            user_input = #argument >= 3 and table.concat(argument, " ", 3) or nil,
+          }
+        end
+      end
+
+      if not mode_entry then
+        table.insert(
+          action.instructions,
+          { role = "user", content = table.concat(argument, " ", 2) }
+        )
+      end
     end
   else
-    named = false
+    new_action = false
     local action_mode = M.get_action_mode(opts)
-    action = vim.deepcopy(config.options.settings.actions[action_mode])
-    table.insert(
-      action.instructions,
-      { role = "user", content = table.concat(argument, " ") }
-    )
+    action = vim.deepcopy(config.options.settings.actions[action_mode]) --[[@as sia.config.Action]]
+
+    if
+      action.mode == "chat"
+      and #argument >= 1
+      and vim.startswith(argument[1], "@")
+    then
+      local mode_name = argument[1]:sub(2)
+      if mode_name == "default" or (action.modes and action.modes[mode_name]) then
+        mode_entry = {
+          name = mode_name,
+          user_input = #argument >= 2 and table.concat(argument, " ", 2) or nil,
+        }
+      end
+    end
+
+    if not mode_entry then
+      table.insert(
+        action.instructions,
+        { role = "user", content = table.concat(argument, " ", 1) }
+      )
+    end
   end
 
   if action.modify_instructions then
     action.modify_instructions(action.instructions, opts)
   end
 
-  return action, named
+  return action, new_action, mode_entry
 end
 
 --- @param action sia.config.Action

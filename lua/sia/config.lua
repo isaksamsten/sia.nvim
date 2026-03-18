@@ -691,7 +691,6 @@ function M.update_auto_config(mutator)
   local stat = vim.uv.fs_stat(auto_path)
   if stat then
     local existing, _ = read_local_config_file(auto_path)
-    -- Just drop the auto config if it can't be parsed
     json = existing or {}
   end
 
@@ -847,6 +846,21 @@ end
 --- @alias sia.config.ActionInput "require"|"ignore"
 --- @alias sia.config.ActionMode "chat"|"diff"|"insert"|"hidden"
 
+--- @class sia.config.ModePermissions
+--- @field deny string[]?
+--- @field allow table<string, true|sia.config.ModeAllowRule>?
+
+--- @class sia.config.ModeAllowRule
+--- @field arguments table<string, string[]>
+
+--- @class sia.config.Mode
+--- @field description string?
+--- @field permissions sia.config.ModePermissions?
+--- @field deny_message (fun(tool_name: string, args: table, kind: "denied"|"restricted"):string[])?
+--- @field enter_prompt string|fun(state: table):string
+--- @field exit_prompt string|fun(state: table, summary: string):string
+--- @field init_state (fun(ctx: sia.Context): table)?
+
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement
 --- @field cursor ("start"|"end")?
@@ -903,7 +917,7 @@ end
 --- @class sia.config.ToolCustom
 --- @field format { type: string, syntax: string?, definition: string? }?
 
---- @class sia.config.Action
+--- @class sia.config.DefaultAction
 --- @field system (string|sia.config.Instruction)[]?
 --- @field instructions (string|sia.config.Instruction)[]
 --- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
@@ -911,14 +925,28 @@ end
 --- @field ignore_tool_confirm boolean?
 --- @field model (string|{name: string})?
 --- @field input sia.config.ActionInput?
---- @field mode sia.config.ActionMode?
 --- @field enabled (fun():boolean)|boolean?
 --- @field capture nil|(fun(arg: sia.ActionContext):[number, number])
 --- @field range boolean?
---- @field insert sia.config.Insert?
---- @field diff sia.config.Diff?
+
+--- @class sia.config.ChatAction : sia.config.DefaultAction
+--- @field mode "chat"
 --- @field chat sia.config.Chat?
+--- @field modes table<string, sia.config.Mode>?
+
+--- @class sia.config.DiffAction : sia.config.DefaultAction
+--- @field mode "diff"
+--- @field diff sia.config.Diff?
+
+--- @class sia.config.InsertAction : sia.config.DefaultAction
+--- @field mode "insert"
+--- @field insert sia.config.Insert?
+
+--- @class sia.config.HiddenAction : sia.config.DefaultAction
+--- @field mode "hidden"
 --- @field hidden sia.config.Hidden?
+
+--- @alias sia.config.Action sia.config.ChatAction|sia.config.InsertAction|sia.config.DiffAction|sia.config.HiddenAction
 
 --- @class sia.config.Context
 --- @field max_tool integer?
@@ -939,7 +967,7 @@ end
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field context_management sia.config.ContextManagement?
---- @field actions table<"diff"|"chat"|"insert", sia.config.Action>
+--- @field actions {diff: sia.config.DiffAction, chat: sia.config.ChatAction, insert: sia.config.InsertAction }
 --- @field chat sia.config.Chat
 --- @field diff sia.config.Diff
 --- @field insert sia.config.Insert
@@ -1308,11 +1336,14 @@ M._raw_options = {
           return { tools.grep, tools.view, tools.glob }
         end,
       },
-      --- @type sia.config.Action
+      --- @type sia.config.ChatAction
       chat = {
         mode = "chat",
         system = {
           "model_system",
+        },
+        modes = {
+          plan = require("sia.modes").plan,
         },
         instructions = {
           "system_info",
@@ -1340,11 +1371,11 @@ M._raw_options = {
             tools.memory,
             tools.view_image,
             tools.view_document,
+            tools.edit,
+            tools.exit_mode,
           }
           if model.api_name:match("gpt%-5") then
             table.insert(all, tools.apply_diff)
-          else
-            table.insert(all, tools.edit)
           end
           return all
         end,
@@ -1383,11 +1414,11 @@ M._raw_options = {
           tools.memory,
           tools.view_image,
           tools.view_document,
+          tools.edit,
+          tools.exit_mode,
         }
         if model.api_name:match("gpt%-5") then
           table.insert(all, tools.apply_diff)
-        else
-          table.insert(all, tools.edit)
         end
         return all
       end,

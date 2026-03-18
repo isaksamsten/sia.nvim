@@ -129,7 +129,7 @@ end
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private turn_renderer sia.chat.AssistantTurnRenderer?
---- @field private queued_instructions {instruction: sia.config.Instruction|string|sia.config.Instruction[], context: sia.Context?}[]
+--- @field private queued_instructions {instruction: sia.config.Instruction|string|sia.config.Instruction[]|nil, context: sia.Context?, mode_entry: sia.ModeEntry? }[]
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -213,12 +213,14 @@ function ChatStrategy:queue_size()
   return #self.queued_instructions
 end
 
---- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
+--- @param instruction (sia.config.Instruction|sia.config.Instruction[]|string)?
 --- @param context sia.Context?
-function ChatStrategy:queue_instruction(instruction, context)
+--- @param mode_entry sia.ModeEntry?
+function ChatStrategy:queue_instruction(instruction, context, mode_entry)
   table.insert(self.queued_instructions, {
     instruction = instruction,
     context = context,
+    mode_entry = mode_entry,
   })
 end
 
@@ -230,7 +232,15 @@ function ChatStrategy:flush_queued_instructions()
 
   local before_count = #self.conversation:prepare_messages()
   for _, queued in ipairs(self.queued_instructions) do
-    self.conversation:add_instruction(queued.instruction, queued.context)
+    if queued.mode_entry then
+      self.conversation:enter_mode(
+        queued.mode_entry.name,
+        queued.mode_entry.user_input,
+        queued.context
+      )
+    elseif queued.instruction then
+      self.conversation:add_instruction(queued.instruction, queued.context)
+    end
   end
 
   if self:buf_is_loaded() then

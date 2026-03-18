@@ -37,6 +37,7 @@ local highlight_groups = {
   SiaStatusValue = { link = "Normal" },
   SiaStatusPath = { link = "Directory" },
   SiaStatusCode = { link = "String" },
+  SiaMode = { link = "DiagnosticInfo" },
 }
 
 local function set_highlight_groups()
@@ -454,7 +455,7 @@ M.chat = {
       M.execute_action(action, {
         context = context,
         model = model_name,
-        named_prompt = false,
+        new_action = false,
       })
     end, { buffer = buf, desc = "Submit prompt" })
 
@@ -519,7 +520,7 @@ function M.setup(options)
 end
 
 --- @param action sia.config.Action
---- @param opts {context: sia.ActionContext, model: string?, named_prompt: boolean?}
+--- @param opts {context: sia.ActionContext, model: string?, new_action: boolean?, mode: sia.ModeEntry?}
 function M.execute_action(action, opts)
   local config = require("sia.config")
   local Model = require("sia.model")
@@ -528,16 +529,34 @@ function M.execute_action(action, opts)
   if vim.api.nvim_buf_is_loaded(context.buf) then
     local strategy
     local should_execute = true
-    if not opts.named_prompt and (vim.bo[context.buf].filetype == "sia") then
+    if not opts.new_action and (vim.bo[context.buf].filetype == "sia") then
       strategy = require("sia.strategy").get_chat(context.buf)
       if strategy then
-        local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-
-        if strategy.is_busy then
-          strategy:queue_instruction(last_instruction, nil)
-          should_execute = false
+        if opts.mode then
+          if strategy.is_busy then
+            strategy:queue_instruction(nil, nil, opts.mode)
+            should_execute = false
+          else
+            if
+              not strategy.conversation:enter_mode(
+                opts.mode.name,
+                opts.mode.user_input,
+                context
+              )
+            then
+              vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
+              return
+            end
+          end
         else
-          strategy.conversation:add_instruction(last_instruction, nil)
+          local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
+
+          if strategy.is_busy then
+            strategy:queue_instruction(last_instruction, nil)
+            should_execute = false
+          else
+            strategy.conversation:add_instruction(last_instruction, nil)
+          end
         end
       end
     else
@@ -548,6 +567,7 @@ function M.execute_action(action, opts)
         enable_supersede = true,
         temporary = false,
         tools = action.tools and action.tools(model),
+        modes = action.modes,
       })
       for _, instruction in ipairs(action.system or {}) do
         conversation:add_instruction(
@@ -562,6 +582,15 @@ function M.execute_action(action, opts)
           context,
           { skip_capture_unless_needed = true }
         )
+      end
+
+      if opts.mode then
+        if
+          not conversation:enter_mode(opts.mode.name, opts.mode.user_input, context)
+        then
+          vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
+          return
+        end
       end
 
       if action.mode == "diff" then

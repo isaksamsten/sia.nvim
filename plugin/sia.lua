@@ -1,103 +1,103 @@
-local function match_flag(s, flag, options)
-  local match = string.match(s, "-" .. flag .. "%s+([%w-_/.]*)$")
-  if match then
-    local models = vim
-      .iter(options)
-      :map(function(item)
-        return item
-      end)
-      :filter(function(model)
-        return vim.startswith(model, match)
-      end)
-      :totable()
-    return models
-  else
-    return nil
+--- A generic command parser that enforces `[flags...] [positional...]` grammar.
+--- Flags must appear before any positional arguments. Each flag consumes one
+--- value token. The parser only parses; completion and validation are the
+--- caller's responsibility.
+---
+--- @class sia.CommandParser
+--- @field private _flags table<string, true>
+local CommandParser = {}
+CommandParser.__index = CommandParser
+
+--- Create a new command parser.
+--- @param spec { flags: string[] }
+function CommandParser.new(spec)
+  local flags = {}
+  for _, name in ipairs(spec.flags or {}) do
+    flags[name] = true
   end
+  return setmetatable({ _flags = flags }, CommandParser)
 end
 
-local function match_any_flag(prefix)
-  local config = require("sia.config")
-  local models = match_flag(prefix, "m", config.options.models)
-  if models then
-    table.sort(models)
-    return models
+--- Parse arguments into flags and positional args.
+--- Flags are only recognised at the front; once a non-flag token is seen
+--- everything from that point on is positional.
+---
+--- @param args string[]
+--- @return { flags: table<string, string?>, positional: string[] }
+function CommandParser:parse(args)
+  local result = { flags = {}, positional = {} }
+  local i = 1
+  while i <= #args do
+    local name = args[i]:match("^%-(.+)$")
+    if name and self._flags[name] and not result.flags[name] then
+      if i + 1 <= #args then
+        result.flags[name] = args[i + 1]
+      end
+      i = i + 2
+    else
+      break
+    end
   end
+  for j = i, #args do
+    table.insert(result.positional, args[j])
+  end
+  return result
+end
 
+--- Return completions for a flag value if the cursor is on one.
+--- Only works when the parsed result has no positional args yet (still in
+--- the flag zone). The caller provides a table mapping flag names to their
+--- candidate values.
+---
+--- @param parsed { flags: table<string, string?>, positional: string[] }
+--- @param prefix string The command-line text up to the cursor
+--- @param candidates table<string, string[]> Flag name → possible values
+--- @return string[]|nil completions Filtered completions, or nil if not on a flag value
+function CommandParser:complete_flag(parsed, prefix, candidates)
+  if #parsed.positional > 0 then
+    return nil
+  end
+  for name, values in pairs(candidates) do
+    if self._flags[name] then
+      local partial = prefix:match("%-" .. vim.pesc(name) .. "%s+([%w%-_/.]*)$")
+      if partial then
+        local filtered = vim.tbl_filter(function(v)
+          return vim.startswith(v, partial)
+        end, values)
+        table.sort(filtered)
+        return filtered
+      end
+    end
+  end
   return nil
 end
 
-local function agent_complete(ArgLead, CmdLine, CursorPos)
-  local config = require("sia.config")
-  local cmd_type = vim.fn.getcmdtype()
-  local is_range = false
-
-  if cmd_type == ":" then
-    is_range = require("sia.utils").is_range_commend(CmdLine)
-  end
-
-  local prefix = string.sub(CmdLine, 1, CursorPos)
-  local choice = match_any_flag(prefix)
-  if choice then
-    return choice
-  else
-    if vim.startswith(ArgLead, "/") then
-      local complete = {}
-      local term = ArgLead:sub(2)
-      for key, prompt in pairs(config.options.actions) do
-        if
-          vim.startswith(key, term)
-          and not require("sia.utils").is_action_disabled(prompt)
-          and vim.bo.ft ~= "sia"
-        then
-          if prompt.range == nil or (prompt.range == is_range) then
-            table.insert(complete, "/" .. key)
-          end
-        end
-      end
-      return complete
-    end
-  end
-
-  return {}
-end
-
---- @return string?
-local function find_and_remove_flag(flag, fargs)
-  local index_of_flag
-  for i, v in ipairs(fargs) do
-    if v == flag then
-      index_of_flag = i
-    end
-  end
-  if index_of_flag and #fargs > index_of_flag then
-    local value = table.remove(fargs, index_of_flag + 1)
-    table.remove(fargs, index_of_flag)
-    return value
-  end
-end
-
+local SIA_PARSER = CommandParser.new({ flags = { "m" } })
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
-  local model = find_and_remove_flag("-m", args.fargs)
+  local parsed = SIA_PARSER:parse(args.fargs)
+  local model = parsed.flags.m
+
   if model and not require("sia.config").options.models[model] then
     vim.notify("sia: model is not defined", vim.log.levels.ERROR)
     return
   end
 
-  if #args.fargs == 0 and not vim.b.sia then
+  local fargs = parsed.positional
+
+  if #fargs == 0 and not vim.b.sia then
     vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
     return
   end
 
   --- @type sia.ActionContext
   local context = utils.create_context(args)
-  if vim.b.sia and #args.fargs == 0 then
-    args.fargs = { vim.b.sia }
+  if vim.b.sia and #fargs == 0 then
+    fargs = { vim.b.sia }
   end
 
-  local action, named = utils.resolve_action(args.fargs, context)
+  local action, new_action, mode_entry = utils.resolve_action(fargs, context)
 
   if not action then
     return
@@ -116,7 +116,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
 
   if action.range == true and context.mode ~= "v" then
     vim.notify(
-      "sia: action " .. args.fargs[1] .. " must be used with a range",
+      "sia: action " .. fargs[1] .. " must be used with a range",
       vim.log.levels.ERROR
     )
     return
@@ -126,7 +126,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
     vim.notify(
-      "sia: action " .. args.fargs[1] .. " is not enabled in the current context",
+      "sia: action " .. fargs[1] .. " is not enabled in the current context",
       vim.log.levels.ERROR
     )
     return
@@ -135,13 +135,100 @@ vim.api.nvim_create_user_command("Sia", function(args)
   require("sia").execute_action(action, {
     context = context,
     model = model,
-    named_prompt = named,
+    new_action = new_action,
+    mode = mode_entry,
   })
 end, {
   range = true,
   bang = true,
   nargs = "*",
-  complete = agent_complete,
+  complete = function(ArgLead, CmdLine, CursorPos)
+    local config = require("sia.config")
+    local cmd_type = vim.fn.getcmdtype()
+    local is_range = false
+
+    if cmd_type == ":" then
+      is_range = require("sia.utils").is_range_commend(CmdLine)
+    end
+    local is_bang = require("sia.utils").is_bang_command(CmdLine)
+
+    local chat = require("sia.strategy").get_chat()
+
+    local prefix = string.sub(CmdLine, 1, CursorPos)
+    local args_before = {}
+    local args_text = prefix:match("^%S+%s+(.*)$") or ""
+    for arg in args_text:gmatch("%S+") do
+      table.insert(args_before, arg)
+    end
+
+    local parsed = SIA_PARSER:parse(args_before)
+
+    local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
+      m = vim.tbl_keys(config.options.models),
+    })
+    if flag_completions then
+      return flag_completions
+    end
+
+    local positional = parsed.positional
+
+    if chat and #positional == 1 then
+      if vim.startswith(ArgLead, "@") then
+        local term = ArgLead:sub(2)
+        local completions = {}
+        for mode_name, _ in pairs(chat.conversation.modes) do
+          if vim.startswith(mode_name, term) then
+            table.insert(completions, mode_name)
+          end
+        end
+        return completions
+      end
+    elseif vim.startswith(ArgLead, "/") and #positional == 1 then
+      local complete = {}
+      local term = ArgLead:sub(2)
+      for key, prompt in pairs(config.options.actions) do
+        if
+          vim.startswith(key, term)
+          and not require("sia.utils").is_action_disabled(prompt)
+          and vim.bo.ft ~= "sia"
+        then
+          if prompt.range == nil or (prompt.range == is_range) then
+            table.insert(complete, "/" .. key)
+          end
+        end
+      end
+      return complete
+    elseif vim.startswith(ArgLead, "@") then
+      local action_modes = nil
+      if #positional <= 1 and not is_bang then
+        local action = config.options.settings.actions.chat
+        action_modes = action and action.modes
+      elseif #positional == 2 and vim.startswith(positional[1], "/") then
+        local action_name = positional[1]:sub(2)
+        local action = config.options.actions[action_name] --[[@as sia.config.Action]]
+        if action.mode == "chat" then
+          action_modes = action and action.modes
+        end
+      end
+
+      if action_modes then
+        local term = ArgLead:sub(2)
+        local complete = {}
+        for mode_name, _ in pairs(action_modes) do
+          if vim.startswith(mode_name, term) then
+            table.insert(complete, "@" .. mode_name)
+          end
+        end
+        if vim.startswith("default", term) then
+          table.insert(complete, "@default")
+        end
+        table.sort(complete)
+        return complete
+      end
+    end
+
+    return {}
+  end,
 })
 
 vim.api.nvim_create_user_command("SiaDebug", function()
@@ -378,7 +465,8 @@ end, {
   bang = true,
   complete = function(arg_lead)
     local commands = { "prompt", "accept", "always", "decline", "preview", "expand" }
-    return vim.iter(commands)
+    return vim
+      .iter(commands)
       :filter(function(command)
         return vim.startswith(command, arg_lead)
       end)
@@ -440,6 +528,7 @@ end, {
   end,
 })
 
+local SIA_FORK_PARSER = CommandParser.new({ flags = { "t" } })
 vim.api.nvim_create_user_command("SiaFork", function(args)
   local fork_conversation = require("sia.conversation").fork_conversation
   local chat = require("sia.strategy").get_chat()
@@ -454,7 +543,8 @@ vim.api.nvim_create_user_command("SiaFork", function(args)
     return
   end
 
-  local turn_id = find_and_remove_flag("-t", args.fargs)
+  local parsed = SIA_FORK_PARSER:parse(args.fargs)
+  local turn_id = parsed.flags.t
   if not turn_id then
     turn_id = chat.conversation:last_turn_id()
     if not turn_id then
@@ -463,7 +553,7 @@ vim.api.nvim_create_user_command("SiaFork", function(args)
     end
   end
 
-  local prompt = table.concat(args.fargs, " ")
+  local prompt = table.concat(parsed.positional, " ")
   if prompt == "" then
     vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
     return
@@ -485,19 +575,22 @@ end, {
   nargs = "+",
   complete = function(_, cmd_line, cursor_pos)
     local prefix = string.sub(cmd_line, 1, cursor_pos)
-
-    local turn_match = string.match(prefix, "%-t%s+([%w-]*)$")
-    if turn_match then
-      local chat = require("sia.strategy").get_chat()
-      if chat and chat.conversation then
-        return vim
-          .iter(chat.conversation:turn_ids())
-          :filter(function(id)
-            return vim.startswith(id, turn_match)
-          end)
-          :totable()
+    local chat = require("sia.strategy").get_chat()
+    if chat and chat.conversation then
+      local args_before = {}
+      local args_text = prefix:match("^%S+%s+(.*)$") or ""
+      for arg in args_text:gmatch("%S+") do
+        table.insert(args_before, arg)
       end
-      return {}
+
+      local parsed = SIA_PARSER:parse(args_before)
+
+      local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
+        t = vim.tbl_keys(chat.conversation:turn_ids()),
+      })
+      if flag_completions then
+        return flag_completions
+      end
     end
 
     return {}

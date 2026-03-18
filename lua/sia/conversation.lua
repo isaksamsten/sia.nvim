@@ -397,6 +397,45 @@ function BashProcess:stop()
   return content
 end
 
+--- @param mode sia.ActiveMode
+--- @return string[]
+local function create_enter_mode_prompt(mode)
+  local prompt = {}
+  table.insert(prompt, string.format("You are now in **%s** mode.", mode.name))
+
+  local perms = mode.definition.permissions
+  if perms then
+    if perms.deny and #perms.deny > 0 then
+      table.insert(
+        prompt,
+        string.format("- Denied tools: %s", table.concat(perms.deny, ", "))
+      )
+    end
+    if perms.allow then
+      local restricted = {}
+      for tool, restricted_to in pairs(perms.allow) do
+        if type(restricted_to) == "table" then
+          table.insert(restricted, { tool = tool, restriction = restricted_to })
+        end
+      end
+      if #restricted > 0 then
+        for _, restriction in ipairs(restricted) do
+          table.insert(
+            prompt,
+            string.format(
+              "- Restricted tool: %s to %s",
+              restriction.tool,
+              vim.json.encode(restriction.restriction)
+            )
+          )
+        end
+      end
+    end
+  end
+
+  return prompt
+end
+
 --- @param generator fun(context: sia.Context?):string?
 --- @param context sia.Context?
 --- @return string? content
@@ -759,6 +798,8 @@ local CONVERSATION_ID = 1
 --- @field agents table<integer, sia.conversation.Agent>
 --- @field bash_processes table<integer, sia.conversation.BashProcess>
 --- @field logger sia.history.HistoryLogger
+--- @field active_mode sia.ActiveMode?
+--- @field modes table<string, sia.config.Mode>?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -778,6 +819,7 @@ end
 --- @field ignore_tool_confirm boolean?
 --- @field temporary boolean?
 --- @field tools sia.config.Tool[]?
+--- @field modes table<string, sia.config.Mode>?
 
 --- @param opts sia.NewConversationArgs
 --- @return sia.Conversation
@@ -804,6 +846,8 @@ function Conversation.new(opts)
   obj.usage_history = {}
   obj.agents = {}
   obj.bash_processes = {}
+  obj.active_mode = nil
+  obj.modes = opts.modes or {}
   obj._prepared_messages = nil
   obj.tools = {}
   obj.tool_fn = {}
@@ -835,6 +879,87 @@ end
 --- @return boolean
 function Conversation:has_tool(name)
   return self.tool_fn[name] ~= nil
+end
+
+--- @param name string
+--- @return sia.config.Mode?
+function Conversation:get_mode(name)
+  return self.modes and self.modes[name] or nil
+end
+
+--- @param name string
+--- @param user_input string?
+--- @param ctx sia.Context?
+--- @return boolean ok
+function Conversation:enter_mode(name, user_input, ctx)
+  if name == "default" then
+    if self.active_mode then
+      self:exit_mode()
+    end
+    if user_input and user_input ~= "" then
+      self:add_instruction({ role = "user", content = user_input }, ctx)
+    end
+    return true
+  end
+
+  local definition = self:get_mode(name)
+  if not definition then
+    return false
+  end
+
+  if self.active_mode then
+    self:exit_mode()
+  end
+
+  local active = require("sia.permissions").create_active_mode(name, definition, ctx)
+  self.active_mode = active
+
+  local prompt = create_enter_mode_prompt(active)
+  if self.tool_fn["exit_mode"] then
+    table.insert(prompt, "- Use `exit_mode` when the mode's objective is complete.")
+  end
+  if type(definition.enter_prompt) == "function" then
+    table.insert(prompt, definition.enter_prompt(active.state))
+  else
+    local render = template.render(tostring(definition.enter_prompt), active.state)
+    table.insert(prompt, render)
+  end
+  if user_input and user_input ~= "" then
+    table.insert(prompt, user_input)
+  end
+
+  self:add_instruction({ role = "user", content = prompt, hide = true }, ctx)
+  self:_invalidate_cache()
+
+  return true
+end
+
+--- Exit the current mode, inserting the exit prompt as a user message.
+--- @param summary string? Summary of what was accomplished (from the LLM)
+--- @param tool_initiated boolean?
+--- @return string?
+function Conversation:exit_mode(summary, tool_initiated)
+  local active = self.active_mode
+  if not active then
+    return nil
+  end
+
+  local definition = active.definition
+  local prompt
+  if type(definition.exit_prompt) == "function" then
+    prompt = definition.exit_prompt(active.state, summary or "")
+  else
+    local ctx = vim.tbl_extend("force", active.state, { summary = summary or "" })
+    prompt = template.render(tostring(definition.exit_prompt), ctx)
+  end
+
+  if not tool_initiated then
+    self.active_mode = nil
+    self:add_instruction({ role = "user", content = prompt, hide = true })
+    self:_invalidate_cache()
+  end
+
+  return prompt
 end
 
 function Conversation:is_buf_valid(buf)
@@ -1394,8 +1519,12 @@ local function fork_conversation(source, turn_id)
     model = source.model,
     ignore_tool_confirm = source.ignore_tool_confirm,
     tools = source.tools,
+    modes = source.modes,
   })
   conversation.enable_supersede = source.enable_supersede
+  if source.active_mode then
+    conversation.active_mode = nil
+  end
 
   for _, message in ipairs(messages) do
     local msg_copy = vim.deepcopy(message)

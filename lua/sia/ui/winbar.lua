@@ -255,8 +255,18 @@ local function push_part(parts, value)
   end
 end
 
+--- @param conversation sia.Conversation
+--- @return string
+local function mode_section(conversation)
+  if not conversation.active_mode then
+    return ""
+  end
+  return section("SiaMode", " " .. conversation.active_mode.name)
+end
+
 local function default_left_sections(data)
   local parts = {}
+  push_part(parts, mode_section(data.conversation))
   push_part(parts, spinner_section(data))
   push_part(parts, queue_section(data))
   push_part(parts, tool_section(data))
