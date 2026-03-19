@@ -264,10 +264,24 @@ local function mode_section(conversation)
   return section("SiaMode", " " .. conversation.active_mode.name)
 end
 
+--- @param conversation sia.Conversation
+--- @return string
+local function id_section(conversation)
+  local parent = conversation.parent
+  if parent then
+    return section(
+      "DiagnosticInfo",
+      "#" .. conversation.id .. "↑" .. parent.conversation.id
+    )
+  end
+  return section("NonText", "#" .. conversation.id)
+end
+
 local function default_left_sections(data)
   local parts = {}
-  push_part(parts, mode_section(data.conversation))
   push_part(parts, spinner_section(data))
+  push_part(parts, id_section(data.conversation))
+  push_part(parts, mode_section(data.conversation))
   push_part(parts, queue_section(data))
   push_part(parts, tool_section(data))
   push_part(parts, agents_section(data.conversation))

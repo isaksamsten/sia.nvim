@@ -6,6 +6,7 @@ local M = {
 }
 
 M.get_chat = M.ChatStrategy.by_buf
+M.close_chat = M.ChatStrategy.remove
 M.last_chat = M.ChatStrategy.last
 M.remove_chat = M.ChatStrategy.remove
 

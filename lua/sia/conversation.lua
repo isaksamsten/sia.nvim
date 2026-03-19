@@ -1,6 +1,5 @@
 local tracker = require("sia.tracker")
 local template = require("sia.template")
-local tool_utils = require("sia.tools.utils")
 
 math.randomseed(os.time())
 
@@ -32,21 +31,6 @@ end
 --- @field id integer
 --- @field description string
 --- @field status string
-
---- @class sia.conversation.Agent
---- @field id integer
---- @field source "tool"|"user"
---- @field status "running"|"completed"|"failed"|"attached"|"cancelled"
---- @field progress string?
---- @field result string[]?
---- @field error string?
---- @field name string
---- @field task string
---- @field started_at number
---- @field usage sia.Usage?
---- @field cancellable sia.Cancellable?
---- @field get_preview fun(self: sia.conversation.Agent): string[]
---- @field cancel fun(self: sia.conversation.Agent): string[]?, string?
 
 --- @class sia.conversation.BashProcess
 --- @field id integer
@@ -131,6 +115,29 @@ Message.__index = Message
 
 local STATUS_OUTPUT_TAIL_LINES = 20
 
+--- @class sia.conversation.AgentMeta
+--- @field parent sia.Conversation
+--- @field current sia.Conversation
+--- @field strategy sia.ChatStrategy?
+
+---- @field conversation sia.Conversation?
+---- @field parent_conversation sia.Conversation?
+---- @field opened_strategy sia.ChatStrategy?
+
+--- @class sia.conversation.Agent
+--- @field id integer
+--- @field source "tool"|"user"
+--- @field status "running"|"completed"|"failed"|"attached"|"cancelled"|"opened"
+--- @field progress string?
+--- @field result string[]?
+--- @field error string?
+--- @field name string
+--- @field task string
+--- @field started_at number
+--- @field usage sia.Usage?
+--- @field cancellable sia.Cancellable?
+--- @field open boolean
+--- @field meta sia.conversation.AgentMeta?
 local Agent = {}
 Agent.__index = Agent
 
@@ -245,12 +252,20 @@ function Agent:get_preview()
   }
 
   if self.status == "running" then
+    if self.open then
+      table.insert(content, "Will open as chat on completion.")
+    end
     if self.progress and #self.progress > 0 then
       table.insert(content, string.format("Progress: %s", self.progress))
     end
     if self.cancellable and self.cancellable.is_cancelled then
       table.insert(content, "Cancellation requested: yes")
     end
+  elseif self.status == "opened" then
+    table.insert(
+      content,
+      "Opened as interactive chat. Use :SiaAgent complete to send result back."
+    )
   elseif self.status == "completed" and self.result then
     table.insert(content, "")
     table.insert(content, "Result:")
@@ -278,6 +293,17 @@ function Agent:cancel()
 
   self.cancellable.is_cancelled = true
   self.progress = "Cancellation requested"
+end
+
+function Agent:can_open()
+  return self.status == "running" or self.status == "completed" and self.meta ~= nil
+end
+
+function Agent:close()
+  if self.status == "opened" then
+    self.open = nil
+    self.status = "cancelled"
+  end
 end
 
 --- @param opts? { tail_lines?: integer }
@@ -792,6 +818,7 @@ local CONVERSATION_ID = 1
 --- @field logger sia.history.HistoryLogger
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
+--- @field parent { agent_id: integer, conversation: sia.Conversation }?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -1112,6 +1139,23 @@ function Conversation:destroy()
 
   self.bash_processes = {}
 
+  -- If the conversation was opened from an agent
+  if self.parent then
+    local agent = self.parent.conversation:get_agent(self.parent.agent_id)
+    -- We have to make sure that the agent we opened from
+    -- no longer carries a reference to this conversation
+    if agent then
+      agent:close()
+    end
+  end
+
+  -- We also need to ensure that all agents that
+  -- have this conversation as parent are no longer opened.
+  -- Instead we mark them as cancelled
+  for _, agent in ipairs(self.agents) do
+    agent:close()
+  end
+
   require("sia.ui.confirm").clear(self.id)
   self.logger:destroyed()
 end
@@ -1167,6 +1211,7 @@ function Conversation:attach_completed_agents()
         description = string.format("agent result: %s", agent.name),
       })
       agent.status = "attached"
+      agent.meta = nil
       attached_any = true
     end
   end

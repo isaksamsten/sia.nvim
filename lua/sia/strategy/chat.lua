@@ -141,8 +141,10 @@ ChatStrategy._order = {}
 
 --- @param conversation sia.Conversation
 --- @param options sia.config.Chat
+--- @param opts { render_all: boolean? }?
 --- @return sia.ChatStrategy
-function ChatStrategy.new(conversation, options)
+function ChatStrategy.new(conversation, options, opts)
+  opts = opts or {}
   vim.cmd(options.cmd)
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_get_current_buf()
@@ -170,13 +172,18 @@ function ChatStrategy.new(conversation, options)
   pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
   local messages = conversation:get_messages()
-  obj.canvas:render_messages(
-    vim.list_slice(messages, 1, #messages - 1),
-    obj.conversation.model.name
-  )
+  if opts.render_all then
+    obj.canvas:render_messages(messages, obj.conversation.model.name)
+    obj.has_generated_name = true
+  else
+    obj.canvas:render_messages(
+      vim.list_slice(messages, 1, #messages - 1),
+      obj.conversation.model.name
+    )
+    obj.has_generated_name = false
+  end
   obj.assistant_extmark = nil
 
-  obj.has_generated_name = false
   local augroup = vim.api.nvim_create_augroup("SiaChat" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup,

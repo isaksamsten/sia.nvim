@@ -728,6 +728,23 @@ end, {
 
 vim.api.nvim_create_user_command("SiaAgent", function(args)
   local subcommand = args.fargs[1]
+
+  if subcommand == "complete" then
+    local chat = require("sia.strategy").get_chat()
+    if not chat then
+      return
+    end
+
+    if require("sia.agents").complete(chat.conversation) then
+      local win = vim.fn.bufwinid(chat.buf)
+      if win ~= -1 then
+        vim.api.nvim_win_close(win, false)
+      end
+      vim.api.nvim_buf_delete(chat.buf, {})
+    end
+    return
+  end
+
   local chat = require("sia.strategy").get_chat()
   if not chat then
     return
@@ -791,6 +808,13 @@ vim.api.nvim_create_user_command("SiaAgent", function(args)
         "SiaProgress",
       },
     }, false, {})
+  elseif subcommand == "open" then
+    local id = tonumber(args.fargs[2])
+    if not id then
+      return
+    end
+
+    require("sia.agents").open(chat.conversation, id)
   elseif subcommand == "cancel" then
     local id = tonumber(args.fargs[2])
     if not id then
@@ -799,7 +823,6 @@ vim.api.nvim_create_user_command("SiaAgent", function(args)
 
     local agent = chat.conversation:get_agent(id)
     if not agent then
-      vim.notify(string.format("sia: agent %d not found", id), vim.log.levels.ERROR)
       return
     end
 
@@ -813,7 +836,7 @@ vim.api.nvim_create_user_command("SiaAgent", function(args)
     vim.notify(
       "sia: unknown subcommand '"
         .. tostring(subcommand)
-        .. "'. use 'start <name> <task>' or 'cancel <id>'",
+        .. "'. use 'start', 'open', 'complete', or 'cancel'",
       vim.log.levels.ERROR
     )
   end
@@ -823,7 +846,7 @@ end, {
     local prefix = string.sub(cmd_line, 1, cursor_pos)
 
     if prefix:match("SiaAgent%s%w*$") then
-      local subcommands = { "start", "cancel" }
+      local subcommands = { "start", "open", "complete", "cancel" }
       return vim.tbl_filter(function(cmd)
         return vim.startswith(cmd, arg_lead)
       end, subcommands)
@@ -839,15 +862,28 @@ end, {
       end, names)
     end
 
+    if prefix:match("SiaAgent%s+open%s") then
+      local chat = require("sia.strategy").get_chat()
+      if chat and chat.conversation then
+        local ids = {}
+        for _, agent in ipairs(chat.conversation.agents) do
+          if agent:can_open() then
+            local id_str = tostring(agent.id)
+            if vim.startswith(id_str, arg_lead) then
+              table.insert(ids, id_str)
+            end
+          end
+        end
+        return ids
+      end
+    end
+
     if prefix:match("SiaAgent%s+cancel%s") then
       local chat = require("sia.strategy").get_chat()
       if chat and chat.conversation then
         local ids = {}
         for _, agent in ipairs(chat.conversation.agents) do
-          if
-            agent.source == "user"
-            and (agent.status == "running" or agent.status == "completed")
-          then
+          if agent.status == "running" or agent.status == "completed" then
             local id_str = tostring(agent.id)
             if vim.startswith(id_str, arg_lead) then
               table.insert(ids, id_str)

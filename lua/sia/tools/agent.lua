@@ -222,6 +222,23 @@ Usage notes:
           },
           display_content = string.format("%s Agent %d failed", icons.error, args.id),
         })
+      elseif current_agent.status == "cancelled" then
+        callback({
+          content = {
+            string.format(
+              "Agent %d (%s) was cancelled by the user.",
+              args.id,
+              current_agent.name
+            ),
+          },
+          display_content = string.format(
+            "%s Agent %d cancelled",
+            icons.error,
+            args.id
+          ),
+        })
+      elseif current_agent.status == "opened" then
+        vim.defer_fn(poll, 1000)
       else
         vim.defer_fn(poll, 500)
       end

@@ -16,7 +16,10 @@ local IDLE_INTERVAL = 1000
 local AGENT_STATUS = {
   running = { hl_group = "SiaStatusActive", icon = icons.started },
   completed = { hl_group = "SiaStatusDone", icon = icons.success },
+  opened = { hl_group = "SiaStatusActive", icon = "󰁝" },
   failed = { hl_group = "SiaStatusFailed", icon = icons.error },
+  cancelled = { hl_group = "SiaStatusMuted", icon = icons.error },
+  attached = { hl_group = "SiaStatusMuted", icon = icons.success },
 }
 
 local BASH_STATUS = {
@@ -337,6 +340,7 @@ local function render_agent(agent, state, lines, line_info, line_meta)
     id = agent.id,
     item_key = item_key,
     action = agent.status == "running" and "cancel" or nil,
+    can_open = agent:can_open(),
   }
   local summary_meta = vim.tbl_extend("force", {}, meta, { summary = true })
 
@@ -393,25 +397,60 @@ local function render_agent(agent, state, lines, line_info, line_meta)
   add_block(lines, line_info, line_meta, "Task:", command_lines(agent.task), meta)
 
   if agent.status == "running" then
-    if agent.cancellable and agent.cancellable.is_cancelled then
-      add_line(lines, line_info, line_meta, "    Cancellation requested.", {
+    if agent.open then
+      local msg = "    Will open as chat on completion."
+      add_line(lines, line_info, line_meta, msg, {
         { line_hl_group = "DiagnosticInfo" },
         {
           col = 4,
-          end_col = 4 + #"Cancellation requested.",
+          end_col = #msg,
+          hl_group = "DiagnosticInfo",
+        },
+      }, meta)
+    end
+    if agent.cancellable and agent.cancellable.is_cancelled then
+      local msg = "    Cancellation requested."
+      add_line(lines, line_info, line_meta, msg, {
+        { line_hl_group = "DiagnosticInfo" },
+        {
+          col = 4,
+          end_col = #msg,
           hl_group = "DiagnosticInfo",
         },
       }, meta)
     elseif not agent.progress or agent.progress == "" then
-      add_line(lines, line_info, line_meta, "    Waiting for progress update.", {
+      local msg = "    Waiting for progress update."
+      add_line(lines, line_info, line_meta, msg, {
         { line_hl_group = "SiaStatusMuted" },
         {
           col = 4,
-          end_col = 4 + #"Waiting for progress update.",
+          end_col = #msg,
           hl_group = "SiaStatusMuted",
         },
       }, meta)
     end
+    return
+  end
+
+  if agent.status == "opened" then
+    local msg = "    Opened as interactive chat."
+    add_line(lines, line_info, line_meta, msg, {
+      { line_hl_group = "DiagnosticInfo" },
+      {
+        col = 4,
+        end_col = #msg,
+        hl_group = "DiagnosticInfo",
+      },
+    }, meta)
+    msg = "    Use :SiaAgent complete to send result back."
+    add_line(lines, line_info, line_meta, msg, {
+      { line_hl_group = "SiaStatusMuted" },
+      {
+        col = 4,
+        end_col = #msg,
+        hl_group = "SiaStatusMuted",
+      },
+    }, meta)
     return
   end
 
@@ -419,11 +458,12 @@ local function render_agent(agent, state, lines, line_info, line_meta)
     if agent.result and #agent.result > 0 then
       add_block(lines, line_info, line_meta, "Output:", agent.result, meta)
     else
-      add_line(lines, line_info, line_meta, "    No output returned.", {
+      local msg = "    No output returned."
+      add_line(lines, line_info, line_meta, msg, {
         { line_hl_group = "SiaStatusMuted" },
         {
           col = 4,
-          end_col = 4 + #"No output returned.",
+          end_col = #msg,
           hl_group = "SiaStatusMuted",
         },
       }, meta)
@@ -431,15 +471,17 @@ local function render_agent(agent, state, lines, line_info, line_meta)
     return
   end
 
-  add_detail_value(
-    lines,
-    line_info,
-    line_meta,
-    "Error",
-    agent.error or "Unknown error",
-    meta,
-    "DiagnosticError"
-  )
+  if agent.error then
+    add_detail_value(
+      lines,
+      line_info,
+      line_meta,
+      "Error",
+      agent.error,
+      meta,
+      "DiagnosticError"
+    )
+  end
   if agent.result and #agent.result > 0 then
     add_block(lines, line_info, line_meta, "Output:", agent.result, meta)
   end
@@ -968,6 +1010,22 @@ local function cancel_current(buf)
   M.schedule_render()
 end
 
+--- @param buf integer
+local function open_current(buf)
+  local state = state_from_buf(buf)
+  if not state then
+    return
+  end
+
+  local meta = current_item_meta(buf)
+  if not meta or meta.kind ~= "agent" or not meta.can_open then
+    return
+  end
+
+  require("sia.agents").open(state.conversation, meta.id)
+  M.schedule_render()
+end
+
 --- Get or create the status buffer for a conversation, filled with a snapshot.
 --- @param conversation sia.Conversation
 --- @return integer buf
@@ -1008,6 +1066,9 @@ local function get_or_create_buf(conversation)
   end, { buffer = buf, silent = true })
   vim.keymap.set("n", "r", function()
     M.schedule_render()
+  end, { buffer = buf, silent = true })
+  vim.keymap.set("n", "e", function()
+    open_current(buf)
   end, { buffer = buf, silent = true })
 
   vim.api.nvim_create_autocmd("BufWipeout", {
