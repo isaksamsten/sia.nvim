@@ -113,7 +113,7 @@ end
 --- Open an agent's conversation as a full interactive chat.
 --- @param agent sia.conversation.Agent
 function M._open_agent_chat(agent)
-  if not agent.open or not agent.meta then
+  if agent.status == "opened" or not agent.meta then
     return
   end
 
@@ -154,7 +154,6 @@ function M.open(parent_conversation, agent_id)
     agent.open = not agent.open
     return
   end
-
   M._open_agent_chat(agent)
 end
 
