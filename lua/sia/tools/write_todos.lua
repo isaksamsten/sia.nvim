@@ -1,104 +1,5 @@
 local tool_utils = require("sia.tools.utils")
 
-local STATUS_NS = vim.api.nvim_create_namespace("sia_todos")
-local STATUS = {
-  active = { icon = "▶", hl_group = "SiaTodoActive" },
-  pending = { icon = "○", hl_group = "SiaTodoPending" },
-  done = { icon = "✓", hl_group = "SiaTodoDone" },
-  skipped = { icon = "⊗", hl_group = "SiaTodoSkipped" },
-}
---- Render todos to buffer
---- @param conversation sia.Conversation
-local function render_todos_buffer(conversation)
-  local buf = conversation.todos.buf
-  if not buf or not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-
-  if #conversation.todos.items == 0 then
-    return
-  end
-
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-  vim.api.nvim_buf_clear_namespace(buf, STATUS_NS, 0, -1)
-  for i, todo in ipairs(conversation.todos.items) do
-    local status = STATUS[todo.status]
-    local icon = status and status.icon or "•"
-    local hl_group = status and status.hl_group or "Normal"
-    local line = string.format("%s %s", icon, todo.description:gsub("\n", " "))
-    vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { line })
-    vim.api.nvim_buf_set_extmark(buf, STATUS_NS, i - 1, 0, {
-      end_col = #line,
-      hl_group = hl_group,
-      hl_mode = "combine",
-    })
-  end
-  vim.bo[buf].modifiable = false
-end
-
---- Toggle todo status between pending, done, and skipped
---- @param conversation sia.Conversation
-local function toggle_todo_status(conversation)
-  local line_num = vim.api.nvim_win_get_cursor(0)[1]
-  if line_num < 1 or line_num > #conversation.todos.items then
-    return
-  end
-
-  local todo = conversation.todos.items[line_num]
-  if not todo then
-    return
-  end
-
-  local status_cycle = {
-    pending = "done",
-    done = "skipped",
-    skipped = "pending",
-    active = "done",
-  }
-
-  todo.status = status_cycle[todo.status] or "pending"
-
-  local buf = conversation.todos.buf
-  if not buf or not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-
-  vim.bo[buf].modifiable = true
-  local status = STATUS[todo.status]
-  local icon = status and status.icon or "•"
-  local hl_group = status and status.hl_group or "Normal"
-  local line = string.format("%s %s", icon, todo.description:gsub("\n", " "))
-  vim.api.nvim_buf_set_lines(buf, line_num - 1, line_num, false, { line })
-  vim.api.nvim_buf_set_extmark(buf, STATUS_NS, line_num - 1, 0, {
-    end_col = #line,
-    hl_group = hl_group,
-    hl_mode = "combine",
-  })
-  vim.bo[buf].modifiable = false
-end
-
---- Set up buffer-local keybindings
---- @param buf integer
---- @param conversation sia.Conversation
-local function setup_keybindings(buf, conversation)
-  vim.keymap.set("n", "<CR>", function()
-    toggle_todo_status(conversation)
-  end, { buffer = buf, nowait = true, desc = "Toggle todo status" })
-end
-
---- Create or get the todos buffer
---- @return integer
-local function create_todos_buffer()
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].bufhidden = "hide"
-  vim.bo[buf].swapfile = false
-  vim.bo[buf].modifiable = false
-
-  return buf
-end
-
 return tool_utils.new_tool({
   name = "write_todos",
   read_only = false,
@@ -181,23 +82,7 @@ of newly added todos for future reference.]],
   required = {},
 }, function(args, conversation, callback, _)
   if not conversation.todos then
-    conversation.todos = { buf = nil, items = {} }
-  end
-
-  local is_first_time = false
-  if
-    not conversation.todos.buf or not vim.api.nvim_buf_is_valid(conversation.todos.buf)
-  then
-    local buf = create_todos_buffer()
-    pcall(
-      vim.api.nvim_buf_set_name,
-      buf,
-      string.format("*%s todos*", conversation.name)
-    )
-
-    setup_keybindings(buf, conversation)
-    is_first_time = true
-    conversation.todos.buf = buf
+    conversation.todos = { items = {} }
   end
 
   local response = {}
@@ -291,14 +176,6 @@ of newly added todos for future reference.]],
     table.insert(response, "")
   end
 
-  render_todos_buffer(conversation)
-
-  if (args.replace and #args.replace > 0) or (args.add and #args.add > 0) then
-    vim.schedule(function()
-      require("sia").ui.todos("open")
-    end)
-  end
-
   local all_completed = true
   for _, todo in ipairs(conversation.todos.items) do
     if todo.status ~= "done" and todo.status ~= "skipped" then
@@ -307,10 +184,16 @@ of newly added todos for future reference.]],
     end
   end
 
+  local todos_ui = require("sia.ui.todos")
+
   if all_completed or #conversation.todos.items == 0 then
     response = { "All items are done or skipped!" }
     vim.schedule(function()
-      require("sia").ui.todos("close")
+      todos_ui.close(conversation)
+    end)
+  else
+    vim.schedule(function()
+      todos_ui.open(conversation)
     end)
   end
 
@@ -322,3 +205,4 @@ of newly added todos for future reference.]],
     content = response,
   })
 end)
+

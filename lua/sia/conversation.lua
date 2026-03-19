@@ -808,7 +808,7 @@ local CONVERSATION_ID = 1
 --- @field tools sia.config.Tool[]?
 --- @field name string
 --- @field model sia.Model
---- @field todos  {buf: number?, items: sia.conversation.Todo[]}
+--- @field todos  {items: sia.conversation.Todo[]}
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
 --- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
@@ -859,7 +859,6 @@ function Conversation.new(opts)
   obj.ignore_tool_confirm = opts.ignore_tool_confirm
   obj.auto_confirm_tools = {}
   obj.todos = {
-    buf = nil,
     items = {},
   }
   obj.usage_history = {}
