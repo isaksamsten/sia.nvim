@@ -211,3 +211,5 @@ function M.toggle(action)
   local buf = get_or_create_buf(chat.conversation)
   panel:open(chat.buf, buf)
 end
+
+return M
