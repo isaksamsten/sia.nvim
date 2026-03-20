@@ -63,9 +63,18 @@ end
 
 --- @param content string
 function AssistantTurnRenderer:append_content(content)
-  if content ~= "" then
-    self.content_writer:append(content)
+  if content == "" then
+    return
   end
+  -- Strip leading newlines before any content has been written to avoid
+  -- a blank line at the top of the response (e.g. when the first delta is "\n")
+  if self.content_writer:is_empty() then
+    content = content:gsub("^\n+", "")
+    if content == "" then
+      return
+    end
+  end
+  self.content_writer:append(content)
 end
 
 --- @param content string
