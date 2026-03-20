@@ -24,6 +24,7 @@ tools:
   - view
 model: openai/gpt-4.1
 require_confirmation: false
+interactive: false
 ---
 
 You are a code search specialist. When given a search task, use the available
@@ -33,12 +34,13 @@ Report your findings clearly with file paths and line numbers.
 
 ### Frontmatter Fields
 
-| Field                    | Required | Default      | Description                                   |
-| ------------------------ | -------- | ------------ | --------------------------------------------- |
-| **description**          | yes      | —            | Shown to the AI when listing available agents |
-| **tools**                | yes      | —            | Array of tool names the agent can use         |
-| **model**                | no       | `fast_model` | Override the model for this agent             |
-| **require_confirmation** | no       | `true`       | Whether tool operations need user approval    |
+| Field                    | Required | Default      | Description                                                        |
+| ------------------------ | -------- | ------------ | ------------------------------------------------------------------ |
+| **description**          | yes      | —            | Shown to the AI when listing available agents                      |
+| **tools**                | yes      | —            | Array of tool names the agent can use                              |
+| **model**                | no       | `fast_model` | Override the model for this agent                                  |
+| **require_confirmation** | no       | `true`       | Whether tool operations need user approval                         |
+| **interactive**          | no       | `false`      | Open the agent as an interactive chat automatically when it starts |
 
 ### Naming
 
@@ -86,17 +88,17 @@ You can also call `require("sia").ui.status()` programmatically.
 
 The status panel supports these keybindings:
 
-| Key     | Action                                   |
-| ------- | ---------------------------------------- |
-| `<CR>`  | Toggle expanded details for the item     |
-| `=`     | Toggle expanded details for the item     |
-| `s`     | Cancel the agent or stop the process     |
-| `e`     | Open the agent as an interactive chat    |
-| `n`     | Jump to the next item                    |
-| `p`     | Jump to the previous item                |
-| `r`     | Refresh the panel                        |
-| `q`     | Close the panel                          |
-| `<Esc>` | Close the panel                          |
+| Key     | Action                                |
+| ------- | ------------------------------------- |
+| `<CR>`  | Toggle expanded details for the item  |
+| `=`     | Toggle expanded details for the item  |
+| `s`     | Cancel the agent or stop the process  |
+| `e`     | Open the agent as an interactive chat |
+| `n`     | Jump to the next item                 |
+| `p`     | Jump to the previous item             |
+| `r`     | Refresh the panel                     |
+| `q`     | Close the panel                       |
+| `<Esc>` | Close the panel                       |
 
 ### Opening an Agent as a Chat
 
@@ -108,6 +110,8 @@ To open an agent, use one of these methods:
 
 - Press `e` on an agent in the status panel.
 - Run `:SiaAgent open <id>` from the parent chat buffer.
+- Set `interactive: true` in the agent's frontmatter to open it automatically
+  whenever it starts, whether launched by the AI or by `:SiaAgent start`.
 
 If the agent is still running, it is flagged to open when it completes. Press
 `e` again (or re-run the command) to toggle the flag off. If the agent has
@@ -133,18 +137,20 @@ on the agent in the status panel.
 
 All `:SiaAgent` subcommands operate in the context of the current chat buffer.
 
-| Command                             | Description                                          |
-| ----------------------------------- | ---------------------------------------------------- |
-| `:SiaAgent start <name> <task>`     | Start an agent manually with a task                  |
-| `:SiaAgent open <id>`               | Open an agent as an interactive chat (toggle if running) |
-| `:SiaAgent complete`                | Send the agent chat result back to the parent        |
-| `:SiaAgent cancel <id>`             | Cancel a running or completed agent                  |
+| Command                         | Description                                              |
+| ------------------------------- | -------------------------------------------------------- |
+| `:SiaAgent start <name> <task>` | Start an agent manually with a task                      |
+| `:SiaAgent open <id>`           | Open an agent as an interactive chat (toggle if running) |
+| `:SiaAgent complete`            | Send the agent chat result back to the parent            |
+| `:SiaAgent cancel <id>`         | Cancel a running or completed agent                      |
 
 Tab-completion is available for subcommands, agent names, and agent IDs.
 
 ## Tips
 
 - Set `require_confirmation: false` for read-only agents to avoid interruptions.
+- Set `interactive: true` for agents that need user review or follow-up questions
+  before their result goes back to the parent conversation.
 - Keep system prompts focused and specific to the agent's purpose.
 - Choose minimal tool sets, agents work better with fewer, relevant tools.
 - Use descriptive names that help the AI understand when to use each agent.
