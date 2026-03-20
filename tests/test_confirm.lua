@@ -333,8 +333,10 @@ T["sia.ui.confirm"]["expanded UI keybindings navigate groups and accept selected
 
   eq(1, child.lua_get("_G.accepted"))
   eq(2, child.lua_get("_G.remaining"))
-  eq(true, child.lua_get("_G.detail_lines_after")[1]:match("%[chat%]") ~= nil)
-  eq("[view (2)]", child.lua_get("_G.detail_lines_after")[2])
+  -- After accepting the bash group, only one section and one group remain,
+  -- so conversation and group headers are omitted.
+  eq("> 1. View a.lua", child.lua_get("_G.detail_lines_after")[1])
+  eq("  2. View b.lua", child.lua_get("_G.detail_lines_after")[2])
 end
 
 T["sia.ui.confirm"]["expanded UI keybindings allow a batchable group always"] = function()

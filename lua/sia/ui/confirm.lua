@@ -644,25 +644,43 @@ local function build_group_lines(width, sections)
   local group_index = 0
   local blocks = {}
 
+  -- Count total groups to decide which headers to show
+  local total_groups = 0
+  for _, section in ipairs(sections) do
+    total_groups = total_groups + #section.groups
+  end
+
+  -- Single group (implies single section): no headers needed at all
+  if total_groups <= 1 then
+    return {}, {}
+  end
+
+  -- Only show conversation headers when multiple conversations
+  local show_section_header = #sections > 1
+
   for _, section in ipairs(sections) do
     local header = string.format("[%s]", section.conversation.name)
     local token_lines = { "" }
-    local header_span = {
+    local header_span = show_section_header and {
       line = 1,
       start_col = 0,
       end_col = #header,
       highlight = "SiaConfirmItem",
-    }
+    } or nil
     local block_spans = {}
     local line = 1
     local col = 0
+    -- When header is shown, token spans start at line 2; otherwise line 1
+    local line_offset = show_section_header and 1 or 0
 
     for _, group in ipairs(section.groups) do
       group_index = group_index + 1
       local token = string.format("[%s]", group_heading(group))
       local token_len = #token
       local separator = col == 0 and "" or " "
-      local max_token_width = math.max(width - #header - section_gap, 20)
+      local max_token_width = show_section_header
+          and math.max(width - #header - section_gap, 20)
+        or width
 
       if col > 0 and col + 1 + token_len > max_token_width then
         table.insert(token_lines, "")
@@ -675,27 +693,29 @@ local function build_group_lines(width, sections)
       token_lines[line] = token_lines[line] .. separator .. token
       table.insert(block_spans, {
         group = group_index,
-        line = line + 1,
+        line = line + line_offset,
         start_col = start_col,
         end_col = start_col + token_len,
         highlight = group_index == detail_selection.group and get_highlight(
           group.level
         ) or "SiaConfirmItem",
       })
-      if detail_selection.group == group_index then
+      if header_span and detail_selection.group == group_index then
         header_span.highlight = "SiaConfirmSelectedItem"
       end
       col = start_col + token_len
     end
 
-    local block_width = #header
+    local block_width = show_section_header and #header or 0
     for _, token_line in ipairs(token_lines) do
       block_width = math.max(block_width, #token_line)
     end
-    table.insert(block_spans, header_span)
+    if header_span then
+      table.insert(block_spans, header_span)
+    end
     table.insert(blocks, {
       width = block_width,
-      header = header,
+      header = show_section_header and header or nil,
       token_lines = token_lines,
       spans = block_spans,
     })
@@ -708,7 +728,7 @@ local function build_group_lines(width, sections)
     local total_width = row_col == 0 and block.width
       or row_col + section_gap + block.width
     if row_col > 0 and total_width > width then
-      row_height = math.max(row_height, 2)
+      row_height = math.max(row_height, show_section_header and 2 or 1)
       for _ = 1, row_height do
         table.insert(lines, "")
       end
@@ -718,7 +738,7 @@ local function build_group_lines(width, sections)
     end
 
     local block_col = row_col == 0 and 0 or row_col + section_gap
-    local block_height = #block.token_lines + 1
+    local block_height = #block.token_lines + (block.header and 1 or 0)
     row_height = math.max(row_height, block_height)
 
     for offset = 0, block_height - 1 do
@@ -730,7 +750,12 @@ local function build_group_lines(width, sections)
           .. string.rep(" ", target_col - #lines[line_idx])
       end
 
-      local text = offset == 0 and block.header or block.token_lines[offset]
+      local text
+      if block.header then
+        text = offset == 0 and block.header or block.token_lines[offset]
+      else
+        text = block.token_lines[offset + 1]
+      end
       lines[line_idx] = lines[line_idx] .. text
     end
 
