@@ -1,8 +1,10 @@
 --- @type table<string, sia.config.Mode>
 local Modes = {}
 
+--- @type sia.config.Mode
 Modes.plan = {
   description = "Create a structured plan before implementing",
+  truncate = true,
   permissions = {
     deny = { "apply_diff", "bash", "agent" },
     allow = {
@@ -37,12 +39,17 @@ Modes.plan = {
     }, "\n")
   end,
   exit_prompt = function(state)
-    return table.concat({
-      "Plan mode has ended.",
-      "The plan is in `" .. state.plan_file .. "`.",
-      "You may now proceed with implementation -- all tools are available.",
-      "Follow the plan steps in order.",
-    }, "\n")
+    local stat = vim.uv.fs_stat(state.plan_file)
+    if stat then
+      return table.concat({
+        "Plan mode has ended.",
+        "The plan is in `" .. state.plan_file .. "`.",
+        "You may now proceed with implementation.",
+        "Follow the plan steps in order.",
+      }, "\n")
+    else
+      return "Plan mode has ended without a plan"
+    end
   end,
 }
 

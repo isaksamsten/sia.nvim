@@ -247,22 +247,36 @@ function ChatStrategy:flush_queued_instructions()
   end
 
   local before_count = #self.conversation:prepare_messages()
+  local needs_redraw = false
   for _, queued in ipairs(self.queued_instructions) do
     if queued.mode_entry then
-      self.conversation:enter_mode(
-        queued.mode_entry.name,
-        queued.mode_entry.user_input,
-        queued.context
-      )
+      local info = self.conversation:enter_mode(queued.mode_entry.name, queued.context)
+      if info and info.truncate_after_id then
+        self.conversation:drop_after(info.truncate_after_id)
+        for _, instruction in ipairs(info.instructions) do
+          self.conversation:add_instruction(instruction)
+        end
+        needs_redraw = true
+      end
+      if queued.mode_entry.user_input and queued.mode_entry.user_input ~= "" then
+        self.conversation:add_instruction({
+          role = "user",
+          content = queued.mode_entry.user_input,
+        })
+      end
     elseif queued.instruction then
       self.conversation:add_instruction(queued.instruction, queued.context)
     end
   end
 
   if self:buf_is_loaded() then
-    local prepared = self.conversation:prepare_messages()
-    local new_messages = vim.list_slice(prepared, before_count + 1)
-    self.canvas:render_messages(new_messages, self.conversation.model.name)
+    if needs_redraw then
+      self:redraw()
+    else
+      local prepared = self.conversation:prepare_messages()
+      local new_messages = vim.list_slice(prepared, before_count + 1)
+      self.canvas:render_messages(new_messages, self.conversation.model.name)
+    end
   end
 
   self.queued_instructions = {}
@@ -497,24 +511,55 @@ function ChatStrategy:on_complete(control)
     end,
     handle_tools_completion = function(opts)
       winbar.update_tool_status(self.buf, nil)
+      local truncate_after = nil
+      local exit_mode_result = nil
       if opts.results then
         for _, tool_result in ipairs(opts.results) do
           if tool_result.result.display_content and self.turn_renderer then
             self.turn_renderer:append_tool_result(tool_result.result.display_content)
           end
-          self.conversation:add_instruction({
-            { role = "assistant", tool_calls = { tool_result.tool } },
-            {
-              role = "tool",
-              content = tool_result.result.content,
-              _tool_call = tool_result.tool,
-              kind = tool_result.result.kind,
-              display_content = tool_result.result.display_content,
-              ephemeral = tool_result.result.kind == "failed"
-                or tool_result.result.ephemeral,
-            },
-          }, tool_result.result.context, { turn_id = control.turn_id })
+          if tool_result.result.truncate_after then
+            truncate_after = tool_result.result.truncate_after
+            exit_mode_result = tool_result
+          else
+            self.conversation:add_instruction({
+              { role = "assistant", tool_calls = { tool_result.tool } },
+              {
+                role = "tool",
+                content = tool_result.result.content,
+                _tool_call = tool_result.tool,
+                kind = tool_result.result.kind,
+                display_content = tool_result.result.display_content,
+                ephemeral = tool_result.result.kind == "failed"
+                  or tool_result.result.ephemeral,
+              },
+            }, tool_result.result.context, { turn_id = control.turn_id })
+          end
         end
+      end
+
+      if truncate_after and exit_mode_result then
+        self.conversation:drop_after(truncate_after)
+        self.conversation:add_instruction({
+          { role = "assistant", tool_calls = { exit_mode_result.tool }, hide = true },
+          {
+            role = "tool",
+            content = exit_mode_result.result.content,
+            _tool_call = exit_mode_result.tool,
+            kind = exit_mode_result.result.kind,
+            display_content = exit_mode_result.result.display_content,
+          },
+        }, exit_mode_result.result.context, { turn_id = control.turn_id })
+      end
+
+      if truncate_after and self:buf_is_loaded() then
+        if self.turn_renderer then
+          self.turn_renderer:finalize()
+          self.turn_renderer = nil
+        end
+        self:redraw()
+        self.assistant_extmark =
+          self.canvas:render_assistant_header(self.conversation.model.name)
       end
 
       if opts.cancelled then

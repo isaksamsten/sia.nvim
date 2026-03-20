@@ -34,10 +34,11 @@ that are restricted in the current mode. Provide a brief summary of what was acc
     return
   end
 
-  local prompt = conversation:exit_mode(args.summary, true)
-  if prompt then
+  local info = conversation:exit_mode(args.summary)
+  if info then
     callback({
-      content = vim.split(prompt, "\n"),
+      content = vim.split(info.prompt, "\n"),
+      truncate_after = info.truncate_after_id,
     })
   else
     callback({

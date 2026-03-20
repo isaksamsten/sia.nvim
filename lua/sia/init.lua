@@ -534,18 +534,28 @@ function M.execute_action(action, opts)
       if strategy then
         if opts.mode then
           if strategy.is_busy then
-            strategy:queue_instruction(nil, nil, opts.mode)
+            strategy:queue_instruction(nil, context, opts.mode)
             should_execute = false
           else
-            if
-              not strategy.conversation:enter_mode(
-                opts.mode.name,
-                opts.mode.user_input,
-                context
-              )
-            then
+            if not strategy.conversation:has_mode(opts.mode.name) then
               vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
               return
+            end
+            local info = strategy.conversation:enter_mode(opts.mode.name, context)
+            if info then
+              if info.truncate_after_id then
+                strategy.conversation:drop_after(info.truncate_after_id)
+                strategy:redraw()
+              end
+              for _, instruction in ipairs(info.instructions) do
+                strategy.conversation:add_instruction(instruction)
+              end
+              if opts.mode.user_input and opts.mode.user_input ~= "" then
+                strategy.conversation:add_instruction({
+                  role = "user",
+                  content = opts.mode.user_input,
+                })
+              end
             end
           end
         else
@@ -585,11 +595,21 @@ function M.execute_action(action, opts)
       end
 
       if opts.mode then
-        if
-          not conversation:enter_mode(opts.mode.name, opts.mode.user_input, context)
-        then
+        if not conversation:has_mode(opts.mode.name) then
           vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
           return
+        end
+        local info = conversation:enter_mode(opts.mode.name, context)
+        if info then
+          for _, instruction in ipairs(info.instructions) do
+            conversation:add_instruction(instruction)
+          end
+          if opts.mode.user_input and opts.mode.user_input ~= "" then
+            conversation:add_instruction({
+              role = "user",
+              content = opts.mode.user_input,
+            })
+          end
         end
       end
 

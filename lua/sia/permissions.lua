@@ -8,6 +8,7 @@ local M = {}
 --- @field name string
 --- @field definition sia.config.Mode
 --- @field state table
+--- @field truncate_after_id string?
 --- @field _compiled_allow table<string, true|{arguments: table<string, vim.regex[]>}>?
 
 --- Helper function for pattern matching

@@ -161,14 +161,15 @@ workflows like planning, reviewing, or exploring before making changes.
 
 Each mode is a table with these fields:
 
-| Field            | Type               | Description                                                         |
-| ---------------- | ------------------ | ------------------------------------------------------------------- |
-| **description**  | string             | Short description of the mode                                       |
-| **permissions**  | table              | Tool permission rules (see below)                                   |
-| **enter_prompt** | string or function | Prompt injected when the mode activates. Functions receive `state`. |
-| **exit_prompt**  | string or function | Prompt injected when the mode exits. Functions receive `state`.     |
-| **init_state**   | function           | Returns a state table passed to prompts. Receives the context.      |
-| **deny_message** | function           | Custom deny message. Receives `(tool_name, args, kind)`.            |
+| Field            | Type               | Description                                                                  |
+| ---------------- | ------------------ | ---------------------------------------------------------------------------- |
+| **description**  | string             | Short description of the mode                                                |
+| **permissions**  | table              | Tool permission rules (see below)                                            |
+| **enter_prompt** | string or function | Prompt injected when the mode activates. Functions receive `state`.          |
+| **exit_prompt**  | string or function | Prompt injected when the mode exits. Functions receive `state`.              |
+| **init_state**   | function           | Returns a state table passed to prompts. Receives the context.               |
+| **deny_message** | function           | Custom deny message. Receives `(tool_name, args, kind)`.                     |
+| **truncate**     | boolean            | Remove all mode messages from history on exit, keeping only the exit prompt. |
 
 ### Mode Permissions
 

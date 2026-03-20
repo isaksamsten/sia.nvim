@@ -6,6 +6,7 @@ local M = {}
 --- @field display_content string?
 --- @field cancelled boolean?
 --- @field ephemeral boolean?
+--- @field truncate_after string?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.StreamRenderer

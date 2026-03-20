@@ -905,28 +905,39 @@ function Conversation:get_mode(name)
   return self.modes and self.modes[name] or nil
 end
 
+function Conversation:has_mode(name)
+  return name == "default" or self:get_mode(name) ~= nil
+end
+
 --- @param name string
---- @param user_input string?
 --- @param ctx sia.Context?
---- @return boolean ok
-function Conversation:enter_mode(name, user_input, ctx)
+--- @return { instructions: sia.config.Instruction[], truncate_after_id: string? }?
+function Conversation:enter_mode(name, ctx)
+  local info = { instructions = {} }
   if name == "default" then
     if self.active_mode then
-      self:exit_mode()
+      local exit_info = self:exit_mode()
+      if exit_info then
+        info.truncate_after_id = exit_info.truncate_after_id
+        table.insert(info.instructions, { role = "user", content = exit_info.prompt })
+      end
     end
-    if user_input and user_input ~= "" then
-      self:add_instruction({ role = "user", content = user_input }, ctx)
-    end
-    return true
+    return info
   end
 
   local definition = self:get_mode(name)
   if not definition then
-    return false
+    return nil
   end
 
   if self.active_mode then
-    self:exit_mode()
+    local exit_info = self:exit_mode()
+    if exit_info then
+      info.truncate_after_id = exit_info.truncate_after_id
+      if exit_info.prompt then
+        table.insert(info.instructions, { role = "user", content = exit_info.prompt })
+      end
+    end
   end
 
   local active = require("sia.permissions").create_active_mode(name, definition, ctx)
@@ -942,21 +953,18 @@ function Conversation:enter_mode(name, user_input, ctx)
     local render = template.render(tostring(definition.enter_prompt), active.state)
     table.insert(prompt, render)
   end
-  if user_input and user_input ~= "" then
-    table.insert(prompt, user_input)
-  end
 
-  self:add_instruction({ role = "user", content = prompt, hide = true }, ctx)
-  self:_invalidate_cache()
-
-  return true
+  active.truncate_after_id = self.messages[#self.messages].id
+  table.insert(
+    info.instructions,
+    { role = "user", content = table.concat(prompt, "\n"), hide = true }
+  )
+  return info
 end
 
---- Exit the current mode, inserting the exit prompt as a user message.
---- @param summary string? Summary of what was accomplished (from the LLM)
---- @param tool_initiated boolean?
---- @return string?
-function Conversation:exit_mode(summary, tool_initiated)
+--- @param summary string?
+--- @return { prompt: string, truncate_after_id: string? }?
+function Conversation:exit_mode(summary)
   local active = self.active_mode
   if not active then
     return nil
@@ -971,13 +979,37 @@ function Conversation:exit_mode(summary, tool_initiated)
     prompt = template.render(tostring(definition.exit_prompt), ctx)
   end
 
-  if not tool_initiated then
-    self.active_mode = nil
-    self:add_instruction({ role = "user", content = prompt, hide = true })
-    self:_invalidate_cache()
+  local info = { prompt = prompt }
+  if definition.truncate and active.truncate_after_id then
+    info.truncate_after_id = active.truncate_after_id
   end
 
-  return prompt
+  self.active_mode = nil
+  return info
+end
+
+--- Drop every message after (and including) message_id
+--- @param message_id string
+function Conversation:drop_after(message_id)
+  local start_index = nil
+  for i, message in ipairs(self.messages) do
+    if message.id == message_id then
+      start_index = i
+      break
+    end
+  end
+
+  if not start_index then
+    return
+  end
+
+  for i = start_index + 1, #self.messages do
+    local message = self.messages[i]
+    if message.status ~= "dropped" then
+      self:set_message_status(message, "dropped")
+    end
+  end
+  self:_invalidate_cache()
 end
 
 function Conversation:is_buf_valid(buf)

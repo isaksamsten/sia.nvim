@@ -860,6 +860,7 @@ end
 --- @field enter_prompt string|fun(state: table):string
 --- @field exit_prompt string|fun(state: table, summary: string):string
 --- @field init_state (fun(ctx: sia.Context): table)?
+--- @field truncate boolean?
 
 --- @class sia.config.Insert
 --- @field placement (fun():sia.config.Placement)|sia.config.Placement

@@ -101,6 +101,11 @@ the codebase, identifies affected files and risks, and writes an ordered
 implementation plan. When it finishes, it calls the `exit_mode` tool to return
 to full access and can then follow the plan.
 
+Plan mode uses `truncate = true`, which means all the intermediate exploration
+and planning messages are removed from the conversation history when the mode
+exits. Only the exit prompt (which references the plan file) remains, keeping
+the context window clean for the implementation phase.
+
 The active mode name appears in the winbar next to the conversation ID.
 
 You can define custom modes in your action configuration. See
@@ -145,13 +150,12 @@ https://github.com/user-attachments/assets/c8a5f031-b032-4a04-96c5-a6407fe43545
 
 ## Choosing the Right Mode
 
-| Goal | Mode | Command |
-|---|---|---|
-| Explore, discuss, or get guidance | Chat | `:Sia [query]` |
-| Generate code at the cursor | Insert | `:Sia! [query]` |
-| Modify existing code with suggestions | Diff | `:'<,'>Sia! [query]` |
+| Goal                                  | Mode   | Command              |
+| ------------------------------------- | ------ | -------------------- |
+| Explore, discuss, or get guidance     | Chat   | `:Sia [query]`       |
+| Generate code at the cursor           | Insert | `:Sia! [query]`      |
+| Modify existing code with suggestions | Diff   | `:'<,'>Sia! [query]` |
 
 You can customize the default behavior for each mode using
 [actions](../5-features/1-actions.md) and
 [project configuration](../3-configuration/3-project.md).
-
