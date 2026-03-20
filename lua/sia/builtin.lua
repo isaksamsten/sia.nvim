@@ -22,7 +22,7 @@ missing, make reasonable assumptions and complete a working version of the featu
 {% if has_skills %}
 # Skills
 These are techniques you know for combining your tools effectively.
-Apply them when the situation matches.
+Apply them when the situation matches. Use the view tool to read the skill.
 {% for skill in skills %}
 - {{skill.name}}: {{skill.description}} ({{skill.filepath}})
 {% end %}
@@ -236,7 +236,7 @@ new files.
 
 {% if has_skills %}
 These are techniques you know for combining your tools effectively.
-Apply them when the situation matches.
+Apply them when the situation matches. Use the view tool to read the skill.
 {% for skill in skills %}
 - {{ skill.name }}: {{ skill.description }} (basedir: {{ skill.dir }}, file: SKILL.md)
 {% end %}
