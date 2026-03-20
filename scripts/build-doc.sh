@@ -31,20 +31,33 @@ For the latest version, see: https://github.com/isaksamsten/sia.nvim
 HEADER
 
   for doc in \
-    "$DOCS_DIR/authentication.md" \
-    "$DOCS_DIR/configuration.md" \
-    "$DOCS_DIR/usage.md" \
-    "$DOCS_DIR/tools.md" \
-    "$DOCS_DIR/concepts.md" \
-    "$DOCS_DIR/changes.md" \
-    "$DOCS_DIR/actions.md"; do
+    "$DOCS_DIR/1-getting-started.md" \
+    "$DOCS_DIR/2-usage/1-modes.md" \
+    "$DOCS_DIR/2-usage/2-commands.md" \
+    "$DOCS_DIR/2-usage/3-reviewing-changes.md" \
+    "$DOCS_DIR/2-usage/4-keybindings.md" \
+    "$DOCS_DIR/3-configuration/1-settings.md" \
+    "$DOCS_DIR/3-configuration/2-models.md" \
+    "$DOCS_DIR/3-configuration/3-project.md" \
+    "$DOCS_DIR/4-permissions/1-confirmation.md" \
+    "$DOCS_DIR/4-permissions/2-rules.md" \
+    "$DOCS_DIR/5-features/1-actions.md" \
+    "$DOCS_DIR/5-features/2-agents.md" \
+    "$DOCS_DIR/5-features/3-skills.md" \
+    "$DOCS_DIR/5-features/4-tools.md" \
+    "$DOCS_DIR/6-reference.md"; do
 
     if [[ -f "$doc" ]]; then
       echo ""
-      # Strip any filename prefix from cross-file links, e.g.
-      # [text](configuration.md#anchor) -> [text](#anchor)
-      # [text](configuration.md)        -> [text](#configuration)  (no-anchor case)
+      # Strip path prefixes from cross-file links, e.g.
+      # [text](../3-configuration/1-settings.md#anchor) -> [text](#anchor)
+      # [text](2-commands.md)                           -> [text](#commands)
+      # [text](configuration.md#anchor)                 -> [text](#anchor)
       sed -E \
+        -e 's|\((\.\./)*[0-9]+-[a-zA-Z]+/[0-9]+-([a-zA-Z0-9_-]+)\.md#([^)]+)\)|(#\3)|g' \
+        -e 's|\((\.\./)*[0-9]+-[a-zA-Z]+/[0-9]+-([a-zA-Z0-9_-]+)\.md\)|(#\2)|g' \
+        -e 's|\((\.\./)*[0-9]+-([a-zA-Z0-9_-]+)\.md#([^)]+)\)|(#\3)|g' \
+        -e 's|\((\.\./)*[0-9]+-([a-zA-Z0-9_-]+)\.md\)|(#\2)|g' \
         -e 's|\(([a-zA-Z0-9_-]+)\.md#([^)]+)\)|(#\2)|g' \
         -e 's|\(([a-zA-Z0-9_-]+)\.md\)|(#\1)|g' \
         "$doc"

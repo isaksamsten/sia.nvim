@@ -17,14 +17,14 @@ https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
 
 https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
 
-- **Multiple interaction modes** — [chat, insert, and diff](docs/usage.md#interaction-modes) for different workflows
-- **Comprehensive tool system** — [file operations, code search, shell access, LSP, and more](docs/tools.md)
-- **Flexible approval system** — [blocking or async tool approval](docs/concepts.md#tool-confirmation) with customizable notifications
-- **Change review** — [inline diff with accept/reject](docs/changes.md) for AI-suggested edits
-- **Agent system** — [custom autonomous agents](docs/concepts.md#custom-agent-registry) for specialized tasks
-- **Project-level config** — [per-project models, permissions, and risk levels](docs/configuration.md#project-level-configuration)
-- **Persistent memory** — [agent memory](docs/concepts.md#agent-memory)
-- **Cost tracking** — [real-time token usage and cost monitoring](docs/configuration.md#cost-tracking)
+- **Multiple interaction modes** — [chat, insert, and diff](docs/2-usage/1-modes.md) for different workflows
+- **Comprehensive tool system** — [file operations, code search, shell access, LSP, and more](docs/5-features/4-tools.md)
+- **Flexible approval system** — [blocking or async tool approval](docs/4-permissions/1-confirmation.md) with customizable notifications
+- **Change review** — [inline diff with accept/reject](docs/2-usage/3-reviewing-changes.md) for AI-suggested edits
+- **Agent system** — [custom autonomous agents](docs/5-features/2-agents.md) for specialized tasks
+- **Project-level config** — [per-project models, permissions, and risk levels](docs/3-configuration/3-project.md)
+- **Persistent memory** — [agent memory](docs/5-features/2-agents.md#agent-memory)
+- **Cost tracking** — [real-time token usage and cost monitoring](docs/3-configuration/2-models.md#cost-tracking)
 
 ## Requirements
 
@@ -59,7 +59,7 @@ Install using Lazy:
 
 ## Quick Start
 
-1. Set up [authentication](docs/authentication.md) for your provider.
+1. Set up [authentication](docs/1-getting-started.md#authentication) for your provider.
 
 2. Use `:Sia` to start a conversation:
 
@@ -75,12 +75,20 @@ Install using Lazy:
 
 ## Documentation
 
-| Document                                 | Description                                               |
+| Document | Description |
 | ---------------------------------------- | --------------------------------------------------------- |
-| [Authentication](docs/authentication.md) | Setting up API keys and provider auth                     |
-| [Configuration](docs/configuration.md)   | Global settings, project config, permissions, risk levels |
-| [Usage](docs/usage.md)                   | Interaction modes, commands, keybindings                  |
-| [Tools](docs/tools.md)                   | Available tools for the AI assistant                      |
-| [Core Concepts](docs/concepts.md)        | Approval system, memory, todos, history, agents           |
-| [Reviewing Changes](docs/changes.md)     | Inline diff workflow for accepting/rejecting edits        |
-| [Actions](docs/actions.md)               | Built-in actions and creating custom actions              |
+| [Getting Started](docs/1-getting-started.md) | Installation, authentication, first commands |
+| [Modes](docs/2-usage/1-modes.md) | Chat, insert, and diff interaction modes |
+| [Commands](docs/2-usage/2-commands.md) | Command reference |
+| [Reviewing Changes](docs/2-usage/3-reviewing-changes.md) | Inline diff workflow for accepting/rejecting edits |
+| [Keybindings](docs/2-usage/4-keybindings.md) | Suggested keybindings |
+| [Settings](docs/3-configuration/1-settings.md) | Global settings and context management |
+| [Models](docs/3-configuration/2-models.md) | Model definitions, providers, pricing |
+| [Project Config](docs/3-configuration/3-project.md) | Per-project `.sia/config.json` reference |
+| [Confirmation](docs/4-permissions/1-confirmation.md) | Blocking and async tool approval |
+| [Permission Rules](docs/4-permissions/2-rules.md) | Allow/deny/ask rules and risk levels |
+| [Actions](docs/5-features/1-actions.md) | Built-in and custom actions |
+| [Agents](docs/5-features/2-agents.md) | Custom agents and memory |
+| [Skills](docs/5-features/3-skills.md) | Reusable skill definitions |
+| [Tools](docs/5-features/4-tools.md) | Available tools for the AI assistant |
+| [Reference](docs/6-reference.md) | Highlight groups |

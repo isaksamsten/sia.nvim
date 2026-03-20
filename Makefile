@@ -10,7 +10,7 @@ deps/mini.nvim:
 	git clone --filter=blob:none https://github.com/echasnovski/mini.nvim $@
 
 # Documentation
-DOCS_MD := $(wildcard docs/*.md)
+DOCS_MD := $(wildcard docs/*.md docs/*/*.md)
 
 doc/sia.md: $(DOCS_MD) scripts/build-doc.sh
 	@bash scripts/build-doc.sh
