@@ -93,6 +93,16 @@ local function get_default_skills_dir()
   return vim.fs.joinpath(config_dir, "sia", "skills")
 end
 
+--- Get the project-local skills directory (.sia/skills/) when available.
+--- @return string?
+local function get_project_skills_dir()
+  local project_root = vim.fs.root(0, ".sia")
+  if not project_root then
+    return nil
+  end
+  return vim.fs.joinpath(project_root, ".sia", "skills")
+end
+
 --- Scan a directory for skill definitions (*/SKILL.md)
 --- @param base_dir string Directory to scan
 --- @param error_report boolean?
@@ -169,18 +179,32 @@ function M.get_skills(conversation_tools, error_report)
   end
 
   -- Scan all search paths. First match wins on name collision.
+  -- Resolution order (first match wins):
+  --   1. Local project .sia/skills/  (overrides global for same name)
+  --   2. Global ~/.config/sia/skills/
+  --   3. Extra paths from config
   --- @type table<string, sia.skills.registry.SkillDef>
   local all_skills = {}
 
-  -- Default location first
-  local default_dir = get_default_skills_dir()
+  -- 1. Local project skills take highest priority
+  local local_dir = get_project_skills_dir()
+  if local_dir then
+    for name, skill in pairs(scan_skills_dir(local_dir, error_report)) do
+      if enabled_set[name] and not all_skills[name] then
+        all_skills[name] = skill
+      end
+    end
+  end
+
+  -- 2. Global default location
+  local default_dir = M._get_default_skills_dir()
   for name, skill in pairs(scan_skills_dir(default_dir, error_report)) do
     if enabled_set[name] and not all_skills[name] then
       all_skills[name] = skill
     end
   end
 
-  -- Then extras
+  -- 3. Extra paths from config
   for _, extra_dir in ipairs(extra_paths) do
     -- Expand ~ in paths
     local expanded = vim.fn.expand(extra_dir)
@@ -218,27 +242,50 @@ function M.get_skills(conversation_tools, error_report)
 end
 
 --- Get a single skill definition by name (ignoring project config filter)
---- Searches default dir + extras from config
+--- Searches project-local dir + default dir + extras from config
+--- Resolution order (first match wins):
+---   1. Local project .sia/skills/
+---   2. Global ~/.config/sia/skills/
+---   3. Extra paths from config
 --- @param name string
 --- @return sia.skills.registry.SkillDef?
 function M.get_skill(name)
   local _, extra_paths = get_skills_config()
 
-  local default_dir = get_default_skills_dir()
+  -- 1. Local project skills
+  local local_dir = get_project_skills_dir()
+  if local_dir then
+    local skill_file = vim.fs.joinpath(local_dir, name, "SKILL.md")
+    local stat = vim.uv.fs_stat(skill_file)
+    if stat and stat.type == "file" then
+      local skill = parse_skill_file(skill_file, name)
+      if skill then
+        return skill
+      end
+    end
+  end
+
+  -- 2. Global default location
+  local default_dir = M._get_default_skills_dir()
   local skill_file = vim.fs.joinpath(default_dir, name, "SKILL.md")
   local stat = vim.uv.fs_stat(skill_file)
   if stat and stat.type == "file" then
     local skill = parse_skill_file(skill_file, name)
-    return skill
+    if skill then
+      return skill
+    end
   end
 
+  -- 3. Extra paths
   for _, extra_dir in ipairs(extra_paths) do
     local expanded = vim.fn.expand(extra_dir)
     skill_file = vim.fs.joinpath(expanded, name, "SKILL.md")
     stat = vim.uv.fs_stat(skill_file)
     if stat and stat.type == "file" then
       local skill = parse_skill_file(skill_file, name)
-      return skill
+      if skill then
+        return skill
+      end
     end
   end
 
@@ -265,8 +312,12 @@ function M.is_skill_path(path)
   end
 
   -- Check each enabled skill name against search paths
-  local default_dir = get_default_skills_dir()
+  local local_dir = get_project_skills_dir()
+  local default_dir = M._get_default_skills_dir()
   for _, name in ipairs(enabled_names) do
+    if local_dir and check_skill_dir(local_dir, name) then
+      return true
+    end
     if check_skill_dir(default_dir, name) then
       return true
     end
@@ -282,5 +333,6 @@ end
 
 -- Expose for testing
 M._parse_skill_file = parse_skill_file
+M._get_default_skills_dir = get_default_skills_dir
 
 return M
