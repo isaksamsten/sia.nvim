@@ -3,8 +3,8 @@ description: Use this agent after completing significant code changes (new featu
 tools:
   - glob
   - grep
-  - read
-model: codex/gpt-5.2
+  - view
+model: copilot/gpt-5.4
 require_confirmation: false
 ---
 

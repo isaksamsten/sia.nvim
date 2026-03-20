@@ -3,7 +3,7 @@
   "models": {
     "copilot/gpt-5.4": {
       "options": {
-        "reasoning": { "effort": "medium", "summary": "concise" }
+        "reasoning": { "effort": "medium", "summary": "detailed" }
       }
     },
     "openai/gpt-5.2": {
@@ -32,8 +32,8 @@
     "keep": 50,
     "clear_input": true
   },
-  "skills": ["monitor-logs", "tmux-interactive"],
-  "agents": ["code/review", "code/explore"],
+  "skills": ["update-docs"],
+"agents": ["code/review", "code/explore", "git/commit"],
   "permission": {
     "deny": {
       "bash": {
