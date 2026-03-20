@@ -58,6 +58,7 @@ function M.spawn(agent_name, task, parent_conversation, opts)
     current = new_conversation,
     parent = parent_conversation,
   }
+  agent.open = agent_def.interactive
   local strategy = require("sia.strategy").new_hidden(nil, new_conversation, {
     notify = function(msg)
       agent.progress = msg

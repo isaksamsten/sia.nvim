@@ -6,18 +6,16 @@ local State = {
   IN_SYSTEM_PROMPT = 3,
 }
 
---- @class sia.agents.registry.AgentDef
---- @field name string             relative path stem, e.g. "coder" or "code/review"
+--- @class sia.agents.registry.Agent
+--- @field name string
 --- @field description string
 --- @field require_confirmation boolean
+--- @field interactive boolean
 --- @field tools string[]
 --- @field model string?
 --- @field system_prompt string[]
 --- @field filepath string
 
---- Derive an agent name from its filepath and the base directory it was found in.
---- The name is the path relative to base_dir with the .md extension stripped.
---- Example: base_dir=/cfg/sia/agents, filepath=/cfg/sia/agents/code/review.md → "code/review"
 --- @param base_dir string
 --- @param filepath string
 --- @return string
@@ -27,19 +25,10 @@ local function name_from_path(base_dir, filepath)
   return rel
 end
 
---- Parse a .md agent file with YAML frontmatter.
---- The frontmatter must contain:
----   description: string  (required)
----   tools:       list    (required)
----   model:       string  (optional)
----   require_confirmation: bool (optional, default true)
---- Everything after the closing --- is used as the system prompt.
---- The agent name is derived from the file path, not the frontmatter.
----
---- @param filepath string  Absolute path to the .md file
---- @param name string      Name derived from the file path (passed by caller)
---- @return sia.agents.registry.AgentDef? agent
---- @return string|nil error
+--- @param filepath string
+--- @param name string
+--- @return sia.agents.registry.Agent?
+--- @return string|nil
 local function parse_agent_file(filepath, name)
   local file = vim.fn.readfile(filepath)
   --- @type string[]
@@ -91,18 +80,19 @@ local function parse_agent_file(filepath, name)
   end
 
   local model = type(metadata.model) == "string" and metadata.model or nil
+  --- @type sia.agents.registry.Agent
   return {
     name = name,
-    description = metadata.description,
-    require_confirmation = require_confirmation,
-    tools = metadata.tools,
-    model = model,
+    description = metadata.description --[[@as string]],
+    require_confirmation = require_confirmation --[[@as boolean]],
+    tools = metadata.tools --[[@as string[] ]],
+    model = model --[[@as string]],
     system_prompt = system_prompt,
     filepath = filepath,
+    interactive = metadata.interactive == true,
   }
 end
 
---- Get the default user-level agents directory (~/.config/sia/agents/)
 --- @return string
 local function get_default_agents_dir()
   local config_dir = vim.env.XDG_CONFIG_HOME or vim.fs.joinpath(vim.env.HOME, ".config")
@@ -119,12 +109,9 @@ local function get_project_agents_dir()
   return vim.fs.joinpath(project_root, ".sia", "agents")
 end
 
---- Recursively scan a directory for *.md agent files.
---- Each file's name is its path relative to base_dir with .md stripped,
---- e.g. base_dir/code/review.md → name "code/review".
 --- @param base_dir string
 --- @param error_report boolean?
---- @return table<string, sia.agents.registry.AgentDef>
+--- @return table<string, sia.agents.registry.Agent>
 local function scan_agents_dir(base_dir, error_report)
   local agents = {}
 
@@ -173,7 +160,7 @@ end
 --- An agent is included only if its name appears in the local config `agents` array.
 ---
 --- @param error_report boolean?
---- @return table<string, sia.agents.registry.AgentDef> agents
+--- @return table<string, sia.agents.registry.Agent> agents
 function M.get_agents(error_report)
   local enabled_names = get_agents_config()
 
@@ -181,16 +168,14 @@ function M.get_agents(error_report)
     return {}
   end
 
-  -- Build lookup set
   local enabled_set = {}
   for _, name in ipairs(enabled_names) do
     enabled_set[name] = true
   end
 
-  --- @type table<string, sia.agents.registry.AgentDef>
+  --- @type table<string, sia.agents.registry.Agent>
   local agents = {}
 
-  -- 1. Local project agents take highest priority
   local local_dir = get_project_agents_dir()
   if local_dir then
     for name, agent in pairs(scan_agents_dir(local_dir, error_report)) do
@@ -200,8 +185,6 @@ function M.get_agents(error_report)
     end
   end
 
-  -- 2. Global agents fill in any gaps
-  -- Use the exported function for the tests...
   local global_dir = M._get_default_agents_dir()
   for name, agent in pairs(scan_agents_dir(global_dir, error_report)) do
     if enabled_set[name] and not agents[name] then
@@ -215,7 +198,7 @@ end
 --- Get a single agent definition by name.
 --- Respects the same resolution order as get_agents.
 --- @param name string
---- @return sia.agents.registry.AgentDef?
+--- @return sia.agents.registry.Agent?
 function M.get_agent(name)
   return M.get_agents()[name]
 end
