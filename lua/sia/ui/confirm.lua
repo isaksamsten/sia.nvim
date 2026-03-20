@@ -187,40 +187,6 @@ function M.floating_notifier()
   }
 end
 
---- @return sia.ConfirmNotifier
-function M.winbar_notifier()
-  local notification_win = nil
-  local old_winbar = nil
-
-  --- @type sia.ConfirmNotifier
-  return {
-    show = function(args)
-      if not notification_win or not vim.api.nvim_win_is_valid(notification_win) then
-        notification_win = vim.api.nvim_get_current_win()
-        old_winbar = vim.wo[notification_win].winbar
-      end
-      local width = vim.fn.winwidth(notification_win)
-      local message =
-        sanitize_newlines(string.format("[%s] %s", args.name, args.message))
-      if args.total and args.total > 1 then
-        message = string.format("%s (+%d more)", message, args.total - 1)
-      end
-      if #message > width then
-        message = message:sub(1, width - 3) .. "..."
-      end
-      vim.wo[notification_win].winbar = message
-    end,
-
-    clear = function()
-      if notification_win and vim.api.nvim_win_is_valid(notification_win) then
-        vim.wo[notification_win].winbar = old_winbar or ""
-        notification_win = nil
-        old_winbar = nil
-      end
-    end,
-  }
-end
-
 local default_notifier = M.floating_notifier()
 
 --- @return sia.ConfirmNotifier
@@ -556,7 +522,10 @@ end
 
 local function warn_always_group_action(group)
   vim.notify(
-    string.format("sia: %s groups require item-level always-allow actions", group.tool_name),
+    string.format(
+      "sia: %s groups require item-level always-allow actions",
+      group.tool_name
+    ),
     vim.log.levels.WARN
   )
 end
