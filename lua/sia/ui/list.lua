@@ -43,7 +43,7 @@ function ListModel:dirty()
   for _, src in ipairs(self.sources) do
     local items = type(src.items) == "table" and src.items or src.items()
     local cache = self.cache[src.tag]
-    if not cache or #items ~= cache.length or tostring(items) == cache.id then
+    if not cache or #items ~= cache.length or tostring(items) ~= cache.id then
       return true
     end
   end
