@@ -122,8 +122,6 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
       return
     end
 
-    local token_str = M.format_token_count(usage.total)
-
     local cost = nil
     if conversation and conversation.model then
       local model = conversation.model
@@ -182,24 +180,11 @@ function M.create_cost_stats(builtin_pricing, cache_multiplier)
     end
 
     if not cost then
-      callback({ right = token_str })
+      callback({})
       return
     end
 
-    local cost_str
-    if cost >= 1.0 then
-      cost_str = string.format("$%.2f", cost)
-    else
-      cost_str = string.format("$%.3f", cost)
-    end
-
-    local max_cost = 1.0
-    local cost_percent = math.min(cost / max_cost, 1)
-
-    callback({
-      bar = { percent = cost_percent, icon = "", text = cost_str },
-      right = token_str,
-    })
+    callback({ cost = cost })
   end
 end
 

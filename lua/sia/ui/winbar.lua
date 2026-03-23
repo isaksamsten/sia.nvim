@@ -216,18 +216,29 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function format_right_metric(data)
-  local bar = data.stats and data.stats.bar
+  local stats = data.stats
   local parts = {}
 
   parts[1] = section(
     "NonText",
     ICONS.total_tokens .. common.format_token_count(data.total_usage)
   )
-  if bar and bar.text and vim.startswith(vim.trim(bar.text), "$") then
-    table.insert(parts, section("NonText", ICONS.price .. vim.trim(bar.text)))
-  elseif bar and bar.percent then
-    local pct = math.floor(bar.percent * 100 + 0.5)
-    table.insert(parts, section("NonText", ICONS.price .. pct .. "%%"))
+
+  if stats and stats.cost then
+    local cost_str
+    if stats.cost >= 1.0 then
+      cost_str = string.format("$%.2f", stats.cost)
+    else
+      cost_str = string.format("$%.3f", stats.cost)
+    end
+    table.insert(parts, section("NonText", ICONS.price .. cost_str))
+  elseif stats and stats.quota then
+    local pct = math.floor(stats.quota.percent * 100 + 0.5)
+    local label = pct .. "%%"
+    if stats.quota.label then
+      label = label .. " " .. stats.quota.label
+    end
+    table.insert(parts, section("NonText", ICONS.price .. label))
   end
 
   local budget_part = context_budget_section(data)

@@ -361,8 +361,8 @@ local copilot_extra_header = function(model, _, messages)
 end
 
 --- @param callback fun(stats: sia.conversation.Stats?)
---- @param conversation sia.Conversation
-local function get_stats(callback, conversation)
+--- @param _conversation sia.Conversation
+local function get_stats(callback, _conversation)
   local oauth = get_oauth_token(_oauth_token)
   if not oauth then
     callback()
@@ -387,48 +387,38 @@ local function get_stats(callback, conversation)
     vim.schedule_wrap(function(response)
       local status, json = pcall(vim.json.decode, response.stdout)
 
-      local token_display = ""
-      if conversation then
-        local usage = conversation:get_cumulative_usage()
-        if usage and usage.total > 0 then
-          token_display = common.format_token_count(usage.total)
+      if not status then
+        callback({})
+        return
+      end
+
+      local premium = json.quota_snapshots
+        and json.quota_snapshots.premium_interactions
+      if not premium then
+        callback({})
+        return
+      end
+
+      local percent_remaining = premium.percent_remaining or 0
+      local used_percent = 1 - (percent_remaining / 100)
+
+      local label
+      if json.quota_reset_date_utc then
+        local year, month, day = json.quota_reset_date_utc:match("(%d+)-(%d+)-(%d+)")
+        if year and month and day then
+          local reset_time = os.time({
+            year = tonumber(year) or 0,
+            month = tonumber(month) or 0,
+            day = tonumber(day) or 0,
+          })
+          local now = os.time()
+          label = math.ceil((reset_time - now) / 86400) .. "d"
         end
       end
 
-      if status then
-        local premium = json.quota_snapshots
-          and json.quota_snapshots.premium_interactions
-        if not premium then
-          callback({ right = token_display })
-          return
-        end
-
-        local percent_remaining = premium.percent_remaining or 0
-        local used_percent = 1 - (percent_remaining / 100)
-        local percent_display = string.format("%d%%%%", math.floor(used_percent * 100))
-
-        local days_remaining
-        if json.quota_reset_date_utc then
-          local year, month, day = json.quota_reset_date_utc:match("(%d+)-(%d+)-(%d+)")
-          if year and month and day then
-            local reset_time = os.time({
-              year = tonumber(year) or 0,
-              month = tonumber(month) or 0,
-              day = tonumber(day) or 0,
-            })
-            local now = os.time()
-            days_remaining = math.ceil((reset_time - now) / 86400) .. "d"
-          end
-        end
-
-        callback({
-          bar = { percent = used_percent, icon = " ", text = percent_display },
-          left = days_remaining,
-          right = token_display,
-        })
-      else
-        callback({ right = token_display })
-      end
+      callback({
+        quota = { percent = used_percent, label = label },
+      })
     end)
   )
 end

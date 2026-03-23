@@ -23,9 +23,8 @@ end
 --- @field display_content string?
 
 --- @class sia.conversation.Stats
---- @field bar { percent: number, text: string?, icon: string?}?
---- @field left string?
---- @field right string?
+--- @field cost number?
+--- @field quota { percent: number, label: string? }?
 
 --- @class sia.conversation.Todo
 --- @field id integer
