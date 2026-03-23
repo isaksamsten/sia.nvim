@@ -1,8 +1,9 @@
 --- Reusable split panel attached to a chat window.
 ---
---- Opens a split (horizontal or vertical depending on chat width),
---- displays a buffer, restores focus to the caller, and cleans up
---- when the chat window/buffer is closed.
+--- Opens a horizontal split below the chat window, displays a buffer,
+--- restores focus to the caller, and cleans up when the chat window/buffer
+--- is closed. The panel is "sticky": it remembers its target height and
+--- restores it when other windows (e.g. quickfix) cause layout changes.
 ---
 --- Usage:
 ---   local panel = require("sia.ui.split").new("status")
@@ -14,60 +15,57 @@
 local M = {}
 
 --- @class sia.ui.Panel
---- @field name string
---- @field _windows table<integer, integer>  chat_buf -> panel_win
---- @field _autocmds table<integer, integer> chat_buf -> autocmd_id
+--- @field private max_size number
+--- @field private windows table<integer, integer>
+--- @field private autocmds table<integer, integer[]> chat_buf -> autocmd_ids
+--- @field private sizes table<integer, integer>    chat_buf -> target size
 local Panel = {}
 Panel.__index = Panel
 
---- Create a new named panel.
---- @param name string   identifier used for debugging / differentiation
+--- Create a new panel.
+--- @param max_size number?
 --- @return sia.ui.Panel
-function M.new(name)
+function M.new(max_size)
   return setmetatable({
-    name = name,
-    _windows = {},
-    _autocmds = {},
+    max_size = max_size or 0.2,
+    windows = {},
+    autocmds = {},
+    sizes = {},
   }, Panel)
 end
 
 --- @param chat_buf integer
 --- @return boolean
 function Panel:is_open(chat_buf)
-  local win = self._windows[chat_buf]
+  local win = self.windows[chat_buf]
   return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
 
 --- Close the panel for a given chat buffer.
 --- @param chat_buf integer
 function Panel:close(chat_buf)
-  local win = self._windows[chat_buf]
+  local win = self.windows[chat_buf]
   if win and vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_win_close(win, true)
   end
-  self._windows[chat_buf] = nil
+  self.windows[chat_buf] = nil
+  self.sizes[chat_buf] = nil
+  if self.autocmds[chat_buf] then
+    for _, id in ipairs(self.autocmds[chat_buf]) do
+      pcall(vim.api.nvim_del_autocmd, id)
+    end
+    self.autocmds[chat_buf] = nil
+  end
 end
 
 --- @param chat_win integer
 --- @return integer win   the newly created panel window
 local function create_split(chat_win)
-  local chat_width = vim.api.nvim_win_get_width(chat_win)
-  local screen_width = vim.o.columns
-  local is_full_width = chat_width >= (screen_width - 2)
-
   local current_win = vim.api.nvim_get_current_win()
   vim.api.nvim_set_current_win(chat_win)
 
-  local panel_win
-  if is_full_width then
-    vim.cmd("vertical topleft split")
-    panel_win = vim.api.nvim_get_current_win()
-    local width = math.floor(screen_width * 0.2)
-    vim.api.nvim_win_set_width(panel_win, width)
-  else
-    vim.cmd("belowright split")
-    panel_win = vim.api.nvim_get_current_win()
-  end
+  vim.cmd("belowright split")
+  local panel_win = vim.api.nvim_get_current_win()
 
   if vim.api.nvim_win_is_valid(current_win) then
     vim.api.nvim_set_current_win(current_win)
@@ -76,17 +74,14 @@ local function create_split(chat_win)
   return panel_win
 end
 
---- Size the panel window to fit content, respecting max limits.
---- @param panel_win integer
+--- Compute a height that fits the buffer content, capped at 20% of screen.
+--- @para max_size number
 --- @param buf integer
---- @param is_vertical boolean
-local function size_to_content(panel_win, buf, is_vertical)
-  if is_vertical then
-    return
-  end
+--- @return integer
+local function size_to_content(max_size, buf)
   local line_count = vim.api.nvim_buf_line_count(buf)
-  local max_height = math.floor(vim.o.lines * 0.2)
-  vim.api.nvim_win_set_height(panel_win, math.min(line_count, max_height))
+  local max_height = math.floor(vim.o.lines * max_size)
+  return math.min(line_count, max_height)
 end
 
 --- Set up cleanup autocmds so the panel closes when the chat window/buffer goes away.
@@ -94,13 +89,15 @@ end
 --- @param chat_buf integer
 --- @param chat_win integer
 local function setup_cleanup(self, chat_buf, chat_win)
-  -- Remove previous autocmd if any
-  if self._autocmds[chat_buf] then
-    pcall(vim.api.nvim_del_autocmd, self._autocmds[chat_buf])
-    self._autocmds[chat_buf] = nil
+  -- Remove previous autocmds if any
+  if self.autocmds[chat_buf] then
+    for _, id in ipairs(self.autocmds[chat_buf]) do
+      pcall(vim.api.nvim_del_autocmd, id)
+    end
+    self.autocmds[chat_buf] = nil
   end
 
-  local id = vim.api.nvim_create_autocmd(
+  local cleanup_id = vim.api.nvim_create_autocmd(
     { "BufDelete", "BufWipeout", "WinClosed", "BufWinLeave" },
     {
       buffer = chat_buf,
@@ -116,17 +113,31 @@ local function setup_cleanup(self, chat_buf, chat_win)
       end,
     }
   )
-  self._autocmds[chat_buf] = id
+
+  -- Restore panel size when window layout changes
+  local resize_id = vim.api.nvim_create_autocmd("WinResized", {
+    callback = function()
+      local win = self.windows[chat_buf]
+      local target = self.sizes[chat_buf]
+      if win and target and vim.api.nvim_win_is_valid(win) then
+        local current = vim.api.nvim_win_get_height(win)
+        if current ~= target then
+          vim.api.nvim_win_set_height(win, target)
+        end
+      end
+    end,
+  })
+
+  self.autocmds[chat_buf] = { cleanup_id, resize_id }
 end
 
 --- Open (or reuse) the panel, displaying the given buffer.
 --- Does nothing if no valid chat window is found.
 --- @param chat_buf integer
 --- @param buf integer       the buffer to show in the panel
---- @param opts { size: "auto"|integer, vertical: boolean, wrap: boolean?}?
+--- @param opts { size: "auto"|integer, wrap: boolean?}?
 function Panel:open(chat_buf, buf, opts)
   opts = opts or {}
-  local is_vertical = opts.vertical == true
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
     return
   end
@@ -137,26 +148,32 @@ function Panel:open(chat_buf, buf, opts)
   end
 
   if self:is_open(chat_buf) then
-    local win = self._windows[chat_buf]
+    local win = self.windows[chat_buf]
     vim.api.nvim_win_set_buf(win, buf)
-    size_to_content(win, buf, is_vertical)
+    local target = size_to_content(self.max_size, buf)
+    vim.api.nvim_win_set_height(win, target)
+    self.sizes[chat_buf] = target
     return
   end
 
   local panel_win = create_split(chat_win)
 
   vim.api.nvim_win_set_buf(panel_win, buf)
+  local target
   if opts.size == nil or opts.size == "auto" then
-    size_to_content(panel_win, buf, is_vertical)
+    target = size_to_content(self.max_size, buf)
   else
-    vim.api.nvim_win_set_height(panel_win, opts.size --[[@as integer]])
+    target = opts.size --[[@as integer]]
   end
+  vim.api.nvim_win_set_height(panel_win, target)
+  self.sizes[chat_buf] = target
+
   vim.wo[panel_win].wrap = opts.wrap or false
   vim.wo[panel_win].number = false
   vim.wo[panel_win].relativenumber = false
   vim.wo[panel_win].signcolumn = "no"
 
-  self._windows[chat_buf] = panel_win
+  self.windows[chat_buf] = panel_win
   setup_cleanup(self, chat_buf, chat_win)
 end
 

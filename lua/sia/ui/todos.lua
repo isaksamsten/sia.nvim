@@ -20,7 +20,7 @@ local STATUS_CYCLE = {
   active = "done",
 }
 
-local panel = split.new("todos")
+local panel = split.new()
 
 --- @class sia.todos.State
 --- @field conversation sia.Conversation
@@ -31,11 +31,12 @@ local panel = split.new("todos")
 --- @type table<integer, sia.todos.State>
 local states = {}
 
---- @param _tag string
---- @param _id any
+--- @param tag string
+--- @param id any
 --- @param todo sia.conversation.Todo
 --- @return sia.ui.RenderSpec
-local function render_todo(_tag, _id, todo)
+--- @diagnostic disable-next-line: unused-local
+local function render_todo(tag, id, todo)
   local status = STATUS[todo.status] or STATUS.pending
   return {
     icon = status.icon,

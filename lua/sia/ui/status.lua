@@ -28,7 +28,7 @@ local BASH_STATUS = {
   stopped = { hl_group = "SiaStatusFailed", icon = icons.bash_kill },
 }
 
-local panel = split.new("status")
+local panel = split.new()
 
 --- @class sia.status.State
 --- @field conversation sia.Conversation
