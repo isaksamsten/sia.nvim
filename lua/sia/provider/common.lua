@@ -46,6 +46,47 @@ function M.prepare_parameters(data, model)
   end
 end
 
+--- @param content string|table|nil
+--- @param text_part_type string
+--- @return table
+function M.content_to_parts(content, text_part_type)
+  if type(content) == "table" then
+    return content
+  end
+  if content and content ~= "" then
+    return { { type = text_part_type, text = content } }
+  end
+  return {}
+end
+
+--- @param messages table[]
+--- @param opts {text_part_type:string?, can_merge:(fun(prev:table, msg:table):boolean)?}?
+--- @return table[]
+function M.merge_consecutive_messages(messages, opts)
+  opts = opts or {}
+  local text_part_type = opts.text_part_type or "text"
+  local merged = {}
+
+  for _, msg in ipairs(messages) do
+    local prev = merged[#merged]
+    local same_role = prev and prev.role and msg.role and prev.role == msg.role
+    local can_merge = same_role and (not opts.can_merge or opts.can_merge(prev, msg))
+
+    if can_merge then
+      if type(prev.content) ~= "table" then
+        prev.content = M.content_to_parts(prev.content, text_part_type)
+      end
+      for _, part in ipairs(M.content_to_parts(msg.content, text_part_type)) do
+        table.insert(prev.content, part)
+      end
+    else
+      table.insert(merged, msg)
+    end
+  end
+
+  return merged
+end
+
 --- @class sia.ProviderStream
 --- @field strategy sia.Strategy
 M.ProviderStream = {}

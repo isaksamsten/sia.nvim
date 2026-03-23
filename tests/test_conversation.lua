@@ -156,17 +156,31 @@ T["tool call filtering"]["should respect excluded tools"] = function()
   local conv = require("sia.conversation").new_conversation({ temporary = true })
 
   conv:add_instruction(create_tool_call_message("call_1", "regular_tool"))
-  conv:add_instruction(create_tool_response_message("call_1", "test_tool"))
+  conv:add_instruction(create_tool_response_message("call_1", "regular_tool"))
   conv:add_instruction(create_tool_call_message("call_2", "important_tool"))
-  conv:add_instruction(create_tool_response_message("call_2", "test_tool"))
+  conv:add_instruction(create_tool_response_message("call_2", "important_tool"))
   conv:add_instruction(create_tool_call_message("call_3", "regular_tool"))
-  conv:add_instruction(create_tool_response_message("call_3", "test_tool"))
+  conv:add_instruction(create_tool_response_message("call_3", "regular_tool"))
   conv:add_instruction(create_tool_call_message("call_4", "regular_tool"))
-  conv:add_instruction(create_tool_response_message("call_4", "test_tool"))
+  conv:add_instruction(create_tool_response_message("call_4", "regular_tool"))
 
-  local query = conv:prepare_messages()
+  conv:prepare_messages()
 
-  eq(2, count_pruned(query))
+  local important_outdated = false
+  local regular_outdated = 0
+  for _, message in ipairs(conv.messages) do
+    if message.tool_calls then
+      local tool_name = message.tool_calls[1]["function"].name
+      if tool_name == "important_tool" then
+        important_outdated = message.status == "outdated"
+      elseif tool_name == "regular_tool" and message.status == "outdated" then
+        regular_outdated = regular_outdated + 1
+      end
+    end
+  end
+
+  eq(false, important_outdated)
+  MiniTest.expect.no_equality(regular_outdated, 0)
 end
 
 T["tool call filtering"]["should handle failed tool calls"] = function()

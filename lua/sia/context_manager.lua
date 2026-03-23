@@ -187,10 +187,11 @@ local function message_bytes(message)
   local bytes = 0
 
   if message.content then
-    if type(message.content) == "string" then
-      bytes = bytes + #message.content
-    elseif type(message.content) == "table" then
-      for _, part in ipairs(message.content) do
+    local content = message.content
+    if type(content) == "string" then
+      bytes = bytes + #content
+    elseif type(content) == "table" then
+      for _, part in ipairs(content) do
         if part.text then
           bytes = bytes + #part.text
         end

@@ -223,10 +223,15 @@ return {
       end
     end
 
+    local merged = common.merge_consecutive_messages(
+      conversation_messages,
+      { text_part_type = "text" }
+    )
+
     if #system_parts > 0 then
       data.system = system_parts
     end
-    data.messages = conversation_messages
+    data.messages = merged
 
     if data.system then
       data.system[#data.system].cache_control = { type = "ephemeral" }

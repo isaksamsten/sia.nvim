@@ -423,11 +423,22 @@ local M = {
         end)
         :totable()
 
+      local merged = common.merge_consecutive_messages(new_messages, {
+        text_part_type = "text",
+        can_merge = function(prev, msg)
+          return prev.role == "user"
+            and not msg.tool_calls
+            and not prev.tool_calls
+            and not msg.tool_call_id
+            and not prev.tool_call_id
+        end,
+      })
+
       data.messages = {}
       local i = 1
-      while i <= #new_messages do
-        local current = new_messages[i]
-        local next = i < #new_messages and new_messages[i + 1] or nil
+      while i <= #merged do
+        local current = merged[i]
+        local next = i < #merged and merged[i + 1] or nil
         if
           next
           and next.role == current.role
@@ -603,8 +614,17 @@ local M = {
         i = i + 1
       end
 
+      -- Responses input allows structural items between turns, so only merge
+      -- adjacent user messages and let assistant items stay distinct.
+      local merged = common.merge_consecutive_messages(input, {
+        text_part_type = "input_text",
+        can_merge = function(prev, item)
+          return prev.role == "user"
+        end,
+      })
+
       data.instructions = #instructions > 0 and table.concat(instructions, "\n") or nil
-      data.input = input
+      data.input = merged
     end,
     --- @param model sia.Model
     prepare_parameters = function(data, model)
