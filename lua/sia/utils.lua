@@ -352,11 +352,7 @@ function M.resolve_action(argument, opts)
     end
 
     new_action = true
-    if
-      action.mode == "chat"
-      and #argument > 1
-      and not (action.input and action.input == "ignore")
-    then
+    if #argument > 1 and not (action.input and action.input == "ignore") then
       if
         #argument >= 2
         and vim.startswith(argument[2], "@")
