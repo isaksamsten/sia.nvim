@@ -1289,16 +1289,12 @@ function Conversation:serialize()
   return messages
 end
 
---- Fork a conversation at the given turn_id.
---- Creates a new Conversation with the same model and tools, containing only
---- the messages before the specified turn. The forked conversation is independent
---- of the source — no shared mutable state.
 --- @param source sia.Conversation
---- @param turn_id string The turn to fork before (messages with this turn_id are excluded)
+--- @param turn_id string
 --- @return sia.Conversation?
 local function fork_conversation(source, turn_id)
-  local messages = source:get_entries_until(turn_id)
-  if not messages then
+  local entries = source:get_entries_until(turn_id)
+  if not entries then
     return nil
   end
 
@@ -1312,12 +1308,12 @@ local function fork_conversation(source, turn_id)
     conversation.active_mode = nil
   end
 
-  for _, message in ipairs(messages) do
-    local msg_copy = vim.deepcopy(message)
-    if msg_copy.region and msg_copy.region.tick then
-      msg_copy.dropped = true
+  for _, entry in ipairs(entries) do
+    local entry_copy = vim.deepcopy(entry)
+    if entry_copy.region and entry_copy.region.tick then
+      entry_copy.dropped = true
     end
-    table.insert(conversation.entries, msg_copy)
+    table.insert(conversation.entries, entry_copy)
   end
 
   return conversation
