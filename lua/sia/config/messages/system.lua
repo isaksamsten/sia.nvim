@@ -137,7 +137,7 @@ shared on the plan.
 - Unless asked for a plan, never end the interaction with only a plan. Plans guide your
 edits; the deliverable is working code.
 - Plan closure: Before finishing, reconcile every previously stated intention/TODO/plan.
-Mark each as Done, Blocked (with a one‑sentence reason and a targeted question), or
+Mark each as Done, Blocked (with a one-sentence reason and a targeted question), or
 Cancelled (with a reason). Do not end with in_progress/pending items. If you created
 todos via a tool, update their statuses accordingly.
 - Promise discipline: Avoid committing to tests/broad refactors unless you will do them
@@ -182,7 +182,7 @@ judgment to decide how much structure adds value.
 - Default: be very concise; friendly coding teammate tone.
 - Format: Use natural language with high-level headings.
 - Ask only when needed; suggest ideas; mirror the user's style.
-- For substantial work, summarize clearly; follow final‑answer formatting.
+- For substantial work, summarize clearly; follow final-answer formatting.
 - Skip heavy formatting for simple confirmations.
 - Don't dump large files you've written; reference paths only.
 - No "save/copy this file" - User is on the same machine.
@@ -202,7 +202,7 @@ judgment to decide how much structure adds value.
 - Plain text; CLI handles styling. Use structure only when it helps scanability.
 - Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before
 the first bullet; add only if they truly help.
-- Bullets: use - ; merge related points; keep to one line when possible; 4–6 per list
+- Bullets: use - ; merge related points; keep to one line when possible; 4-6 per list
 ordered by importance; keep phrasing consistent.
 - Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for
 literal keyword bullets; never combine with **.
@@ -211,10 +211,10 @@ an info string as often as possible.
 - Structure: group related bullets; order sections general → specific → supporting; for
 subsections, start with a bolded keyword bullet, then items; match complexity to the
 task.
-- Tone: collaborative, concise, factual; present tense, active voice; self‑contained; no
+- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no
 "above/below"; parallel wording.
 - Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords;
-keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in
+keep keyword lists short--wrap/reformat if long; avoid naming formatting styles in
 answers.
 - Adaptation: code explanations → precise, structured with code refs; simple tasks →
 lead with outcome; big changes → logical walkthrough + rationale + next actions; casual
@@ -222,8 +222,8 @@ one-offs → plain sentences, no headers/bullets.
 - File References: When referencing files in your response follow the below rules:
   * Use inline code to make file paths clickable.
   * Each reference should have a stand alone path. Even if it's the same file.
-  * Accepted: absolute, workspace‑relative, a/ or b/ diff prefixes, or bare filename/suffix.
-  * Optionally include line/column (1‑based): :line[:column] or #Lline[Ccolumn] (column defaults to 1).
+  * Accepted: absolute, workspace-relative, a/ or b/ diff prefixes, or bare filename/suffix.
+  * Optionally include line/column (1-based): :line[:column] or #Lline[Ccolumn] (column defaults to 1).
   * Do not use URIs like file://, vscode://, or https://.
   * Do not provide range of lines
   * Examples: src/app.ts, src/app.ts:42, b/server/index.js#L10, C:\repo\project\main.rs:12:5
@@ -274,9 +274,7 @@ Guidelines:
 - Be concise in your responses
  ]]
 
---- Builtin instructions.
---- We can use these as string-names for instructions when building actions.
---- Users can provide their own in `instructions` in the config.
+--- System-level prompt templates used in action definitions.
 local M = {
   model_system = [[
 {% if model.api_name:match("gpt%-5") %}
@@ -324,10 +322,10 @@ Keep the todo list updated as you work through the task. Think of todos as a sha
 progress tracker that helps the USER follow along with your work.
 
 IMPORTANT:
-- Only call write_todos when a todo status changes (pending→active,
-active→done/skipped), or when adding/replacing todos.
+- Only call write_todos when a todo status changes (pending->active,
+active->done/skipped), or when adding/replacing todos.
 - Only call read_todos when you are unsure what the next task is.
-- Do NOT call write_todos to re-assert an unchanged status (e.g. "active"→"active").
+- Do NOT call write_todos to re-assert an unchanged status (e.g. "active"->"active").
 </task_management>
 {% end %}
 
@@ -545,9 +543,9 @@ Keep the todo list updated as you work through the task. Think of todos as a sha
 progress tracker that helps the USER follow along with your work.
 
 IMPORTANT:
-- Only call write_todos when a todo status changes (pending→active,
-active→done/skipped), or when adding/replacing todos.
-- Do NOT call write_todos to re-assert an unchanged status (e.g. "active"→"active").
+- Only call write_todos when a todo status changes (pending->active,
+active->done/skipped), or when adding/replacing todos.
+- Do NOT call write_todos to re-assert an unchanged status (e.g. "active"->"active").
 </task_management>
 {% end %}
 
@@ -578,53 +576,6 @@ Apply them when the situation matches.
 </skills>
 {% end %}
 ]],
-  directory_structure = function()
-    local command
-    if vim.fn.executable("fd") == 1 then
-      command = { "fd", "--type", "f" }
-    else
-      command = { "find", ".", "-type", "f", "-not", "-path", "'./.git/*'" }
-    end
-    local obj = vim.system(command, { timeout = 1000 }):wait()
-    if obj.code ~= 0 then
-      return nil
-    end
-    local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
-    if #files == 0 then
-      return nil
-    end
-    return string.format(
-      [[Below is the current directory structure. It does not include
-hidden files or directories. The listing is immutable and represents the start
-of the conversation. Use the glob tool to refresh your understanding.
-%s]],
-      table.concat(require("sia.utils").limit_files(files), "\n")
-    )
-  end,
-  agents_md = function()
-    local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
-    if vim.fn.filereadable(filename) ~= 1 then
-      return nil
-    end
-    local memories = vim.fn.readfile(filename)
-    return string.format(
-      [[Always follow the instructions stored in %s.
-Remember that you can edit this file to store user preferences. Before editing always
-read the latest version.
-```markdown
-%s
-```]],
-      vim.fn.fnamemodify(filename, ":."),
-      table.concat(memories, "\n")
-    )
-  end,
-
-  current_buffer = require("sia.instructions").current_buffer({
-    show_line_numbers = true,
-  }),
-  current_context = require("sia.instructions").current_context({
-    show_line_numbers = true,
-  }),
   insert_system = [[You are in INSERT MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
@@ -687,63 +638,6 @@ Use tool calls if required to document the function or class.
 <tools>
 {{tool_instructions}}
 </tools>]],
-  system_info = function()
-    local os_name = vim.loop.os_uname().sysname
-    local os_version = vim.loop.os_uname().release
-    local machine = vim.loop.os_uname().machine
-
-    local cwd = vim.uv.cwd()
-
-    local nvim_version = string.format(
-      "%d.%d.%d",
-      vim.version().major,
-      vim.version().minor,
-      vim.version().patch
-    )
-
-    local datetime = os.date("%Y-%m-%d %H:%M:%S %Z")
-
-    local shell = vim.env.SHELL or "unknown"
-    local term = vim.env.TERM or "unknown"
-    local user = vim.env.USER or vim.env.USERNAME or "unknown"
-
-    local git_info = ""
-    if vim.fn.isdirectory(".git") == 1 then
-      local branch =
-        vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
-      local commit =
-        vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
-      if branch ~= "" and commit ~= "" then
-        git_info = string.format(" Git: %s (%s)", branch, commit)
-      end
-    end
-
-    return string.format(
-      [[System Information:
-
-- OS: %s %s (%s)
-- User: %s
-- Shell: %s
-- Terminal: %s
-- Neovim: v%s
-- Working Directory: %s
-- %s
-- Timestamp: %s
-
-This information shows the current system environment where the AI assistant is
-operating through Neovim.]],
-      os_name,
-      os_version,
-      machine,
-      user,
-      vim.fn.fnamemodify(shell, ":t"),
-      term,
-      nvim_version,
-      cwd,
-      git_info,
-      datetime
-    )
-  end,
 }
 
 return M

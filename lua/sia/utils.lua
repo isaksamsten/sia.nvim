@@ -443,13 +443,6 @@ function M.get_window_for_buffer(buf)
   return nil
 end
 
---- @param buf integer
---- @param query string?
-function M.get_filename(buf, query)
-  local full_path = vim.api.nvim_buf_get_name(buf)
-  return vim.fn.fnamemodify(full_path, query or ":t")
-end
-
 --- @param start_line integer
 --- @param end_line integer
 --- @param opts { buf: integer?, return_table: boolean?, show_line_numbers: boolean? }?
