@@ -27,13 +27,13 @@ are included in the default chat action.
 
 ### Development Environment
 
-| Tool            | Default | Description                                                                |
-| --------------- | ------- | -------------------------------------------------------------------------- |
-| **bash**        | ★       | Execute shell commands with persistent sessions and async support          |
-| **diagnostics** | ★       | Retrieve LSP diagnostics for a file                                        |
-| **websearch**   | ★       | Search the web using Google                                                |
-| **webfetch**    |         | Fetch and convert web content to markdown (requires curl; pandoc optional) |
-| **memory**      | ★       | Manage persistent memory in `.sia/memory/`                                 |
+| Tool            | Default | Description                                                       |
+| --------------- | ------- | ----------------------------------------------------------------- |
+| **bash**        | ★       | Execute shell commands with persistent sessions and async support |
+| **diagnostics** | ★       | Retrieve LSP diagnostics for a file                               |
+| **websearch**   | ★       | Search the web using Google                                       |
+| **webfetch**    | ★       | Fetch and convert web content to markdown                         |
+| **memory**      | ★       | Manage persistent memory in `.sia/memory/`                        |
 
 ### Task Management
 
@@ -47,7 +47,7 @@ are included in the default chat action.
 | Tool          | Default | Description                                   |
 | ------------- | ------- | --------------------------------------------- |
 | **ask_user**  | ★       | Ask the user to choose from a list of options |
-| **agent**     |         | Launch autonomous agents for subtasks         |
+| **agent**     | ★       | Launch autonomous agents for subtasks         |
 | **exit_mode** | ★       | Exit the current conversation mode            |
 
 ### Media
@@ -62,15 +62,6 @@ are included in the default chat action.
 These tools are available under `require("sia.tools.extra")` and can be added
 to custom actions or agent configurations.
 
-### File Operations
-
-| Tool               | Description                                        |
-| ------------------ | -------------------------------------------------- |
-| **rename**         | Rename or move files with automatic buffer updates |
-| **remove**         | Delete files with optional trash functionality     |
-| **replace_region** | Replace a line region in a file                    |
-| **unread**         | Mark file contexts as outdated, prompting re-reads |
-
 ### Code Navigation
 
 | Tool          | Description                                                       |
@@ -78,14 +69,6 @@ to custom actions or agent configurations.
 | **workspace** | Show visible files with line ranges and cursor positions          |
 | **locations** | Create navigable quickfix lists for multiple locations            |
 | **lsp**       | Interact with LSP servers (hover, definition, references, rename) |
-
-### Research
-
-Available via direct `require` (not exported in `require("sia.tools.extra")`):
-
-| Tool              | Module                                     | Description                           |
-| ----------------- | ------------------------------------------ | ------------------------------------- |
-| **search_papers** | `require("sia.tools.extra.search_papers")` | Search research articles via CORE API |
 
 ## Tool Parameters for Permissions
 
@@ -173,7 +156,7 @@ require("sia").setup({
   actions = {
     research = {
       mode = "chat",
-      tools = function()
+      tools = function(model)
         local tools = require("sia.tools")
         local extra = require("sia.tools.extra")
         return {

@@ -90,96 +90,68 @@ function DiffStrategy:on_stream_start()
   return self:buf_is_loaded()
 end
 
-function DiffStrategy:on_content(input)
+--- @param input sia.StreamDelta
+function DiffStrategy:on_stream(input)
   if self:buf_is_loaded() then
     if input.content then
       self.writer:append(input.content)
-    end
-    if input.tool_calls then
-      self.pending_tools = input.tool_calls
     end
     return true
   end
   return false
 end
 
-function DiffStrategy:on_complete(control)
-  self:execute_tools({
-    turn_id = control.turn_id,
-    handle_tools_completion = function(opts)
-      if opts.results then
-        for _, tool_result in ipairs(opts.results) do
-          self.conversation:add_instruction({
-            { role = "assistant", tool_calls = { tool_result.tool } },
-            {
-              role = "tool",
-              content = tool_result.result.content,
-              _tool_call = tool_result.tool,
-              kind = tool_result.result.kind,
-              ephemeral = tool_result.result.kind == "failed"
-                or tool_result.result.ephemeral,
-            },
-          }, tool_result.result.context, { turn_id = control.turn_id })
+--- @param statuses sia.engine.Completed[]
+function DiffStrategy:on_tool_results(statuses)
+  for _, status in ipairs(statuses) do
+    if status.summary then
+      self.writer:append(status.summary)
+    end
+  end
+  self.writer:append_newline()
+  if #statuses > 0 then
+    return "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement."
+  end
+end
 
-          if tool_result.result.display_content then
-            self.writer:append(tool_result.result.display_content)
-          end
-        end
+--- @param ctx sia.FinishContext
+function DiffStrategy:on_finish(ctx)
+  vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
+  local content = ctx.content
+  local buf_loaded = vim.api.nvim_buf_is_loaded(self.target_buf)
+  local diff_win_valid = vim.api.nvim_win_is_valid(self.target_win)
+  local curr_win_valid = vim.api.nvim_win_is_valid(self.win)
+  if not (buf_loaded and diff_win_valid and curr_win_valid and content) then
+    self.conversation:untrack_messages()
+    return
+  end
 
-        self.conversation:add_instruction({
-          role = "user",
-          content = "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement.",
-        }, nil, { turn_id = control.turn_id })
-      end
-      self.writer:append_newline()
-
-      if opts.cancelled then
-        self:confirm_continue_after_cancelled_tool(control)
-      else
-        control.continue_execution()
-      end
-    end,
-    handle_empty_toolset = function()
-      vim.api.nvim_buf_clear_namespace(self.buf, DIFF_NS, 0, -1)
-      local content = control.content
-      local buf_loaded = vim.api.nvim_buf_is_loaded(self.target_buf)
-      local diff_win_valid = vim.api.nvim_win_is_valid(self.target_win)
-      local curr_win_valid = vim.api.nvim_win_is_valid(self.win)
-      if not (buf_loaded and diff_win_valid and curr_win_valid and content) then
-        control.finish()
-        self.conversation:untrack_messages()
-        return
-      end
-
-      self:del_abort_keymap(self.target_buf)
-      self.writer.canvas:clear_temporary_text()
-      vim.api.nvim_buf_set_lines(
-        self.target_buf,
-        self.pos[1] - 1,
-        self.pos[2] - 1,
-        false,
-        content
-      )
-      if self.pos[2] < vim.api.nvim_buf_line_count(self.buf) then
-        local after = vim.api.nvim_buf_get_lines(self.buf, self.pos[2], -1, true)
-        vim.api.nvim_buf_set_lines(
-          self.target_buf,
-          #content + self.pos[2] - 1,
-          -1,
-          false,
-          after
-        )
-      end
-      vim.api.nvim_set_current_win(self.target_win)
-      vim.cmd("diffthis")
-      vim.api.nvim_set_current_win(self.win)
-      vim.cmd("diffthis")
-      vim.bo[self.target_buf].modifiable = false
-      vim.bo[self.buf].modifiable = true
-      self.conversation:untrack_messages()
-      control.finish()
-    end,
-  })
+  self:del_abort_keymap(self.target_buf)
+  self.writer.canvas:clear_temporary_text()
+  vim.api.nvim_buf_set_lines(
+    self.target_buf,
+    self.pos[1] - 1,
+    self.pos[2] - 1,
+    false,
+    vim.split(content, "\n")
+  )
+  if self.pos[2] < vim.api.nvim_buf_line_count(self.buf) then
+    local after = vim.api.nvim_buf_get_lines(self.buf, self.pos[2], -1, true)
+    vim.api.nvim_buf_set_lines(
+      self.target_buf,
+      #content + self.pos[2] - 1,
+      -1,
+      false,
+      after
+    )
+  end
+  vim.api.nvim_set_current_win(self.target_win)
+  vim.cmd("diffthis")
+  vim.api.nvim_set_current_win(self.win)
+  vim.cmd("diffthis")
+  vim.bo[self.target_buf].modifiable = false
+  vim.bo[self.buf].modifiable = true
+  self.conversation:untrack_messages()
 end
 
 return DiffStrategy

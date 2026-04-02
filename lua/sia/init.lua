@@ -204,7 +204,7 @@ M.ui = {
       return
     end
 
-    local contexts = chat.conversation:get_contexts()
+    local contexts = chat.conversation:get_regions()
     if #contexts == 0 then
       return
     end
@@ -229,37 +229,138 @@ M.ui = {
     opts = opts or {}
     local chat = require("sia.strategy").get_chat()
     if chat then
-      local messages = chat.conversation:get_messages()
-      if #messages == 0 then
+      local entries = chat.conversation.entries
+      if #entries == 0 then
         return
       end
-      vim.ui.select(messages, {
-        prompt = "Show message",
-        --- @param message sia.PreparedMessage
-        format_item = function(message)
-          local outdated = message.outdated
-          local description = message.description
-          local empty = message.content
-          if outdated then
-            return "[outdated] " .. description
-          elseif empty == nil and message.role == "user" then
-            return "[empty] " .. description
+      --- @param entry sia.Entry
+      local function description(entry)
+        local parts = {}
+
+        -- Role label
+        local role = entry.role
+        if role == "tool" then
+          if entry.tool_call.type == "function" then
+            role = "tool(" .. entry.tool_call.name .. ")"
+          elseif entry.tool_call.type == "custom" then
+            role = "tool(" .. entry.tool_call.name .. ")"
           else
-            return description
+            role = "tool"
           end
-        end,
-        --- @param item sia.PreparedMessage?
+        end
+        table.insert(parts, role)
+
+        -- Status flags
+        if entry.dropped then
+          table.insert(parts, "[dropped]")
+        elseif entry.region and chat.conversation:is_stale(entry.region) then
+          table.insert(parts, "[stale]")
+        end
+        if entry.hide then
+          table.insert(parts, "[hidden]")
+        end
+
+        -- Content preview
+        local preview
+        local content = entry.content
+        if type(content) == "string" then
+          preview = content
+        elseif type(content) == "table" then
+          for _, part in ipairs(content) do
+            if part.type == "text" then
+              preview = part.text
+              break
+            elseif part.type == "file" then
+              preview = "📎 " .. part.file.filename
+              break
+            elseif part.type == "image" then
+              preview = "🖼️ image"
+              break
+            end
+          end
+        end
+
+        if preview then
+          preview = preview:gsub("%s+", " "):sub(1, 80)
+          if #preview == 80 then
+            preview = preview .. "…"
+          end
+          table.insert(parts, ": " .. preview)
+        end
+
+        return table.concat(parts, " ")
+      end
+
+      --- @param entry sia.Entry
+      --- @return string?
+      local function format_content(entry)
+        local parts = {}
+
+        if entry.role == "tool" then
+          table.insert(parts, "## Tool Call")
+          table.insert(parts, "")
+          table.insert(
+            parts,
+            string.format("**%s** (id: %s)", entry.tool_call.name, entry.tool_call.id)
+          )
+          if entry.tool_call.type == "function" then
+            table.insert(parts, "")
+            table.insert(parts, "**Arguments:**")
+            table.insert(parts, "```json")
+            table.insert(parts, vim.json.encode(entry.tool_call.arguments))
+            table.insert(parts, "```")
+          end
+          table.insert(parts, "")
+          table.insert(parts, "## Tool Result")
+          table.insert(parts, "")
+        end
+
+        if entry.role == "assistant" and entry.reasoning then
+          table.insert(parts, "## Reasoning")
+          table.insert(parts, "")
+          table.insert(parts, entry.reasoning.text or "")
+          table.insert(parts, "")
+          if entry.content then
+            table.insert(parts, "## Response")
+            table.insert(parts, "")
+          end
+        end
+
+        local content = entry.content
+        if not content then
+          return #parts > 0 and table.concat(parts, "\n") or nil
+        end
+
+        if type(content) == "string" then
+          table.insert(parts, content)
+        elseif type(content) == "table" then
+          for _, part in ipairs(content) do
+            if part.type == "text" then
+              table.insert(parts, part.text)
+            elseif part.type == "file" then
+              table.insert(
+                parts,
+                string.format("📎 File: **%s**", part.file.filename)
+              )
+            elseif part.type == "image" then
+              table.insert(parts, string.format("🖼️ Image: %s", part.image.url))
+            end
+          end
+        end
+
+        return #parts > 0 and table.concat(parts, "\n") or nil
+      end
+
+      vim.ui.select(entries, {
+        prompt = "Show message",
+        format_item = description,
+        --- @param item sia.Entry?
       }, function(item, _)
         if item then
-          local content
-          if item.tool_calls then
-            content = vim.inspect(item.tool_calls)
-          else
-            content = item.content
-          end
+          local content = format_content(item)
 
           if content then
-            local buf_name = chat.conversation.name .. " " .. item.description
+            local buf_name = chat.conversation.name .. " " .. description(item)
             local buf = vim.fn.bufnr(buf_name)
             if buf == -1 then
               buf = vim.api.nvim_create_buf(false, true)
@@ -339,13 +440,7 @@ M.chat = {
 
       vim.keymap.set("n", "<CR>", function()
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        --- @type sia.config.Instruction
-        local instruction = {
-          role = "user",
-          content = lines,
-        }
-        chat.conversation:add_instruction(instruction, nil)
-        require("sia.assistant").execute_strategy(chat)
+        chat:submit({ content = table.concat(lines, "\n") })
         vim.api.nvim_buf_delete(buf, { force = true })
       end, { buffer = buf })
       vim.keymap.set("n", "q", function()
@@ -424,18 +519,6 @@ M.chat = {
       end
 
       local model_name = vim.b[buf].sia_prompt_model
-      local action =
-        vim.tbl_deep_extend("force", {}, config.options.settings.actions.chat)
-      action.instructions = vim.list_extend({}, action.instructions)
-      table.insert(action.instructions, {
-        role = "user",
-        content = prompt,
-      })
-
-      if model_name then
-        action.model = model_name
-      end
-
       local target_buf = vim.fn.bufnr("#")
       if target_buf == -1 then
         target_buf = vim.api.nvim_get_current_buf()
@@ -452,11 +535,17 @@ M.chat = {
         vim.api.nvim_win_close(win, true)
       end
 
-      M.execute_action(action, {
-        context = context,
-        model = model_name,
-        new_action = false,
-      })
+      --- @type sia.config.ChatAction?
+      local action = config.options.settings.actions.chat
+      if not action then
+        error("chat action is not defined!")
+      end
+      local conversation =
+        require("sia.conversation").from_action(action, context, { model = model_name })
+      conversation:add_user_message(prompt)
+      local strategy =
+        require("sia.strategy").from_action(action, context, conversation)
+      require("sia.assistant").execute_strategy(strategy)
     end, { buffer = buf, desc = "Submit prompt" })
 
     vim.keymap.set("n", "q", function()
@@ -517,149 +606,6 @@ function M.setup(options)
       set_highlight_groups()
     end,
   })
-end
-
---- @param action sia.config.Action
---- @param opts {context: sia.ActionContext, model: string?, new_action: boolean?, mode: sia.ModeEntry?}
-function M.execute_action(action, opts)
-  local config = require("sia.config")
-  local Model = require("sia.model")
-  local new_conversation = require("sia.conversation").new_conversation
-  local context = opts.context
-  if vim.api.nvim_buf_is_loaded(context.buf) then
-    local strategy
-    local should_execute = true
-    if not opts.new_action and (vim.bo[context.buf].filetype == "sia") then
-      strategy = require("sia.strategy").get_chat(context.buf)
-      if strategy then
-        if opts.mode then
-          if strategy.is_busy then
-            strategy:queue_instruction(nil, context, opts.mode)
-            should_execute = false
-          else
-            if not strategy.conversation:has_mode(opts.mode.name) then
-              vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
-              return
-            end
-            local info = strategy.conversation:enter_mode(opts.mode.name, context)
-            if info then
-              if info.truncate_after_id then
-                strategy.conversation:drop_after(info.truncate_after_id)
-                strategy:redraw()
-              end
-              for _, instruction in ipairs(info.instructions) do
-                strategy.conversation:add_instruction(instruction)
-              end
-              if opts.mode.user_input and opts.mode.user_input ~= "" then
-                strategy.conversation:add_instruction({
-                  role = "user",
-                  content = opts.mode.user_input,
-                })
-              end
-            end
-          end
-        else
-          local last_instruction = action.instructions[#action.instructions] --[[@as sia.config.Instruction ]]
-
-          if strategy.is_busy then
-            strategy:queue_instruction(last_instruction, nil)
-            should_execute = false
-          else
-            strategy.conversation:add_instruction(last_instruction, nil)
-          end
-        end
-      end
-    else
-      local model = Model.resolve(action.model or opts.model)
-      local conversation = new_conversation({
-        model = model,
-        ignore_tool_confirm = false,
-        enable_supersede = true,
-        temporary = false,
-        tools = action.tools and action.tools(model),
-        modes = action.modes,
-      })
-      for _, instruction in ipairs(action.system or {}) do
-        conversation:add_instruction(
-          instruction,
-          context,
-          { skip_capture_unless_needed = true }
-        )
-      end
-      for _, instruction in ipairs(action.instructions or {}) do
-        conversation:add_instruction(
-          instruction,
-          context,
-          { skip_capture_unless_needed = true }
-        )
-      end
-
-      if opts.mode then
-        if not conversation:has_mode(opts.mode.name) then
-          vim.notify("sia: mode is not defined", vim.log.levels.ERROR)
-          return
-        end
-        local info = conversation:enter_mode(opts.mode.name, context)
-        if info then
-          for _, instruction in ipairs(info.instructions) do
-            conversation:add_instruction(instruction)
-          end
-          if opts.mode.user_input and opts.mode.user_input ~= "" then
-            conversation:add_instruction({
-              role = "user",
-              content = opts.mode.user_input,
-            })
-          end
-        end
-      end
-
-      if action.mode == "diff" then
-        local options =
-          vim.tbl_deep_extend("force", config.options.settings.diff, action.diff or {})
-        strategy = require("sia.strategy").new_diff(
-          context.buf,
-          context.win,
-          context.pos,
-          conversation,
-          options
-        )
-      elseif action.mode == "insert" then
-        local options = vim.tbl_deep_extend(
-          "force",
-          config.options.settings.insert,
-          action.insert or {}
-        )
-        strategy = require("sia.strategy").new_insert(
-          context.buf,
-          context.pos,
-          context.cursor,
-          conversation,
-          options
-        )
-      elseif action.mode == "hidden" then
-        local options = vim.tbl_deep_extend(
-          "force",
-          config.options.settings.hidden,
-          action.hidden or {}
-        )
-        if not options.callback then
-          return
-        end
-        strategy =
-          require("sia.strategy").new_hidden(context.buf, conversation, options)
-      else
-        local options =
-          vim.tbl_deep_extend("force", config.options.settings.chat, action.chat or {})
-        strategy = require("sia.strategy").new_chat(conversation, options)
-      end
-    end
-
-    if strategy and should_execute then
-      --- @cast strategy sia.Strategy
-      strategy.conversation:attach_completed_agents()
-      require("sia.assistant").execute_strategy(strategy)
-    end
-  end
 end
 
 return M

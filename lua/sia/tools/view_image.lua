@@ -23,30 +23,33 @@ local function get_mime_type(path)
 end
 
 return tool_utils.new_tool({
-  name = tool_names.view_image,
-  is_available = function(support)
-    return support ~= nil and support.image == true
+  definition = {
+    type = "function",
+    name = tool_names.view_image,
+    description = "Views an image file from the local filesystem.",
+    parameters = {
+      path = {
+        type = "string",
+        description = "The file path to the image",
+      },
+    },
+    required = { "path" },
+  },
+  is_supported = function(model)
+    return model.support.image == true
   end,
   read_only = true,
-  message = function(args)
+  notification = function(args)
     if args.path then
       return "Viewing image " .. vim.fn.fnamemodify(args.path, ":t")
     else
       return "Viewing image..."
     end
   end,
-  system_prompt = [[Views an image file from the local filesystem and returns it as an
+  instructions = [[Views an image file from the local filesystem and returns it as an
 image for visual analysis. Supports PNG, JPEG, GIF, and WebP formats. Use this tool
 when you need to view or analyze the contents of an image file. The image is returned
 as base64-encoded data that you can directly interpret.]],
-  description = "Views an image file from the local filesystem.",
-  parameters = {
-    path = {
-      type = "string",
-      description = "The file path to the image",
-    },
-  },
-  required = { "path" },
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
@@ -59,9 +62,9 @@ as base64-encoded data that you can directly interpret.]],
 }, function(args, _, callback, opts)
   if not args.path then
     callback({
-      content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to view image",
-      kind = "failed",
+      content = "Error: No file path was provided",
+      summary = icons.error .. " Failed to view image",
+      ephemeral = true,
     })
     return
   end
@@ -70,23 +73,21 @@ as base64-encoded data that you can directly interpret.]],
   if not mime_type then
     local ext = args.path:match("%.(%w+)$") or "unknown"
     callback({
-      content = {
-        string.format(
-          "Error: Unsupported image format '.%s'. Supported formats: png, jpg, jpeg, gif, webp",
-          ext
-        ),
-      },
-      display_content = icons.error .. " Unsupported image format",
-      kind = "failed",
+      content = string.format(
+        "Error: Unsupported image format '.%s'. Supported formats: png, jpg, jpeg, gif, webp",
+        ext
+      ),
+      summary = icons.error .. " Unsupported image format",
+      ephemeral = true,
     })
     return
   end
 
   if vim.fn.filereadable(args.path) == 0 then
     callback({
-      content = { "Error: Image file cannot be found" },
-      display_content = icons.error .. " Failed to view image",
-      kind = "failed",
+      content = "Error: Image file cannot be found",
+      summary = icons.error .. " Failed to view image",
+      ephemeral = true,
     })
     return
   end
@@ -94,15 +95,13 @@ as base64-encoded data that you can directly interpret.]],
   local stat = vim.uv.fs_stat(args.path)
   if stat and stat.size > MAX_FILE_SIZE then
     callback({
-      content = {
-        string.format(
-          "Error: Image file is too large (%d bytes). Maximum size is %d bytes.",
-          stat.size,
-          MAX_FILE_SIZE
-        ),
-      },
-      display_content = icons.error .. " Image too large",
-      kind = "failed",
+      content = string.format(
+        "Error: Image file is too large (%d bytes). Maximum size is %d bytes.",
+        stat.size,
+        MAX_FILE_SIZE
+      ),
+      summary = icons.error .. " Image too large",
+      ephemeral = true,
     })
     return
   end
@@ -116,8 +115,8 @@ as base64-encoded data that you can directly interpret.]],
       if not file then
         callback({
           content = { "Error: Cannot open " .. args.path },
-          display_content = icons.error .. " Failed to view image",
-          kind = "failed",
+          summary = icons.error .. " Failed to view image",
+          ephemeral = true,
         })
         return
       end
@@ -127,9 +126,9 @@ as base64-encoded data that you can directly interpret.]],
 
       if not data or #data == 0 then
         callback({
-          content = { "Error: Image file is empty" },
-          display_content = icons.error .. " Failed to view image",
-          kind = "failed",
+          content = "Error: Image file is empty",
+          summary = icons.error .. " Failed to view image",
+          ephemeral = true,
         })
         return
       end
@@ -148,7 +147,7 @@ as base64-encoded data that you can directly interpret.]],
         end
       end
 
-      local display_content = string.format(
+      local summary = string.format(
         "%s Viewed image %s%s",
         icons.image,
         vim.fn.fnamemodify(args.path, ":~:."),
@@ -171,8 +170,7 @@ as base64-encoded data that you can directly interpret.]],
 
       callback({
         content = content,
-        display_content = display_content,
-        kind = "context",
+        summary = summary,
       })
     end,
   })

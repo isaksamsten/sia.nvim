@@ -71,6 +71,32 @@ local function call_provider(data, opts)
   })
 end
 
+--- @class sia.FinishContext
+--- @field usage sia.Usage?
+--- @field content string?
+--- @field turn_id string
+
+--- @param conversation sia.Conversation
+--- @param turn_id string
+--- @param results sia.engine.Entry[]
+local function apply_tool_results(conversation, turn_id, results)
+  for _, entry in ipairs(results) do
+    if entry.result.actions then
+      for _, action in ipairs(entry.result.actions) do
+        if action.type == "drop_after" then
+          conversation:drop_after(action.message_id)
+        end
+      end
+    end
+
+    conversation:add_tool_message(turn_id, entry.tool.tool_call, entry.result.content, {
+      ephemeral = entry.result.ephemeral,
+      summary = entry.result.summary,
+      region = entry.result.region,
+    })
+  end
+end
+
 --- @param strategy sia.Strategy
 function M.execute_strategy(strategy)
   if strategy.is_busy then
@@ -84,17 +110,22 @@ function M.execute_strategy(strategy)
 
   local turn_id = strategy.conversation:new_turn()
   local auth_retries = 0
-  local function execute_round(is_initial)
-    local timer
-    if is_initial then
-      if not strategy:on_request_start() then
-        strategy.is_busy = false
-        strategy:on_error("Failed to start request")
-        return
-      end
-    end
-    strategy:on_round_start()
 
+  -- Executes a round
+  local execute_round
+
+  -- Calls the provider
+  local execute_stream
+
+  -- The flow:
+  -- - execute_round(true) (first round)
+  --  - ensure_token_budget
+  --   - execute_stream
+  --     - execute_round(false)
+  --     ...
+
+  execute_stream = function()
+    local timer
     local model = strategy.conversation.model
     local provider = model:get_provider()
 
@@ -106,8 +137,8 @@ function M.execute_strategy(strategy)
     if provider.prepare_parameters then
       provider.prepare_parameters(data, model)
     end
-    local messages = strategy.conversation:prepare_messages()
-    provider.prepare_tools(data, strategy.conversation.tools)
+    local messages = strategy.conversation:serialize()
+    provider.prepare_tools(data, strategy.conversation.tool_definitions)
     provider.prepare_messages(data, model.api_name, messages)
 
     local extra_args = provider.get_headers
@@ -235,19 +266,14 @@ function M.execute_strategy(strategy)
           strategy.is_busy = false
           return
         end
-        local final_content = stream:finalize(turn_id)
 
-        local finish = function()
-          strategy.is_busy = false
-        end
-
-        local continue_execution = function()
-          if strategy.cancellable.is_cancelled then
-            strategy:on_cancel()
-            finish()
-          else
-            execute_round(false)
-          end
+        local round = stream:finalize()
+        if round.content or round.reasoning then
+          strategy.conversation:add_assistant_message(
+            turn_id,
+            round.content,
+            round.reasoning
+          )
         end
 
         if start_time then
@@ -257,13 +283,36 @@ function M.execute_strategy(strategy)
           end
         end
 
-        strategy:on_complete({
-          continue_execution = continue_execution,
-          finish = finish,
-          content = final_content,
-          usage = usage,
-          turn_id = turn_id,
-        })
+        if round and round.tool_calls and #round.tool_calls > 0 then
+          require("sia.engine").execute_tools(round.tool_calls, strategy.conversation, {
+            cancellable = strategy.cancellable,
+            turn_id = turn_id,
+            on_status = function(statuses)
+              strategy:on_tool_status(statuses)
+            end,
+            on_complete = function(results, statuses)
+              apply_tool_results(strategy.conversation, turn_id, results)
+              local follow_up = strategy:on_tool_results(statuses)
+              if follow_up then
+                strategy.conversation:add_user_message(follow_up)
+              end
+
+              if strategy.cancellable.is_cancelled then
+                strategy:on_cancel()
+                strategy.is_busy = false
+              else
+                execute_round(false)
+              end
+            end,
+          })
+        else
+          strategy:on_finish({
+            usage = usage,
+            content = round and round.content or nil,
+            turn_id = turn_id,
+          })
+          strategy.is_busy = false
+        end
       end,
       stream = true,
     })
@@ -281,6 +330,32 @@ function M.execute_strategy(strategy)
     )
   end
 
+  execute_round = function(is_initial)
+    if is_initial then
+      if not strategy:on_request_start() then
+        strategy.is_busy = false
+        strategy:on_error("Failed to start request")
+        return
+      end
+    end
+    strategy:on_round_start()
+
+    local context_manager = require("sia.context_manager")
+    context_manager.ensure_token_budget(strategy.conversation, {
+      on_complete = function(pruned, compacted)
+        strategy:on_context_update({
+          budget = context_manager.get_token_estimate(strategy.conversation),
+          pruned = pruned,
+          compacted = compacted,
+        })
+        execute_stream()
+      end,
+      on_status = function(message)
+        strategy:on_status(message, "info")
+      end,
+    })
+  end
+
   execute_round(true)
 end
 
@@ -295,7 +370,7 @@ function M.fetch_response(conversation, callback)
   local data = {
     model = model.api_name,
   }
-  local messages = conversation:prepare_messages()
+  local messages = conversation:serialize()
   provider.prepare_messages(data, model.api_name, messages)
   if provider.prepare_parameters then
     provider.prepare_parameters(data, model)

@@ -1,9 +1,68 @@
 local tool_utils = require("sia.tools.utils")
 
 return tool_utils.new_tool({
-  name = "write_todos",
+  definition = {
+    type = "function",
+    name = "write_todos",
+    description = "Add, update, or clear todos for this conversation",
+    parameters = {
+      replace = {
+        type = "array",
+        items = {
+          type = "object",
+          properties = {
+            description = { type = "string", description = "Task description" },
+            status = {
+              type = "string",
+              enum = { "pending", "active", "done", "skipped" },
+              description = "Initial status (default: pending)",
+            },
+          },
+          required = { "description" },
+        },
+        description = "Replace all existing todos with this new list",
+      },
+      add = {
+        type = "array",
+        items = {
+          type = "object",
+          properties = {
+            description = { type = "string", description = "Task description" },
+            status = {
+              type = "string",
+              enum = { "pending", "active", "done", "skipped" },
+              description = "Initial status (default: pending)",
+            },
+          },
+          required = { "description" },
+        },
+        description = "New todos to add",
+      },
+      update = {
+        type = "array",
+        items = {
+          type = "object",
+          properties = {
+            id = { type = "integer", description = "ID of todo to update" },
+            status = {
+              type = "string",
+              enum = { "pending", "active", "done", "skipped" },
+              description = "New status",
+            },
+          },
+          required = { "id", "status" },
+        },
+        description = "Todo updates by ID",
+      },
+      clear = {
+        type = "boolean",
+        description = "Remove all completed (done/skipped) todos",
+      },
+    },
+    required = {},
+  },
   read_only = false,
-  message = function(args)
+  notification = function(args)
     local parts = {}
     if args.replace and #args.replace > 0 then
       table.insert(parts, string.format("replacing with %d todo(s)", #args.replace))
@@ -19,67 +78,11 @@ return tool_utils.new_tool({
     end
     return "Writing todos: " .. table.concat(parts, ", ")
   end,
-  system_prompt = [[Manage todos for this conversation. You can add new todos, update
+  instructions = [[Manage todos for this conversation. You can add new todos, update
 existing ones, clear completed todos, or replace the entire list.
 
 The tool returns a summary of what was added, updated, or cleared, including the IDs
 of newly added todos for future reference.]],
-  description = "Add, update, or clear todos for this conversation",
-  parameters = {
-    replace = {
-      type = "array",
-      items = {
-        type = "object",
-        properties = {
-          description = { type = "string", description = "Task description" },
-          status = {
-            type = "string",
-            enum = { "pending", "active", "done", "skipped" },
-            description = "Initial status (default: pending)",
-          },
-        },
-        required = { "description" },
-      },
-      description = "Replace all existing todos with this new list",
-    },
-    add = {
-      type = "array",
-      items = {
-        type = "object",
-        properties = {
-          description = { type = "string", description = "Task description" },
-          status = {
-            type = "string",
-            enum = { "pending", "active", "done", "skipped" },
-            description = "Initial status (default: pending)",
-          },
-        },
-        required = { "description" },
-      },
-      description = "New todos to add",
-    },
-    update = {
-      type = "array",
-      items = {
-        type = "object",
-        properties = {
-          id = { type = "integer", description = "ID of todo to update" },
-          status = {
-            type = "string",
-            enum = { "pending", "active", "done", "skipped" },
-            description = "New status",
-          },
-        },
-        required = { "id", "status" },
-      },
-      description = "Todo updates by ID",
-    },
-    clear = {
-      type = "boolean",
-      description = "Remove all completed (done/skipped) todos",
-    },
-  },
-  required = {},
 }, function(args, conversation, callback, _)
   if not conversation.todos then
     conversation.todos = { items = {} }
@@ -202,7 +205,6 @@ of newly added todos for future reference.]],
   end
 
   callback({
-    content = response,
+    content = table.concat(response, "\n"),
   })
 end)
-

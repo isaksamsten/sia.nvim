@@ -163,7 +163,7 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function queue_section(data)
-  local size = data.strategy:queue_size()
+  local size = #data.strategy.queue
   if size <= 0 then
     return ""
   end

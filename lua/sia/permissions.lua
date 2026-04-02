@@ -236,12 +236,11 @@ end
 --- Create a new active mode instance.
 --- @param name string
 --- @param definition sia.config.Mode
---- @param ctx sia.Context?
 --- @return sia.ActiveMode
-function M.create_active_mode(name, definition, ctx)
+function M.create_active_mode(name, definition)
   local state = {}
-  if definition.init_state and ctx then
-    state = definition.init_state(ctx) or {}
+  if definition.init_state then
+    state = definition.init_state() or {}
   end
   return {
     name = name,

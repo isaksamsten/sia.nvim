@@ -45,58 +45,39 @@ function AnthropicStream:process_stream_chunk(obj)
       table.insert(self.pending_tool_calls, {
         id = block.id,
         type = "function",
-        ["function"] = {
-          name = block.name,
-          arguments = "",
-        },
+        name = block.name,
+        arguments = "",
       })
     end
   elseif obj.type == "content_block_delta" then
     local delta = obj.delta
     if delta.type == "text_delta" then
-      if not self:on_content({ content = delta.text }) then
+      if not self.strategy:on_stream({ content = delta.text }) then
         return true
       end
       self.content = self.content .. delta.text
     elseif delta.type == "input_json_delta" then
       if #self.pending_tool_calls > 0 then
         local last_tool = self.pending_tool_calls[#self.pending_tool_calls]
-        last_tool["function"].arguments = last_tool["function"].arguments
-          .. delta.partial_json
+        last_tool.arguments = last_tool.arguments .. delta.partial_json
       end
     end
   end
 end
 
---- @param turn_id string
---- @return string[]? content
-function AnthropicStream:finalize(turn_id)
-  if not self:on_content({ tool_calls = self.pending_tool_calls }) then
-    return nil
-  end
-
-  local has_tool_calls = #self.pending_tool_calls > 0
-  if self.content == "" and not has_tool_calls then
-    return nil
-  end
-
+--- @return sia.RoundResult
+function AnthropicStream:finalize()
   local content
   if self.content ~= "" then
-    content = vim.split(self.content, "\n")
+    content = self.content
   end
 
-  self.strategy.conversation:add_instruction(
-    {
-      role = "assistant",
-      content = content,
-    },
-    nil,
-    {
-      meta = { empty_content = has_tool_calls },
-      turn_id = turn_id,
-    }
-  )
-  return content
+  --- @type sia.RoundResult
+  return {
+    content = content,
+    reasoning = nil,
+    tool_calls = self.pending_tool_calls,
+  }
 end
 
 --- @type sia.config.Provider
@@ -145,14 +126,17 @@ return {
       data.max_tokens = 4096
     end
   end,
+  --- @param data table
+  --- @param tools sia.tool.Definition[]
   prepare_tools = function(data, tools)
     if tools then
       data.tools = vim
         .iter(tools)
-        --- @param tool sia.config.Tool
+        --- @param tool sia.tool.Definition
         :filter(function(tool)
-          return not tool.custom
+          return tool.type == "function"
         end)
+        --- @param tool sia.tool.Definition
         :map(function(tool)
           return {
             name = tool.name,
@@ -181,12 +165,12 @@ return {
           content = {
             {
               type = "tool_result",
-              tool_use_id = m._tool_call.id,
+              tool_use_id = m.tool_call.id,
               content = m.content,
             },
           },
         })
-      elseif m.tool_calls then
+      elseif m.role == "assistant" and m.tool_call then
         local content = {}
         if m.content and m.content ~= "" then
           table.insert(content, {
@@ -194,23 +178,21 @@ return {
             text = m.content,
           })
         end
-        for _, tool_call in ipairs(m.tool_calls) do
-          local input
-          local arguments = tool_call["function"].arguments
-          if arguments ~= "" then
-            local ok, decoded = pcall(vim.json.decode, arguments)
-            if ok and type(decoded) == "table" then
-              input = decoded
-            end
+        local input
+        local arguments = m.tool_call.arguments
+        if arguments ~= "" then
+          local ok, decoded = pcall(vim.json.decode, arguments)
+          if ok and type(decoded) == "table" then
+            input = decoded
           end
-
-          table.insert(content, {
-            type = "tool_use",
-            id = tool_call.id,
-            name = tool_call["function"].name,
-            input = input or vim.empty_dict(),
-          })
         end
+
+        table.insert(content, {
+          type = "tool_use",
+          id = m.tool_call.id,
+          name = m.tool_call.name,
+          input = input or vim.empty_dict(),
+        })
         table.insert(conversation_messages, {
           role = "assistant",
           content = content,

@@ -1,6 +1,5 @@
 local diff = require("sia.diff")
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
@@ -83,15 +82,9 @@ end
 --- @param buf integer
 --- @param matches sia.matcher.Match[]
 --- @param new_text_lines string[]
---- @param conversation_id integer
+--- @param conversation sia.Conversation
 --- @param turn_id string?
-local function perform_replace_all(
-  buf,
-  matches,
-  new_text_lines,
-  conversation_id,
-  turn_id
-)
+local function perform_replace_all(buf, matches, new_text_lines, conversation, turn_id)
   local sorted_matches = matches
   if #matches > 1 then
     sorted_matches = vim.deepcopy(matches)
@@ -108,7 +101,7 @@ local function perform_replace_all(
 
   diff.update_baseline(buf, { turn_id = turn_id })
 
-  tracker.without_tracking(buf, conversation_id, function()
+  conversation.tracker:suppress(buf, function()
     for _, match in ipairs(sorted_matches) do
       local span = match.span
       if match.col_span then
@@ -173,15 +166,39 @@ local function create_edit_description(target_file, span, col_span)
 end
 
 return tool_utils.new_tool({
-  name = "edit",
-  message = function(args)
+  definition = {
+    type = "function",
+    name = "edit",
+    description = "Tool for editing files",
+    parameters = {
+
+      target_file = {
+        type = "string",
+        description = "The file path to the file to modify",
+      },
+      old_string = {
+        type = "string",
+        description = "The text to replace",
+      },
+      new_string = {
+        type = "string",
+        description = "The text to replace with",
+      },
+      replace_all = {
+        type = "boolean",
+        description = "If true, replace all occurrences of old_string in the file. If false or omitted, only replace a single unique occurrence.",
+      },
+    },
+    required = { "target_file", "old_string", "new_string" },
+  },
+  notification = function(args)
     if args.target_file then
       return string.format("Making changes to %s...", args.target_file)
     end
     return "Making file changes..."
   end,
-  description = "Tool for editing files",
-  system_prompt = string.format([[Performs exact string replacements in files.
+  instructions = string.format(
+    [[Performs exact string replacements in files.
 
 Usage:
 - You must use your `%s` tool at least once in the conversation before editing. This tool will error if you attempt an edit without viewing the file.
@@ -189,27 +206,10 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
 - The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.
-- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.]], tool_names.view, tool_names.view),
-  parameters = {
-
-    target_file = {
-      type = "string",
-      description = "The file path to the file to modify",
-    },
-    old_string = {
-      type = "string",
-      description = "The text to replace",
-    },
-    new_string = {
-      type = "string",
-      description = "The text to replace with",
-    },
-    replace_all = {
-      type = "boolean",
-      description = "If true, replace all occurrences of old_string in the file. If false or omitted, only replace a single unique occurrence.",
-    },
-  },
-  required = { "target_file", "old_string", "new_string" },
+- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.]],
+    tool_names.view,
+    tool_names.view
+  ),
   persist_allow = function(args)
     return tool_utils.path_allow_rules("target_file", args.target_file)
   end,
@@ -220,9 +220,9 @@ Usage:
   local validation_message = validate_args(args)
   if validation_message then
     callback({
-      content = { validation_message },
-      display_content = icons.error .. " Failed to edit",
-      kind = "failed",
+      content = validation_message,
+      summary = icons.error .. " Failed to edit",
+      ephemeral = true,
     })
     return
   end
@@ -230,9 +230,9 @@ Usage:
   local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
-      content = { "Error: Cannot load " .. args.target_file },
-      display_content = icons.error .. " Failed to edit",
-      kind = "failed",
+      content = "Error: Cannot load " .. args.target_file,
+      summary = icons.error .. " Failed to edit",
+      ephemeral = true,
     })
     return
   end
@@ -299,7 +299,7 @@ Usage:
             buf,
             result.matches,
             new_text_lines,
-            conversation.id,
+            conversation,
             opts.turn_id
           )
 
@@ -323,16 +323,16 @@ Usage:
           )
 
           callback({
-            content = { success_msg },
-            context = {
+            content = success_msg,
+            region = {
               buf = buf,
               pos = pos,
-              tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
-              outdated_message = create_outdated_message(filename, pos),
-              clear_outdated_tool_input = clear_outdated_tool_input,
+              stale = {
+                content = create_outdated_message(filename, pos),
+                input = clear_outdated_tool_input,
+              },
             },
-            kind = "edit",
-            display_content = display_description,
+            summary = display_description,
           })
         end,
       })
@@ -371,7 +371,7 @@ Usage:
             buf,
             { match },
             new_text_lines,
-            conversation.id,
+            conversation,
             opts.turn_id
           )
 
@@ -399,16 +399,16 @@ Usage:
             create_display_description(filename, pos, match.col_span, result.fuzzy)
 
           callback({
-            content = diff_lines,
-            context = {
+            content = table.concat(diff_lines, "\n"),
+            region = {
               buf = buf,
               pos = pos,
-              tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
-              outdated_message = create_outdated_message(filename, pos),
-              clear_outdated_tool_input = clear_outdated_tool_input,
+              stale = {
+                content = create_outdated_message(filename, pos),
+                input = clear_outdated_tool_input,
+              },
             },
-            kind = "edit",
-            display_content = display_description,
+            summary = display_description,
           })
         end,
       })
@@ -418,52 +418,44 @@ Usage:
 
       if replace_all and num_matches == 0 then
         callback({
-          kind = "failed",
-          content = {
-            string.format(
-              "Failed to edit %s with replace_all because no matches were found for old_string.",
-              args.target_file
-            ),
-          },
-          display_content = failed_to_edit_file(filename),
+          ephemeral = true,
+          content = string.format(
+            "Failed to edit %s with replace_all because no matches were found for old_string.",
+            args.target_file
+          ),
+          summary = failed_to_edit_file(filename),
         })
       elseif not replace_all and num_matches > 1 then
         callback({
-          kind = "failed",
-          content = {
-            string.format(
-              "Failed to edit %s because %d matches were found. Either provide more context to make old_string unique, or set replace_all to true to replace all %d occurrences.",
-              args.target_file,
-              num_matches,
-              num_matches
-            ),
-          },
-          display_content = failed_to_edit_file(filename),
+          ephemeral = true,
+          content = string.format(
+            "Failed to edit %s because %d matches were found. Either provide more context to make old_string unique, or set replace_all to true to replace all %d occurrences.",
+            args.target_file,
+            num_matches,
+            num_matches
+          ),
+          summary = failed_to_edit_file(filename),
         })
       elseif failed_matches[buf] >= MAX_FAILED_MATCHES then
         callback({
-          kind = "failed",
-          content = {
-            string.format(
-              "Failed to edit %s because %s were found. Show the location(s) and the edit you want to make and let the user manually make the change.",
-              args.target_file,
-              match_description
-            ),
-          },
-          display_content = failed_to_edit_file(filename),
+          ephemeral = true,
+          content = string.format(
+            "Failed to edit %s because %s were found. Show the location(s) and the edit you want to make and let the user manually make the change.",
+            args.target_file,
+            match_description
+          ),
+          summary = failed_to_edit_file(filename),
         })
       else
         callback({
-          kind = "failed",
-          content = {
-            string.format(
-              "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",
-              args.target_file,
-              match_description,
-              result.fuzzy and " with fuzzy matching" or ""
-            ),
-          },
-          display_content = failed_to_edit_file(filename),
+          ephemeral = true,
+          content = string.format(
+            "Failed to edit %s since I couldn't find the exact text to replace (found %s%s instead of exactly one).",
+            args.target_file,
+            match_description,
+            result.fuzzy and " with fuzzy matching" or ""
+          ),
+          summary = failed_to_edit_file(filename),
         })
       end
     end

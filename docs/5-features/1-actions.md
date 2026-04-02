@@ -32,12 +32,11 @@ require("sia").setup({
     yoda = {
       mode = "chat",
       chat = { cmd = "split" },
-      instructions = {
-        {
-          role = "system",
-          content = "You are a helpful writer, rewriting prose as Yoda.",
-        },
-        "current_context",
+      system = {
+        "You are a helpful writer, rewriting prose as Yoda.",
+      },
+      user = {
+        require("sia.instructions").current_context(),
       },
       range = true,
     },
@@ -51,17 +50,17 @@ Use it with `:Sia /yoda` on a visual selection.
 
 ### Core Options
 
-| Option           | Type             | Description                                                             |
-| ---------------- | ---------------- | ----------------------------------------------------------------------- |
-| **mode**         | string           | UI mode: `"chat"`, `"diff"`, `"insert"`, or `"hidden"`                  |
-| **instructions** | array            | Messages to send to the model (strings or instruction objects)          |
-| **system**       | array            | System-level instructions                                               |
-| **model**        | string           | Override the default model                                              |
-| **tools**        | function         | `(model) -> tool[]` returning available tools                           |
-| **input**        | string           | `"require"` (must include user text) or `"ignore"` (user text not used) |
-| **range**        | boolean          | Whether a range/selection is required (default: false)                  |
-| **capture**      | function         | Auto-capture context (e.g., using treesitter)                           |
-| **enabled**      | function/boolean | Whether the action is available                                         |
+| Option      | Type             | Description                                                             |
+| ----------- | ---------------- | ----------------------------------------------------------------------- |
+| **mode**    | string           | UI mode: `"chat"`, `"diff"`, `"insert"`, or `"hidden"`                  |
+| **system**  | array            | System-level messages (strings or functions returning strings)          |
+| **user**    | array            | User-level context messages (functions, strings, or tables)             |
+| **model**   | string           | Override the default model                                              |
+| **tools**   | function         | `(model) -> tool[]` returning available tools                           |
+| **input**   | string           | `"require"` (must include user text) or `"ignore"` (user text not used) |
+| **range**   | boolean          | Whether a range/selection is required (default: false)                  |
+| **capture** | function         | Auto-capture context (e.g., using treesitter)                           |
+| **enabled** | function/boolean | Whether the action is available                                         |
 
 ### Mode-Specific Options
 
@@ -98,57 +97,73 @@ Use it with `:Sia /yoda` on a visual selection.
 
 ## Instructions
 
-Instructions define the messages sent to the model. You can mix built-in
-instruction names, function calls, and custom message tables.
+Actions use two arrays to define what is sent to the model:
 
-### Built-in Instruction Names
+- **system** — system-level messages that set behavior and role
+- **user** — user-level context messages that provide code, files, and instructions
 
-Use these by name in the `instructions` array:
+### System Messages
 
-| Name                | Description                                                 |
+System messages are strings or functions returning strings.
+
+You can also use these as functions from `require("sia.builtin")`:
+
+```lua
+system = {
+  require("sia.builtin").model_system,
+  require("sia.builtin").directory_structure,
+  require("sia.builtin").agents_md,
+},
+```
+
+Or as inline strings:
+
+```lua
+system = {
+  "You are a code reviewer. Focus on correctness and performance.",
+},
+```
+
+### User Messages
+
+User messages provide context to the model. They can be strings, functions, or
+tables with a `hide` flag. Use them in the `user` array.
+
+Functions receive an `invocation` context and can return content and an optional
+region (for tracking file changes):
+
+```lua
+user = {
+  require("sia.instructions").current_context({ show_line_numbers = true }),
+  require("sia.instructions").current_buffer({ show_line_numbers = true }),
+  "Please review this code",
+},
+```
+
+Built-in user instruction functions from `require("sia.instructions")`:
+
+| Function            | Description                                                 |
 | ------------------- | ----------------------------------------------------------- |
-| `"current_context"` | Current selection (visual) or minimal file context (normal) |
-| `"current_buffer"`  | Entire buffer with line numbers                             |
-| `"visible_buffers"` | All visible buffers with cursor positions                   |
-| `"verbatim"`        | Raw selection without formatting                            |
+| `current_context()` | Current selection (visual) or minimal file context (normal) |
+| `current_buffer()`  | Entire buffer with line numbers                             |
+| `visible_buffers`   | All visible buffers with cursor positions                   |
+| `verbatim`          | Raw selection without formatting                            |
 
-Use as function calls for options:
+Options for `current_context()` and `current_buffer()`:
 
 ```lua
 require("sia.instructions").current_context({ show_line_numbers = true })
 require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true })
 ```
 
-### System Instructions
-
-Use these in the `system` array:
-
-| Name                    | Description                                                |
-| ----------------------- | ---------------------------------------------------------- |
-| `"model_system"`        | Model-dependent system prompt (GPT-5 specific or fallback) |
-| `"default_system"`      | Comprehensive coding system prompt                         |
-| `"minimal_system"`      | Minimal system prompt                                      |
-| `"prose_system"`        | Optimized for writing and prose editing                    |
-| `"insert_system"`       | For insert mode (output only insertable text)              |
-| `"diff_system"`         | For diff mode (output replacement text)                    |
-| `"directory_structure"` | File tree of the current directory                         |
-| `"agents_md"`           | Contents of AGENTS.md if it exists                         |
-| `"system_info"`         | OS, Neovim version, git branch, timestamp                  |
-
-### Custom Instructions
+To hide a user message from the UI (useful for context that clutters the chat):
 
 ```lua
-instructions = {
-  {
-    role = "user",
-    content = function(ctx)
-      -- ctx contains: buf, cursor, mode, pos
-      return "Custom instruction based on context"
-    end,
-    hide = true,         -- Don't show in UI
-    description = "My custom instruction",
-  },
-}
+user = {
+  { hide = true, content = function(invocation)
+    return "Hidden context based on " .. invocation.buf
+  end },
+},
 ```
 
 ## Conversation Modes
@@ -223,6 +238,14 @@ require("sia").setup({
           exit_prompt = "Review complete. All tools are now available for fixes.",
         },
       },
+      system = {
+        require("sia.builtin").model_system,
+      },
+      user = {
+        require("sia.builtin").system_info,
+        require("sia.builtin").directory_structure,
+        require("sia.instructions").visible_buffers,
+      },
       -- ... other chat action options
     },
   },
@@ -250,12 +273,11 @@ actions = {
   summarize = {
     mode = "insert",
     system = {
-      {
-        role = "system",
-        content = "Generate a brief 1-2 sentence summary of the provided code.",
-      },
+      "Generate a brief 1-2 sentence summary of the provided code.",
     },
-    instructions = { "current_context" },
+    user = {
+      require("sia.instructions").current_context(),
+    },
     range = true,
     insert = {
       placement = "above",
@@ -287,22 +309,22 @@ actions = {
       wo = { "number", "relativenumber" },
     },
     system = {
-      {
-        role = "system",
-        content = "You are a code reviewer. Analyze the code and suggest improvements "
-          .. "for clarity, performance, naming, and reduced complexity. "
-          .. "Output the complete refactored code.",
-      },
+      "You are a code reviewer. Analyze the code and suggest improvements "
+        .. "for clarity, performance, naming, and reduced complexity. "
+        .. "Output the complete refactored code.",
     },
-    instructions = {
-      "current_context",
-      { role = "user", content = "Refactor this code following best practices." },
+    user = {
+      require("sia.instructions").current_context(),
+      "Refactor this code following best practices.",
     },
     range = true,
-    capture = require("sia.capture").treesitter({
-      "@function.outer",
-      "@class.outer",
-    }),
+    capture = function(ctx)
+      return require("sia.capture").treesitter(
+        { "function.outer", "class.outer" },
+        ctx.buf,
+        ctx.cursor
+      )
+    end,
   },
 }
 ```

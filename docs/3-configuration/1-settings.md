@@ -9,7 +9,7 @@ overrides, see [Project Configuration](3-project.md).
 ```lua
 require("sia").setup({
   settings = {
-    model = "openai/gpt-4.1",
+    model = "openai/gpt-5.2",
   },
 })
 ```
@@ -20,10 +20,10 @@ require("sia").setup({
 require("sia").setup({
   settings = {
     -- Models
-    model = "openai/gpt-4.1",                          -- Main conversational model
-    fast_model = "openai/gpt-4.1-mini",                -- Fast model for quick tasks and compaction
-    plan_model = "openai/o3-mini",                      -- Model for planning and reasoning
-    embedding_model = "openai/text-embedding-3-small",  -- Model for semantic embeddings
+    model = "openai/gpt-5.2",                              -- Main conversational model
+    fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
+    plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
+    embedding_model = "openai/text-embedding-3-small",      -- Model for semantic embeddings
 
     -- Icon set: "emoji" or a custom table
     icons = "emoji",
@@ -137,7 +137,7 @@ The indicator changes color: normal below 85%, warning (`DiagnosticWarn`) at
 85%+, error (`DiagnosticError`) at 95%+.
 
 Compaction uses `fast_model` to generate summaries. Make sure your fast model
-has a large enough context window (e.g., `openai/gpt-4.1-mini` with 1M tokens).
+has a large enough context window (e.g., `openai/gpt-4.1` with 1M tokens).
 
 ### Winbar Customization
 

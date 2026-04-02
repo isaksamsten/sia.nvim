@@ -573,7 +573,7 @@ function M.update_diff(buf)
     return
   end
 
-  local show_char_diff = require("sia.config").options.settings.ui.char_diff
+  local show_char_diff = require("sia.config").options.settings.ui.diff.char_diff
 
   local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local current_content = table.concat(current_lines, "\n")

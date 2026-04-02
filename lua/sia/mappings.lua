@@ -18,20 +18,15 @@ end
 function _G.__sia_add_buffer()
   require("sia.utils").with_chat_strategy({
     on_select = function(strategy)
-      local buf = vim.api.nvim_get_current_buf()
-      local name = vim.api.nvim_buf_get_name(buf)
-      strategy.conversation:add_instruction("current_context", {
+      local get_context =
+        require("sia.instructions").current_context({ show_line_numbers = true })
+      local content, region = get_context({
         buf = vim.api.nvim_get_current_buf(),
-        cursor = vim.api.nvim_win_get_cursor(0),
-        tick = require("sia.tracker").ensure_tracked(
-          buf,
-          { id = strategy.conversation.id }
-        ),
-        outdated_message = string.format(
-          "Previously viewed content from %s - file was modified, read file if needed",
-          vim.fn.fnamemodify(name, ":.")
-        ),
+        mode = "v",
       })
+      if content then
+        strategy.conversation:add_user_message(content, region, true)
+      end
     end,
     only_visible = true,
   })
@@ -42,25 +37,18 @@ function _G.__sia_add_context(type)
   local start_line = start_pos[2]
   local end_line = end_pos[2]
   if start_line > 0 then
-    local buf = vim.api.nvim_get_current_buf()
-    local name = vim.api.nvim_buf_get_name(buf)
     require("sia.utils").with_chat_strategy({
       on_select = function(strategy)
-        local pos = { start_line, end_line }
-        return strategy.conversation:add_instruction("current_context", {
+        local get_context =
+          require("sia.instructions").current_context({ show_line_numbers = true })
+        local content, region = get_context({
           buf = vim.api.nvim_get_current_buf(),
-          cursor = vim.api.nvim_win_get_cursor(0),
-          pos = pos,
+          pos = { start_line, end_line },
           mode = "v",
-          tick = require("sia.tracker").ensure_tracked(
-            buf,
-            { id = strategy.conversation.id, pos = pos }
-          ),
-          outdated_message = string.format(
-            "Previously viewed content from %s - file was modified, read file if needed",
-            vim.fn.fnamemodify(name, ":.")
-          ),
         })
+        if content then
+          strategy.conversation:add_user_message(content, region, true)
+        end
       end,
       only_visible = true,
     })
@@ -76,31 +64,29 @@ function _G.__sia_execute(type)
     return
   end
   local pos = { start_line, end_line }
-  --- @type sia.ActionContext
-  local context = {
-    start_line = start_line,
-    end_line = end_line,
+  --- @type sia.Invocation
+  local invocation = {
     pos = pos,
     mode = "v",
+    bang = false,
     buf = vim.api.nvim_get_current_buf(),
     win = vim.api.nvim_get_current_win(),
     cursor = vim.api.nvim_win_get_cursor(0),
-    tick = require("sia.tracker").ensure_tracked(
-      vim.api.nvim_get_current_buf(),
-      { pos = pos }
-    ),
-    global = true,
   }
+  local config = require("sia.config")
   local action
   if _G.__sia_execute_action == nil and vim.b.sia then
-    action = utils.resolve_action({ vim.b.sia }, context)
+    action = config.options.actions[vim.b.sia]
   elseif _G.__sia_execute_action then
-    action = utils.resolve_action({ _G.__sia_execute_action }, context)
+    action = config.options.actions[_G.__sia_execute_action]
   end
   _G.__sia_execute_action = nil
 
   if action and not utils.is_action_disabled(action) then
-    require("sia").execute_action(action, { context = context })
+    local conversation = require("sia.conversation").from_action(action, invocation)
+    local strategy =
+      require("sia.strategy").from_action(action, invocation, conversation)
+    require("sia.assistant").execute_strategy(strategy)
   else
     vim.api.nvim_echo({ { NO_ACTION_ERROR, "ErrorMsg" } }, true, {})
   end

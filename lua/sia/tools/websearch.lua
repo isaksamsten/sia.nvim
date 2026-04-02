@@ -2,19 +2,33 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
-  name = "websearch",
-  is_available = function()
+  definition = {
+    type = "function",
+    name = "websearch",
+    description = "Searches the web using Google",
+    parameters = {
+      query = {
+        type = "string",
+        description = "The search query",
+      },
+      description = {
+        type = "string",
+        description = "Clear, consice description of the search in 3-10 words",
+      },
+    },
+    required = { "query" },
+  },
+  is_supported = function()
     return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil
       and os.getenv("GOOGLE_SEARCH_CX") ~= nil
   end,
-  message = function(args)
+  notification = function(args)
     if args.description then
       return string.format("%s...", args.description)
     end
     return string.format("Searching for: %s", args.query)
   end,
-  description = "Searches the web using Google",
-  system_prompt = [[- Searches the web using Google Custom Search API
+  instructions = [[- Searches the web using Google Custom Search API
 - Returns search results with titles, URLs, and snippets
 - Use this tool when you need to find current information, documentation, or
   resources online
@@ -22,41 +36,26 @@ return tool_utils.new_tool({
 Usage notes:
   - The top 10 results are shown
   - Use specific, targeted search queries for better results]],
-  parameters = {
-    query = {
-      type = "string",
-      description = "The search query",
-    },
-    description = {
-      type = "string",
-      description = "Clear, consice description of the search in 3-10 words",
-    },
-  },
-  required = { "query" },
   read_only = true,
 }, function(args, _, callback, opts)
   if not vim.fn.executable("curl") then
     callback({
-      content = { "Error: curl is not installed. Don't try again." },
-      display_content = icons.error .. " Failed to access search",
+      content = "Error: curl is not installed. Don't try again.",
+      summary = icons.error .. " Failed to access search",
     })
     return
   end
   if not os.getenv("GOOGLE_SEARCH_API_KEY") then
     callback({
-      content = {
-        "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
-      },
-      display_content = icons.error .. " Failed to access search",
+      content = "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
+      summary = icons.error .. " Failed to access search",
     })
     return
   end
   if not os.getenv("GOOGLE_SEARCH_CX") then
     callback({
-      content = {
-        "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
-      },
-      display_content = icons.error .. " Failed to access search",
+      content = "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
+      summary = icons.error .. " Failed to access search",
     })
     return
   end
@@ -83,10 +82,11 @@ Usage notes:
             local error_msg = result.stderr and result.stderr ~= "" and result.stderr
               or string.format("curl failed with exit code: %d", result.code)
             callback({
-              content = {
-                string.format("Error: Failed to fetch search results - %s", error_msg),
-              },
-              display_content = icons.error .. " Failed to fetch search results",
+              content = string.format(
+                "Error: Failed to fetch search results - %s",
+                error_msg
+              ),
+              summary = icons.error .. " Failed to fetch search results",
             })
             return
           end
@@ -128,17 +128,17 @@ Usage notes:
               table.insert(content, "No search results found for this query.")
             end
 
-            local display_content = args.description
+            local summary = args.description
                 and string.format("%s %s", icons.search, args.description)
               or string.format("%s Search results for: %s", icons.search, args.query)
             callback({
               content = content,
-              display_content = display_content,
+              summary = summary,
             })
           else
             callback({
-              content = { "Error: Failed to parse json response from search" },
-              display_content = icons.error .. " Failed to fetch search results",
+              content = "Error: Failed to parse json response from search",
+              summary = icons.error .. " Failed to fetch search results",
             })
           end
         end)

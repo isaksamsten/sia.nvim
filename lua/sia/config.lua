@@ -3,9 +3,6 @@ local M = {}
 --- @type table<string, {mtime: string, json: table}?>
 local config_cache = {}
 
---- @type table<string, {mtime: string, json: table}?>
-local auto_config_cache = {}
-
 --- @param stat {mtime:{sec:integer?, nsec:integer?}}
 --- @return string
 local function cache_mtime(stat)
@@ -497,6 +494,7 @@ local LOCAL_ONLY_KEYS = {
 
 --- The settings proxy. Indexing resolves local → global automatically.
 --- Accessed via config.options.settings.
+--- @type sia.config.Settings
 local settings_proxy = setmetatable({}, {
   __index = function(_, key)
     local lc = M.get_local_config()
@@ -531,10 +529,6 @@ local settings_proxy = setmetatable({}, {
       return default_model
     end
 
-    if key == "auto_continue" then
-      return lc and lc.auto_continue or false
-    end
-
     if LOCAL_ONLY_KEYS[key] then
       return lc and lc[key]
     end
@@ -556,7 +550,6 @@ local settings_proxy = setmetatable({}, {
 
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
---- @field auto_continue boolean?
 --- @field model sia.config.ModelSpec?
 --- @field fast_model sia.config.ModelSpec?
 --- @field plan_model sia.config.ModelSpec?
@@ -620,17 +613,6 @@ local function validate_local_config_json(json, local_config)
   validate_with(validate.model_field, json, "model")
   validate_with(validate.model_field, json, "fast_model")
   validate_with(validate.model_field, json, "plan_model")
-  validate_with(function()
-    if json.auto_continue and type(json.auto_continue) ~= "boolean" then
-      return false,
-        string.format(
-          "'%s' must be a boolean, got %s",
-          json.auto_continue,
-          type(json.auto_continue)
-        )
-    end
-    return true
-  end)
 
   return not has_failed, error_message
 end
@@ -674,12 +656,10 @@ end
 function M.invalidate_local_config(root)
   if root then
     config_cache[root] = nil
-    auto_config_cache[root] = nil
     return
   end
 
   config_cache = {}
-  auto_config_cache = {}
 end
 
 --- @param mutator fun(json: table)
@@ -841,8 +821,7 @@ end
 --- @field show_preview boolean?
 --- @field async sia.config.Settings.Ui.Confirm.Async?
 
---- @alias sia.config.Role "user"|"system"|"assistant"|"tool"
---- @alias sia.config.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
+--- @alias sia.config.insert.Placement ["below"|"above", "start"|"end"|"cursor"]|"start"|"end"|"cursor"
 --- @alias sia.config.ActionInput "require"|"ignore"
 --- @alias sia.config.ActionMode "chat"|"diff"|"insert"|"hidden"
 
@@ -859,11 +838,11 @@ end
 --- @field deny_message (fun(tool_name: string, args: table, kind: "denied"|"restricted"):string[])?
 --- @field enter_prompt string|fun(state: table):string
 --- @field exit_prompt string|fun(state: table, summary: string):string
---- @field init_state (fun(ctx: sia.Context): table)?
+--- @field init_state (fun(): table)?
 --- @field truncate boolean?
 
 --- @class sia.config.Insert
---- @field placement (fun():sia.config.Placement)|sia.config.Placement
+--- @field placement (fun():sia.config.insert.Placement)|sia.config.insert.Placement
 --- @field cursor ("start"|"end")?
 --- @field message [string, string]?
 --- @field post_process (fun(args: { lines: string[], buf: integer, start_line: integer, start_col: integer, end_line: integer, end_col: integer }): string[])?
@@ -886,48 +865,19 @@ end
 --- @field callback fun(buf:number?, opts: { error: string?, content:string[]?, usage:sia.Usage?})?
 --- @field notify fun(string)?
 
---- @class sia.config.Instruction
---- @field role sia.config.Role
---- @field template boolean?
---- @field hide boolean?
---- @field mode "v"|"n"|nil
---- @field description ((fun(ctx:sia.Context?):string)|string)?
---- @field content ((fun(ctx: sia.Context?):string?)|string|string[]|sia.Content[])?
---- @field kind string?
---- @field ephemeral boolean?
---- @field tool_calls sia.ToolCall[]?
---- @field _tool_call sia.ToolCall?
---- @field display_content string?
---- TODO: Drop tool fields from instructions...
-
---- @alias sia.config.ToolExecute fun(arguments: table, conversation: sia.Conversation, callback: fun(opts: sia.ToolResult?), cancellable: sia.Cancellable?, turn_id: string?)
---- @class sia.config.Tool
---- @field name string
---- @field module string?
---- @field description string
---- @field system_prompt string?
---- @field allow_parallel (fun(conv: sia.Conversation, args: table):boolean)?
---- @field message string|(fun(args:table):string)?
---- @field parameters table<string, sia.ToolParameter>?
---- @field is_available (fun(support: sia.config.Support?):boolean)?
---- @field required string[]?
---- @field execute sia.config.ToolExecute
---- @field custom sia.config.ToolCustom? if set, this is a custom tool with non-JSON output
-
---- Custom tool format definition (e.g. grammar-constrained output)
---- @class sia.config.ToolCustom
---- @field format { type: string, syntax: string?, definition: string? }?
+--- @alias sia.config.UserContent (fun(invocation: sia.Invocation):sia.Content?,sia.Region?)|sia.Content
+--- @alias sia.config.UserMessage sia.config.UserContent|{hide: boolean, content:sia.config.UserContent}
+--- @alias sia.config.SystemMessage string|fun():string
 
 --- @class sia.config.DefaultAction
---- @field system (string|sia.config.Instruction)[]?
---- @field instructions (string|sia.config.Instruction)[]
---- @field modify_instructions (fun(instructions:(string|sia.config.Instruction|(fun():sia.config.Instruction[]))[], ctx: sia.ActionContext):nil)?
---- @field tools (fun(model: sia.Model):sia.config.Tool[])?
+--- @field system sia.config.SystemMessage[]
+--- @field user sia.config.UserMessage[]
+--- @field tools (fun(model: sia.Model):sia.Tool[])?
 --- @field ignore_tool_confirm boolean?
 --- @field model (string|{name: string})?
 --- @field input sia.config.ActionInput?
---- @field enabled (fun():boolean)|boolean?
---- @field capture nil|(fun(arg: sia.ActionContext):[number, number])
+--- @field enabled ((fun():boolean)|boolean)?
+--- @field capture (fun(arg: sia.Invocation):sia.Capture?)?
 --- @field range boolean?
 
 --- @class sia.config.ChatAction : sia.config.DefaultAction
@@ -1016,11 +966,11 @@ end
 --- @field process_usage (fun(obj:table):sia.Usage?)?
 --- @field process_response fun(json:table):string?
 --- @field process_embeddings (fun(json:table):number[][])?
---- @field prepare_messages fun(data: table, model:string, prompt:sia.PreparedMessage[])
---- @field prepare_tools fun(data: table, tools:sia.Tool[])
+--- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])
+--- @field prepare_tools fun(data: table, tools:sia.tool.Definition[])
 --- @field prepare_parameters fun(data: table, model: sia.Model)?
 --- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
---- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.PreparedMessage[]? ):string[])?
+--- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.Message[]? ):string[])?
 --- @field translate_http_error (fun(code: integer):string?)?
 --- @field on_http_error (fun(code: integer):boolean)?
 --- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
@@ -1029,7 +979,6 @@ end
 --- @class sia.config.Options
 --- @field models sia.config.Models
 --- @field embeddings sia.config.Embeddings?
---- @field instructions table<string, sia.config.Instruction|sia.config.Instruction[]>
 --- @field settings sia.config.Settings
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.config.Provider>
@@ -1155,9 +1104,9 @@ M._raw_options = {
         output_config = { effort = "high" },
       },
     },
-    ["copilot/gemini-3-pro"] = {
+    ["copilot/gemini-3.1-pro"] = {
       "copilot",
-      "gemini-3-pro-preview",
+      "gemini-3.1-pro-preview",
       context_window = 128000,
     },
     ["copilot/gemini-3-flash"] = {
@@ -1239,7 +1188,6 @@ M._raw_options = {
     ["openai/text-embedding-3-small"] = { "openai", "text-embedding-3-small" },
     ["openai/text-embedding-3-large"] = { "openai", "text-embedding-3-large" },
   },
-  instructions = {},
   --- @type sia.config.Settings
   settings = {
     model = "openai/gpt-5.2",
@@ -1306,8 +1254,8 @@ M._raw_options = {
       insert = {
         mode = "insert",
         input = "require",
-        system = { "insert_system" },
-        instructions = {
+        system = { require("sia.builtin").insert_system },
+        user = {
           require("sia.instructions").current_buffer({
             show_line_numbers = true,
             include_cursor = true,
@@ -1321,12 +1269,8 @@ M._raw_options = {
       diff = {
         mode = "diff",
         input = "require",
-        system = { "diff_system" },
-        instructions = {
-          require("sia.instructions").current_buffer({
-            show_line_numbers = true,
-            include_cursor = true,
-          }),
+        system = { require("sia.builtin").diff_system },
+        user = {
           require("sia.instructions").current_context({
             show_line_numbers = true,
             fences = false,
@@ -1341,17 +1285,17 @@ M._raw_options = {
       chat = {
         mode = "chat",
         system = {
-          "model_system",
+          require("sia.builtin").model_system,
         },
         modes = {
           plan = require("sia.modes").plan,
         },
-        instructions = {
-          "system_info",
-          "directory_structure",
-          "agents_md",
-          "visible_buffers",
-          "current_context",
+        input = "require",
+        user = {
+          require("sia.builtin").system_info,
+          require("sia.builtin").directory_structure,
+          require("sia.builtin").agents_md,
+          require("sia.instructions").visible_buffers,
         },
         tools = function(model)
           local tools = require("sia.tools")
@@ -1392,10 +1336,13 @@ M._raw_options = {
         "system_info",
         "directory_structure",
         "agents_md",
-      },
-      instructions = {
         "visible_buffers",
-        "current_context",
+      },
+      user = {
+        role = "user",
+        content = function()
+          return "current_context"
+        end,
       },
       tools = function(model)
         local tools = require("sia.tools")
@@ -1432,6 +1379,7 @@ M._raw_options = {
 --- Proxy for config.options that:
 --- - Enriches the models table with aliases from local project config
 --- - Returns the settings proxy for transparent local → global resolution
+--- @type sia.config.Options
 M.options = setmetatable({}, {
   __index = function(_, key)
     if key == "settings" then

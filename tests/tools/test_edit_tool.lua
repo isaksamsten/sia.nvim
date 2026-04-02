@@ -14,6 +14,11 @@ local eq = MiniTest.expect.equality
 
 T["sia.tools.edit"] = MiniTest.new_set()
 
+-- Mock tracker that just runs the function
+local function mock_tracker()
+  return { suppress = function(_, _, fn) fn() end }
+end
+
 T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   local code = [[
     local edit_tool = require("sia.tools.edit")
@@ -36,7 +41,10 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
 
     local result = nil
     local callback = function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
     end
 
     local args = {
@@ -47,9 +55,11 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
 
     local conversation = {
       auto_confirm_tools = { edit = 1 },
+      ignore_tool_confirm = true,
+      tracker = { suppress = function(_, _, fn) fn() end },
     }
 
-    edit_tool.execute(args, conversation, callback, nil)
+    edit_tool.implementation.execute(args, callback, { conversation = conversation })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -72,7 +82,6 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   eq("", new_content[4])
   eq("  print(test)", new_content[6])
 
-  eq("edit", result.kind)
   eq("Edited test.lua:", result.content[1])
   eq("+  print(test)", result.content[7])
 end
@@ -101,9 +110,16 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
       new_string = "function hello()\n  print('universe')\nend",
     }
 
-    edit_tool.execute(args, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    edit_tool.implementation.execute(args, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = {
+      auto_confirm_tools = { edit = 1 },
+      ignore_tool_confirm = true,
+      tracker = { suppress = function(_, _, fn) fn() end },
+    } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -122,13 +138,8 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   eq("end", new_content[3])
   eq("other code", new_content[4])
 
-  eq("edit", result.kind)
   eq("Edited test.lua:", result.content[1])
-  eq(
-    true,
-    string.find(result.display_content, "✏️ Edited lines 1%-3 in test%.lua")
-      ~= nil
-  )
+  eq(true, string.find(result.summary, "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
 end
 
 T["sia.tools.edit"]["successful inline edit"] = function()
@@ -144,13 +155,20 @@ T["sia.tools.edit"]["successful inline edit"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.txt",
       old_string = "isak",
       new_string = "lisa",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = {
+      auto_confirm_tools = { edit = 1 },
+      ignore_tool_confirm = true,
+      tracker = { suppress = function(_, _, fn) fn() end },
+    } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -165,13 +183,10 @@ T["sia.tools.edit"]["successful inline edit"] = function()
   local new_content = child.lua_get("_G.new_content")
 
   eq("hello world lisa", new_content[1])
-  eq("edit", result.kind)
   eq(
     true,
-    string.find(
-      result.display_content,
-      "✏️ Edited line 1 %(columns 13%-16%) in test%.txt"
-    ) ~= nil
+    string.find(result.summary, "✏️ Edited line 1 %(columns 13%-16%) in test%.txt")
+      ~= nil
   )
 end
 
@@ -188,13 +203,16 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       old_string = "    1\tfunction test()\n    2\t  return true\n    3\tend",
       new_string = "    1\tfunction test()\n    2\t  return false\n    3\tend",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -212,12 +230,8 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
   eq("  return false", new_content[2])
   eq("end", new_content[3])
 
-  eq("edit", result.kind)
   eq(true, string.find(result.content[1], "the match was not perfect") ~= nil)
-  eq(
-    true,
-    string.find(result.display_content, "please double%-check the changes") ~= nil
-  )
+  eq(true, string.find(result.summary, "please double%-check the changes") ~= nil)
 end
 
 T["sia.tools.edit"]["create new file"] = function()
@@ -233,13 +247,16 @@ T["sia.tools.edit"]["create new file"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "new_file.lua",
       old_string = "",
       new_string = "print('hello world')",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -254,7 +271,6 @@ T["sia.tools.edit"]["create new file"] = function()
   local new_content = child.lua_get("_G.new_content")
 
   eq("print('hello world')", new_content[1])
-  eq("edit", result.kind)
   eq("Edited new_file.lua:", result.content[1])
 end
 
@@ -264,12 +280,15 @@ T["sia.tools.edit"]["missing target_file parameter"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       old_string = "test",
       new_string = "updated",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -280,7 +299,7 @@ T["sia.tools.edit"]["missing target_file parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No target_file was provided", result.content[1])
-  eq("❌ Failed to edit", result.display_content)
+  eq("❌ Failed to edit", result.summary)
 end
 
 T["sia.tools.edit"]["missing old_string parameter"] = function()
@@ -289,12 +308,15 @@ T["sia.tools.edit"]["missing old_string parameter"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       new_string = "updated",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -305,7 +327,7 @@ T["sia.tools.edit"]["missing old_string parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No old_string was provided", result.content[1])
-  eq("❌ Failed to edit", result.display_content)
+  eq("❌ Failed to edit", result.summary)
 end
 
 T["sia.tools.edit"]["missing new_string parameter"] = function()
@@ -314,12 +336,15 @@ T["sia.tools.edit"]["missing new_string parameter"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       old_string = "test",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -330,7 +355,7 @@ T["sia.tools.edit"]["missing new_string parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No new_string was provided", result.content[1])
-  eq("❌ Failed to edit", result.display_content)
+  eq("❌ Failed to edit", result.summary)
 end
 
 T["sia.tools.edit"]["file cannot be loaded"] = function()
@@ -343,13 +368,16 @@ T["sia.tools.edit"]["file cannot be loaded"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "nonexistent.lua",
       old_string = "test",
       new_string = "updated",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -362,7 +390,7 @@ T["sia.tools.edit"]["file cannot be loaded"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: Cannot load nonexistent.lua", result.content[1])
-  eq("❌ Failed to edit", result.display_content)
+  eq("❌ Failed to edit", result.summary)
 end
 
 T["sia.tools.edit"]["no matches found"] = function()
@@ -378,13 +406,16 @@ T["sia.tools.edit"]["no matches found"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.txt",
       old_string = "nonexistent",
       new_string = "updated",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -397,7 +428,7 @@ T["sia.tools.edit"]["no matches found"] = function()
   local result = child.lua_get("_G.result")
 
   eq(true, string.find(result.content[1], "Failed to edit test.txt") ~= nil)
-  eq("❌ Failed to edit test.txt", result.display_content)
+  eq("❌ Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.edit"]["multiple matches found"] = function()
@@ -413,13 +444,16 @@ T["sia.tools.edit"]["multiple matches found"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.txt",
       old_string = "test",
       new_string = "updated",
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -432,10 +466,10 @@ T["sia.tools.edit"]["multiple matches found"] = function()
   local result = child.lua_get("_G.result")
 
   eq(
-    "Failed to edit test.txt because 2 matches were found. Either provide more context to make old_string unique, or set replace_all to true to replace all 2 occurrences.",
-    result.content[1]
+    true,
+    string.find(result.content[1], "Failed to edit test.txt because") ~= nil
   )
-  eq("❌ Failed to edit test.txt", result.display_content)
+  eq("❌ Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.edit"]["max failed matches reached"] = function()
@@ -450,6 +484,7 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
     utils.ensure_file_is_loaded = function(_) return buf end
 
     local results = {}
+    local conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } }
 
     local args = {
       target_file = "test.txt",
@@ -457,21 +492,27 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
       new_string = "updated",
     }
 
-    edit_tool.execute(args, { auto_confirm_tools = { edit = 1 } }, function(res)
-      table.insert(results, res)
-    end, nil)
+    edit_tool.implementation.execute(args, function(res)
+      table.insert(results, {
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      })
+    end, { conversation = conversation })
 
     vim.wait(2000, function() return #results > 0 end)
 
-    edit_tool.execute(args, { auto_confirm_tools = { edit = 1 } }, function(res)
-      table.insert(results, res)
-    end, nil)
+    edit_tool.implementation.execute(args, function(res)
+      table.insert(results, {
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      })
+    end, { conversation = conversation })
 
     vim.wait(2000, function() return #results > 1 end)
 
-    edit_tool.execute(args, { auto_confirm_tools = { edit = 1 } }, function(res)
-      table.insert(results, res)
-    end, nil)
+    edit_tool.implementation.execute(args, function(res)
+      table.insert(results, {
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      })
+    end, { conversation = conversation })
 
     vim.wait(2000, function() return #results > 2 end)
 
@@ -508,14 +549,17 @@ T["sia.tools.edit"]["replace_all with inline matches"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       old_string = "x",
       new_string = "foo",
       replace_all = true,
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -535,13 +579,8 @@ T["sia.tools.edit"]["replace_all with inline matches"] = function()
   eq("local y = foo + 5", new_content[3])
   eq("return foo", new_content[4])
 
-  eq("edit", result.kind)
   eq(true, string.find(result.content[1], "Replaced all %d+ occurrences?") ~= nil)
-  eq(
-    true,
-    string.find(result.display_content, "✏️ Replaced all %d+ occurrences?")
-      ~= nil
-  )
+  eq(true, string.find(result.summary, "✏️ Replaced all %d+ occurrences?") ~= nil)
 end
 
 T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
@@ -571,14 +610,17 @@ T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       old_string = "function test()\n  return true\nend",
       new_string = "function test()\n  return false\nend",
       replace_all = true,
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -606,12 +648,8 @@ T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
   eq("  return false", new_content[10])
   eq("end", new_content[11])
 
-  eq("edit", result.kind)
   eq(true, string.find(result.content[1], "Replaced all 2 occurrences") ~= nil)
-  eq(
-    true,
-    string.find(result.display_content, "✏️ Replaced all 2 occurrences") ~= nil
-  )
+  eq(true, string.find(result.summary, "✏️ Replaced all 2 occurrences") ~= nil)
 end
 
 T["sia.tools.edit"]["replace_all error when no matches"] = function()
@@ -627,14 +665,17 @@ T["sia.tools.edit"]["replace_all error when no matches"] = function()
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.txt",
       old_string = "nonexistent",
       new_string = "updated",
       replace_all = true,
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -646,13 +687,12 @@ T["sia.tools.edit"]["replace_all error when no matches"] = function()
   child.lua(code)
   local result = child.lua_get("_G.result")
 
-  eq("failed", result.kind)
   eq(
     true,
     string.find(result.content[1], "with replace_all because no matches were found")
       ~= nil
   )
-  eq("❌ Failed to edit test.txt", result.display_content)
+  eq("❌ Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.edit"]["tool metadata"] = function()
@@ -665,18 +705,18 @@ T["sia.tools.edit"]["tool metadata"] = function()
       new_string = "updated",
     }
 
-    _G.name = edit_tool.name
-    _G.description = edit_tool.description
-    _G.message = edit_tool.message(args)
-    _G.required = edit_tool.required
-    _G.parameters = edit_tool.parameters
+    _G.name = edit_tool.definition.name
+    _G.description = edit_tool.definition.description
+    _G.notification = edit_tool.implementation.notification(args)
+    _G.required = edit_tool.definition.required
+    _G.parameters = edit_tool.definition.parameters
   ]]
 
   child.lua(code)
 
   eq("edit", child.lua_get("_G.name"))
   eq("Tool for editing files", child.lua_get("_G.description"))
-  eq("Making changes to test.txt...", child.lua_get("_G.message"))
+  eq("Making changes to test.txt...", child.lua_get("_G.notification"))
 
   local required = child.lua_get("_G.required")
   eq(true, vim.tbl_contains(required, "target_file"))
@@ -707,14 +747,17 @@ T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function
 
     local result = nil
 
-    edit_tool.execute({
+    edit_tool.implementation.execute({
       target_file = "test.lua",
       old_string = "x",
       new_string = "foo",
       replace_all = true,
-    }, { auto_confirm_tools = { edit = 1 } }, function(res)
-      result = {display_content=res.display_content,kind=res.kind, content=res.content}
-    end, nil)
+    }, function(res)
+      result = {
+        summary = res.summary,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+      }
+    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -733,13 +776,10 @@ T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function
   eq("print(foo)", new_content[2])
   eq("return foo", new_content[3])
 
-  eq("edit", result.kind)
   -- Should have replaced 6 occurrences total (4 on line 1, 1 on line 2, 1 on line 3)
   eq(true, string.find(result.content[1], "Replaced all 6 occurrences") ~= nil)
-  eq(
-    true,
-    string.find(result.display_content, "✏️ Replaced all 6 occurrences") ~= nil
-  )
+  eq(true, string.find(result.summary, "✏️ Replaced all 6 occurrences") ~= nil)
 end
 
 return T
+

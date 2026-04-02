@@ -3,10 +3,18 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
-  name = "workspace",
-  message = "Getting workspace information...",
-  description = "Show visible files with line ranges and background files",
-  system_prompt = [[Use this tool to get information about which files and line
+  definition = {
+    type = "function",
+    name = "workspace",
+    description = "Show visible files with line ranges and background files",
+
+    parameters = vim.empty_dict(),
+    required = {},
+  },
+  notification = function()
+    return "Getting workspace information..."
+  end,
+  instructions = [[Use this tool to get information about which files and line
 ranges are currently visible in the user's workspace.
 
 Always call this tool first when the user asks contextual questions about code
@@ -14,8 +22,6 @@ they are viewing, especially if they refer to "this", "here", or do not specify
 a file.
 
 Do not guess which file the user means—always check the workspace first.]],
-  parameters = vim.empty_dict(),
-  required = {},
 }, function(_, _, callback)
   local content = {}
   local current_win = vim.api.nvim_get_current_win()
@@ -140,6 +146,6 @@ Do not guess which file the user means—always check the workspace first.]],
 
   callback({
     content = content,
-    display_content = icons.workspace .. " Read current workspace",
+    summary = icons.workspace .. " Read current workspace",
   })
 end)

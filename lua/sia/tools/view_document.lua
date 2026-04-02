@@ -33,32 +33,35 @@ local function get_mime_type(path)
 end
 
 return tool_utils.new_tool({
-  name = tool_names.view_document,
-  is_available = function(support)
-    return support ~= nil and support.document == true
+  definition = {
+    type = "function",
+    name = tool_names.view_document,
+    description = "Views a document file from the local filesystem.",
+    parameters = {
+      path = {
+        type = "string",
+        description = "The file path to the document",
+      },
+    },
+    required = { "path" },
+  },
+  is_supported = function(model)
+    return model.support.document == true
   end,
   read_only = true,
-  message = function(args)
+  notification = function(args)
     if args.path then
       return "Viewing document " .. vim.fn.fnamemodify(args.path, ":t")
     else
       return "Viewing document..."
     end
   end,
-  system_prompt = string.format(
+  instructions = string.format(
     [[Views a document file from the local filesystem and returns it as file content
 for analysis. Supports the following formats: %s. Use this tool when you need to
 view or analyze the contents of a document file.]],
     table.concat(SUPPORTED_LIST, ", ")
   ),
-  description = "Views a document file from the local filesystem.",
-  parameters = {
-    path = {
-      type = "string",
-      description = "The file path to the document",
-    },
-  },
-  required = { "path" },
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
@@ -71,9 +74,9 @@ view or analyze the contents of a document file.]],
 }, function(args, _, callback, opts)
   if not args.path then
     callback({
-      content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to view document",
-      kind = "failed",
+      content = "Error: No file path was provided",
+      summary = icons.error .. " Failed to view document",
+      ephemeral = true,
     })
     return
   end
@@ -82,24 +85,22 @@ view or analyze the contents of a document file.]],
   if not mime_type then
     local ext = args.path:match("%.(%w+)$") or "unknown"
     callback({
-      content = {
-        string.format(
-          "Error: Unsupported document format '.%s'. Supported formats: %s",
-          ext,
-          table.concat(SUPPORTED_LIST, ", ")
-        ),
-      },
-      display_content = icons.error .. " Unsupported document format",
-      kind = "failed",
+      content = string.format(
+        "Error: Unsupported document format '.%s'. Supported formats: %s",
+        ext,
+        table.concat(SUPPORTED_LIST, ", ")
+      ),
+      summary = icons.error .. " Unsupported document format",
+      ephemeral = true,
     })
     return
   end
 
   if vim.fn.filereadable(args.path) == 0 then
     callback({
-      content = { "Error: Document file cannot be found" },
-      display_content = icons.error .. " Failed to view document",
-      kind = "failed",
+      content = "Error: Document file cannot be found",
+      summary = icons.error .. " Failed to view document",
+      ephemeral = true,
     })
     return
   end
@@ -107,15 +108,13 @@ view or analyze the contents of a document file.]],
   local stat = vim.uv.fs_stat(args.path)
   if stat and stat.size > MAX_FILE_SIZE then
     callback({
-      content = {
-        string.format(
-          "Error: Document file is too large (%d bytes). Maximum size is %d bytes.",
-          stat.size,
-          MAX_FILE_SIZE
-        ),
-      },
-      display_content = icons.error .. " Document too large",
-      kind = "failed",
+      content = string.format(
+        "Error: Document file is too large (%d bytes). Maximum size is %d bytes.",
+        stat.size,
+        MAX_FILE_SIZE
+      ),
+      summary = icons.error .. " Document too large",
+      ephemeral = true,
     })
     return
   end
@@ -128,9 +127,9 @@ view or analyze the contents of a document file.]],
       local file = io.open(args.path, "rb")
       if not file then
         callback({
-          content = { "Error: Cannot open " .. args.path },
-          display_content = icons.error .. " Failed to view document",
-          kind = "failed",
+          content = "Error: Cannot open " .. args.path,
+          summary = icons.error .. " Failed to view document",
+          ephemeral = true,
         })
         return
       end
@@ -140,9 +139,9 @@ view or analyze the contents of a document file.]],
 
       if not data or #data == 0 then
         callback({
-          content = { "Error: Document file is empty" },
-          display_content = icons.error .. " Failed to view document",
-          kind = "failed",
+          content = "Error: Document file is empty",
+          summary = icons.error .. " Failed to view document",
+          ephemeral = true,
         })
         return
       end
@@ -161,7 +160,7 @@ view or analyze the contents of a document file.]],
         end
       end
 
-      local display_content = string.format(
+      local summary = string.format(
         "%s Viewed document %s%s",
         icons.document,
         vim.fn.fnamemodify(args.path, ":~:."),
@@ -185,8 +184,7 @@ view or analyze the contents of a document file.]],
 
       callback({
         content = content,
-        display_content = display_content,
-        kind = "context",
+        summary = summary,
       })
     end,
   })

@@ -52,11 +52,13 @@ end
 
 local function create_dummy_tool(name, read_only, runner, extra_opts)
   return utils.new_tool({
-    name = name,
-    description = "dummy",
+    definition = {
+      name = name,
+      description = "dummy",
+      required = {},
+      parameters = {},
+    },
     read_only = read_only,
-    required = {},
-    parameters = {},
     persist_allow = extra_opts and extra_opts.persist_allow or nil,
   }, function(args, conversation, callback, opts)
     runner(args, conversation, callback, opts)
@@ -110,9 +112,9 @@ T["permissions (nil treated as empty)"]["deny triggers when arg is missing (nil)
     end)
 
     local result
-    tool.execute({}, { auto_confirm_tools = {} }, function(res)
+    tool.implementation.execute({}, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = {} } })
 
     eq(false, executed)
     eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
@@ -136,9 +138,9 @@ T["permissions (nil treated as empty)"]["deny does NOT trigger when arg is false
     end)
 
     local result
-    tool.execute({ foo = false }, { auto_confirm_tools = {} }, function(res)
+    tool.implementation.execute({ foo = false }, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = {} } })
 
     eq(true, executed)
     eq("ok", result.kind)
@@ -160,9 +162,9 @@ T["permissions (nil treated as empty)"]["allow auto-allow when arg is missing (n
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local can_parallel = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      {}
+    local can_parallel = tool.implementation.allow_parallel(
+      {},
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
     eq(true, can_parallel)
   end)
@@ -200,9 +202,9 @@ T["permissions (nil treated as empty)"]["ask on missing arg forces prompt even i
     end)
 
     local result
-    tool.execute({}, { auto_confirm_tools = { dummy = 1 } }, function(res)
+    tool.implementation.execute({}, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = { dummy = 1 } } })
 
     eq(true, prompt_called)
     eq("ok", result.kind)
@@ -225,13 +227,13 @@ T["permissions (nil treated as empty)"]["allow with exact string pattern"] = fun
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { foo = "foo" }
+    local ok1 = tool.implementation.allow_parallel(
+      { foo = "foo" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
-    local ok2 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { foo = "bar" }
+    local ok2 = tool.implementation.allow_parallel(
+      { foo = "bar" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
     eq(true, ok1)
     eq(false, ok2)
@@ -250,13 +252,13 @@ T["permissions (nil treated as empty)"]["allow with numeric coerced to string"] 
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { n = 123 }
+    local ok1 = tool.implementation.allow_parallel(
+      { n = 123 },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
-    local ok2 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { n = "abc" }
+    local ok2 = tool.implementation.allow_parallel(
+      { n = "abc" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
     eq(true, ok1)
     eq(false, ok2)
@@ -275,13 +277,13 @@ T["permissions (nil treated as empty)"]["allow requires all configured keys to m
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local ok1 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { a = "x", b = "y" }
+    local ok1 = tool.implementation.allow_parallel(
+      { a = "x", b = "y" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
-    local ok2 = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { a = "x", b = "nope" }
+    local ok2 = tool.implementation.allow_parallel(
+      { a = "x", b = "nope" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
     eq(true, ok1)
     eq(false, ok2)
@@ -303,15 +305,15 @@ T["permissions (nil treated as empty)"]["allow supports multiple persisted rules
       callback({ kind = "ok", content = { "ran" } })
     end)
 
-    local foo_choice = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { foo = "foo" }
+    local foo_choice = tool.implementation.allow_parallel(
+      { foo = "foo" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
     local bar_choice =
       require("sia.permissions").resolve_permissions("dummy", { foo = "bar" })
-    local baz_choice = tool.allow_parallel(
-      { ignore_tool_confirm = false, auto_confirm_tools = {} },
-      { foo = "baz" }
+    local baz_choice = tool.implementation.allow_parallel(
+      { foo = "baz" },
+      { ignore_tool_confirm = false, auto_confirm_tools = {} }
     )
 
     eq(true, foo_choice)
@@ -349,25 +351,17 @@ T["permissions (nil treated as empty)"]["ask triggers on negative lookahead patt
     end)
 
     local result
-    tool.execute(
-      { action = "rm -rf" },
-      { auto_confirm_tools = { dummy = 1 } },
-      function(res)
-        result = res
-      end
-    )
+    tool.implementation.execute({ action = "rm -rf" }, function(res)
+      result = res
+    end, { conversation = { auto_confirm_tools = { dummy = 1 } } })
 
     eq(true, prompt_called)
     eq("ok", result.kind)
 
     prompt_called = false
-    tool.execute(
-      { action = "safe run" },
-      { auto_confirm_tools = { dummy = 1 } },
-      function(res)
-        result = res
-      end
-    )
+    tool.implementation.execute({ action = "safe run" }, function(res)
+      result = res
+    end, { conversation = { auto_confirm_tools = { dummy = 1 } } })
     eq(false, prompt_called)
 
     vim.ui.input = original_vim_ui_input
@@ -389,9 +383,9 @@ T["permissions (nil treated as empty)"]["deny blocks on positive string pattern"
     end)
 
     local result
-    tool.execute({ cmd = "rm -rf /" }, { auto_confirm_tools = {} }, function(res)
+    tool.implementation.execute({ cmd = "rm -rf /" }, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = {} } })
 
     eq(false, executed)
     eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
@@ -412,9 +406,9 @@ T["permissions (nil treated as empty)"]["deny blocks on simple string pattern"] 
     end)
 
     local result
-    tool.execute({ value = "badstuff" }, { auto_confirm_tools = {} }, function(res)
+    tool.implementation.execute({ value = "badstuff" }, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = {} } })
 
     eq(false, executed)
     eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
@@ -495,12 +489,12 @@ T["permissions (nil treated as empty)"]["always persists an opt-in rule before e
     end
 
     local result
-    tool.execute(
+    tool.implementation.execute(
       { path = "src/demo.lua", mode = "read", choice = 2 },
-      { auto_confirm_tools = {} },
       function(res)
         result = res
-      end
+      end,
+      { conversation = { auto_confirm_tools = {} } }
     )
 
     config.options.settings.ui.use_vim_ui = original_ui_flag
@@ -555,12 +549,12 @@ T["permissions (nil treated as empty)"]["async confirm always persists an opt-in
     }
 
     local result
-    tool.execute(
+    tool.implementation.execute(
       { path = "src/demo.lua", mode = "read", choice = 2 },
-      { id = 1, name = "chat", auto_confirm_tools = {} },
       function(res)
         result = res
-      end
+      end,
+      { conversation = { id = 1, name = "chat", auto_confirm_tools = {} } }
     )
 
     eq(false, executed)
@@ -617,13 +611,13 @@ T["permissions (nil treated as empty)"]["always with multiple candidates present
     end
     vim.ui.select = function(items, _, on_choice)
       select_items = items
-      on_choice(items[2])
+      on_choice(items[3])
     end
 
     local result
-    tool.execute({ path = "src/demo.lua" }, { auto_confirm_tools = {} }, function(res)
+    tool.implementation.execute({ path = "src/demo.lua" }, function(res)
       result = res
-    end)
+    end, { conversation = { auto_confirm_tools = {} } })
 
     config.options.settings.ui.use_vim_ui = original_ui_flag
     vim.ui.input = original_vim_ui_input
@@ -680,9 +674,9 @@ T["permissions (nil treated as empty)"]["always with multiple candidates falls b
     end
 
     local result
-    tool.execute({ path = "src/demo.lua" }, conversation, function(res)
+    tool.implementation.execute({ path = "src/demo.lua" }, function(res)
       result = res
-    end)
+    end, { conversation = conversation })
 
     config.options.settings.ui.use_vim_ui = original_ui_flag
     vim.ui.input = original_vim_ui_input

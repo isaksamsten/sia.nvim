@@ -59,7 +59,7 @@ local PRICING = {
 local get_stats = common.create_cost_stats(PRICING, { read = 0.1 })
 
 --- @class sia.OpenAICompletionStream : sia.ProviderStream
---- @field pending_tool_calls sia.ToolCall[]
+--- @field pending_tool_calls table<integer, sia.ToolCall>
 --- @field reasoning_opaque string?
 --- @field reasoning_text string?
 --- @field content string
@@ -85,13 +85,13 @@ function OpenAICompletionStream:process_stream_chunk(obj)
           or delta.reasoning_content
           or delta.reasoning_text
         if reasoning and reasoning ~= "" then
-          if not self:on_content({ reasoning = { content = reasoning } }) then
+          if not self.strategy:on_stream({ reasoning = { content = reasoning } }) then
             return true
           end
           self.reasoning_text = (self.reasoning_text or "") .. reasoning
         end
         if delta.content and delta.content ~= "" then
-          if not self:on_content({ content = delta.content }) then
+          if not self.strategy:on_stream({ content = delta.content }) then
             return true
           end
           self.content = self.content .. delta.content
@@ -106,27 +106,28 @@ function OpenAICompletionStream:process_stream_chunk(obj)
             return true
           end
 
-          for i, v in ipairs(delta.tool_calls) do
-            local func = v["function"]
+          for i, call in ipairs(delta.tool_calls) do
+            local func = call["function"]
             --- Patch for gemini models
-            if v.index == nil then
-              v.index = i
-              v.id = "tool_call_id_" .. v.index
+            if call.index == nil then
+              call.index = i
+              call.id = "tool_call_id_" .. call.index
             end
 
-            if not self.pending_tool_calls[v.index] then
-              self.pending_tool_calls[v.index] = {
-                ["function"] = { name = "", arguments = "" },
-                type = v.type,
-                id = v.id,
+            if not self.pending_tool_calls[call.index] then
+              self.pending_tool_calls[call.index] = {
+                type = call.type,
+                id = call.id,
+                name = "",
+                arguments = "",
               }
             end
             if func.name then
-              self.pending_tool_calls[v.index]["function"].name = self.pending_tool_calls[v.index]["function"].name
+              self.pending_tool_calls[call.index].name = self.pending_tool_calls[call.index].name
                 .. func.name
             end
             if func.arguments then
-              self.pending_tool_calls[v.index]["function"].arguments = self.pending_tool_calls[v.index]["function"].arguments
+              self.pending_tool_calls[call.index].arguments = self.pending_tool_calls[call.index].arguments
                 .. func.arguments
             end
           end
@@ -136,36 +137,33 @@ function OpenAICompletionStream:process_stream_chunk(obj)
   end
 end
 
---- @param turn_id string
---- @return string[]? content
-function OpenAICompletionStream:finalize(turn_id)
-  if not self:on_content({ tool_calls = self.pending_tool_calls }) then
-    return nil
+--- @return sia.RoundResult
+function OpenAICompletionStream:finalize()
+  --- @type sia.Reasoning?
+  local reasoning
+  if self.reasoning_text then
+    reasoning = { text = self.reasoning_text }
+    if self.reasoning_opaque then
+      reasoning.opaque = self.reasoning_opaque
+    end
+  end
+
+  local tool_calls = {}
+  for _, tool_call in pairs(self.pending_tool_calls) do
+    table.insert(tool_calls, tool_call)
   end
 
   local content
-  if self.content == "" then
-    content = nil
-  else
-    content = vim.split(self.content, "\n")
+  if self.content ~= "" then
+    content = self.content
   end
-  self.strategy.conversation:add_instruction(
-    {
-      role = "assistant",
-      content = content,
-    },
-    nil,
-    {
-      meta = {
-        empty_content = self.reasoning_opaque ~= nil or self.reasoning_text ~= nil,
-        reasoning_opaque = self.reasoning_opaque,
-        reasoning_text = self.reasoning_text,
-      },
-      turn_id = turn_id,
-    }
-  )
 
-  return content
+  --- @type sia.RoundResult
+  return {
+    content = content,
+    reasoning = reasoning,
+    tool_calls = tool_calls,
+  }
 end
 
 --- @class sia.OpenAIResponsesStream : sia.ProviderStream
@@ -195,11 +193,11 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     self.response_id = json.response.id
   end
   if json.type == "response.reasoning_summary_text.done" then
-    if not self:on_content({ reasoning = { content = json.text } }) then
+    if not self.strategy:on_stream({ reasoning = { content = json.text } }) then
       return true
     end
   elseif json.type == "response.output_text.delta" then
-    if not self:on_content({ content = json.delta }) then
+    if not self.strategy:on_stream({ content = json.delta }) then
       return true
     end
     self.content = self.content .. json.delta
@@ -225,20 +223,16 @@ function OpenAIResponsesStream:process_stream_chunk(json)
           id = item.id,
           call_id = item.call_id,
           type = "function",
-          ["function"] = {
-            name = item.name,
-            arguments = item.arguments or "",
-          },
+          name = item.name,
+          arguments = item.arguments or "",
         })
       elseif item.type == "custom_tool_call" then
         table.insert(self.pending_tool_calls, {
           id = item.id,
           call_id = item.call_id,
           type = "custom",
-          ["custom"] = {
-            name = item.name,
-            input = item.input or "",
-          },
+          name = item.name,
+          input = item.input or "",
         })
       elseif item.type == "reasoning" then
         self.encrypted_reasoning =
@@ -255,43 +249,28 @@ function OpenAIResponsesStream:process_stream_chunk(json)
   end
 end
 
---- @param turn_id string
---- @return string[]? content
-function OpenAIResponsesStream:finalize(turn_id)
-  if not self:on_content({ tool_calls = self.pending_tool_calls }) then
-    return nil
-  end
-
+--- @return sia.RoundResult
+function OpenAIResponsesStream:finalize()
+  --- @type sia.Reasoning?
   local reasoning
   if self.encrypted_reasoning and self.reasoning_summary then
     reasoning = {
-      summary = self.reasoning_summary,
-      encrypted_content = self.encrypted_reasoning,
+      text = self.reasoning_summary,
+      opaque = self.encrypted_reasoning,
     }
-  end
-
-  if reasoning == nil and self.content == "" then
-    return nil
   end
 
   local content
   if self.content ~= "" then
-    content = vim.split(self.content, "\n")
+    content = self.content
   end
 
-  self.strategy.conversation:add_instruction(
-    {
-      role = "assistant",
-      content = content,
-    },
-    nil,
-    {
-      meta = { reasoning = reasoning, empty_content = reasoning ~= nil },
-      turn_id = turn_id,
-    }
-  )
-
-  return content
+  --- @type sia.RoundResult
+  return {
+    content = content,
+    reasoning = reasoning,
+    tool_calls = self.pending_tool_calls,
+  }
 end
 
 local M = {
@@ -345,25 +324,27 @@ local M = {
         data.stream_options = { include_usage = true }
       end
     end,
+    --- @param data table
+    --- @param tools sia.tool.Definition[]
     prepare_tools = function(data, tools)
       if tools then
         data.tools = vim
           .iter(tools)
-          --- @param tool sia.config.Tool
-          :filter(function(tool)
-            -- Completion API doesn't support custom tools
-            return not tool.custom
+          --- @param def sia.tool.Definition
+          :filter(function(def)
+            return def.type == "function"
           end)
-          :map(function(tool)
+          --- @param def sia.tool.Definition
+          :map(function(def)
             return {
               type = "function",
               ["function"] = {
-                name = tool.name,
-                description = tool.description,
+                name = def.name,
+                description = def.description,
                 parameters = {
                   type = "object",
-                  properties = tool.parameters,
-                  required = tool.required,
+                  properties = def.parameters,
+                  required = def.required,
                   additionalProperties = false,
                 },
               },
@@ -375,13 +356,15 @@ local M = {
     prepare_messages = function(data, _, messages)
       local new_messages = vim
         .iter(messages)
-        --- @param m sia.PreparedMessage
+        --- @param m sia.Message
         :map(function(m)
           --- @type string|table
           local content = ""
           if type(m.content) == "table" then
             content = {}
-            for _, part in ipairs(m.content) do
+            for _, part in
+              ipairs(m.content --[[@as sia.MultiPart[] ]])
+            do
               if part.type == "image" then
                 table.insert(content, {
                   type = "image_url",
@@ -397,26 +380,28 @@ local M = {
             content = m.content
           end
           local message = { role = m.role, content = content }
-          if m._tool_call then
-            message.tool_call_id = m._tool_call.id
+          if m.role == "tool" and m.tool_call then
+            message.tool_call_id = m.tool_call.id
           end
-          if m.tool_calls then
-            message.tool_calls = {}
-            for _, tool_call in ipairs(m.tool_calls) do
-              if tool_call["function"] then
-                table.insert(message.tool_calls, {
-                  ["function"] = tool_call["function"],
-                  id = tool_call.id,
-                  type = tool_call.type,
-                })
+          if m.role == "assistant" and m.tool_call and m.tool_call then
+            message.tool_calls = {
+              {
+                ["function"] = {
+                  name = m.tool_call.name,
+                  arguments = m.tool_call.arguments,
+                },
+                id = m.tool_call.id,
+                type = m.tool_call.type,
+              },
+            }
+          end
+          if m.role ~= "system" then
+            if m.reasoning then
+              if m.reasoning.opaque then
+                message.reasoning_opaque = m.reasoning.opaque
               end
+              message.reasoning_text = m.reasoning.text
             end
-          end
-          if m.meta.reasoning_opaque then
-            message.reasoning_opaque = m.meta.reasoning_opaque
-          end
-          if m.meta.reasoning_text then
-            message.reasoning_text = m.meta.reasoning_text
           end
 
           return message
@@ -469,6 +454,7 @@ local M = {
     end,
   },
 
+  --- @type sia.config.Provider
   responses = {
     base_url = "https://api.openai.com/",
     chat_endpoint = "v1/responses",
@@ -515,7 +501,6 @@ local M = {
       end
       return nil
     end,
-    --- @param messages sia.PreparedMessage[]
     prepare_messages = function(data, _, messages)
       local instructions = vim
         .iter(messages)
@@ -538,7 +523,9 @@ local M = {
         local content = ""
         if type(m.content) == "table" then
           content = {}
-          for _, part in ipairs(m.content) do
+          for _, part in
+            ipairs(m.content --[[@as sia.MultiPart[] ]])
+          do
             if part.type == "image" then
               table.insert(content, {
                 type = "input_image",
@@ -562,49 +549,48 @@ local M = {
           content = m.content
         end
         if m.role == "tool" then
-          if m._tool_call.type == "custom" then
+          if m.tool_call.type == "custom" then
             table.insert(input, {
               type = "custom_tool_call_output",
-              call_id = m._tool_call.call_id,
+              call_id = m.tool_call.call_id,
               output = content,
             })
           else
             table.insert(input, {
               type = "function_call_output",
-              call_id = m._tool_call.call_id,
+              call_id = m.tool_call.call_id,
               output = content,
             })
           end
-        elseif m.tool_calls then
-          for _, tool_call in ipairs(m.tool_calls) do
-            if tool_call.custom then
-              table.insert(input, {
-                type = "custom_tool_call",
-                id = tool_call.id,
-                call_id = tool_call.call_id,
-                name = tool_call.custom.name,
-                input = tool_call.custom.input,
-              })
-            else
-              table.insert(input, {
-                type = "function_call",
-                id = tool_call.id,
-                call_id = tool_call.call_id,
-                name = tool_call["function"].name,
-                arguments = tool_call["function"].arguments,
-              })
-            end
+        elseif m.role == "assistant" and m.tool_call then
+          local call = m.tool_call
+          if call and call.type == "custom" then
+            table.insert(input, {
+              type = "custom_tool_call",
+              id = call.id,
+              call_id = call.call_id,
+              name = call.name,
+              input = call.input,
+            })
+          elseif call and call.type == "function" then
+            table.insert(input, {
+              type = "function_call",
+              id = call.id,
+              call_id = call.call_id,
+              name = call.name,
+              arguments = call.arguments,
+            })
           end
         elseif m.role ~= "system" then
-          local reasoning = m.meta.reasoning
+          local reasoning = m.reasoning
           if reasoning then
             local item = { type = "reasoning" }
-            if reasoning.summary then
-              item.summary = { { type = "summary_text", text = reasoning.summary } }
+            if reasoning.text then
+              item.summary = { { type = "summary_text", text = reasoning.text } }
             end
-            if reasoning.encrypted_content then
-              item.id = reasoning.encrypted_content.id
-              item.encrypted_content = reasoning.encrypted_content.encrypted_content
+            if reasoning.opaque then
+              item.id = reasoning.opaque.id
+              item.encrypted_content = reasoning.opaque.encrypted_content
             end
             table.insert(input, item)
           else
@@ -618,7 +604,7 @@ local M = {
       -- adjacent user messages and let assistant items stay distinct.
       local merged = common.merge_consecutive_messages(input, {
         text_part_type = "input_text",
-        can_merge = function(prev, item)
+        can_merge = function(prev)
           return prev.role == "user"
         end,
       })
@@ -654,20 +640,19 @@ local M = {
       end
       data.store = false
     end,
+    --- @param data table
+    --- @param tools sia.tool.Definition[]
     prepare_tools = function(data, tools)
-      if not tools then
-        return
-      end
       data.tools = vim
         .iter(tools)
-        --- @param tool sia.config.Tool
+        --- @param tool sia.tool.Definition
         :map(function(tool)
-          if tool.custom then
+          if tool.type == "custom" then
             return {
               type = "custom",
               name = tool.name,
               description = tool.description,
-              format = tool.custom.format,
+              format = tool.format,
             }
           end
           return {
@@ -693,7 +678,8 @@ local M = {
 --- @class sia.openai.CompatibleOpts
 --- @field api_key fun():string?
 --- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])?
---- @field prepare_tools fun(data: table, tools:sia.Tool[])?
+--- @field prepare_tools fun(data: table, tools:sia.tool.Definition[])?
+--- @field translate_http_error (fun(code: integer):string?)?
 --- @field prepare_parameters fun(data: table, model: table)?
 --- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.Message[]):string[])?
 
@@ -741,6 +727,9 @@ function M.completion_compatible(base_url, chat_endpoint, opts)
   }
 end
 
+--- @param base_url string
+--- @param chat_endpoint string
+--- @param opts sia.openai.CompatibleOpts
 --- @return sia.config.Provider
 function M.responses_compatible(base_url, chat_endpoint, opts)
   --- @type sia.config.Provider

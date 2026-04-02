@@ -1,11 +1,12 @@
 local M = {}
 
+--- @param message sia.Message
 function M.apply_caching(message)
   if type(message.content) == "string" then
     message.content = {
       {
         type = "text",
-        text = message.content,
+        text = message.content --[[@as string]],
         cache_control = { type = "ephemeral" },
       },
     }
@@ -14,6 +15,7 @@ function M.apply_caching(message)
   end
 end
 
+--- @param messages sia.Message
 function M.apply_prompt_caching(messages)
   local last_system_idx = nil
   local last_user_idx = nil
@@ -46,7 +48,7 @@ function M.prepare_parameters(data, model)
   end
 end
 
---- @param content string|table|nil
+--- @param content sia.Content
 --- @param text_part_type string
 --- @return table
 function M.content_to_parts(content, text_part_type)
@@ -87,6 +89,24 @@ function M.merge_consecutive_messages(messages, opts)
   return merged
 end
 
+--- @class sia.ToolAction
+--- @field type "drop_after"
+--- @field message_id string
+
+--- @class sia.RoundResult
+--- @field content string?           -- raw assistant text (nil if tools-only)
+--- @field reasoning sia.Reasoning?  -- opaque + summary if present
+--- @field tool_calls sia.ToolCall[] -- empty table if no tools
+
+--- @class sia.StreamReasoning
+--- @field content string
+
+--- @class sia.StreamDelta
+--- @field content string?
+--- @field reasoning sia.StreamReasoning?
+--- @field tool_calls sia.ToolCall[]?
+--- @field extra table?
+
 --- @class sia.ProviderStream
 --- @field strategy sia.Strategy
 M.ProviderStream = {}
@@ -108,16 +128,8 @@ function M.ProviderStream:process_stream_chunk(obj)
   return false
 end
 
---- @param turn_id string?
---- @return string[]? content
-function M.ProviderStream:finalize(turn_id) end
-
---- @protected
---- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?, extra: table? }
---- @return boolean success
-function M.ProviderStream:on_content(input)
-  return self.strategy:on_content(input)
-end
+--- @return sia.RoundResult
+function M.ProviderStream:finalize() end
 
 --- Format token count for display (e.g., "45.2K", "1.3M")
 --- @param total integer

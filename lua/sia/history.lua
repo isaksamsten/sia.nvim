@@ -10,11 +10,20 @@ local SKIP_RECONSTRUCT = { dropped = true, superseded = true, failed = true }
 --- @field id string
 --- @field provider string
 --- @field api_name string
---- @field config table
+--- @field config table?
 
 --- @class sia.history.LoadedConversation
 --- @field model sia.Model?
---- @field messages sia.config.Instruction[]
+--- @field messages sia.history.ReconstructedInstruction[]
+
+--- @class sia.history.ReconstructedInstruction
+--- @field role "user"|"assistant"|"tool"|"system"
+--- @field content (string|sia.Content[])?
+--- @field tool_calls sia.ToolCall[]?
+--- @field _tool_call sia.ToolCall?
+--- @field meta table?
+--- @field template boolean?
+--- @field turn_id string?
 
 --- @class sia.history.Message
 --- @field id string
@@ -34,6 +43,9 @@ local SKIP_RECONSTRUCT = { dropped = true, superseded = true, failed = true }
 --- @field content string
 --- @field meta table?
 --- @field outdated string?
+---
+--- @class sia.history.StoredMessage : sia.history.Message, sia.history.ToolMessage
+--- @field _status string?
 
 --- @class sia.history.MessageStatusChange
 --- @field id string
@@ -63,11 +75,12 @@ end
 
 --- @param model sia.Model
 function M:created(model)
+  local config = model.config --[[@as table?]]
   self:log("conversation_created", {
     id = self.id,
     provider = model.provider_name,
     api_name = model.api_name,
-    config = model.config,
+    config = config,
   })
 end
 
@@ -112,7 +125,7 @@ function M:usage_created(usage)
   self:log("usage_created", usage)
 end
 
---- @param tools sia.config.Tool[]
+--- @param tools sia.Tool[]
 function M:tools_registered(tools)
   local entries = {}
   for _, tool in ipairs(tools) do
@@ -139,7 +152,7 @@ end
 
 --- Load and reconstruct a conversation from a history file.
 ---
---- Returns a list of `sia.config.Instruction`-like tables that can be passed back
+--- Returns a list of instruction-like tables that can be passed back
 --- into `Conversation:add_instruction`. Outdated messages have their content replaced
 --- with the stored `outdated` hint (mirroring `get_message_content` in conversation.lua).
 --- Messages whose final status is "dropped", "superseded", or "failed" are excluded.
@@ -154,7 +167,7 @@ function M.load(id)
 
   local lines = vim.fn.readfile(path)
 
-  --- @type table<string, sia.history.Message|sia.history.ToolMessage>
+  --- @type table<string, sia.history.StoredMessage>
   local by_id = {}
   --- ordered list of message ids as they were created
   --- @type string[]
@@ -191,12 +204,12 @@ function M.load(id)
     end
   end
 
-  --- @type sia.config.Instruction[]
+  --- @type sia.history.ReconstructedInstruction[]
   local messages = {}
   for _, mid in ipairs(order) do
     local event = by_id[mid]
     if event and not SKIP_RECONSTRUCT[event._status] then
-      --- @type sia.config.Instruction
+      --- @type sia.history.ReconstructedInstruction
       local instr = {
         role = event.role,
         tool_calls = event.tool_calls,

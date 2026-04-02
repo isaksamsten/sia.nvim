@@ -4,6 +4,7 @@ local M = {}
 --- @field name string
 --- @field api_name string
 --- @field provider_name string
+--- @field config table
 --- @field context_window integer?
 --- @field response_format table?
 --- @field pricing {input: number, output: number}?
@@ -34,6 +35,7 @@ function Model:new(model_config)
 
   local obj = setmetatable({}, self)
   obj.name = model_config.name
+  obj.config = vim.deepcopy(model_config)
   obj.provider_name = model_spec[1]
   obj.api_name = model_spec[2]
   obj.support = setmetatable({}, {

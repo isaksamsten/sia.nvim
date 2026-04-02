@@ -1,5 +1,4 @@
 local openai = require("sia.provider.openai")
-local common = require("sia.provider.common")
 
 local GITHUB_OAUTH_CLIENT_ID = "Iv1.b507a08c87ecfe98"
 local DEVICE_CODE_URL = "https://github.com/login/device/code"
@@ -392,8 +391,7 @@ local function get_stats(callback, _conversation)
         return
       end
 
-      local premium = json.quota_snapshots
-        and json.quota_snapshots.premium_interactions
+      local premium = json.quota_snapshots and json.quota_snapshots.premium_interactions
       if not premium then
         callback({})
         return

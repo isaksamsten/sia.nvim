@@ -27,11 +27,13 @@ end
 
 local function create_dummy_tool(name, read_only, runner)
   return utils.new_tool({
-    name = name,
-    description = "dummy",
+    definition = {
+      name = name,
+      description = "dummy",
+      required = {},
+      parameters = {},
+    },
     read_only = read_only,
-    required = {},
-    parameters = {},
   }, function(args, conversation, callback, opts)
     runner(args, conversation, callback, opts)
   end)
@@ -78,7 +80,8 @@ T["mode permissions"]["conditional allow approves matching args"] = function()
     },
   })
 
-  local result = permissions.resolve_mode_permission(mode, "write", { path = "plan_config.md" })
+  local result =
+    permissions.resolve_mode_permission(mode, "write", { path = "plan_config.md" })
   eq(1, result.auto_allow)
 end
 
@@ -90,7 +93,8 @@ T["mode permissions"]["conditional allow denies non-matching args"] = function()
     },
   })
 
-  local result = permissions.resolve_mode_permission(mode, "write", { path = "main.lua" })
+  local result =
+    permissions.resolve_mode_permission(mode, "write", { path = "main.lua" })
   eq(true, result.deny)
   eq("OPERATION RESTRICTED BY CURRENT MODE (plan)", result.reason[1])
 end
@@ -103,13 +107,16 @@ T["mode permissions"]["conditional allow with multiple patterns matches any"] = 
     },
   })
 
-  local r1 = permissions.resolve_mode_permission(mode, "write", { path = "plan_foo.md" })
+  local r1 =
+    permissions.resolve_mode_permission(mode, "write", { path = "plan_foo.md" })
   eq(1, r1.auto_allow)
 
-  local r2 = permissions.resolve_mode_permission(mode, "write", { path = ".sia/plans/v1.md" })
+  local r2 =
+    permissions.resolve_mode_permission(mode, "write", { path = ".sia/plans/v1.md" })
   eq(1, r2.auto_allow)
 
-  local r3 = permissions.resolve_mode_permission(mode, "write", { path = "src/main.lua" })
+  local r3 =
+    permissions.resolve_mode_permission(mode, "write", { path = "src/main.lua" })
   eq(true, r3.deny)
 end
 
@@ -199,7 +206,8 @@ T["mode permissions"]["custom deny_message is used for restricted too"] = functi
     end,
   })
 
-  local result = permissions.resolve_mode_permission(mode, "write", { path = "main.lua" })
+  local result =
+    permissions.resolve_mode_permission(mode, "write", { path = "main.lua" })
   eq(true, result.deny)
   eq("CUSTOM: write restricted", result.reason[1])
 end
@@ -233,13 +241,9 @@ T["mode tool integration"]["mode deny blocks tool execution"] = function()
   end)
 
   local result
-  tool.execute(
-    {},
-    { auto_confirm_tools = {}, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION BLOCKED BY CURRENT MODE (plan)", result.content[1])
@@ -255,13 +259,9 @@ T["mode tool integration"]["mode allow auto-approves tool execution"] = function
   end)
 
   local result
-  tool.execute(
-    {},
-    { auto_confirm_tools = {}, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -282,13 +282,9 @@ T["mode tool integration"]["mode conditional allow blocks non-matching args"] = 
   end)
 
   local result
-  tool.execute(
-    { path = "main.lua" },
-    { auto_confirm_tools = {}, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({ path = "main.lua" }, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION RESTRICTED BY CURRENT MODE (plan)", result.content[1])
@@ -309,13 +305,9 @@ T["mode tool integration"]["mode conditional allow approves matching args"] = fu
   end)
 
   local result
-  tool.execute(
-    { path = "plan_config.md" },
-    { auto_confirm_tools = {}, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({ path = "plan_config.md" }, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -331,13 +323,9 @@ T["mode tool integration"]["unlisted tool falls through to default behavior"] = 
   end)
 
   local result
-  tool.execute(
-    {},
-    { auto_confirm_tools = { dummy = 1 }, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = { dummy = 1 }, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -353,13 +341,9 @@ T["mode tool integration"]["mode deny blocks even when auto_confirm is set for t
   end)
 
   local result
-  tool.execute(
-    {},
-    { auto_confirm_tools = { dummy = 1 }, active_mode = mode },
-    function(res)
-      result = res
-    end
-  )
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, { conversation = { auto_confirm_tools = { dummy = 1 }, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION BLOCKED BY CURRENT MODE (plan)", result.content[1])
@@ -373,10 +357,10 @@ T["create_active_mode"]["sets name and state from init_state"] = function()
   local mode = permissions.create_active_mode("plan", {
     enter_prompt = "",
     exit_prompt = "",
-    init_state = function(ctx)
-      return { plan_file = "plan_" .. (ctx.buf or "unknown") }
+    init_state = function()
+      return { plan_file = "plan_42" }
     end,
-  }, { buf = 42 })
+  })
 
   eq("plan", mode.name)
   eq("plan_42", mode.state.plan_file)
@@ -392,18 +376,4 @@ T["create_active_mode"]["defaults state to empty table when no init_state"] = fu
   eq({}, mode.state)
 end
 
-T["create_active_mode"]["defaults state to empty table when no ctx"] = function()
-  local mode = permissions.create_active_mode("plan", {
-    enter_prompt = "",
-    exit_prompt = "",
-    init_state = function(ctx)
-      return { plan_file = "plan_" .. (ctx.buf or "unknown") }
-    end,
-  })
-
-  eq("plan", mode.name)
-  eq({}, mode.state)
-end
-
 return T
-

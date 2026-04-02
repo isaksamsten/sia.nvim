@@ -35,10 +35,8 @@ function HiddenStrategy:on_tools()
   return true
 end
 
-function HiddenStrategy:on_content(input)
-  if input.tool_calls then
-    self.pending_tools = input.tool_calls
-  end
+--- @param input sia.StreamDelta
+function HiddenStrategy:on_stream(input)
   return true
 end
 
@@ -46,58 +44,28 @@ function HiddenStrategy:on_error(error)
   self.options.callback(self.buf, { error = error or "Internal error" })
 end
 
-function HiddenStrategy:on_complete(control)
+--- @param statuses sia.engine.Status[]
+function HiddenStrategy:on_tool_status(statuses)
   local notify = self.options.notify or default_notify
-  self:execute_tools({
-    cancellable = self.cancellable,
-    turn_id = control.turn_id,
-    handle_status_updates = function(statuses)
-      local running_tools = vim.tbl_filter(function(s)
-        return s.status == "running"
-      end, statuses)
-      if #running_tools > 0 then
-        local tool = running_tools[1].tool
-        local friendly_message = tool.message
-        local message = friendly_message or ("Using " .. (tool.name or "tool") .. "...")
-        notify(message)
-      end
-    end,
-    handle_tools_completion = function(opts)
-      if opts.results then
-        for _, tool_result in ipairs(opts.results) do
-          self.conversation:add_instruction({
-            { role = "assistant", tool_calls = { tool_result.tool } },
-            {
-              role = "tool",
-              content = tool_result.result.content,
-              _tool_call = tool_result.tool,
-              kind = tool_result.result.kind,
-              ephemeral = tool_result.result.kind == "failed"
-                or tool_result.result.ephemeral,
-            },
-          }, tool_result.result.context, { turn_id = control.turn_id })
-        end
-      end
+  --- @type sia.engine.Status[]
+  local running = vim.tbl_filter(function(s)
+    return s.status == "running"
+  end, statuses)
+  if #running > 0 then
+    local status = running[1]
+    local message = status.notification
+      or ("Using " .. (status.name or "tool") .. "...")
+    notify(message)
+  end
+end
 
-      if opts.cancelled then
-        control.finish()
-        self.options.callback(self.buf, { usage = control.usage })
-      else
-        control.continue_execution()
-      end
-    end,
-    handle_empty_toolset = function()
-      self.options.callback(
-        self.buf,
-        { content = control.content, usage = control.usage }
-      )
-      self.conversation:untrack_messages()
-      vim.defer_fn(function()
-        vim.cmd.echo()
-      end, 500)
-      control.finish()
-    end,
+--- @param ctx sia.FinishContext
+function HiddenStrategy:on_finish(ctx)
+  self.options.callback(self.buf, {
+    content = ctx.content and vim.split(ctx.content, "\n") or nil,
+    usage = ctx.usage,
   })
+  self.conversation:untrack_messages()
 end
 
 function HiddenStrategy:on_cancel()

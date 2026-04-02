@@ -1,14 +1,22 @@
-local tracker = require("sia.tracker")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
-  name = "get_diagnostics",
+  definition = {
+    type = "function",
+    name = "get_diagnostics",
+    description = "Get LSP diagnostics for a specific file",
+    parameters = {
+      file = { type = "string", description = "The file path to get diagnostics for" },
+    },
+    required = { "file" },
+  },
   read_only = true,
-  message = "Retrieving diagnostics...",
-  description = "Get LSP diagnostics for a specific file",
-  system_prompt = [[Get LSP diagnostics for a specific file - includes syntax errors,
+  notification = function()
+    return "Retrieving diagnostics..."
+  end,
+  instructions = [[Get LSP diagnostics for a specific file - includes syntax errors,
 type errors, warnings, and hints from the Language Server Protocol.
 
 Use this tool FIRST when investigating code problems. It provides instant feedback
@@ -23,25 +31,21 @@ Prefer this over bash compilation commands - it's instant, requires no build set
 provides the same error information that a compiler would show.
 
 If no diagnostics are found, the code has no LSP-detected issues.]],
-  parameters = {
-    file = { type = "string", description = "The file path to get diagnostics for" },
-  },
-  required = { "file" },
 }, function(args, conversation, callback)
   if not args.file then
     callback({
-      content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to read diagnostics",
-      kind = "failed",
+      content = "Error: No file path was provided",
+      summary = icons.error .. " Failed to read diagnostics",
+      ephemeral = true,
     })
     return
   end
 
   if vim.fn.filereadable(args.file) == 0 then
     callback({
-      content = { "Error: File cannot be found or is not readable" },
-      display_content = icons.error .. " Failed to read diagnostics",
-      kind = "failed",
+      content = "Error: File cannot be found or is not readable",
+      summary = icons.error .. " Failed to read diagnostics",
+      ephemeral = true,
     })
     return
   end
@@ -51,9 +55,9 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   })
   if not buf then
     callback({
-      content = { "Error: Cannot load file into buffer" },
-      display_content = icons.error .. " Failed to read diagnostics",
-      kind = "failed",
+      content = "Error: Cannot load file into buffer",
+      summary = icons.error .. " Failed to read diagnostics",
+      ephemeral = true,
     })
     return
   end
@@ -61,17 +65,12 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
-      display_content = string.format(
+      summary = string.format(
         "%s No diagnostics found for %s",
         icons.diagnostics,
         args.file
       ),
-      content = { string.format("No diagnostics found for %s", args.file) },
-      context = {
-        buf = buf,
-        tick = tracker.ensure_tracked(buf, { id = conversation.id }),
-      },
-      kind = "diagnostics",
+      content = string.format("No diagnostics found for %s", args.file),
     })
     return
   end
@@ -105,16 +104,18 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   end
 
   callback({
-    content = content,
-    context = {
+    content = table.concat(content, "\n"),
+    region = {
       buf = buf,
-      tick = tracker.ensure_tracked(buf, { id = conversation.id }),
+      stale = {
+        content = "File changed",
+      },
     },
-    kind = "diagnostics",
-    display_content = string.format(
-      "%s Found %d diagnostics",
+    summary = string.format(
+      "%s Found %d diagnostics for %s",
       icons.diagnostics,
-      #diagnostics
+      #diagnostics,
+      args.file
     ),
   })
 end)

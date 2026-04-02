@@ -2,7 +2,6 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 local diff = require("sia.diff")
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
 local patch_mod = require("sia.patch")
 
 --- Lark grammar for the apply_patch format used by OpenAI Codex models.
@@ -38,12 +37,12 @@ end
 --- Write content to a buffer and save to disk.
 --- @param buf integer
 --- @param content string
---- @param conversation_id integer
+--- @param conversation sia.Conversation
 --- @param turn_id string?
-local function write_buf(buf, content, conversation_id, turn_id)
+local function write_buf(buf, content, conversation, turn_id)
   local lines = vim.split(content, "\n", { plain = true })
   diff.update_baseline(buf, { turn_id = turn_id })
-  tracker.without_tracking(buf, conversation_id, function()
+  conversation.tracker:suppress(buf, function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.api.nvim_buf_call(buf, function()
       pcall(vim.cmd, "noa silent write!")
@@ -94,10 +93,20 @@ local function summarize_commit(commit)
 end
 
 return tool_utils.new_tool({
-  name = "apply_diff",
-  message = "Applying diff...",
-  description = "Apply a patch to files. This is a FREEFORM tool — output the patch directly, do NOT wrap it in JSON.",
-  system_prompt = [[Use the `apply_diff` tool to make changes to existing files.
+  definition = {
+    type = "custom",
+    name = "apply_diff",
+    description = "Apply a patch to files. This is a FREEFORM tool — output the patch directly, do NOT wrap it in JSON.",
+    format = {
+      type = "grammar",
+      syntax = "lark",
+      definition = APPLY_PATCH_GRAMMAR,
+    },
+  },
+  notification = function()
+    return "Applying diff..."
+  end,
+  instructions = [[Use the `apply_diff` tool to make changes to existing files.
 
 This tool uses a structured patch format with the following syntax:
 
@@ -123,23 +132,15 @@ Rules:
 - Multiple files can be patched in a single patch block.
 
 IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
-  custom = {
-    format = {
-      type = "grammar",
-      syntax = "lark",
-      definition = APPLY_PATCH_GRAMMAR,
-    },
-  },
   auto_apply = function(args, conversation)
     return conversation.auto_confirm_tools["apply_diff"]
   end,
-}, function(args, conversation, callback, opts)
-  local raw_input = args._raw_input
+}, function(raw_input, conversation, callback, opts)
   if not raw_input or raw_input == "" then
     callback({
-      content = { "Error: No patch input received" },
-      display_content = icons.error .. " No patch input",
-      kind = "failed",
+      content = "Error: No patch input received",
+      summary = icons.error .. " No patch input",
+      ephemeral = true,
     })
     return
   end
@@ -158,9 +159,9 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   local ok, patch_or_err, fuzz = pcall(patch_mod.text_to_patch, raw_input, orig)
   if not ok then
     callback({
-      content = { "Error parsing patch: " .. tostring(patch_or_err) },
-      display_content = icons.error .. " Failed to parse patch",
-      kind = "failed",
+      content = "Error parsing patch: " .. tostring(patch_or_err),
+      summary = icons.error .. " Failed to parse patch",
+      ephemeral = true,
     })
     return
   end
@@ -169,9 +170,9 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   local commit_ok, commit_or_err = pcall(patch_mod.patch_to_commit, patch, orig)
   if not commit_ok then
     callback({
-      content = { "Error applying patch: " .. tostring(commit_or_err) },
-      display_content = icons.error .. " Failed to apply patch",
-      kind = "failed",
+      content = "Error applying patch: " .. tostring(commit_or_err),
+      summary = icons.error .. " Failed to apply patch",
+      ephemeral = true,
     })
     return
   end
@@ -181,8 +182,8 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   local change_count = vim.tbl_count(commit)
   if change_count == 0 then
     callback({
-      content = { "Patch produced no changes." },
-      display_content = icons.edit .. " No changes to apply",
+      content = "Patch produced no changes.",
+      summary = icons.edit .. " No changes to apply",
     })
     return
   end
@@ -236,7 +237,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
           end
           local buf = utils.ensure_file_is_loaded(path, { listed = true })
           if buf then
-            write_buf(buf, change.new_content, conversation.id, opts.turn_id)
+            write_buf(buf, change.new_content, conversation, opts.turn_id)
           end
         elseif change.type == "update" then
           if change.move_path then
@@ -247,13 +248,13 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
             local move_buf =
               utils.ensure_file_is_loaded(change.move_path, { listed = true })
             if move_buf then
-              write_buf(move_buf, change.new_content, conversation.id, opts.turn_id)
+              write_buf(move_buf, change.new_content, conversation, opts.turn_id)
             end
             remove_file(path)
           else
             local buf = bufs[path]
             if buf then
-              write_buf(buf, change.new_content, conversation.id, opts.turn_id)
+              write_buf(buf, change.new_content, conversation, opts.turn_id)
             end
           end
         end
@@ -273,9 +274,8 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
       end
 
       callback({
-        content = content_lines,
-        display_content = table.concat(display_lines, "\n"),
-        kind = "edit",
+        content = table.concat(content_lines, "\n"),
+        summary = table.concat(display_lines, "\n"),
       })
     end,
   })

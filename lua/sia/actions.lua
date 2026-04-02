@@ -2,41 +2,74 @@ local M = {}
 
 local MAX_INDENT = 2 ^ 31 - 1
 
-function M.commit()
+--- @param model string?
+--- @return sia.config.Action
+function M.commit(model)
+  --- @type sia.config.Action
   return {
+    model = model,
     system = {
-      {
-        role = "system",
-        content = [[You are an AI assistant tasked with generating concise,
-informative, and context-aware git commit messages based on code
-diffs. Your goal is to provide commit messages that clearly describe
-the purpose and impact of the changes. Consider the following when
-crafting the commit message:
+      [[You generate git commit messages from staged diffs.
+Output ONLY the raw commit message text — no markdown fences, no
+commentary, no explanations.
 
-1. **Summarize the change**: Clearly describe what was changed, added, removed,
-   or fixed.
-2. **Explain why**: If relevant, include the reason or motivation behind the
-   change.
-3. **Keep it concise**: The commit message should be brief but informative,
-   typically under 50 characters for the subject line.
-4. If the change requires it, write a longer message two linebreaks after the
-   subject line.
-4. **Use an imperative tone**: Write the commit message as a command, e.g.,
-   "Fix typo in README," "Add unit tests for validation logic." ]],
-      },
+## Style matching
+
+You will receive the repository's recent commit log. This is your
+primary style guide. Mirror the format exactly:
+- If the project uses Conventional Commits (feat/fix/refactor/docs/…),
+  use them. Preserve scope conventions and capitalisation.
+- If commits are plain imperative sentences, do the same.
+- Never mix styles within a single message.
+
+## Subject line
+
+- Imperative mood ("Add", "Fix", "Refactor", not "Added", "Fixes").
+- Max 50 characters. No trailing period.
+- Describe *what* the commit does at a high level, not implementation
+  details.
+
+## Body (only when needed)
+
+- Separate from the subject with one blank line.
+- Wrap lines at 72 characters.
+- Explain *what* changed and *why*, not *how* (the diff shows how).
+- Use bullet points for multiple logical changes.
+- Omit the body for trivial or self-explanatory changes.
+
+## Analysing the diff
+
+- Identify the primary intent: is this a bug fix, feature, refactor,
+  documentation change, test addition, or chore?
+- Group related hunks mentally; don't describe each hunk individually.
+- If the diff touches multiple concerns, note that in the body but
+  keep the subject focused on the dominant change.]],
     },
-    instructions = {
-      {
-        role = "user",
-        content = function()
-          return "Given the git diff listed below, please generate a commit message for me:"
-            .. "\n\n```diff\n"
-            .. vim.fn.system("git diff --staged")
-            .. "\n```"
-        end,
-      },
+    user = {
+      function()
+        local recent_commits = vim.fn.system("git log --oneline -10 2>/dev/null")
+        local commits_section = ""
+        if recent_commits and recent_commits ~= "" then
+          commits_section = "\n\nRecent commits (follow this style):\n\n"
+            .. "```\n"
+            .. recent_commits
+            .. "```\n"
+        end
+
+        local stat = vim.fn.system("git diff --staged --stat")
+        local stat_section = ""
+        if stat and stat ~= "" then
+          stat_section = "\n\nDiff stat:\n```\n" .. stat .. "```\n"
+        end
+
+        return "Generate a commit message for the following staged changes:"
+          .. commits_section
+          .. stat_section
+          .. "\n\n```diff\n"
+          .. vim.fn.system("git diff --staged")
+          .. "\n```"
+      end,
     },
-    input = "ignore",
     mode = "insert",
     enabled = function()
       return require("sia.utils").is_git_repo(true) and vim.bo.ft == "gitcommit"
@@ -47,11 +80,10 @@ end
 
 --- @return sia.config.Action
 function M.doc()
+  --- @type sia.config.Action
   return {
     system = {
-      {
-        role = "system",
-        content = [[CRITICAL: You must ONLY output documentation comments.
+      [[CRITICAL: You must ONLY output documentation comments.
 DO NOT include any function declarations, signatures, or code.
 
 You are tasked with writing documentation for functions, methods, and classes.
@@ -71,13 +103,7 @@ WHAT NOT TO OUTPUT:
 - Class declarations (e.g., "class MyClass:")
 - Any executable code whatsoever
 
-<tool_calling>
 Use tool calls if required to document the function or class.
-</tool_calling>
-
-<tools>
-{{tool_instructions}}
-</tools>
 
 Requirements:
 
@@ -96,15 +122,20 @@ Requirements:
 7. Double-check that your response adheres strictly to the language’s
    documentation style, contains only the requested documentation text, and
    maintains proper indentation for easy insertion into code.]],
-      },
     },
-    instructions = {
+    user = {
       require("sia.instructions").current_context({
         show_line_numbers = false,
       }),
-      { role = "user", content = "Please document the provided context" },
+      "Please document the provided context",
     },
-    capture = require("sia.capture").treesitter({ "@function.outer", "@class.outer" }),
+    capture = function(ctx)
+      return require("sia.capture").treesitter(
+        { "function.outer", "class.outer" },
+        ctx.buf,
+        ctx.cursor
+      )
+    end,
     mode = "insert",
     tools = function()
       local tools = require("sia.tools")
@@ -122,11 +153,11 @@ Requirements:
             "below",
             function(start_line)
               local capture = require("sia.capture").treesitter({
-                "@function.inner",
-                "@class.inner",
-              })({ buf = 0 })
+                "function.inner",
+                "class.inner",
+              })
               if capture then
-                return capture[1] - 1
+                return capture.start_row - 1
               end
               return start_line
             end,

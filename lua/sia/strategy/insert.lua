@@ -23,7 +23,6 @@ InsertStrategy.__index = InsertStrategy
 --- @param options sia.config.Insert
 function InsertStrategy.new(buf, pos, cursor, conversation, options)
   local obj = setmetatable(Strategy.new(conversation), InsertStrategy)
-  obj.conversation.enable_supersede = false
   obj.buf = buf
   obj.pos = pos
   obj.cursor = cursor
@@ -99,7 +98,8 @@ function InsertStrategy:on_cancel()
   self:on_error()
 end
 
-function InsertStrategy:on_content(input)
+--- @param input sia.StreamDelta
+function InsertStrategy:on_stream(input)
   if not self:is_buf_loaded() then
     return false
   end
@@ -109,116 +109,76 @@ function InsertStrategy:on_content(input)
   if input.content then
     self.writer:append(input.content)
   end
-  if input.tool_calls then
-    self.pending_tools = input.tool_calls
-  end
   return true
 end
 
-function InsertStrategy:on_complete(control)
-  if not self:is_buf_loaded() then
-    control.finish()
+--- @param statuses sia.engine.Completed[]
+function InsertStrategy:on_tool_results(statuses)
+  for _, status in ipairs(statuses) do
+    if status.summary then
+      self.writer:append_newline()
+      self.writer:append(status.summary)
+      self.writer:append_newline()
+    end
+  end
+  if not self.writer:is_empty() then
+    self.writer:append_newline()
+  end
+  if #statuses > 0 then
+    return "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file."
+  end
+end
+
+--- @param ctx sia.FinishContext
+function InsertStrategy:on_finish(ctx)
+  if not self:is_buf_loaded() or not ctx.content then
     self.conversation:untrack_messages()
-    return false
+    return
   end
 
-  self:execute_tools({
-    turn_id = control.turn_id,
-    handle_tools_completion = function(opts)
-      if opts.results then
-        for _, tool_result in ipairs(opts.results) do
-          self.conversation:add_instruction({
-            { role = "assistant", tool_calls = { tool_result.tool } },
-            {
-              role = "tool",
-              content = tool_result.result.content,
-              _tool_call = tool_result.tool,
-              kind = tool_result.result.kind,
-              ephemeral = tool_result.result.kind == "failed"
-                or tool_result.result.ephemeral,
-            },
-          }, tool_result.result.context, { turn_id = control.turn_id })
-          self.writer:append_newline()
-          if tool_result.result.display_content then
-            self.writer:append(tool_result.result.display_content)
-          end
-        end
-        self.conversation:add_instruction({
-          role = "user",
-          content = "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file.",
-        }, nil, { turn_id = control.turn_id })
-      end
-
-      if not self.writer:is_empty() then
-        self.writer:append_newline()
-      end
-
-      if opts.cancelled then
-        self:confirm_continue_after_cancelled_tool(control)
-      else
-        control.continue_execution()
-      end
-    end,
-    handle_empty_toolset = function()
-      local content = control.content
-      if not self:is_buf_loaded() or not content then
-        control.finish()
-        self.conversation:untrack_messages()
-        return
-      end
-
-      self:del_abort_keymap(self.buf)
-      self.writer.canvas:clear_temporary_text()
-      vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
-      if self.padding_direction == "below" or self.padding_direction == "above" then
-        vim.api.nvim_buf_set_lines(
-          self.buf,
-          self.start_row - 1,
-          self.start_row - 1,
-          false,
-          { "" }
-        )
-      end
-
-      vim.api.nvim_buf_set_text(
-        self.buf,
-        self.start_row - 1,
-        self.start_col,
-        self.start_row - 1,
-        self.start_col,
-        content
-      )
-      local end_row = self.start_row + #content - 1
-      local end_col = #content[#content]
-      vim.api.nvim_buf_set_extmark(
-        self.buf,
-        INSERT_NS,
-        self.start_row - 1,
-        self.start_col,
-        {
-          end_line = end_row - 1,
-          end_col = end_col,
-          hl_group = "SiaInsert",
-        }
-      )
-      self:post_process(
-        content,
-        self.start_row - 1,
-        self.start_col,
-        end_row - 1,
-        end_col
-      )
-      self.writer = nil
-      vim.defer_fn(function()
-        if not self:is_buf_loaded() then
-          return
-        end
-        vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
-      end, 500)
-      self.conversation:untrack_messages()
-      control.finish()
-    end,
-  })
+  self:del_abort_keymap(self.buf)
+  self.writer.canvas:clear_temporary_text()
+  vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
+  if self.padding_direction == "below" or self.padding_direction == "above" then
+    vim.api.nvim_buf_set_lines(
+      self.buf,
+      self.start_row - 1,
+      self.start_row - 1,
+      false,
+      { "" }
+    )
+  end
+  local content = vim.split(ctx.content, "\n")
+  vim.api.nvim_buf_set_text(
+    self.buf,
+    self.start_row - 1,
+    self.start_col,
+    self.start_row - 1,
+    self.start_col,
+    content
+  )
+  local end_row = self.start_row + #content - 1
+  local end_col = #content[#content]
+  vim.api.nvim_buf_set_extmark(
+    self.buf,
+    INSERT_NS,
+    self.start_row - 1,
+    self.start_col,
+    {
+      end_line = end_row - 1,
+      end_col = end_col,
+      hl_group = "SiaInsert",
+    }
+  )
+  self:post_process(content, self.start_row - 1, self.start_col, end_row - 1, end_col)
+  self.writer = nil
+  vim.defer_fn(function()
+    if not self:is_buf_loaded() then
+      return
+    end
+    vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
+  end, 500)
+  self.conversation:untrack_messages()
 end
 
 --- @private
@@ -241,7 +201,7 @@ function InsertStrategy:post_process(lines, srow, scol, erow, ecol)
     vim.api.nvim_buf_call(self.buf, function()
       pcall(vim.cmd.undojoin)
     end)
-    vim.api.nvim_buf_set_text(self.context.buf, srow, scol, erow, ecol, new_lines)
+    vim.api.nvim_buf_set_text(self.buf, srow, scol, erow, ecol, new_lines)
     changed = true
   elseif ok and type(new_lines) == "table" then
     for i = 1, #lines do

@@ -71,7 +71,6 @@ system.
 
 | Command             | Description                                          |
 | ------------------- | ---------------------------------------------------- |
-| `:SiaClear`         | Remove outdated tool calls from conversation history |
 | `:SiaFork <prompt>` | Fork the current conversation into a new chat buffer |
 | `:SiaDebug`         | Show the conversation's JSON payload in a new buffer |
 

@@ -16,11 +16,36 @@ continue working on them now. Wait to call agent(command="wait") until either:
 ]]
 
 return tool_utils.new_tool({
-  name = "agent",
-  message = "Launching autonomous agent...",
+  definition = {
+    type = "function",
+    name = "agent",
+    description = [[Launch a new agent to handle complex, multi-step tasks autonomously.]],
+    parameters = {
+      command = {
+        type = "string",
+        enum = { "start", "status", "wait" },
+        description = "The command to execute:  start (launch new agent), status (check agent status), wait (wait for agent completion)",
+      },
+      agent = {
+        type = "string",
+        description = "The name of the agent type to launch (required for 'start' command)",
+      },
+      task = {
+        type = "string",
+        description = "The task for the agent to perform (required for 'start' command)",
+      },
+      id = {
+        type = "integer",
+        description = "The ID of an already running agent (required for 'status' and 'wait' commands)",
+      },
+    },
+    required = { "command" },
+  },
+  notification = function()
+    return "Launching autonomous agent..."
+  end,
   read_only = true,
-  description = [[Launch a new agent to handle complex, multi-step tasks autonomously.]],
-  system_prompt = string.format(
+  instructions = string.format(
     [[The task tool launches specialized agents (subprocesses) that
 autonomously handle complex tasks. Each agent type has specific capabilities and tools
 available to it.
@@ -34,7 +59,6 @@ When NOT to use the task tool:
 - If you are searching for a specific class definition like "class Foo", use the grep tool instead, to find the match more quickly
 - If you are searching for code within a specific file or set of 2-3 files, use the %s tool instead of the task tool, to find the match more quickly
 - Other tasks that are not related to the agent descriptions above
-
 
 Usage notes:
 - Launch multiple agents concurrently whenever possible, to maximize performance; to do
@@ -64,42 +88,22 @@ Usage notes:
     tool_names.view,
     tool_names.view
   ),
-  parameters = {
-    command = {
-      type = "string",
-      enum = { "start", "status", "wait" },
-      description = "The command to execute:  start (launch new agent), status (check agent status), wait (wait for agent completion)",
-    },
-    agent = {
-      type = "string",
-      description = "The name of the agent type to launch (required for 'start' command)",
-    },
-    task = {
-      type = "string",
-      description = "The task for the agent to perform (required for 'start' command)",
-    },
-    id = {
-      type = "integer",
-      description = "The ID of an already running agent (required for 'status' and 'wait' commands)",
-    },
-  },
-  required = { "command" },
 }, function(args, conversation, callback, opts)
   local registry = require("sia.agents.registry")
 
   if args.command == "start" then
     if not args.agent then
       callback({
-        content = { "Error: 'agent' parameter is required for 'start' command" },
-        kind = "failed",
+        content = "Error: 'agent' parameter is required for 'start' command",
+        ephemeral = true,
       })
       return
     end
 
     if not args.task then
       callback({
-        content = { "Error: 'task' parameter is required for 'start' command" },
-        kind = "failed",
+        content = "Error: 'task' parameter is required for 'start' command",
+        ephemeral = true,
       })
       return
     end
@@ -108,10 +112,8 @@ Usage notes:
 
     if not agent_def then
       callback({
-        content = {
-          string.format("Error: Agent '%s' not found.", args.agent),
-          kind = "failed",
-        },
+        content = string.format("Error: Agent '%s' not found.", args.agent),
+        ephemeral = true,
       })
       return
     end
@@ -126,27 +128,23 @@ Usage notes:
 
         if not agent then
           callback({
-            content = { string.format("Agent %s not found", args.agent) },
-            kind = "failed",
+            content = string.format("Agent %s not found", args.agent),
+            ephemeral = true,
           })
           return
         end
 
         callback({
-          content = vim.split(string.format(START_REPLY, agent.id), "\n"),
-          display_content = string.format(
-            "%s Started agent '%s'",
-            icons.started,
-            args.agent
-          ),
+          content = string.format(START_REPLY, agent.id),
+          summary = string.format("%s Started agent '%s'", icons.started, args.agent),
         })
       end,
     })
   elseif args.command == "status" then
     if not args.id then
       callback({
-        content = { "Error: 'id' parameter is required for 'status' command" },
-        display_content = icons.error .. " Missing id parameter",
+        content = "Error: 'id' parameter is required for 'status' command",
+        summary = icons.error .. " Missing id parameter",
       })
       return
     end
@@ -155,12 +153,10 @@ Usage notes:
 
     if not agent then
       callback({
-        content = {
-          string.format(
-            "Error: Agent with ID %d not found in this conversation",
-            args.id
-          ),
-        },
+        content = string.format(
+          "Error: Agent with ID %d not found in this conversation",
+          args.id
+        ),
       })
       return
     end
@@ -169,19 +165,17 @@ Usage notes:
     callback({ content = agent:get_preview() })
   elseif args.command == "wait" then
     if not args.id then
-      callback({ content = { "Error: 'id' parameter is required for 'wait' command" } })
+      callback({ content = "Error: 'id' parameter is required for 'wait' command" })
       return
     end
 
     local agent = conversation:get_agent(args.id)
     if not agent then
       callback({
-        content = {
-          string.format(
-            "Error: Agent with ID %d not found in this conversation",
-            args.id
-          ),
-        },
+        content = string.format(
+          "Error: Agent with ID %d not found in this conversation",
+          args.id
+        ),
       })
       return
     end
@@ -190,7 +184,7 @@ Usage notes:
       local current_agent = conversation:get_agent(args.id)
       if not current_agent then
         callback({
-          content = { "Error: Agent instance was removed" },
+          content = "Error: Agent instance was removed",
         })
         return
       end
@@ -206,36 +200,27 @@ Usage notes:
           end
         end
         callback({
-          content = content,
-          display_content = string.format(
-            "%s Agent %s completed",
-            icons.success,
-            agent.name
-          ),
+          content = table.concat(content, "\n"),
+          summary = string.format("%s Agent %s completed", icons.success, agent.name),
         })
       elseif current_agent.status == "failed" then
         callback({
-          content = {
-            string.format("Agent %d (%s) failed:", args.id, current_agent.name),
-            "",
-            string.format("Error: %s", current_agent.error or "Unknown error"),
-          },
-          display_content = string.format("%s Agent %d failed", icons.error, args.id),
+          content = string.format(
+            "Agent %d (%s) failed:\n% Error: %s",
+            args.id,
+            current_agent.name,
+            current_agent.error or "Unknown error"
+          ),
+          summary = string.format("%s Agent %d failed", icons.error, args.id),
         })
       elseif current_agent.status == "cancelled" then
         callback({
-          content = {
-            string.format(
-              "Agent %d (%s) was cancelled by the user.",
-              args.id,
-              current_agent.name
-            ),
-          },
-          display_content = string.format(
-            "%s Agent %d cancelled",
-            icons.error,
-            args.id
+          content = string.format(
+            "Agent %d (%s) was cancelled by the user.",
+            args.id,
+            current_agent.name
           ),
+          summary = string.format("%s Agent %d cancelled", icons.error, args.id),
         })
       elseif current_agent.status == "opened" then
         vim.defer_fn(poll, 1000)
@@ -247,8 +232,8 @@ Usage notes:
     poll()
   else
     callback({
-      content = { string.format("Error: Unknown command '%s'", args.command) },
-      kind = "failed",
+      content = string.format("Error: Unknown command '%s'", args.command),
+      ephemeral = true,
     })
   end
 end)

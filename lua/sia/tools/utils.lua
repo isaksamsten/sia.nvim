@@ -31,56 +31,58 @@ M.tool_names = {
 --- @param clear_args string[]
 --- @return fun(t:sia.ToolCall):sia.ToolCall
 function M.gen_clear_outdated_tool_input(clear_args)
-  local function clear_outdated_tool_input(tool)
-    if tool.type == "custom" and tool.custom then
+  --- @param call sia.ToolCall
+  --- @return sia.ToolCall
+  local function clear_outdated_tool_input(call)
+    if call.type == "custom" then
+      --- @return sia.ToolCall
       return {
-        id = tool.id,
-        call_id = tool.call_id,
-        type = tool.type,
-        ["custom"] = {
-          name = tool.custom.name,
-          input = "content has been pruned",
-        },
+        id = call.id,
+        call_id = call.call_id,
+        type = call.type,
+        name = call.name,
+        input = "content has been pruned",
       }
     end
 
-    local f = tool["function"]
-    if f then
-      local new_func = { name = f.name, arguments = f.arguments }
-      local ok, arguments = pcall(vim.json.decode, f.arguments)
+    if call.type == "function" then
+      local new_arguments = call.arguments
+      local ok, arguments = pcall(vim.json.decode, call.arguments)
       if ok then
         for key, _ in pairs(arguments) do
           if vim.tbl_contains(clear_args, key) then
             arguments[key] = "text has been pruned"
           end
         end
-        new_func.arguments = vim.json.encode(arguments)
+        new_arguments = vim.json.encode(arguments)
       end
+      --- @type sia.ToolCall
       return {
-        id = tool.id,
-        call_id = tool.call_id,
-        type = tool.type,
-        ["function"] = new_func,
+        id = call.id,
+        call_id = call.call_id,
+        type = "function",
+        name = call.name,
+        arguments = new_arguments,
       }
     end
-    return tool
+    return call
   end
   return clear_outdated_tool_input
 end
 
 local function cancellation_message(name)
-  return {
-    "OPERATION DECLINED BY USER",
-    "",
-    string.format("The USER declined to execute the %s operation.", name),
-    "",
-    "IMPORTANT: Do not proceed with your original plan. Instead:",
-    "1. Acknowledge that the operation was declined",
-    "2. Ask the USER how they would like to proceed",
-    "3. Wait for their guidance before taking any further action",
-    "",
-    "Do not attempt to continue with alternative approaches unless explicitly requested by the USER.",
-  }
+  return string.format(
+    [[OPERATION DECLINED BY USER
+The USER declined to execute the %s operation
+
+IMPORTANT: Do not proceed with your original plan. Instead:
+1. Acknowledge that the operation was declined
+2. Ask the USER how they would like to proceed
+3. Wait for their guidance before taking any further action
+Do not attempt to continue with alternative approaches unless explicitly requested by the USER.
+]],
+    name
+  )
 end
 
 --- @param items string[]
@@ -164,19 +166,14 @@ local function input(opts, on_confirm)
   end)
 end
 
----@class sia.NewToolOpts
----@field name string
----@field module string?
----@field description string
----@field read_only boolean?
----@field is_available (fun(support: sia.config.Support?):boolean)?
----@field auto_apply (fun(args: table, conversation:sia.Conversation):integer?)?
----@field persist_allow (fun(args: table, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
----@field message string|(fun(args:table):string)?
----@field system_prompt string?
----@field required string[]?
----@field parameters table?
----@field custom sia.config.ToolCustom?
+--- @class sia.NewToolDeclaration
+--- @field definition sia.tool.Definition
+--- @field read_only boolean?
+--- @field is_supported (fun(model: sia.Model):boolean)?
+--- @field auto_apply (fun(args: any, conversation:sia.Conversation):integer?)?
+--- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
+--- @field notification (fun(args:table):string)?
+--- @field instructions string?
 
 --- @class sia.NewToolExecuteUserChoiceOpts
 --- @field choices string[]
@@ -200,16 +197,16 @@ end
 
 --- @param resp string?
 --- @param level sia.RiskLevel
---- @param opts {on_accept: fun(mode:"always"|nil), on_cancel: fun(kind:"user_cancelled"|"user_declined")}
+--- @param opts {on_accept: fun(mode:"always"|nil), on_cancel: fun()}
 local function handle_user_response(resp, level, opts)
   if resp == nil then
-    return opts.on_cancel("user_cancelled")
+    return opts.on_cancel()
   end
 
   local response = resp:lower():gsub("^%s*(.-)%s*$", "%1")
 
   if response == "n" or response == "no" then
-    return opts.on_cancel("user_declined")
+    return opts.on_cancel()
   end
 
   local risk = require("sia.risk")
@@ -403,11 +400,9 @@ local function create_user_input_handler(
             end
             input_args.on_accept()
           end,
-          on_cancel = function(kind)
+          on_cancel = function()
             callback({
               content = cancellation_message(tool_name),
-              kind = kind,
-              cancelled = true,
             })
           end,
         })
@@ -437,8 +432,6 @@ local function create_user_input_handler(
         on_cancel = function()
           callback({
             content = cancellation_message(tool_name),
-            kind = "user_declined",
-            cancelled = true,
           })
         end,
         on_prompt = prompt_user,
@@ -501,8 +494,6 @@ local function create_user_choice_handler(
           else
             callback({
               content = cancellation_message(tool_name),
-              kind = "user_cancelled",
-              cancelled = true,
             })
           end
         end
@@ -518,8 +509,6 @@ local function create_user_choice_handler(
         on_cancel = function()
           callback({
             content = cancellation_message(tool_name),
-            kind = "user_declined",
-            cancelled = true,
           })
         end,
         on_prompt = prompt_user,
@@ -530,9 +519,9 @@ local function create_user_choice_handler(
   end
 end
 
----@param opts sia.NewToolOpts
----@param execute fun(args: table, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: sia.NewToolExecuteOpts?)
----@return sia.config.Tool
+---@param opts sia.NewToolDeclaration
+---@param execute fun(args: any, conversation: sia.Conversation, callback: (fun(result: sia.ToolResult):nil), opts: sia.NewToolExecuteOpts?)
+---@return sia.Tool
 M.new_tool = function(opts, execute)
   --- @param args table
   --- @param conversation sia.Conversation
@@ -540,19 +529,22 @@ M.new_tool = function(opts, execute)
   local resolve_permission = function(args, conversation)
     local permissions = require("sia.permissions")
     if conversation.active_mode then
-      local mode_permission =
-        permissions.resolve_mode_permission(conversation.active_mode, opts.name, args)
+      local mode_permission = permissions.resolve_mode_permission(
+        conversation.active_mode,
+        opts.definition.name,
+        args
+      )
       if mode_permission then
         return mode_permission
       end
     end
 
-    local permission = permissions.resolve_permissions(opts.name, args)
+    local permission = permissions.resolve_permissions(opts.definition.name, args)
     if permission then
       return permission
     elseif not permission then
-      if conversation.auto_confirm_tools[opts.name] then
-        return { auto_allow = conversation.auto_confirm_tools[opts.name] }
+      if conversation.auto_confirm_tools[opts.definition.name] then
+        return { auto_allow = conversation.auto_confirm_tools[opts.definition.name] }
       else
         local choice = (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
         return choice and { auto_allow = choice } or nil
@@ -560,81 +552,84 @@ M.new_tool = function(opts, execute)
     end
   end
 
-  --- @type sia.config.Tool
+  --- @type sia.Tool
   return {
-    name = opts.name,
-    module = opts.module or ("sia.tools." .. opts.name),
-    is_available = opts.is_available,
-    message = opts.message,
-    parameters = opts.parameters,
-    custom = opts.custom,
-    system_prompt = opts.system_prompt,
-    allow_parallel = function(conversation, args)
-      if
-        opts.read_only
-        and (
-          (
-            conversation.auto_confirm_tools
-            and conversation.auto_confirm_tools[opts.name]
-          ) or conversation.ignore_tool_confirm
+    implementation = {
+      instructions = opts.instructions,
+      is_supported = opts.is_supported,
+      notification = opts.notification,
+      allow_parallel = function(args, conversation)
+        if
+          opts.read_only
+          and (
+            (
+              conversation.auto_confirm_tools
+              and conversation.auto_confirm_tools[opts.definition.name]
+            ) or conversation.ignore_tool_confirm
+          )
+        then
+          return true
+        end
+
+        if
+          opts.read_only
+          and require("sia.config").options.settings.ui.confirm.async.enable
+        then
+          return true
+        end
+
+        if not opts.read_only then
+          return false
+        end
+
+        local permission = resolve_permission(args, conversation)
+        if not permission or not permission.auto_allow then
+          return false
+        end
+
+        local risk = require("sia.risk")
+        local resolved_level = risk.get_risk_level(opts.definition.name, args, "info")
+        return risk.allows_auto_confirm(resolved_level)
+      end,
+      execute = function(args, callback, exeution_context)
+        local permission = resolve_permission(args, exeution_context.conversation)
+        if permission and permission.deny then
+          callback({
+            content = permission.reason
+              or {
+                "OPERATION BLOCKED",
+                "",
+                string.format("The %s operation was denied.", opts.definition.name),
+              },
+          })
+          return
+        end
+
+        local user_input = create_user_input_handler(
+          opts.definition.name,
+          args,
+          exeution_context.conversation,
+          callback,
+          permission,
+          opts.persist_allow
         )
-      then
-        return true
-      end
+        local user_choice = create_user_choice_handler(
+          opts.definition.name,
+          args,
+          exeution_context.conversation,
+          callback,
+          permission
+        )
 
-      if
-        opts.read_only
-        and require("sia.config").options.settings.ui.confirm.async.enable
-      then
-        return true
-      end
-
-      if not opts.read_only then
-        return false
-      end
-
-      local permission = resolve_permission(args, conversation)
-      if not permission or not permission.auto_allow then
-        return false
-      end
-
-      local risk = require("sia.risk")
-      local resolved_level = risk.get_risk_level(opts.name, args, "info")
-      return risk.allows_auto_confirm(resolved_level)
-    end,
-    description = opts.description,
-    required = opts.required,
-    execute = function(args, conversation, callback, cancellable, turn_id)
-      local permission = resolve_permission(args, conversation)
-      if permission and permission.deny then
-        callback({
-          content = permission.reason or {
-            "OPERATION BLOCKED",
-            "",
-            string.format("The %s operation was denied.", opts.name),
-          },
+        execute(args, exeution_context.conversation, callback, {
+          cancellable = exeution_context.cancellable,
+          user_input = user_input,
+          user_choice = user_choice,
+          turn_id = exeution_context.turn_id,
         })
-        return
-      end
-
-      local user_input = create_user_input_handler(
-        opts.name,
-        args,
-        conversation,
-        callback,
-        permission,
-        opts.persist_allow
-      )
-      local user_choice =
-        create_user_choice_handler(opts.name, args, conversation, callback, permission)
-
-      execute(args, conversation, callback, {
-        cancellable = cancellable,
-        user_input = user_input,
-        user_choice = user_choice,
-        turn_id = turn_id,
-      })
-    end,
+      end,
+    },
+    definition = opts.definition,
   }
 end
 

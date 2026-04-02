@@ -1,9 +1,9 @@
-local tracker = require("sia.tracker")
-local template = require("sia.template")
-
 math.randomseed(os.time())
 
-local function make_uuid()
+---@type integer
+local CONVERSATION_ID = 1
+
+local function new_uuid()
   local uuid_template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
   return string.gsub(uuid_template, "[xy]", function(c)
     local v = (c == "x") and math.random(0, 0xf) or math.random(8, 0xb)
@@ -11,16 +11,11 @@ local function make_uuid()
   end)
 end
 
---- @class sia.PreparedMessage
---- @field turn_id string?
---- @field role string
---- @field content (string|sia.Content[])?
---- @field hide boolean
---- @field tool_calls sia.ToolCall[]?
---- @field _tool_call sia.ToolCall?
---- @field meta table?
---- @field description string?
---- @field display_content string?
+local function new_conversation_id()
+  local id = CONVERSATION_ID
+  CONVERSATION_ID = CONVERSATION_ID + 1
+  return id
+end
 
 --- @class sia.conversation.Stats
 --- @field cost number?
@@ -44,7 +39,7 @@ end
 --- @field completed_at number?
 --- @field detached_handle sia.DetachedProcess? handle for async/detached processes
 --- @field _conversation_id integer?
---- @field get_preview fun(self: sia.conversation.BashProcess, opts?: { tail_lines?: integer }): string[]
+--- @field get_preview fun(self: sia.conversation.BashProcess, opts?: { tail_lines?: integer }): string
 --- @field stop fun(self: sia.conversation.BashProcess): string[]?, string?
 
 --- @class sia.CacheControl
@@ -65,52 +60,245 @@ end
 --- @field image  { url: string, detail: "high"|"low"}
 --- @field cache_control sia.CacheControl?
 
---- @alias sia.Content sia.TextContent|sia.FileContent|sia.ImageContent
+--- @alias sia.MultiPart sia.TextContent|sia.FileContent|sia.ImageContent
+--- @alias sia.Content (sia.MultiPart)[]|string
 
---- @class sia.Prompt
---- @field role sia.config.Role
---- @field content (string|sia.Content[])?
---- @field tool_calls sia.ToolCall[]?
---- @field tool_call_id string?
+--- @class sia.tool.BaseType
+--- @field description string
 
---- @alias sia.Tool { type: "function", function: { name: string, description: string, parameters: {type: "object", properties: table<string, sia.ToolParameter>?, required: string[]?, additionalProperties: boolean?}}}
+--- @class sia.tool.Number : sia.tool.BaseType
+--- @field type "number"
+
+--- @class sia.tool.String : sia.tool.BaseType
+--- @field type "string"
+--- @field enum string[]?
+
+--- @class sia.tool.Object : sia.tool.BaseType
+--- @field type "object"
+--- @field required string[]?
+--- @field properties table<string, sia.tool.Type>
+
+--- @class sia.tool.Array : sia.tool.BaseType
+--- @field type "array"
+--- @field items sia.tool.Type
+
+--- @class sia.tool.Boolean : sia.tool.BaseType
+--- @field type "boolean"
+
+--- @class sia.tool.Integer : sia.tool.BaseType
+--- @field type "integer"
+
+--- @alias sia.tool.Type sia.tool.Number|sia.tool.String|sia.tool.Object|sia.tool.Array|sia.tool.Boolean|sia.tool.Integer
+
+--- @class sia.tool.CustomFormat
+--- @field type string
+--- @field syntax string?
+--- @field definition string
+
+--- @class sia.tool.BaseDefinition
+--- @field name string
+--- @field description string
+
+--- @class sia.tool.FunctionDefinition : sia.tool.BaseDefinition
+--- @field type "function"
+--- @field required string[]
+--- @field parameters table<string, sia.tool.Type>
+
+--- @class sia.tool.CustomDefinition : sia.tool.BaseDefinition
+--- @field type "custom"
+--- @field format sia.tool.CustomFormat
+
+--- @alias sia.tool.Definition sia.tool.FunctionDefinition|sia.tool.CustomDefinition
+
+--- @class sia.tool.ExecutionContext
+--- @field conversation sia.Conversation
+--- @field turn_id string
+--- @field cancellable sia.Cancellable?
+
+--- @class sia.tool.Implementation
+--- @field instructions string?
+--- @field notification fun(args: any):string
+--- @field allow_parallel (fun(args: any, conversation: sia.Conversation):boolean)?
+--- @field is_supported (fun(model: sia.Model):boolean)?
+--- @field execute fun(args: any, callback: fun(res: sia.ToolResult?), opts: sia.tool.ExecutionContext)
+
+--- @class sia.Tool
+--- @field implementation sia.tool.Implementation
+--- @field definition sia.tool.Definition
+
 --- @alias sia.ToolParameter { type: "number"|"string"|"array"|nil, items: { type: string }?, enum: string[]?, description: string? }
 
---- @class sia.Context
---- @field buf integer? buffer
---- @field win integer? window
---- @field pos [integer,integer]? 1-indexed
---- @field mode "n"|"v"? normal or visual mode
---- @field bang boolean?
---- @field cursor integer[]? 1-indexed
+--- @class sia.Stale
+--- @field content string
+--- @field input (fun(t: sia.ToolCall):sia.ToolCall)?
+
+--- @class sia.Region
+--- @field buf integer
+--- @field pos [integer,integer]?
+--- @field idempotent boolean?
+--- @field stale sia.Stale?
+
+--- @class sia.TrackedRegion
+--- @field buf integer
+--- @field pos [integer,integer]?
+--- @field idempotent boolean?
+--- @field stale sia.Stale?
 --- @field tick integer?
---- @field global boolean?
---- @field outdated_message string?
---- @field clear_outdated_tool_input (fun(t: sia.ToolCall):sia.ToolCall)?
 
---- @class sia.ActionContext : sia.Context
---- @field start_line integer?
---- @field end_line integer?
+--- @class sia.Invocation
+--- @field buf integer
+--- @field win integer?
+--- @field mode "n"|"v"
+--- @field bang boolean?
+--- @field cursor integer[]?
+--- @field pos [integer, integer]?
 
---- @class sia.Message
+--- @class sia.SystemMessage
+--- @role "system"
+--- @field content string
+
+--- @class sia.UserMessage
+--- @field role "user"
+--- @field content sia.Content
+
+--- @class sia.AssistantMessage
+--- @field role "assistant"
+--- @field content string?
+--- @field reasoning sia.Reasoning?
+--- @field tool_call sia.ToolCall?
+
+--- @class sia.ToolMessage
+--- @field role "tool"
+--- @field content sia.Content
+--- @field tool_call sia.ToolCall
+
+--- @alias sia.Message sia.UserMessage|sia.AssistantMessage|sia.ToolMessage|sia.SystemMessage
+
+--- @class sia.BaseEntry
 --- @field id string
---- @field turn_id string? identifier for the user turn that created this message
---- @field role sia.config.Role
---- @field context sia.Context?
---- @field capture_context boolean
---- @field template boolean
---- @field hide boolean?
---- @field kind string?
+--- @field turn_id string?
+--- @field content sia.Content?
+--- @field dropped boolean
+--- @field hide boolean
+local BaseEntry = {}
+BaseEntry.__index = BaseEntry
+
+--- @class sia.NewBaseEntry
+--- @field turn_id string
+--- @field content sia.Content?
 --- @field ephemeral boolean?
---- @field content (string|sia.Content[])?
---- @field tool_calls sia.ToolCall[]?
---- @field _tool_call sia.ToolCall?
---- @field meta table?
---- @field description string?
---- @field display_content string?
---- @field status ("outdated"|"failed"|"superseded"|"dropped")?
-local Message = {}
-Message.__index = Message
+--- @field hide boolean?
+
+--- @param args sia.NewBaseEntry
+function BaseEntry.new(args)
+  return setmetatable({
+    id = new_uuid(),
+    turn_id = args.turn_id,
+    content = args.content,
+    ephemeral = args.ephemeral or false,
+    hide = args.hide or false,
+  }, BaseEntry)
+end
+
+--- @class sia.SystemEntry : sia.BaseEntry
+--- @field role "system"
+local SystemEntry = setmetatable({}, { __index = BaseEntry })
+SystemEntry.__index = SystemEntry
+
+--- @param content (string|sia.Content)?
+function SystemEntry.new(content)
+  local self = setmetatable(
+    BaseEntry.new({ turn_id = new_uuid(), content = content }),
+    SystemEntry
+  )
+  self.role = "system"
+  return self
+end
+
+--- @class sia.UserEntry : sia.BaseEntry
+--- @field role "user"
+--- @field region sia.TrackedRegion?
+local UserEntry = setmetatable({}, { __index = BaseEntry })
+UserEntry.__index = UserEntry
+
+--- @param content sia.Content?
+--- @param region sia.TrackedRegion?
+--- @param hide boolean?
+function UserEntry.new(content, region, hide)
+  local self = setmetatable(
+    BaseEntry.new({ turn_id = new_uuid(), content = content, hide = hide == true }),
+    UserEntry
+  )
+  self.role = "user"
+  self.region = region
+  self.dropped = false
+  return self
+end
+
+--- @class sia.Reasoning
+--- @field text string
+--- @field opaque any?
+
+--- @class sia.AssistantEntry : sia.BaseEntry
+--- @field role "assistant"
+--- @field content sia.Content?
+--- @field reasoning sia.Reasoning?
+local AssistantEntry = setmetatable({}, { __index = BaseEntry })
+AssistantEntry.__index = AssistantEntry
+
+--- @class sia.NewAssistantEntry
+--- @field turn_id string
+--- @field reasoning sia.Reasoning?
+
+--- @param content sia.Content?
+--- @param args sia.NewAssistantEntry
+function AssistantEntry.new(content, args)
+  local self = setmetatable(
+    BaseEntry.new({ turn_id = args.turn_id, content = content }),
+    AssistantEntry
+  )
+  self.role = "assistant"
+  self.reasoning = args.reasoning
+  self.dropped = false
+  return self
+end
+
+--- @class sia.ToolEntry : sia.BaseEntry
+--- @field role "tool"
+--- @field content sia.Content?
+--- @field summary string?
+--- @field region sia.TrackedRegion?
+--- @field tool_call sia.ToolCall
+--- @field ephemeral boolean
+local ToolEntry = setmetatable({}, { __index = BaseEntry })
+ToolEntry.__index = ToolEntry
+
+--- @class sia.NewToolEntry
+--- @field turn_id string
+--- @field tool_call sia.ToolCall
+--- @field ephemeral boolean?
+--- @field region sia.TrackedRegion?
+
+--- @param content sia.Content?
+--- @param summary string?
+--- @param args sia.NewToolEntry
+function ToolEntry.new(content, summary, args)
+  local self = setmetatable(
+    BaseEntry.new({
+      turn_id = args.turn_id,
+      content = content,
+    }),
+    ToolEntry
+  )
+  self.role = "tool"
+  self.tool_call = args.tool_call
+  self.ephemeral = args.ephemeral
+  self.region = args.region
+  self.summary = summary
+  return self
+end
+
+--- @alias sia.Entry sia.SystemEntry|sia.UserEntry|sia.AssistantEntry|sia.ToolEntry
 
 local STATUS_OUTPUT_TAIL_LINES = 20
 
@@ -118,10 +306,6 @@ local STATUS_OUTPUT_TAIL_LINES = 20
 --- @field parent sia.Conversation
 --- @field current sia.Conversation
 --- @field strategy sia.ChatStrategy?
-
----- @field conversation sia.Conversation?
----- @field parent_conversation sia.Conversation?
----- @field opened_strategy sia.ChatStrategy?
 
 --- @class sia.conversation.Agent
 --- @field id integer
@@ -241,7 +425,7 @@ local function append_output_sections(
   end
 end
 
---- @return string[]
+--- @return string
 function Agent:get_preview()
   local content = {
     string.format("Agent ID: %d", self.id),
@@ -274,7 +458,7 @@ function Agent:get_preview()
     table.insert(content, string.format("Error: %s", self.error))
   end
 
-  return content
+  return table.concat(content, "\n")
 end
 
 function Agent:cancel()
@@ -306,7 +490,7 @@ function Agent:close()
 end
 
 --- @param opts? { tail_lines?: integer }
---- @return string[]
+--- @return string
 function BashProcess:get_preview(opts)
   opts = opts or {}
   local tail_line_count = opts.tail_lines or STATUS_OUTPUT_TAIL_LINES
@@ -324,7 +508,7 @@ function BashProcess:get_preview(opts)
 
     if not self.detached_handle then
       table.insert(content, "Output preview is unavailable for synchronous processes.")
-      return content
+      return table.concat(content, "\n")
     end
 
     local output = self.detached_handle.get_output()
@@ -336,7 +520,7 @@ function BashProcess:get_preview(opts)
       "Recent",
       "No output yet."
     )
-    return content
+    return table.concat(content, "\n")
   end
 
   table.insert(content, string.format("Exit code: %d", self.code or -1))
@@ -359,7 +543,7 @@ function BashProcess:get_preview(opts)
     "No output captured."
   )
 
-  return content
+  return table.concat(content, "\n")
 end
 
 --- @return string[]? content
@@ -453,368 +637,22 @@ local function create_enter_mode_prompt(mode)
   return prompt
 end
 
---- @param generator fun(context: sia.Context?):string?
---- @param context sia.Context?
---- @return string? content
-local function generate_content(generator, context)
-  local tmp = generator(context)
-  if tmp then
-    if type(tmp) == "table" then
-      return table.concat(tmp, "\n")
-    else
-      return tmp
-    end
-  end
-  return nil
-end
-
---- @param message sia.Message
---- @param id integer
---- @return boolean
-local function is_outdated(message, id)
-  if message.status == "outdated" then
-    return true
-  end
-
-  local has_tick = message.context ~= nil
-    and message.context.buf ~= nil
-    and message.context.tick ~= nil
-  local not_assistant = message.role == "tool" or message.role ~= "assistant"
-  if has_tick and message.kind ~= nil and not_assistant then
-    if vim.api.nvim_buf_is_loaded(message.context.buf) then
-      return message.context.tick
-        ~= tracker.user_tick(message.context.buf, id, message.context.pos)
-    else
-      return true
-    end
-  end
-  return false
-end
-
---- @param conversation sia.Conversation
-local function mark_outdated_messages(conversation)
-  local context_config = require("sia.config").options.settings.context
-  local min_keep = context_config.keep or 5
-  local max_tool_calls = context_config.max_tool or 100
-  local exclude_tool = context_config.exclude or {}
-
-  --- @type table<string, "ephemeral"|"outdated">
-  local tool_filter = {}
-
-  --- @type {id:string, index:integer, name:string}[]
-  local tool_calls_info = {}
-  for i, m in ipairs(conversation.messages) do
-    if m._tool_call and m._tool_call.id then
-      if m.ephemeral then
-        tool_filter[m._tool_call.id] = "ephemeral"
-      elseif m.status == "outdated" then
-        tool_filter[m._tool_call.id] = "outdated"
-      else
-        table.insert(tool_calls_info, {
-          id = m._tool_call.id,
-          index = i,
-          name = m._tool_call["function"] and m._tool_call["function"].name
-            or m._tool_call["custom"] and m._tool_call["custom"].name,
-        })
-      end
-    end
-  end
-
-  if min_keep < #tool_calls_info and #tool_calls_info > max_tool_calls then
-    table.sort(tool_calls_info, function(a, b)
-      return a.index > b.index
-    end)
-
-    for i, info in ipairs(tool_calls_info) do
-      if i > min_keep and not vim.tbl_contains(exclude_tool, info.name) then
-        tool_filter[info.id] = "outdated"
-      end
-    end
-  end
-
-  local last_message = conversation.messages[#conversation.messages]
-  if
-    last_message
-    and last_message.ephemeral
-    and last_message._tool_call
-    and last_message._tool_call.id
-  then
-    tool_filter[last_message._tool_call.id] = nil
-  end
-
-  for _, m in ipairs(conversation.messages) do
-    if not m.status then
-      local tool_call_id = m._tool_call and m._tool_call.id
-      if not tool_call_id and m.tool_calls and #m.tool_calls > 0 then
-        tool_call_id = m.tool_calls[1].id
-      end
-
-      if tool_call_id and tool_filter[tool_call_id] == "ephemeral" then
-        conversation:set_message_status(m, "failed")
-      elseif
-        (tool_call_id and tool_filter[tool_call_id] == "outdated")
-        or is_outdated(m, conversation.id)
-      then
-        conversation:set_message_status(m, "outdated")
-      end
-    end
-  end
-end
-
---- @param instruction sia.config.Instruction
---- @param context sia.Context?
---- @return (string|sia.Content[])?
-local function make_content(instruction, context)
-  --- @type (string|sia.Content[])?
-  local content
-  if type(instruction.content) == "function" then
-    content = generate_content(instruction.content --[[@as fun()]], context)
-  elseif
-    type(instruction.content) == "table" and type(instruction.content[1]) == "string"
-  then
-    local tmp = instruction.content
-    --- @cast tmp string[]
-    content = table.concat(tmp, "\n")
-  elseif type(instruction.content) == "table" then
-    local tmp = instruction.content
-    --- @cast tmp sia.Content[]
-    content = tmp
-  elseif instruction.content ~= nil and type(instruction.content) == "string" then
-    content = instruction.content
-  end
-  if instruction.role == "tool" then
-    content = content or nil
-  end
-
-  return content
-end
-
---- @param instruction sia.config.Instruction
---- @param context sia.Context?
---- @return string?
-local function make_description(instruction, context)
-  if type(instruction.description) == "function" then
-    return instruction.description(context)
-  end
-  return instruction.description
-end
-
---- @param instruction sia.config.Instruction
---- @param context sia.Context?
---- @return sia.Message
-function Message.from_table(instruction, context)
-  local obj = setmetatable({}, Message)
-  obj.id = make_uuid()
-  obj.role = instruction.role
-  obj.kind = instruction.kind
-  obj.capture_context = type(instruction.content) == "function"
-    and debug.getinfo(instruction.content).nparams > 0
-
-  obj.ephemeral = instruction.ephemeral
-  obj.display_content = instruction.display_content
-  if instruction.tool_calls then
-    obj.tool_calls = instruction.tool_calls
-  end
-  if instruction._tool_call then
-    obj._tool_call = instruction._tool_call
-  end
-  if
-    instruction.mode
-    and context
-    and context.mode
-    and instruction.mode ~= context.mode
-  then
-    obj.status = "superseded"
-  end
-  obj.meta = {}
-  obj.template = instruction.template or false
-  obj.hide = instruction.hide
-  obj.content = make_content(instruction, context)
-  obj.description = make_description(instruction, context)
-  obj.context = context
-  return obj
-end
-
---- Create a new message from a stored instruction
---- @param str string|string[]
---- @param context sia.Context?
---- @return sia.Message[]?
-function Message.from_string(str, context)
-  if type(str) == "string" then
-    local instruction = require("sia.config").options.instructions[str]
-    if not instruction then
-      instruction = require("sia.builtin")[str]
-    end
-    if instruction then
-      if vim.islist(instruction) then
-        local messages = {}
-        for _, step in ipairs(instruction) do
-          table.insert(messages, Message.from_table(step, context))
-        end
-        return messages
-      end
-      return { Message.from_table(instruction, context) }
-    end
-  end
-end
-
---- Create a new message from an Instruction or a stored instruction.
---- @param instruction sia.config.Instruction|string|sia.config.Instruction[]
---- @param context sia.Context?
---- @return sia.Message[]?
-function Message.new(instruction, context)
-  if type(instruction) == "string" then
-    return Message.from_string(instruction, context)
-  elseif vim.islist(instruction) then
-    local messages = {}
-    for _, step in ipairs(instruction) do
-      table.insert(messages, Message.from_table(step, context))
-    end
-    return messages
-  else
-    return { Message.from_table(instruction, context) }
-  end
-end
-
---- @param message sia.Message
---- @return (string|sia.Content[])?
-local function get_message_content(message)
-  if message.content then
-    if message.status and message.status == "outdated" then
-      return string.format(
-        "System Note: History pruned. %s",
-        message.context and message.context.outdated_message or ""
-      )
-    end
-    return message.content
-  else
-    return nil
-  end
-end
-
-function Message:has_content()
-  return self.content ~= nil
-    or self.tool_calls ~= nil
-    or (self.meta and self.meta.empty_content)
-end
-
---- @param message sia.Message
---- @param template_context table
---- @return sia.PreparedMessage
-local function prepare_message(message, template_context, context_conf)
-  local hide = false
-  if message.hide then
-    hide = true
-  end
-
-  local meta
-  if message.meta then
-    meta = vim.deepcopy(message.meta)
-  end
-
-  local _tool_call
-  if message._tool_call then
-    _tool_call = vim.deepcopy(message._tool_call)
-  end
-
-  local description = message:get_description()
-
-  local tool_calls
-  if message.tool_calls then
-    tool_calls = vim.deepcopy(message.tool_calls)
-    for i, tool_call in ipairs(message.tool_calls) do
-      if tool_call.type == "function" or tool_call.type == "custom" then
-        if
-          context_conf.clear_input
-          and message.context
-          and message.context.clear_outdated_tool_input
-          and message.status
-          and message.status == "outdated"
-        then
-          tool_calls[i] = message.context.clear_outdated_tool_input(tool_call)
-        end
-      end
-    end
-  end
-  local content = get_message_content(message)
-  if message.template and template_context then
-    if content ~= nil and type(content) == "string" then
-      template_context.filetype = (
-        message.context
-        and message.context.buf
-        and vim.api.nvim_buf_is_loaded(message.context.buf)
-      )
-          and vim.bo[message.context.buf].ft
-        or ""
-      content = template.render(content, template_context)
-    end
-  end
-
-  --- @type sia.PreparedMessage
-  return {
-    turn_id = message.turn_id,
-    role = message.role,
-    hide = hide,
-    meta = meta or {},
-    description = description,
-    content = content,
-    display_content = message.display_content,
-    _tool_call = _tool_call,
-    tool_calls = tool_calls,
-  }
-end
-
---- @return string
-function Message:get_description()
-  if self.role == "tool" and self._tool_call then
-    local f = self._tool_call["function"]
-    local c = self._tool_call["custom"]
-    local name = (f and f.name) or (c and c.name) or "unknown"
-    return self.role .. ": result from " .. name
-  end
-  local description = self.description
-  --- @cast description string?
-  if description then
-    return self.role .. ": " .. description
-  end
-
-  local content = get_message_content(self)
-  if content then
-    return self.role .. ": " .. string.sub(content:gsub("\n", " "), 1, 40)
-  elseif self.tool_calls then
-    local name = "unknown"
-    local tc = self.tool_calls[1]
-    if tc and tc["function"] then
-      name = tc["function"].name
-    elseif tc and tc["custom"] then
-      name = tc["custom"].name
-    end
-    return self.role .. ": calling " .. name
-  end
-  return self.role
-end
-
----@type integer
-local CONVERSATION_ID = 1
-
---- @alias sia.InstructionOption (string|sia.config.Instruction|(fun(conv: sia.Conversation?):sia.config.Instruction[]))
 --- @class sia.Conversation
 --- @field uuid string
---- @field id integer Session unique identifier for a conversation
---- @field context sia.Context?
---- @field messages sia.Message[]
---- @field enable_supersede boolean
---- @field tools sia.config.Tool[]?
+--- @field id integer
+--- @field entries sia.Entry[]
+--- @field tool_definitions sia.tool.Definition[]
+--- @field tool_implementation table<string, sia.tool.Implementation>
 --- @field name string
 --- @field model sia.Model
 --- @field todos  {items: sia.conversation.Todo[]}
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
---- @field tool_fn table<string, {allow_parallel:(fun(c: sia.Conversation, args: table):boolean)?,  message: string|(fun(args:table):string)? , action: sia.config.ToolExecute}>}?
 --- @field usage_history sia.Usage[]
 --- @field agents table<integer, sia.conversation.Agent>
 --- @field bash_processes table<integer, sia.conversation.BashProcess>
 --- @field logger sia.history.HistoryLogger
+--- @field tracker sia.Tracker
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
 --- @field parent { agent_id: integer, conversation: sia.Conversation }?
@@ -823,20 +661,11 @@ local Conversation = {}
 Conversation.__index = Conversation
 Conversation.pending_messages = {}
 
---- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
---- @param context sia.Context?
-function Conversation.add_pending_instruction(instruction, context)
-  for _, message in ipairs(Message.new(instruction, context) or {}) do
-    table.insert(Conversation.pending_messages, message)
-  end
-end
-
 --- @class sia.NewConversationArgs
 --- @field model sia.Model
---- @field enable_supersede boolean?
 --- @field ignore_tool_confirm boolean?
 --- @field temporary boolean?
---- @field tools sia.config.Tool[]?
+--- @field tools sia.Tool[]?
 --- @field modes table<string, sia.config.Mode>?
 
 --- @param opts sia.NewConversationArgs
@@ -844,17 +673,16 @@ end
 function Conversation.new(opts)
   local obj = setmetatable({}, Conversation)
   obj.model = opts.model
-  obj.name = ""
-  obj.enable_supersede = true
-  obj.id = CONVERSATION_ID
-  CONVERSATION_ID = CONVERSATION_ID + 1
-  obj.uuid = make_uuid()
+  obj.id = new_conversation_id()
+  obj.name = string.format("**%d**", obj.id)
+  obj.uuid = new_uuid()
   obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
   if obj.model then
     obj.logger:created(obj.model)
   end
+  obj.tracker = require("sia.tracker").new()
 
-  obj.messages = {}
+  obj.entries = {}
   obj.ignore_tool_confirm = opts.ignore_tool_confirm
   obj.auto_confirm_tools = {}
   obj.todos = {
@@ -865,37 +693,98 @@ function Conversation.new(opts)
   obj.bash_processes = {}
   obj.active_mode = nil
   obj.modes = opts.modes or {}
-  obj._prepared_messages = nil
-  obj.tools = {}
-  obj.tool_fn = {}
+  obj.tool_definitions = {}
+  obj.tool_implementation = {}
   if opts.tools then
     for _, tool in ipairs(opts.tools) do
-      if
-        tool ~= nil
-        and obj.tool_fn[tool.name] == nil
-        and (tool.is_available == nil or tool.is_available(obj.model.support))
-      then
-        obj.tool_fn[tool.name] = {
-          message = tool.message,
-          action = tool.execute,
-          allow_parallel = tool.allow_parallel,
-        }
-        table.insert(obj.tools, tool)
+      local is_supported = tool.implementation.is_supported == nil
+        or tool.implementation.is_supported(obj.model)
+      if obj.tool_implementation[tool.definition.name] == nil and is_supported then
+        obj.tool_implementation[tool.definition.name] = tool.implementation
+        table.insert(obj.tool_definitions, tool.definition)
       end
     end
-  end
-
-  if #obj.tools > 0 then
-    obj.logger:tools_registered(obj.tools)
   end
 
   return obj
 end
 
+--- @private
+--- @param region sia.Region
+--- @return sia.TrackedRegion
+function Conversation:track_region(region)
+  return {
+    buf = region.buf,
+    pos = region.pos,
+    idempotent = region.idempotent,
+    stale = region.stale,
+    tick = self.tracker:track(region.buf, region.pos),
+  }
+end
+
+--- @private
+--- @param region sia.TrackedRegion
+--- @return boolean
+function Conversation:is_stale(region)
+  if vim.api.nvim_buf_is_loaded(region.buf) then
+    return self.tracker:is_stale(region.buf, region.tick, region.pos)
+  else
+    return true
+  end
+end
+
+--- @param content sia.Content
+--- @param region sia.Region?
+--- @param hide boolean?
+function Conversation:add_user_message(content, region, hide)
+  if region then
+    self:outdate_overlapping_entries(region)
+  end
+
+  table.insert(
+    self.entries,
+    UserEntry.new(content, region and self:track_region(region), hide)
+  )
+end
+
+--- @param turn_id string
+--- @param content string
+--- @param reasoning sia.Reasoning?
+function Conversation:add_assistant_message(turn_id, content, reasoning)
+  local message = AssistantEntry.new(content, {
+    turn_id = turn_id,
+    reasoning = reasoning,
+  })
+  table.insert(self.entries, message)
+end
+
+--- @param content string
+function Conversation:add_system_message(content)
+  table.insert(self.entries, SystemEntry.new(content))
+end
+
+--- @param turn_id string
+--- @param tool sia.ToolCall
+--- @param content sia.Content
+--- @param opts {summary: string?, ephemeral: boolean, region: sia.Region?}?
+function Conversation:add_tool_message(turn_id, tool, content, opts)
+  opts = opts or {}
+  if opts.region and not opts.ephemeral then
+    self:outdate_overlapping_entries(opts.region)
+  end
+  local tool_msg = ToolEntry.new(content, opts.summary, {
+    turn_id = turn_id,
+    tool_call = tool,
+    ephemeral = opts.ephemeral,
+    region = opts.region and self:track_region(opts.region),
+  })
+  table.insert(self.entries, tool_msg)
+end
+
 --- @param name string
 --- @return boolean
 function Conversation:has_tool(name)
-  return self.tool_fn[name] ~= nil
+  return self.tool_implementation[name] ~= nil
 end
 
 --- @param name string
@@ -909,19 +798,15 @@ function Conversation:has_mode(name)
 end
 
 --- @param name string
---- @param ctx sia.Context?
---- @return { instructions: sia.config.Instruction[], truncate_after_id: string? }?
-function Conversation:enter_mode(name, ctx)
-  local info = { instructions = {} }
+--- @return { content: string, truncate_after_id: string? }?
+function Conversation:enter_mode(name)
+  --- @type string[]
+  local content = {}
   if name == "default" then
     if self.active_mode then
-      local exit_info = self:exit_mode()
-      if exit_info then
-        info.truncate_after_id = exit_info.truncate_after_id
-        table.insert(info.instructions, { role = "user", content = exit_info.prompt })
-      end
+      return self:exit_mode()
     end
-    return info
+    return nil
   end
 
   local definition = self:get_mode(name)
@@ -929,40 +814,41 @@ function Conversation:enter_mode(name, ctx)
     return nil
   end
 
+  --- @type string?
+  local truncate_after_id
+
   if self.active_mode then
     local exit_info = self:exit_mode()
     if exit_info then
-      info.truncate_after_id = exit_info.truncate_after_id
-      if exit_info.prompt then
-        table.insert(info.instructions, { role = "user", content = exit_info.prompt })
+      truncate_after_id = exit_info.truncate_after_id
+      if exit_info.content then
+        table.insert(content, exit_info.content)
       end
     end
   end
 
-  local active = require("sia.permissions").create_active_mode(name, definition, ctx)
+  local active = require("sia.permissions").create_active_mode(name, definition)
   self.active_mode = active
 
   local prompt = create_enter_mode_prompt(active)
-  if self.tool_fn["exit_mode"] then
+  if self:has_tool("exit_mode") then
     table.insert(prompt, "- Use `exit_mode` when the mode's objective is complete.")
   end
   if type(definition.enter_prompt) == "function" then
     table.insert(prompt, definition.enter_prompt(active.state))
   else
-    local render = template.render(tostring(definition.enter_prompt), active.state)
+    local render =
+      require("sia.template").render(tostring(definition.enter_prompt), active.state)
     table.insert(prompt, render)
   end
 
-  active.truncate_after_id = self.messages[#self.messages].id
-  table.insert(
-    info.instructions,
-    { role = "user", content = table.concat(prompt, "\n"), hide = true }
-  )
-  return info
+  active.truncate_after_id = self.entries[#self.entries].id
+  table.insert(content, table.concat(prompt, "\n"))
+  return { truncate_after_id = truncate_after_id, content = table.concat(content, "\n") }
 end
 
 --- @param summary string?
---- @return { prompt: string, truncate_after_id: string? }?
+--- @return { content: string, truncate_after_id: string? }?
 function Conversation:exit_mode(summary)
   local active = self.active_mode
   if not active then
@@ -975,10 +861,10 @@ function Conversation:exit_mode(summary)
     prompt = definition.exit_prompt(active.state, summary or "")
   else
     local ctx = vim.tbl_extend("force", active.state, { summary = summary or "" })
-    prompt = template.render(tostring(definition.exit_prompt), ctx)
+    prompt = require("sia.template").render(tostring(definition.exit_prompt), ctx)
   end
 
-  local info = { prompt = prompt }
+  local info = { content = prompt }
   if definition.truncate and active.truncate_after_id then
     info.truncate_after_id = active.truncate_after_id
   end
@@ -987,11 +873,11 @@ function Conversation:exit_mode(summary)
   return info
 end
 
---- Drop every message after (and including) message_id
+--- Drop every message after message_id
 --- @param message_id string
 function Conversation:drop_after(message_id)
   local start_index = nil
-  for i, message in ipairs(self.messages) do
+  for i, message in ipairs(self.entries) do
     if message.id == message_id then
       start_index = i
       break
@@ -1002,71 +888,42 @@ function Conversation:drop_after(message_id)
     return
   end
 
-  for i = start_index + 1, #self.messages do
-    local message = self.messages[i]
-    if message.status ~= "dropped" then
-      self:set_message_status(message, "dropped")
+  for i = start_index + 1, #self.entries do
+    local message = self.entries[i]
+    if not message.dropped then
+      message.dropped = true
     end
   end
-  self:_invalidate_cache()
 end
 
+--- TODO: rename
 function Conversation:is_buf_valid(buf)
   local is_valid = false
-  for _, message in ipairs(self.messages) do
-    if message.context and message.context.buf == buf then
-      is_valid = not is_outdated(message, self.id)
+  for _, message in ipairs(self.entries) do
+    if message.region and message.region.buf == buf then
+      is_valid = not self:is_stale(message.region)
     end
   end
   return is_valid
 end
 
 function Conversation:untrack_messages()
-  for _, message in ipairs(self.messages) do
-    if message.context and message.context.buf and message.context.tick then
-      tracker.untrack(
-        message.context.buf,
-        { id = self.id, pos = message.context.pos, global = message.context.global }
-      )
-    end
-  end
-end
-
---- Set a message's status, automatically untracking from the tracker when
---- the message transitions to a terminal status (dropped, superseded, failed, outdated).
---- This is the single chokepoint for status changes that affect tracking.
---- @param message sia.Message
---- @param status "outdated"|"failed"|"superseded"|"dropped"
-function Conversation:set_message_status(message, status)
-  local current_status_is_set = message.status ~= nil
-  message.status = status
-  if
-    not current_status_is_set
-    and message.context
-    and message.context.buf
-    and message.context.tick
-  then
-    self.logger:message_status_change(message)
-    tracker.untrack(
-      message.context.buf,
-      { id = self.id, pos = message.context.pos, global = message.context.global }
-    )
-  end
+  self.tracker:destroy()
 end
 
 ---@return string turn_id
 function Conversation:new_turn()
-  local turn_id = make_uuid()
-  self.messages[#self.messages].turn_id = turn_id
+  local turn_id = new_uuid()
+  self.entries[#self.entries].turn_id = turn_id
   return turn_id
 end
 
 --- Get the turn_id of the last (most recent) turn.
 --- @return string? turn_id The last turn_id, or nil if no turns exist
 function Conversation:last_turn_id()
-  for i = #self.messages, 1, -1 do
-    local message = self.messages[i]
-    if message.turn_id and message.status ~= "dropped" then
+  for i = #self.entries, 1, -1 do
+    local message = self.entries[i]
+    if message.turn_id and not message.dropped then
       return message.turn_id
     end
   end
@@ -1078,12 +935,8 @@ end
 function Conversation:turn_ids()
   local ids = {}
   local seen = {}
-  for _, message in ipairs(self.messages) do
-    if
-      message.turn_id
-      and not seen[message.turn_id]
-      and message.status ~= "dropped"
-    then
+  for _, message in ipairs(self.entries) do
+    if message.turn_id and not seen[message.turn_id] and not message.dropped then
       seen[message.turn_id] = true
       table.insert(ids, message.turn_id)
     end
@@ -1095,27 +948,25 @@ end
 --- Returns messages that are not dropped and appear before the first message
 --- with the matching turn_id.
 --- @param turn_id string
---- @return sia.Message[]? messages nil if turn_id not found
-function Conversation:messages_until(turn_id)
+--- @return sia.Entry[]? messages nil if turn_id not found
+function Conversation:get_entries_until(turn_id)
   local result = {}
-  for _, message in ipairs(self.messages) do
+  for _, message in ipairs(self.entries) do
     if message.turn_id == turn_id then
       return result
     end
-    if message.status ~= "dropped" then
+    if not message.dropped then
       table.insert(result, message)
     end
   end
   return nil
 end
 
---- Rollback the conversation to the given turn.
---- Marks the first message with the matching turn_id and all messages after it as "dropped".
 --- @param turn_id string The turn_id to rollback (this turn and all after it are dropped)
 --- @return string[]? dropped_turn_ids List of unique dropped turn_ids, or nil if turn not found
 function Conversation:rollback_to(turn_id)
   local target_index = nil
-  for i, message in ipairs(self.messages) do
+  for i, message in ipairs(self.entries) do
     if message.turn_id == turn_id then
       target_index = i
       break
@@ -1128,10 +979,10 @@ function Conversation:rollback_to(turn_id)
 
   local dropped_turn_ids = {}
   local seen = {}
-  for i = target_index, #self.messages do
-    local message = self.messages[i]
-    if message.status ~= "dropped" then
-      self:set_message_status(message, "dropped")
+  for i = target_index, #self.entries do
+    local message = self.entries[i]
+    if not message.dropped then
+      message.dropped = true
     end
     if message.turn_id and not seen[message.turn_id] then
       seen[message.turn_id] = true
@@ -1139,19 +990,7 @@ function Conversation:rollback_to(turn_id)
     end
   end
 
-  self:_invalidate_cache()
   return dropped_turn_ids
-end
-
-function Conversation:clear_user_instructions()
-  self:destroy()
-  self.messages = vim
-    .iter(self.messages)
-    :filter(function(m)
-      return m.role == "system"
-    end)
-    :totable()
-  self:_invalidate_cache()
 end
 
 function Conversation:destroy()
@@ -1216,8 +1055,6 @@ function Conversation:get_agent(id)
   return self.agents[id]
 end
 
---- Attach completed user-spawned agents as hidden context messages.
---- Marks attached agents with status "attached" so they are only injected once.
 --- @return boolean any_attached True if any agents were attached
 function Conversation:attach_completed_agents()
   local attached_any = false
@@ -1233,13 +1070,7 @@ function Conversation:attach_completed_agents()
         "",
       }
       vim.list_extend(content, agent.result)
-
-      self:add_instruction({
-        role = "user",
-        content = table.concat(content, "\n"),
-        hide = true,
-        description = string.format("agent result: %s", agent.name),
-      })
+      self:add_user_message(table.concat(content, "\n"), nil, true)
       agent.status = "attached"
       agent.meta = nil
       attached_any = true
@@ -1271,15 +1102,10 @@ function Conversation:get_bash_process(id)
   return self.bash_processes[id]
 end
 
---- Invalidate the prepared messages cache. Call whenever messages or their statuses change.
-function Conversation:_invalidate_cache()
-  self._prepared_messages = nil
-end
-
 --- Check if the new interval completely encompasses an existing interval
 --- Returns true if the existing interval should be masked (new is superset of existing)
---- @param new_interval sia.Context
---- @param existing_interval sia.Context
+--- @param new_interval sia.Region
+--- @param existing_interval sia.TrackedRegion
 --- @return boolean
 local function should_mask_existing(new_interval, existing_interval)
   if new_interval.buf ~= existing_interval.buf then
@@ -1303,122 +1129,46 @@ end
 
 --- Mark overlapping messages as superseded instead of removing them
 --- Handle tool call sequences as atomic units to maintain conversation integrity
---- @param context sia.Context?
---- @param kind string?
-function Conversation:_update_overlapping_messages(context, kind)
-  if not context or not context.buf then
+--- @private
+--- @param region sia.Region
+function Conversation:outdate_overlapping_entries(region)
+  if not region or not region.buf or not region.idempotent then
     return
   end
 
-  local tool_call_ids_to_supersede = {}
+  local messages_to_remove = {}
 
-  -- First pass: identify messages that should be marked as superseded due to overlap
-  for _, message in ipairs(self.messages) do
-    local old_context = message.context
-
+  for i, message in ipairs(self.entries) do
+    local old_region = message.region
     if
-      old_context
-      and message.kind ~= nil
-      and message.kind == "context"
-      and old_context.buf
-      and message.content
+      old_region
+      and old_region.buf
+      and old_region.idempotent
       and (message.role == "user" or message.role == "tool")
     then
-      if should_mask_existing(context, old_context) then
-        self:set_message_status(message, "superseded")
-
-        -- If this is a tool result being superseded, mark its tool call ID for superseding
-        if message.role == "tool" and message._tool_call then
-          tool_call_ids_to_supersede[message._tool_call.id] = true
-        end
+      if should_mask_existing(region, old_region) then
+        messages_to_remove[i] = true
       end
     end
   end
 
-  -- Second pass: also mark assistant messages whose tool calls are being superseded
-  for _, message in ipairs(self.messages) do
-    if message.role == "assistant" and message.tool_calls then
-      for _, tool_call in ipairs(message.tool_calls) do
-        if tool_call_ids_to_supersede[tool_call.id] then
-          self:set_message_status(message, "superseded")
-          break
-        end
-      end
-    end
-  end
-
-  -- Remove superseded messages immediately — they are never read back
   local had_superseded = false
   local kept = {}
-  for _, message in ipairs(self.messages) do
-    if message.status == "superseded" then
+  for i, message in ipairs(self.entries) do
+    if messages_to_remove[i] then
       had_superseded = true
     else
       kept[#kept + 1] = message
     end
   end
   if had_superseded then
-    self.messages = kept
+    self.entries = kept
   end
 end
 
---- By default it excludes overlapping contexts and mark outdated messages.
----
---- Set ignore_duplicates = true to keep duplicate messages
---- Set mark_outdated = false to keep outdated messages
---- @param instruction sia.config.Instruction|sia.config.Instruction[]|string
---- @param context sia.Context?
---- @param opts { ignore_duplicates: boolean?, meta: table?, mark_outdated: boolean?, turn_id: string?, skip_capture_unless_needed: boolean?}?
-function Conversation:add_instruction(instruction, context, opts)
-  opts = opts or {}
-  opts.skip_capture_unless_needed = opts.skip_capture_unless_needed == true
-
-  -- We track per-kind updates to avoid two problems:
-  -- 1) Self-supersession: a single instruction can expand into multiple messages of the same `kind`.
-  --    If we ran `_update_overlapping_messages` for each message, the first inserted message could
-  --    be considered "existing" when processing the second, causing the second to supersede the first.
-  -- 2) Redundant scans: calling the overlap logic once per kind avoids repeated O(n) passes when
-  --    an instruction yields many messages.
-  -- In short: run overlap updates at most once per message.kind for the current instruction batch.
-  local done = {}
-  for _, message in ipairs(Message.new(instruction, context) or {}) do
-    if
-      opts.skip_capture_unless_needed
-      and (message.capture_context == false or message.role == "system")
-    then
-      message.context = nil
-    end
-
-    if
-      message.kind
-      and opts.ignore_duplicates ~= true
-      and not done[message.kind]
-      and self.enable_supersede
-    then
-      self:_update_overlapping_messages(context, message.kind)
-      done[message.kind] = true
-    end
-    table.insert(self.messages, message)
-    if opts.meta then
-      message.meta = opts.meta
-    end
-    if opts.turn_id then
-      message.turn_id = opts.turn_id
-    end
-    self.logger:message_created(message)
-  end
-
-  if opts.mark_outdated ~= false then
-    mark_outdated_messages(self)
-  end
-  self:_invalidate_cache()
-end
-
---- @return sia.PreparedMessage message
-function Conversation:last_message()
-  local template_context = self:build_template_context()
-  local context_conf = require("sia.config").options.settings.context
-  return prepare_message(self.messages[#self.messages], template_context, context_conf)
+--- @return sia.Entry message
+function Conversation:get_last_entry()
+  return self.entries[#self.entries]
 end
 
 --- @param name string
@@ -1426,13 +1176,16 @@ end
 --- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string? }
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, opts)
-  if self.tool_fn[name] then
-    local action = self.tool_fn[name].action
+  if self:has_tool(name) then
     local ok, err =
-      pcall(action, arguments, self, opts.callback, opts.cancellable, opts.turn_id)
+      pcall(self.tool_implementation[name].execute, arguments, opts.callback, {
+        cancellable = opts.cancellable,
+        turn_id = opts.turn_id,
+        conversation = self,
+      })
     if not ok then
       print(vim.inspect(err))
-      opts.callback({ content = { "Tool execution failed. " }, kind = "failed" })
+      opts.callback({ content = "Tool execution failed. ", ephemeral = true })
     end
     return
   else
@@ -1440,40 +1193,18 @@ function Conversation:execute_tool(name, arguments, opts)
   end
 end
 
---- @param opts {filter: (fun(message: sia.PreparedMessage):boolean)?}?
---- @return sia.PreparedMessage[] messages
---- @return table<integer, integer>? mappings if filter is used
-function Conversation:get_messages(opts)
-  opts = opts or {}
-
-  local mappings = {}
-  local return_messages = {}
-  for i, message in ipairs(self:prepare_messages()) do
-    if opts.filter == nil or opts.filter(message) then
-      table.insert(return_messages, message)
-      table.insert(mappings, i)
+--- @return sia.TrackedRegion[]
+function Conversation:get_regions()
+  local regions = {}
+  for _, message in ipairs(self.entries) do
+    if message.role == "user" or message.role == "tool" then
+      local region = message.region
+      if region and not self:is_stale(message.region) then
+        table.insert(regions, region)
+      end
     end
   end
-
-  if opts.filter then
-    return return_messages, mappings
-  else
-    return return_messages
-  end
-end
-
---- @return sia.Context[]
-function Conversation:get_contexts()
-  mark_outdated_messages(self)
-  self:_invalidate_cache()
-  local contexts = {}
-  for _, message in ipairs(self.messages) do
-    local ctx = message.context
-    if ctx and ctx.buf and message.kind == "context" and message.status == nil then
-      table.insert(contexts, ctx)
-    end
-  end
-  return contexts
+  return regions
 end
 
 --- Add usage statistics from a request/response cycle
@@ -1507,98 +1238,59 @@ function Conversation:get_cumulative_usage()
   return cumulative
 end
 
---- Build template context for rendering system prompts.
---- The result is cached on the conversation since all inputs (tools, agents, skills, model)
---- are stable for the lifetime of a conversation.
---- @return table Template context
-function Conversation:build_template_context()
-  if self._template_context then
-    self._template_context.today = os.date("%Y-%m-%d")
-    return self._template_context
-  end
-
-  local agents = require("sia.agents.registry").get_agents(false)
-  local agent_list = {}
-  for _, agent in pairs(agents) do
-    table.insert(agent_list, agent)
-  end
-
-  local skills = require("sia.skills.registry").get_skills(self.tool_fn, false)
-  local skill_list = {}
-  for _, skill in ipairs(skills) do
-    table.insert(skill_list, {
-      name = skill.name,
-      description = skill.description,
-      content = table.concat(skill.content, "\n"),
-      filepath = skill.filepath,
-      dir = skill.dir,
-    })
-  end
-
-  self._template_context = {
-    today = os.date("%Y-%m-%d"),
-    tools = self.tools,
-    agents = agent_list,
-    has_tools = #self.tools > 0,
-    tool_count = #self.tools,
-    model = self.model,
-    skills = skill_list,
-    has_skills = #skill_list > 0,
-    has_tool = function(name)
-      return self.tool_fn[name] ~= nil
-    end,
-  }
-  return self._template_context
-end
-
---- @return sia.PreparedMessage[]
-function Conversation:prepare_messages()
-  if self._prepared_messages then
-    return self._prepared_messages
-  end
-
-  local template_context = self:build_template_context()
-  local context_conf = require("sia.config").options.settings.context
-  local outdated_any = false
+--- Persist the current state of the conversation into a new round.
+--- Called once per round.
+--- @return sia.Message[]
+function Conversation:serialize()
   --- @type sia.Message[]
-  local messages = vim
-    .iter(self.messages)
-    --- @param m sia.Message
-    --- @return boolean
-    :filter(function(m)
-      if m.status == "superseded" then
-        return false
-      end
+  local messages = {}
 
-      if m.status == "dropped" then
-        return false
+  for _, entry in ipairs(self.entries) do
+    if not entry.dropped then
+      if entry.ephemeral then
+        entry.dropped = true
       end
+      if entry.role == "system" then
+        table.insert(messages, { role = "system", content = entry.content })
+      elseif entry.role == "user" and entry.content then
+        local message = { role = "user", content = entry.content }
+        if entry.region and self:is_stale(entry.region) then
+          message.content = string.format(
+            "System Note: History pruned. %s",
+            entry.region.stale and entry.region.stale.content or ""
+          )
+        end
+        table.insert(messages, message)
+      elseif entry.role == "assistant" and (entry.content or entry.reasoning) then
+        local message = {
+          role = "assistant",
+          content = entry.content,
+          reasoning = entry.reasoning,
+        }
+        table.insert(messages, message)
+      elseif entry.role == "tool" and entry.content then
+        local assistant_message = { role = "assistant" }
+        local tool_message = { role = "tool", tool_call = entry.tool_call }
+        local stale = entry.region and self:is_stale(entry.region)
+        if stale then
+          tool_message.content = string.format(
+            "System Note: History pruned. %s",
+            entry.region.stale and entry.region.stale.content or ""
+          )
+        else
+          tool_message.content = entry.content
+        end
 
-      if not m:has_content() then
-        return false
+        if stale and entry.region.stale.input then
+          assistant_message.tool_call = entry.region.stale.input(entry.tool_call)
+        else
+          assistant_message.tool_call = entry.tool_call
+        end
+        table.insert(messages, assistant_message)
+        table.insert(messages, tool_message)
       end
-
-      if m.status == "failed" then
-        return false
-      end
-
-      return true
-    end)
-    --- @param m sia.Message
-    --- @return sia.PreparedMessage
-    :map(function(m)
-      if not m.status and is_outdated(m, self.id) then
-        self:set_message_status(m, "outdated")
-        outdated_any = true
-      end
-      return prepare_message(m, template_context, context_conf)
-    end)
-    :totable()
-
-  if not outdated_any then
-    self._prepared_messages = messages
+    end
   end
-
   return messages
 end
 
@@ -1610,7 +1302,7 @@ end
 --- @param turn_id string The turn to fork before (messages with this turn_id are excluded)
 --- @return sia.Conversation?
 local function fork_conversation(source, turn_id)
-  local messages = source:messages_until(turn_id)
+  local messages = source:get_entries_until(turn_id)
   if not messages then
     return nil
   end
@@ -1618,27 +1310,112 @@ local function fork_conversation(source, turn_id)
   local conversation = Conversation.new({
     model = source.model,
     ignore_tool_confirm = source.ignore_tool_confirm,
-    tools = source.tools,
+    tools = source.tools, -- TODO: fix me!
     modes = source.modes,
   })
-  conversation.enable_supersede = source.enable_supersede
   if source.active_mode then
     conversation.active_mode = nil
   end
 
   for _, message in ipairs(messages) do
     local msg_copy = vim.deepcopy(message)
-    if msg_copy.context and msg_copy.context.tick then
-      msg_copy.status = "outdated"
+    if msg_copy.region and msg_copy.region.tick then
+      msg_copy.dropped = true
     end
-    table.insert(conversation.messages, msg_copy)
+    table.insert(conversation.entries, msg_copy)
   end
 
-  conversation:_invalidate_cache()
+  return conversation
+end
+
+--- @param conversation sia.Conversation
+local function new_template_context(conversation)
+  local agents = require("sia.agents.registry").get_agents(false)
+  local agent_list = {}
+  for _, agent in pairs(agents) do
+    table.insert(agent_list, agent)
+  end
+
+  local has_tool = function(name)
+    return conversation.tool_implementation[name] ~= nil
+  end
+  local skills = require("sia.skills.registry").get_skills(has_tool, false)
+  local skill_list = {}
+  for _, skill in ipairs(skills) do
+    table.insert(skill_list, {
+      name = skill.name,
+      description = skill.description,
+      content = table.concat(skill.content, "\n"),
+      filepath = skill.filepath,
+      dir = skill.dir,
+    })
+  end
+  return {
+    today = os.date("%Y-%m-%d"),
+    tools = conversation.tool_definitions,
+    agents = agent_list,
+    has_tools = #conversation.tool_definitions > 0,
+    tool_count = #conversation.tool_definitions,
+    model = conversation.model,
+    skills = skill_list,
+    has_skills = #skill_list > 0,
+    has_tool = has_tool,
+  }
+end
+
+--- @param action sia.config.Action
+--- @param invocation sia.Invocation
+--- @param overrides {model: string?}?
+--- @return sia.Conversation
+local function from_action(action, invocation, overrides)
+  overrides = overrides or {}
+  local config = require("sia.config")
+  local model = require("sia.model").resolve(
+    overrides.model or action.model or config.options.settings.model
+  )
+  local conversation = Conversation.new({
+    model = model,
+    tools = action.tools and action.tools(model),
+    modes = action.modes,
+  })
+
+  local template = require("sia.template")
+  local template_context = new_template_context(conversation)
+  for _, system in ipairs(action.system or {}) do
+    local content = type(system) == "function" and system()
+      or template.render(system --[[@as string]], template_context)
+    conversation:add_system_message(content)
+  end
+  for _, user in ipairs(action.user or {}) do
+    if type(user) == "function" then
+      local content, region = user(invocation)
+      if content then
+        conversation:add_user_message(content, region, true)
+      end
+    elseif type(user) == "string" then
+      conversation:add_user_message(user)
+    elseif type(user) == "table" and user.content then
+      if type(user.content) == "function" then
+        local content, region = user.content(invocation)
+        if content then
+          conversation:add_user_message(content, region, user.hide)
+        end
+      else
+        conversation:add_user_message(
+          user.content --[[@as sia.Content]],
+          nil,
+          user.hide
+        )
+      end
+    else
+      conversation:add_user_message(user --[[@as sia.Content]])
+    end
+  end
   return conversation
 end
 
 return {
   new_conversation = Conversation.new,
   fork_conversation = fork_conversation,
+  from_action = from_action,
 }

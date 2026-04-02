@@ -162,10 +162,10 @@ end
 --- 1. They are listed in the project's config.json `skills` array
 --- 2. All their required `tools` are available in the conversation
 ---
---- @param conversation_tools table<string, any>?
+--- @param has_tool fun(name: string):boolean
 --- @param error_report boolean?
 --- @return sia.skills.registry.SkillDef[] skills
-function M.get_skills(conversation_tools, error_report)
+function M.get_skills(has_tool, error_report)
   local enabled_names, extra_paths = get_skills_config()
 
   if #enabled_names == 0 then
@@ -219,12 +219,10 @@ function M.get_skills(conversation_tools, error_report)
   local result = {}
   for _, skill in pairs(all_skills) do
     local tools_met = true
-    if conversation_tools then
-      for _, required_tool in ipairs(skill.tools) do
-        if not conversation_tools[required_tool] then
-          tools_met = false
-          break
-        end
+    for _, required_tool in ipairs(skill.tools) do
+      if not has_tool(required_tool) then
+        tools_met = false
+        break
       end
     end
 

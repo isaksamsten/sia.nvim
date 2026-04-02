@@ -32,11 +32,14 @@ precedence.
 
 ### Tool Approval
 
-| Group            | Default Link | Description             |
-| ---------------- | ------------ | ----------------------- |
-| `SiaApproveInfo` | `StatusLine` | Standard risk level     |
-| `SiaApproveSafe` | `StatusLine` | Safe/low risk level     |
-| `SiaApproveWarn` | `StatusLine` | Warning/high risk level |
+| Group                    | Default Link  | Description                      |
+| ------------------------ | ------------- | -------------------------------- |
+| `SiaApproveInfo`         | `StatusLine`  | Standard risk level              |
+| `SiaApproveSafe`         | `StatusLine`  | Safe/low risk level              |
+| `SiaApproveWarn`         | `StatusLine`  | Warning/high risk level          |
+| `SiaConfirm`             | `NormalFloat` | Confirm detail window background |
+| `SiaConfirmItem`         | `NonText`     | Unselected item in confirm view  |
+| `SiaConfirmSelectedItem` | `Normal`      | Selected item in confirm view    |
 
 ### Insert and Diff Mode
 
@@ -46,17 +49,28 @@ precedence.
 | `SiaInsertPostProcess` | `DiffChange` | Post-processed text        |
 | `SiaReplace`           | `DiffChange` | Replaced text in diff mode |
 
-### Todos and Status
+### Todos
 
-| Group               | Default Link      | Description           |
-| ------------------- | ----------------- | --------------------- |
-| `SiaTodoActive`     | `DiagnosticWarn`  | Active todo items     |
-| `SiaTodoPending`    | `Comment`         | Pending todo items    |
-| `SiaTodoDone`       | `DiagnosticOk`    | Completed todo items  |
-| `SiaTodoSkipped`    | `NonText`         | Skipped todo items    |
-| `SiaStatusActive`   | `DiagnosticHint`  | Running agent tasks   |
-| `SiaAgentCompleted` | `DiagnosticOk`    | Completed agent tasks |
-| `SiaAgentFailed`    | `DiagnosticError` | Failed agent tasks    |
+| Group            | Default Link     | Description          |
+| ---------------- | ---------------- | -------------------- |
+| `SiaTodoActive`  | `DiagnosticWarn` | Active todo items    |
+| `SiaTodoPending` | `Comment`        | Pending todo items   |
+| `SiaTodoDone`    | `DiagnosticOk`   | Completed todo items |
+| `SiaTodoSkipped` | `NonText`        | Skipped todo items   |
+
+### Status Panel
+
+| Group             | Default Link      | Description                    |
+| ----------------- | ----------------- | ------------------------------ |
+| `SiaStatusActive` | `DiagnosticHint`  | Running agents and processes   |
+| `SiaStatusDone`   | `DiagnosticOk`    | Completed agents and processes |
+| `SiaStatusFailed` | `DiagnosticError` | Failed agents and processes    |
+| `SiaStatusTag`    | `Type`            | Status tags                    |
+| `SiaStatusMuted`  | `NonText`         | Muted/secondary text           |
+| `SiaStatusLabel`  | `Identifier`      | Detail labels                  |
+| `SiaStatusValue`  | `Normal`          | Detail values                  |
+| `SiaStatusPath`   | `Directory`       | File path values               |
+| `SiaStatusCode`   | `String`          | Code/command values            |
 
 ### Other
 

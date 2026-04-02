@@ -1,6 +1,10 @@
 test: deps
 	@echo Testing...
+ifdef FILE
+	nvim --headless --noplugin -u ./assets/minimal.lua -c "lua MiniTest.run_file('$(FILE)')"
+else
 	nvim --headless --noplugin -u ./assets/minimal.lua -c "lua MiniTest.run()"
+endif
 
 deps: deps/mini.nvim
 	@echo Pulling...

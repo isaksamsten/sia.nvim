@@ -6,9 +6,28 @@ local MAX_FILES_RESULT = 100
 local MAX_FILES_SORT = 1000
 
 return tool_utils.new_tool({
-  name = "glob",
+  definition = {
+    type = "function",
+    name = "glob",
+    description = "Find files matching a glob pattern in the current project",
+    parameters = {
+      pattern = {
+        type = "string",
+        description = "Glob pattern to match files (e.g., `*.lua`, `**/*.py`, `src/**`). If not provided, lists all files.",
+      },
+      path = {
+        type = "string",
+        description = "Directory path to search within (e.g., `src/lua`). If not provided, searches from current directory.",
+      },
+      hidden = {
+        type = "boolean",
+        description = "Include hidden files",
+      },
+    },
+    required = {},
+  },
   read_only = true,
-  system_prompt = [[- Fast file pattern matching tool that works with any codebase size
+  instructions = [[- Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
 - Returns matching file paths sorted by modification time
 - Use this tool when you need to find files by name patterns
@@ -16,23 +35,9 @@ return tool_utils.new_tool({
   and grepping, use the Agent tool instead
 - You can call multiple tools in a single response. It is always better to speculatively
   perform multiple searches in parallel if they are potentially useful.]],
-  description = "Find files matching a glob pattern in the current project",
-  message = "Searching for files...",
-  parameters = {
-    pattern = {
-      type = "string",
-      description = "Glob pattern to match files (e.g., `*.lua`, `**/*.py`, `src/**`). If not provided, lists all files.",
-    },
-    path = {
-      type = "string",
-      description = "Directory path to search within (e.g., `src/lua`). If not provided, searches from current directory.",
-    },
-    hidden = {
-      type = "boolean",
-      description = "Include hidden files",
-    },
-  },
-  required = {},
+  notification = function()
+    return "Searching for files..."
+  end,
   auto_apply = function(args, conversation)
     return conversation.auto_confirm_tools["glob"]
   end,
@@ -105,7 +110,7 @@ return tool_utils.new_tool({
           else
             msg = "No files found (or fd is not installed)."
           end
-          callback({ content = { msg } })
+          callback({ content = msg })
           return
         end
 
@@ -122,7 +127,7 @@ return tool_utils.new_tool({
           else
             msg = "No files found."
           end
-          callback({ content = { msg } })
+          callback({ content = msg })
           return
         end
 
@@ -201,8 +206,8 @@ return tool_utils.new_tool({
         end
 
         callback({
-          content = limited_files,
-          display_content = display_line,
+          content = table.concat(limited_files, "\n"),
+          summary = display_line,
         })
       end)
     end,

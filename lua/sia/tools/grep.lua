@@ -24,8 +24,8 @@ local function handle_files_with_matches_mode(lines, args, callback)
     ) .. format_no_match_context(args)
 
     callback({
-      content = { "No files with matches found." },
-      display_content = no_match_msg,
+      content = "No files with matches found.",
+      summary = no_match_msg,
     })
     return
   end
@@ -45,8 +45,8 @@ local function handle_files_with_matches_mode(lines, args, callback)
   ) .. format_no_match_context(args)
 
   callback({
-    content = output,
-    display_content = display_msg,
+    content = table.concat(output, "\n"),
+    summary = display_msg,
   })
 end
 
@@ -59,8 +59,8 @@ local function handle_count_mode(lines, args, callback)
     ) .. format_no_match_context(args)
 
     callback({
-      content = { "No matches found." },
-      display_content = no_match_msg,
+      content = "No matches found.",
+      summary = no_match_msg,
     })
     return
   end
@@ -116,8 +116,8 @@ local function handle_count_mode(lines, args, callback)
   ) .. format_no_match_context(args)
 
   callback({
-    content = output,
-    display_content = display_msg,
+    content = table.concat(output, "\n"),
+    summary = display_msg,
   })
 end
 
@@ -173,8 +173,8 @@ local function handle_content_mode(lines, args, callback)
     ) .. format_no_match_context(args)
 
     callback({
-      content = { "No matches found." },
-      display_content = no_match_msg,
+      content = "No matches found.",
+      summary = no_match_msg,
     })
     return
   end
@@ -214,15 +214,37 @@ local function handle_content_mode(lines, args, callback)
   ) .. format_no_match_context(args)
 
   callback({
-    content = output,
-    display_content = display_msg,
+    content = table.concat(output, "\n"),
+    summary = display_msg,
   })
 end
 
 return tool_utils.new_tool({
-  name = "grep",
+  definition = {
+    type = "function",
+    name = "grep",
+    description = "Grep for a pattern in files using rg",
+    parameters = {
+      glob = { type = "string", description = "Glob pattern for files to search" },
+      pattern = { type = "string", description = "Search pattern" },
+      path = {
+        type = "string",
+        description = "Directory or file path to search within (e.g., `lua/sia`, `lua/sia/config.lua`, `.`). If not provided, searches from current directory.",
+      },
+      output_mode = {
+        type = "string",
+        description = 'Output mode: "content" (default, shows matching lines), "files_with_matches" (only file paths), "count" (match counts per file)',
+        enum = { "content", "files_with_matches", "count" },
+      },
+      multiline = {
+        type = "boolean",
+        description = "Enable multiline matching for patterns that span multiple lines (e.g., matching code blocks). Default is false.",
+      },
+    },
+    required = { "pattern" },
+  },
   read_only = true,
-  system_prompt = [[A powerful search tool built on ripgrep
+  instructions = [[A powerful search tool built on ripgrep
 
 Usage:
 - ALWAYS use grep for search tasks. NEVER invoke `grep` or `rg` as a bash command. The grep tool has been optimized for correct permissions and access.
@@ -232,34 +254,15 @@ Usage:
 - Use the task tool for open-ended searches requiring multiple rounds
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
-  message = function(args)
+  notification = function(args)
     return string.format("Searching for %s...", args.pattern)
   end,
-  description = "Grep for a pattern in files using rg",
-  parameters = {
-    glob = { type = "string", description = "Glob pattern for files to search" },
-    pattern = { type = "string", description = "Search pattern" },
-    path = {
-      type = "string",
-      description = "Directory or file path to search within (e.g., `lua/sia`, `lua/sia/config.lua`, `.`). If not provided, searches from current directory.",
-    },
-    output_mode = {
-      type = "string",
-      description = 'Output mode: "content" (default, shows matching lines), "files_with_matches" (only file paths), "count" (match counts per file)',
-      enum = { "content", "files_with_matches", "count" },
-    },
-    multiline = {
-      type = "boolean",
-      description = "Enable multiline matching for patterns that span multiple lines (e.g., matching code blocks). Default is false.",
-    },
-  },
   auto_apply = function(args, conversation)
     if args.path and require("sia.utils").dirs.is_safe(args.path) then
       return 1
     end
     return conversation.auto_confirm_tools["grep"]
   end,
-  required = { "pattern" },
 }, function(args, _, callback, opts)
   local output_mode = args.output_mode or "content"
   local command = { "rg", "--no-heading", "--no-follow", "--color=never" }
@@ -282,7 +285,7 @@ Usage:
   end
 
   if args.pattern == nil then
-    callback({ content = { "No pattern was given" } })
+    callback({ content = "No pattern was given" })
     return
   end
 

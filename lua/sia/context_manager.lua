@@ -1,45 +1,44 @@
---- Context window management: token estimation, budget tracking, and auto-pruning.
----
---- This module lives at the strategy level and modifies the conversation directly.
---- It does NOT replace the existing outdating mechanism in conversation.lua — that
---- handles tick-based staleness. This module handles hard context window limits.
 local M = {}
 
---- Normalize a message for the summarizer by converting tool calls and tool
---- results into plain text. This avoids passing provider-specific tool call
---- IDs (e.g., Anthropic's `toolu_...` vs OpenAI's `call_...`) to a potentially
---- different provider used for summarization.
---- @param msg sia.Message
---- @return { role: string, content: string }
-local function normalize_for_summary(msg)
+--- @param entry sia.Entry
+--- @return { role: "user"|"assistant", content: string }
+local function normalize_for_summary(entry)
   local parts = {}
 
-  if msg.content and type(msg.content) == "string" and msg.content ~= "" then
-    table.insert(parts, msg.content)
-  end
-
-  if msg.tool_calls then
-    for _, tc in ipairs(msg.tool_calls) do
-      local name = tc["function"] and tc["function"].name
-        or tc["custom"] and tc["custom"].name
-        or "unknown"
-      local args = tc["function"] and tc["function"].arguments
-        or tc["custom"] and tc["custom"].input
-        or ""
-      table.insert(parts, string.format("[Tool call: %s(%s)]", name, args))
+  local content = entry.content
+  if content then
+    if type(content) == "string" then
+      if content ~= "" then
+        table.insert(parts, content)
+      end
+    elseif type(content) == "table" then
+      for _, part in ipairs(content) do
+        if part.text and part.text ~= "" then
+          table.insert(parts, part.text)
+        end
+      end
     end
   end
 
-  local tc = msg._tool_call
-  if tc then
-    local name = tc["function"] and tc["function"].name
-      or tc["custom"] and tc["custom"].name
-      or "unknown"
-    table.insert(parts, 1, string.format("[Tool result: %s]", name))
+  local reasoning = entry.reasoning
+  if entry.role == "assistant" and reasoning then
+    if reasoning.text and reasoning.text ~= "" then
+      table.insert(parts, string.format("[Reasoning: %s]", reasoning.text))
+    end
   end
 
-  local role = msg.role
-  if role == "tool" then
+  if entry.role == "tool" then
+    local tc = entry.tool_call
+    if tc then
+      local name = tc.name or ""
+      local args = tc.type == "function" and tc.arguments or tc.input or ""
+      table.insert(parts, 1, string.format("[Tool call: %s(%s)]", name, args))
+      table.insert(parts, string.format("[Tool result: %s]", name))
+    end
+  end
+
+  local role = entry.role
+  if role == "tool" or role == "system" then
     role = "user"
   end
 
@@ -49,7 +48,17 @@ local function normalize_for_summary(msg)
   }
 end
 
---- Compact a conversation by summarizing previous messages
+--- @param conversation sia.Conversation
+--- @param msg { role: "user"|"assistant", content: string }
+local function add_summary_message(conversation, msg)
+  if msg.role == "assistant" then
+    conversation:add_assistant_message(tostring(math.random(1e9)), msg.content)
+  else
+    conversation:add_user_message(msg.content)
+  end
+end
+
+--- Compact a conversation by summarizing previous entries
 --- @param conversation sia.Conversation The conversation object to compact
 --- @param opts { ratio: number?, on_complete: fun(content: string?)? }
 local compact_conversation = function(conversation, opts)
@@ -60,9 +69,8 @@ local compact_conversation = function(conversation, opts)
     model = model,
     temporary = true,
   })
-  new_conversation:add_instruction({
-    role = "system",
-    content = [[Provide a detailed prompt for continuing our conversation above.
+  new_conversation:add_system_message(
+    [[Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including
 what we did, what we're doing, which files we're working on, and what we're going to do
 next. The summary that you construct will be used so that another agent can read it and
@@ -93,26 +101,24 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created
 that pertain to the task at hand. If all the files in a directory are relevant, include
 the path to the directory.]
-]],
-  })
+]]
+  )
 
-  local prepared = conversation:prepare_messages()
-
-  -- Collect dropped non-system messages from the raw conversation.
-  -- These are filtered out by prepare_messages() but their content is still
-  -- intact. We always include them in the summarizer input since they are
-  -- essentially free to compact (already excluded from the context window).
-  local dropped_messages = {}
-  for _, m in ipairs(conversation.messages) do
-    if m.status == "dropped" and m.role ~= "system" and m:has_content() then
-      table.insert(dropped_messages, m)
+  --- @type sia.Entry[]
+  local dropped_entries = {}
+  for _, entry in ipairs(conversation.entries) do
+    if entry.dropped and entry.role ~= "system" then
+      if entry.role == "tool" or entry.content or entry.reasoning then
+        table.insert(dropped_entries, entry)
+      end
     end
   end
 
+  --- @type {index: integer, entry: sia.Entry}[]
   local non_system = {}
-  for i, message in ipairs(prepared) do
-    if message.role ~= "system" then
-      table.insert(non_system, { index = i, message = message })
+  for i, entry in ipairs(conversation.entries) do
+    if entry.role ~= "system" and not entry.dropped then
+      table.insert(non_system, { index = i, entry = entry })
     end
   end
 
@@ -121,21 +127,21 @@ the path to the directory.]
     compact_count = math.max(1, math.floor(#non_system * opts.ratio))
   end
 
-  for _, m in ipairs(dropped_messages) do
-    new_conversation:add_instruction(normalize_for_summary(m))
+  for _, entry in ipairs(dropped_entries) do
+    add_summary_message(new_conversation, normalize_for_summary(entry))
   end
 
   for i = 1, compact_count do
-    local msg = non_system[i].message
-    new_conversation:add_instruction(normalize_for_summary(msg))
+    local entry = non_system[i].entry
+    add_summary_message(new_conversation, normalize_for_summary(entry))
   end
 
   require("sia.assistant").fetch_response(new_conversation, function(content)
     if content then
       local dropped = 0
-      for _, m in ipairs(conversation.messages) do
-        if m.role ~= "system" and m.status ~= "dropped" then
-          conversation:set_message_status(m, "dropped")
+      for _, entry in ipairs(conversation.entries) do
+        if entry.role ~= "system" and not entry.dropped then
+          entry.dropped = true
           dropped = dropped + 1
           if dropped >= compact_count then
             break
@@ -143,33 +149,23 @@ the path to the directory.]
         end
       end
 
-      local dropped_set = {}
-      for _, m in ipairs(dropped_messages) do
-        dropped_set[m] = true
+      local summarized_set = {}
+      for _, entry in ipairs(dropped_entries) do
+        summarized_set[entry.id] = true
       end
-      conversation.messages = vim
-        .iter(conversation.messages)
-        :filter(function(m)
-          if dropped_set[m] then
-            return false
-          end
-          if m.status == "superseded" then
-            return false
-          end
-          return true
+      for i = 1, compact_count do
+        summarized_set[non_system[i].entry.id] = true
+      end
+
+      conversation.entries = vim
+        .iter(conversation.entries)
+        --- @param entry sia.Entry
+        :filter(function(entry)
+          return not summarized_set[entry.id]
         end)
         :totable()
-      conversation:_invalidate_cache()
 
-      conversation:add_instruction({
-        role = "user",
-        hide = true,
-        content = content,
-        meta = {
-          compaction = true,
-        },
-      })
-
+      conversation:add_user_message(content, nil, true)
       if opts.on_complete then
         opts.on_complete(content)
       end
@@ -179,15 +175,14 @@ the path to the directory.]
   end)
 end
 
---- Estimate the number of bytes in a prepared message.
---- We serialize content + tool_calls to get a reasonable byte count.
---- @param message sia.PreparedMessage
+--- Estimate the number of bytes in an entry.
+--- @param entry sia.Entry
 --- @return integer bytes
-local function message_bytes(message)
+local function entry_bytes(entry)
   local bytes = 0
 
-  if message.content then
-    local content = message.content
+  if entry.content then
+    local content = entry.content
     if type(content) == "string" then
       bytes = bytes + #content
     elseif type(content) == "table" then
@@ -199,28 +194,22 @@ local function message_bytes(message)
     end
   end
 
-  if message.tool_calls then
-    for _, tc in ipairs(message.tool_calls) do
-      if tc["function"] then
-        bytes = bytes + #(tc["function"].name or "")
-        bytes = bytes + #(tc["function"].arguments or "")
-      elseif tc["custom"] then
-        bytes = bytes + #(tc["custom"].name or "")
-        bytes = bytes + #(tc["custom"].input or "")
-      end
+  local reasoning = entry.reasoning
+  if entry.role == "assistant" and reasoning then
+    if reasoning.text then
+      bytes = bytes + #reasoning.text
     end
   end
 
-  if message._tool_call then
-    local tc = message._tool_call or {}
-    local fn = tc["function"]
-    local custom = tc["custom"]
-    if fn then
-      bytes = bytes + #(fn.name or "")
-      bytes = bytes + #(fn.arguments or "")
-    elseif custom then
-      bytes = bytes + #(custom.name or "")
-      bytes = bytes + #(custom.input or "")
+  if entry.role == "tool" then
+    local tc = entry.tool_call
+    if tc then
+      bytes = bytes + #(tc.name or "")
+      if tc.type == "function" then
+        bytes = bytes + #(tc.arguments or "")
+      elseif tc.type == "custom" then
+        bytes = bytes + #(tc.input or "")
+      end
     end
   end
 
@@ -234,12 +223,9 @@ end
 --- @param conversation sia.Conversation
 --- @return integer bytes
 local function tool_definition_bytes(conversation)
-  if conversation._tool_def_bytes then
-    return conversation._tool_def_bytes
-  end
   local bytes = 0
-  if conversation.tools then
-    for _, tool in ipairs(conversation.tools) do
+  if conversation.tool_definitions then
+    for _, tool in ipairs(conversation.tool_definitions) do
       bytes = bytes + #(tool.name or "")
       bytes = bytes + #(tool.description or "")
       if tool.parameters then
@@ -250,19 +236,19 @@ local function tool_definition_bytes(conversation)
       end
     end
   end
-  conversation._tool_def_bytes = bytes
   return bytes
 end
 
---- Estimate the token count for a conversation's prepared messages.
+--- Estimate the token count for a conversation's entries.
 --- Uses the heuristic: tokens ≈ bytes / 4
 --- @param conversation sia.Conversation
 --- @return integer estimated_tokens
 function M.estimate_tokens(conversation)
-  local messages = conversation:prepare_messages()
   local total_bytes = 0
-  for _, message in ipairs(messages) do
-    total_bytes = total_bytes + message_bytes(message)
+  for _, entry in ipairs(conversation.entries) do
+    if not entry.dropped then
+      total_bytes = total_bytes + entry_bytes(entry)
+    end
   end
   total_bytes = total_bytes + tool_definition_bytes(conversation)
   return math.floor(total_bytes / 4)
@@ -271,7 +257,7 @@ end
 --- Get the context window budget information for a conversation.
 --- @param conversation sia.Conversation
 --- @return { estimated: integer, limit: integer, percent: number }?
-function M.get_budget(conversation)
+function M.get_token_estimate(conversation)
   local model = conversation.model
   if not model then
     return nil
@@ -288,61 +274,41 @@ function M.get_budget(conversation)
   }
 end
 
---- Find tool call pairs (assistant message with tool_calls + tool result message)
---- that are eligible for hard-dropping. Returns them oldest-first.
+--- Find tool entries that can be dropped.
+--- Tool entries are self-contained: they store both the tool call metadata
+--- and the result content in a single entry.
 --- @param conversation sia.Conversation
---- @return { assistant_idx: integer, tool_idx: integer, tool_call_id: string }[]
-local function find_droppable_tool_pairs(conversation)
+--- @return { index: integer, entry: sia.ToolEntry }[]
+local function find_droppable_tool_entries(conversation)
   local context_config = require("sia.config").options.settings.context
-  local exclude = context_config.exclude or {}
+  local exclude = context_config and context_config.exclude or {}
 
-  --- @type { assistant_idx: integer, tool_idx: integer, tool_call_id: string }[]
-  local pairs_list = {}
+  --- @type { index: integer, entry: sia.ToolEntry }[]
+  local result = {}
 
-  --- @type table<string, integer>
-  local tool_result_map = {}
-  for i, message in ipairs(conversation.messages) do
-    if message.role == "tool" and message._tool_call and message._tool_call.id then
-      tool_result_map[message._tool_call.id] = i
+  for i, entry in ipairs(conversation.entries) do
+    if
+      entry.role == "tool"
+      and entry.tool_call
+      and not entry.dropped
+      and not vim.tbl_contains(exclude, entry.tool_call.name)
+    then
+      table.insert(result, { index = i, entry = entry })
     end
   end
 
-  for i, message in ipairs(conversation.messages) do
-    if message.role == "assistant" and message.tool_calls then
-      for _, tc in ipairs(message.tool_calls) do
-        if tc.id then
-          local tool_idx = tool_result_map[tc.id]
-          local tool_name = tc["function"] and tc["function"].name
-            or tc["custom"] and tc["custom"].name
-          if
-            tool_idx
-            and not vim.tbl_contains(exclude, tool_name)
-            and message.status ~= "superseded"
-            and message.status ~= "dropped"
-          then
-            table.insert(pairs_list, {
-              assistant_idx = i,
-              tool_idx = tool_idx,
-              tool_call_id = tc.id,
-            })
-          end
-        end
-      end
-    end
-  end
-
-  return pairs_list
+  return result
 end
 
---- Hard-drop the oldest tool call pairs by marking them as "dropped".
+--- Hard-drop the oldest tool entries by marking them as "dropped".
 --- Unlike "outdated" (which replaces content with a pruning note),
---- "dropped" causes messages to be fully filtered from prepared output.
+--- "dropped" causes entries to be fully filtered from prepared output.
 --- Uses incremental byte estimation to avoid calling estimate_tokens() in a loop.
 --- @param conversation sia.Conversation
 --- @param target_tokens integer Target token count to get below
---- @return boolean dropped Whether any messages were dropped
+--- @return boolean dropped Whether any entries were dropped
 function M.drop_oldest_tool_calls(conversation, target_tokens)
-  local droppable = find_droppable_tool_pairs(conversation)
+  local droppable = find_droppable_tool_entries(conversation)
   if #droppable == 0 then
     return false
   end
@@ -353,69 +319,17 @@ function M.drop_oldest_tool_calls(conversation, target_tokens)
   end
 
   local dropped_any = false
-  for _, pair in ipairs(droppable) do
+  for _, item in ipairs(droppable) do
     if current_tokens <= target_tokens then
       break
     end
 
-    local assistant_msg = conversation.messages[pair.assistant_idx]
-    local tool_msg = conversation.messages[pair.tool_idx]
-    local bytes_freed = 0
-
-    if assistant_msg and assistant_msg.status ~= "dropped" then
-      if assistant_msg.tool_calls then
-        for _, tc in ipairs(assistant_msg.tool_calls) do
-          if tc["function"] then
-            bytes_freed = bytes_freed + #(tc["function"].name or "")
-            bytes_freed = bytes_freed + #(tc["function"].arguments or "")
-          elseif tc["custom"] then
-            bytes_freed = bytes_freed + #(tc["custom"].name or "")
-            bytes_freed = bytes_freed + #(tc["custom"].input or "")
-          end
-        end
-      end
-      if assistant_msg.content then
-        if type(assistant_msg.content) == "string" then
-          bytes_freed = bytes_freed + #assistant_msg.content
-        end
-      end
-      bytes_freed = bytes_freed + 40
-      conversation:set_message_status(assistant_msg, "dropped")
-      dropped_any = true
-    end
-
-    if tool_msg and tool_msg.status ~= "dropped" then
-      if tool_msg.content then
-        if type(tool_msg.content) == "string" then
-          bytes_freed = bytes_freed + #tool_msg.content
-        elseif type(tool_msg.content) == "table" then
-          for _, part in ipairs(tool_msg.content) do
-            if type(part) == "string" then
-              bytes_freed = bytes_freed + #part
-            end
-          end
-        end
-      end
-      if tool_msg._tool_call then
-        local tc = tool_msg._tool_call
-        if tc["function"] then
-          bytes_freed = bytes_freed + #(tc["function"].name or "")
-          bytes_freed = bytes_freed + #(tc["function"].arguments or "")
-        elseif tc["custom"] then
-          bytes_freed = bytes_freed + #(tc["custom"].name or "")
-          bytes_freed = bytes_freed + #(tc["custom"].input or "")
-        end
-      end
-      bytes_freed = bytes_freed + 40
-      conversation:set_message_status(tool_msg, "dropped")
-      dropped_any = true
-    end
+    local entry = item.entry
+    local bytes_freed = entry_bytes(entry)
+    entry.dropped = true
+    dropped_any = true
 
     current_tokens = current_tokens - math.floor(bytes_freed / 4)
-  end
-
-  if dropped_any then
-    conversation:_invalidate_cache()
   end
 
   return dropped_any
@@ -424,13 +338,13 @@ end
 --- Prune conversation if context budget is exceeded.
 --- Strategy:
 --- 1. If estimated tokens >= prune_threshold * context_window:
----    Hard-drop oldest tool calls until we reach target_after_prune
---- 2. If still over target after dropping all eligible tool calls:
----    Compact the oldest user+assistant messages
+---    Hard-drop oldest tool entries until we reach target_after_prune
+--- 2. If still over target after dropping all eligible tool entries:
+---    Compact the oldest user+assistant entries
 ---
 --- @param conversation sia.Conversation
 --- @param opts { on_complete: fun(pruned: boolean, compacted: boolean), on_status: fun(message:string)? }
-function M.prune_if_needed(conversation, opts)
+function M.ensure_token_budget(conversation, opts)
   local config = require("sia.config").options.settings.context_management
   if not config then
     if opts.on_complete then
@@ -439,7 +353,7 @@ function M.prune_if_needed(conversation, opts)
     return
   end
 
-  local budget = M.get_budget(conversation)
+  local budget = M.get_token_estimate(conversation)
   if not budget then
     if opts.on_complete then
       opts.on_complete(false, false)
@@ -460,11 +374,15 @@ function M.prune_if_needed(conversation, opts)
 
   local target_tokens = math.floor(budget.limit * target_after_prune)
 
-  -- Step 1: Drop oldest tool calls
-  local dropped = M.drop_oldest_tool_calls(conversation, target_tokens)
+  if opts.on_status then
+    opts.on_status(
+      string.format("Pruning context (%d%%)", math.floor(budget.percent * 100))
+    )
+  end
 
-  -- Check if we're now below target
+  local dropped = M.drop_oldest_tool_calls(conversation, target_tokens)
   local current = M.estimate_tokens(conversation)
+
   if current <= target_tokens then
     if opts.on_complete then
       opts.on_complete(dropped, false)
@@ -473,12 +391,21 @@ function M.prune_if_needed(conversation, opts)
   end
 
   if opts.on_status then
-    opts.on_status("Compacting conversation history")
+    opts.on_status("Compacting history…")
   end
 
   compact_conversation(conversation, {
     ratio = config.compact_ratio,
     on_complete = function(content)
+      if content and opts.on_status then
+        local common = require("sia.provider.common")
+        opts.on_status(
+          string.format(
+            "Compacted to %s",
+            common.format_token_count(M.estimate_tokens(conversation))
+          )
+        )
+      end
       if opts.on_complete then
         opts.on_complete(true, content ~= nil)
       end

@@ -41,7 +41,9 @@ local eq = MiniTest.expect.equality
 
 -- Helper function to check if files are present in result.content
 local function contains_files(result, expected_files)
-  local content_str = table.concat(result.content, "\n")
+  local content_str = type(result.content) == "table"
+    and table.concat(result.content, "\n")
+    or result.content
   for _, file in ipairs(expected_files) do
     if not content_str:find(file, 1, true) then
       return false, "Missing file: " .. file
@@ -64,7 +66,9 @@ T["sia.tools.glob"]["find all lua files"] = function()
       pattern = "*.lua",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -90,7 +94,9 @@ T["sia.tools.glob"]["find all lua files recursively"] = function()
       pattern = "**/*.lua",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -127,7 +133,9 @@ T["sia.tools.glob"]["find files in specific directory"] = function()
       path = "src",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -156,7 +164,9 @@ T["sia.tools.glob"]["find files in nested directory"] = function()
       path = "src/python",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -184,7 +194,9 @@ T["sia.tools.glob"]["list all files in directory without pattern"] = function()
       path = "tests",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -213,7 +225,9 @@ T["sia.tools.glob"]["find hidden files with flag"] = function()
       hidden = true,
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -243,7 +257,9 @@ T["sia.tools.glob"]["find files in hidden directory"] = function()
       hidden = true,
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -272,7 +288,9 @@ T["sia.tools.glob"]["no matches returns appropriate message"] = function()
       pattern = "*.nonexistent",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -285,7 +303,7 @@ T["sia.tools.glob"]["no matches returns appropriate message"] = function()
   local result = child.lua_get("_G.result")
 
   -- Should return no matches message
-  eq("No files found matching pattern: *.nonexistent", result.content[1])
+  eq(true, result.content:find("No files found matching pattern: *.nonexistent", 1, true) ~= nil)
 end
 
 T["sia.tools.glob"]["no matches in specific directory"] = function()
@@ -301,7 +319,9 @@ T["sia.tools.glob"]["no matches in specific directory"] = function()
       path = "src",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -314,7 +334,7 @@ T["sia.tools.glob"]["no matches in specific directory"] = function()
   local result = child.lua_get("_G.result")
 
   -- Should return no matches message with path
-  eq("No files found matching pattern: *.rs in src", result.content[1])
+  eq(true, result.content:find("No files found matching pattern: *.rs in src", 1, true) ~= nil)
 end
 
 T["sia.tools.glob"]["multiple file extensions"] = function()
@@ -329,7 +349,9 @@ T["sia.tools.glob"]["multiple file extensions"] = function()
       pattern = "*.{lua,py}",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -368,7 +390,9 @@ T["sia.tools.glob"]["search in non-existent path"] = function()
       path = "nonexistent_directory",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -381,7 +405,7 @@ T["sia.tools.glob"]["search in non-existent path"] = function()
   local result = child.lua_get("_G.result")
 
   -- Should return no files found message for non-existent path
-  eq("No files found in nonexistent_directory", result.content[1])
+  eq(true, result.content:find("No files found in nonexistent_directory", 1, true) ~= nil)
 end
 
 T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
@@ -397,7 +421,9 @@ T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
       path = "does/not/exist",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -411,7 +437,7 @@ T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
   local result = child.lua_get("_G.result")
 
   -- Should return no files found message with pattern and path
-  eq("No files found matching pattern: *.lua in does/not/exist", result.content[1])
+  eq(true, result.content:find("No files found matching pattern: *.lua in does/not/exist", 1, true) ~= nil)
 end
 
 T["sia.tools.glob"]["pattern with path separator finds files"] = function()
@@ -426,7 +452,9 @@ T["sia.tools.glob"]["pattern with path separator finds files"] = function()
       pattern = "src/lua/*.lua",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -455,7 +483,9 @@ T["sia.tools.glob"]["pattern with path separator and path arg"] = function()
       path = "src",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -483,7 +513,9 @@ T["sia.tools.glob"]["pattern starting with **/ and path separator"] = function()
       pattern = "**/python/*.py",
     }
 
-    glob_tool.execute(args, { auto_confirm_tools = {}, ignore_tool_confirm = true }, callback)
+    glob_tool.implementation.execute(args, callback, {
+      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+    })
 
     vim.wait(1000, function()
       return result ~= nil
@@ -500,3 +532,4 @@ T["sia.tools.glob"]["pattern starting with **/ and path separator"] = function()
 end
 
 return T
+

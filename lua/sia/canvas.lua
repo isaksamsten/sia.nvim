@@ -87,19 +87,7 @@ local function trim_trailing_empty(lines)
   return lines
 end
 
-local function extract_reasoning_text(message)
-  local meta = message.meta or {}
-  if type(meta.reasoning_text) == "string" and meta.reasoning_text ~= "" then
-    return meta.reasoning_text
-  end
-
-  if meta.reasoning and type(meta.reasoning.summary) == "string" then
-    return meta.reasoning.summary
-  end
-
-  return nil
-end
-
+--- @return string[]?
 local function format_reasoning_lines(content)
   if type(content) ~= "string" or content == "" then
     return nil
@@ -254,31 +242,31 @@ function Canvas:_set_user_extmark(line)
     hl_group = "SiaUser",
   })
 end
---- @param messages sia.PreparedMessage[]
+--- @param messages sia.Entry[]
 --- @param model string?
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
   local last_assistant_turn_id = nil
   for _, message in ipairs(messages) do
-    if message.hide == true or message.role == "system" or message.status then
+    if message.hide == true or message.role == "system" or message.dropped then
       goto continue
     end
 
     if message.role == "tool" then
-      if message.display_content then
-        local line_count = vim.api.nvim_buf_line_count(self.buf)
-        local start_line = line_count
-        vim.api.nvim_buf_set_lines(
-          self.buf,
-          start_line,
-          start_line,
-          false,
-          vim.split(message.display_content, "\n")
-        )
-        line_count = vim.api.nvim_buf_line_count(self.buf)
-        self:highlight_tool(start_line, line_count)
-        vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
-      end
+      -- if message.summary then
+      --   local line_count = vim.api.nvim_buf_line_count(self.buf)
+      --   local start_line = line_count
+      --   vim.api.nvim_buf_set_lines(
+      --     self.buf,
+      --     start_line,
+      --     start_line,
+      --     false,
+      --     vim.split(message.summary, "\n")
+      --   )
+      --   line_count = vim.api.nvim_buf_line_count(self.buf)
+      --   self:highlight_tool(start_line, line_count)
+      --   vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
+      -- end
       goto continue
     end
 
@@ -334,15 +322,23 @@ function Canvas:render_messages(messages, model)
       end
 
       if is_assistant then
-        local reasoning = format_reasoning_lines(extract_reasoning_text(message))
-        if reasoning then
-          local line_count = vim.api.nvim_buf_line_count(self.buf)
-          vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, reasoning)
-          local has_content = content and type(content) == "string" and content ~= ""
-          if has_content then
-            vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
-          else
-            vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+        if message.reasoning then
+          local reasoning = format_reasoning_lines(message.reasoning.text)
+          if reasoning then
+            local line_count = vim.api.nvim_buf_line_count(self.buf)
+            vim.api.nvim_buf_set_lines(
+              self.buf,
+              line_count,
+              line_count,
+              false,
+              reasoning
+            )
+            local has_content = content and type(content) == "string" and content ~= ""
+            if has_content then
+              vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
+            else
+              vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
+            end
           end
         end
       end

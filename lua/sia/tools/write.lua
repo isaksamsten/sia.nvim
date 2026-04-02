@@ -2,16 +2,25 @@ local icons = require("sia.ui").icons
 
 local diff = require("sia.diff")
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 
 local clear_tool_input = tool_utils.gen_clear_outdated_tool_input({ "content" })
 
 return tool_utils.new_tool({
-  name = "write",
-  message = "Writing file...",
-  description = "Write complete file contents to a buffer",
-  system_prompt = [[Write complete file contents to a buffer.
+  definition = {
+    type = "function",
+    name = "write",
+    description = "Write complete file contents to a buffer",
+    parameters = {
+      path = { type = "string", description = "The file path to write to" },
+      content = { type = "string", description = "The complete file content to write" },
+    },
+    required = { "path", "content" },
+  },
+  notification = function()
+    return "Writing file..."
+  end,
+  instructions = [[Write complete file contents to a buffer.
 
 This tool is ideal for:
 - Creating new files from scratch
@@ -30,11 +39,6 @@ Use this tool when:
 - You want to ensure the entire file structure is correct
 
 For small, targeted changes, prefer the edit tool instead.]],
-  parameters = {
-    path = { type = "string", description = "The file path to write to" },
-    content = { type = "string", description = "The complete file content to write" },
-  },
-  required = { "path", "content" },
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
@@ -44,18 +48,18 @@ For small, targeted changes, prefer the edit tool instead.]],
 }, function(args, conversation, callback, opts)
   if not args.path then
     callback({
-      content = { "Error: No file path provided" },
-      display_content = icons.error .. " Failed to write file",
-      kind = "failed",
+      content = "Error: No file path provided",
+      summary = icons.error .. " Failed to write file",
+      ephemeral = true,
     })
     return
   end
 
   if not args.content then
     callback({
-      content = { "Error: No content provided" },
-      display_content = icons.error .. " Failed to write file",
-      kind = "failed",
+      content = "Error: No content provided",
+      summary = icons.error .. " Failed to write file",
+      ephemeral = true,
     })
     return
   end
@@ -106,16 +110,16 @@ For small, targeted changes, prefer the edit tool instead.]],
       local buf = utils.ensure_file_is_loaded(args.path, { listed = true })
       if not buf then
         callback({
-          content = { "Error: Cannot create buffer for " .. args.path },
-          display_content = icons.error .. " Failed to write file",
-          kind = "failed",
+          content = "Error: Cannot create buffer for " .. args.path,
+          summary = icons.error .. " Failed to write file",
+          ephemeral = true,
         })
         return
       end
 
       diff.update_baseline(buf, { turn_id = opts.turn_id })
       local lines = vim.split(args.content, "\n", { plain = true })
-      tracker.without_tracking(buf, conversation.id, function()
+      conversation.tracker:suppress(buf, function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
         vim.api.nvim_buf_call(buf, function()
           pcall(vim.cmd, "noa silent write!")
@@ -132,15 +136,15 @@ For small, targeted changes, prefer the edit tool instead.]],
         #lines
       )
       callback({
-        content = {
-          string.format("Successfully %s buffer for %s", action, args.path),
-        },
-        context = {
+        content = string.format("Successfully %s buffer for %s", action, args.path),
+        region = {
           buf = buf,
-          kind = "edit",
-          clear_outdated_tool_input = clear_tool_input,
+          stale = {
+            content = "File has changed since written, use view to view it again",
+            input = clear_tool_input,
+          },
         },
-        display_content = display_text,
+        summary = display_text,
       })
     end,
   })

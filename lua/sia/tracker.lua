@@ -1,5 +1,3 @@
-local M = {}
-
 local RELOAD_FULL_RANGE = 2 ^ 31
 
 --- @class sia.tracker.Options
@@ -12,16 +10,6 @@ local RELOAD_FULL_RANGE = 2 ^ 31
 --- @field pos [integer, integer]?
 --- @field tick integer
 --- @field refcount integer
-
---- @class sia.tracker.BufferTracker
---- @field global sia.tracker.Region[]?
---- @field global_skip_tracking boolean
---- @field regions table<integer, sia.tracker.Region[]>
---- @field skip_tracking table<integer, boolean>
---- @field marked_for_deletion boolean
-
---- @type table<integer, sia.tracker.BufferTracker>
-M.tracked_buffers = {}
 
 --- @param buf integer
 --- @return boolean
@@ -42,12 +30,23 @@ local function should_track_buffer(buf)
   return true
 end
 
---- Update ticks for regions that overlap with the changed lines
---- @param tracker sia.tracker.BufferTracker
---- @param first integer 0-indexed, inclusive start line
---- @param last_old integer 0-indexed, exclusive end line (before change)
---- @param last_new integer 0-indexed, exclusive end line (after change)
-local function update_tick(tracker, first, last_old, last_new)
+--- @class sia.Tracker
+--- @field buffers table<integer, sia.tracker.Region[]>
+--- @field suppressed table<integer, boolean>
+local Tracker = {}
+Tracker.__index = Tracker
+
+--- @type table<integer, sia.Tracker[]>
+local buf_listeners = {}
+
+--- @type table<integer, boolean>
+local buf_attached = {}
+
+--- @param regions sia.tracker.Region[]
+--- @param first integer
+--- @param last_old integer
+--- @param last_new integer
+local function update_tracker_ticks(regions, first, last_old, last_new)
   local change_start = first + 1
   local change_end = last_old
   local line_delta = last_new - last_old
@@ -56,238 +55,200 @@ local function update_tick(tracker, first, last_old, last_new)
     return region_start <= change_end and change_start <= region_end
   end
 
-  for id, regions_array in pairs(tracker.regions) do
-    if not tracker.skip_tracking[id] then
-      for _, region in ipairs(regions_array) do
-        if region.pos == nil then
-          region.tick = region.tick + 1
-        elseif overlaps(region.pos[1], region.pos[2]) then
-          region.tick = region.tick + 1
-        elseif line_delta ~= 0 and region.pos[1] > change_end then
-          region.tick = region.tick + 1
-        end
-      end
-    end
-  end
-
-  if tracker.global and not tracker.global_skip_tracking then
-    for _, region in ipairs(tracker.global) do
-      if region.pos == nil then
-        region.tick = region.tick + 1
-      elseif overlaps(region.pos[1], region.pos[2]) then
-        region.tick = region.tick + 1
-      elseif line_delta ~= 0 and region.pos[1] > change_end then
-        region.tick = region.tick + 1
-      end
+  for _, region in ipairs(regions) do
+    if region.pos == nil then
+      region.tick = region.tick + 1
+    elseif overlaps(region.pos[1], region.pos[2]) then
+      region.tick = region.tick + 1
+    elseif line_delta ~= 0 and region.pos[1] > change_end then
+      region.tick = region.tick + 1
     end
   end
 end
 
-local function attach(buf)
+--- @param buf integer
+local function shared_attach(buf)
+  if buf_attached[buf] then
+    return
+  end
+  buf_attached[buf] = true
+
   vim.api.nvim_buf_attach(buf, false, {
     on_lines = function(_, _, _, first, last_old, last_new)
-      local tracker = M.tracked_buffers[buf]
-      if not tracker or tracker.marked_for_deletion then
+      local listeners = buf_listeners[buf]
+      if not listeners or #listeners == 0 then
+        buf_attached[buf] = nil
+        buf_listeners[buf] = nil
         return true
       end
-      update_tick(tracker, first, last_old, last_new)
+      for _, t in ipairs(listeners) do
+        if not t.suppressed[buf] then
+          local regions = t.buffers[buf]
+          if regions then
+            update_tracker_ticks(regions, first, last_old, last_new)
+          end
+        end
+      end
     end,
     on_reload = function()
-      local tracker = M.tracked_buffers[buf]
-      if not tracker or tracker.marked_for_deletion then
+      local listeners = buf_listeners[buf]
+      if not listeners or #listeners == 0 then
         return
       end
-      -- On reload, treat as if the entire buffer changed
-      -- Use a large finite range to avoid math.huge - math.huge precision issues
-      update_tick(tracker, 0, RELOAD_FULL_RANGE, RELOAD_FULL_RANGE)
+      for _, t in ipairs(listeners) do
+        if not t.suppressed[buf] then
+          local regions = t.buffers[buf]
+          if regions then
+            update_tracker_ticks(regions, 0, RELOAD_FULL_RANGE, RELOAD_FULL_RANGE)
+          end
+        end
+      end
     end,
     on_detach = function()
-      M.tracked_buffers[buf] = nil
+      local listeners = buf_listeners[buf]
+      if listeners then
+        for _, t in ipairs(listeners) do
+          t.buffers[buf] = nil
+          t.suppressed[buf] = nil
+        end
+      end
+      buf_listeners[buf] = nil
+      buf_attached[buf] = nil
     end,
   })
 end
 
-local function resolve_tick(regions, pos)
-  if not regions then
-    return nil
+--- @param buf integer
+--- @param t sia.Tracker
+local function register_listener(buf, t)
+  if not buf_listeners[buf] then
+    buf_listeners[buf] = {}
   end
-
-  local fallback_tick
-  for _, region in ipairs(regions) do
-    if region.pos == nil then
-      return region.tick
-    end
-
-    if pos and region.pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
-      return region.tick
-    end
-
-    if not fallback_tick or region.tick > fallback_tick then
-      fallback_tick = region.tick
+  for _, existing in ipairs(buf_listeners[buf]) do
+    if existing == t then
+      return
     end
   end
-
-  return fallback_tick
+  table.insert(buf_listeners[buf], t)
+  shared_attach(buf)
 end
 
---- Track a buffer or region for a conversation
 --- @param buf integer
---- @param opts sia.tracker.Options?
---- @return integer current_tick
-function M.ensure_tracked(buf, opts)
-  opts = opts or {}
-  local id = opts.id
-  local pos = opts.pos
+--- @param t sia.Tracker
+local function unregister_listener(buf, t)
+  local listeners = buf_listeners[buf]
+  if not listeners then
+    return
+  end
+  for i, existing in ipairs(listeners) do
+    if existing == t then
+      table.remove(listeners, i)
+      break
+    end
+  end
+end
 
+--- @return sia.Tracker
+function Tracker.new()
+  return setmetatable({
+    buffers = {},
+    suppressed = {},
+  }, Tracker)
+end
+
+--- @param buf integer
+--- @param pos [integer, integer]?
+--- @return integer tick
+function Tracker:track(buf, pos)
   if not should_track_buffer(buf) then
     return 0
   end
 
-  if not M.tracked_buffers[buf] then
-    M.tracked_buffers[buf] = {
-      global = nil,
-      global_skip_tracking = false,
-      regions = {},
-      skip_tracking = {},
-      marked_for_deletion = false,
-    }
-    attach(buf)
+  if not self.buffers[buf] then
+    self.buffers[buf] = {}
+    register_listener(buf, self)
   end
 
-  local tracker = M.tracked_buffers[buf]
-  if tracker.marked_for_deletion then
-    tracker.marked_for_deletion = false
-  end
+  local regions = self.buffers[buf]
 
-  -- Get the appropriate regions array
-  local regions_array
-  if id then
-    regions_array = tracker.regions[id]
-    if not regions_array then
-      regions_array = {}
-      tracker.regions[id] = regions_array
-    end
-  else
-    regions_array = tracker.global
-    if not regions_array then
-      regions_array = {}
-      tracker.global = regions_array
-    end
-  end
-
-  -- Check if already tracking whole buffer for this conversation
   local whole_buffer_region = nil
-  for _, region in ipairs(regions_array) do
+  for _, region in ipairs(regions) do
     if region.pos == nil then
       whole_buffer_region = region
       break
     end
   end
 
-  -- If tracking whole buffer and trying to add a new region then we just increment
-  -- whole buffer refcount
+  -- If tracking whole buffer and adding a specific region, just increment refcount
   if whole_buffer_region and pos then
     whole_buffer_region.refcount = whole_buffer_region.refcount + 1
     return whole_buffer_region.tick
   end
 
-  -- If adding whole buffer when regions exist then we remove all regions
+  -- If adding whole buffer when regions exist, replace with single whole-buffer entry
   if not pos and not whole_buffer_region then
-    -- Inherit tick from global if this is a conversation tracking
-    -- Use resolve_tick to match the same fallback logic as user_tick,
-    -- otherwise ensure_tracked and user_tick can disagree causing
-    -- immediate "outdated" status.
-    local inherited_tick = 0
-    if id then
-      inherited_tick = resolve_tick(tracker.global, nil) or 0
-    end
-
-    if id then
-      tracker.regions[id] = {
-        {
-          id = id,
-          pos = nil,
-          tick = inherited_tick,
-          refcount = 1,
-        },
-      }
-    else
-      tracker.global = {
-        {
-          id = nil,
-          pos = nil,
-          tick = 0,
-          refcount = 1,
-        },
-      }
-    end
-
-    return inherited_tick
+    self.buffers[buf] = {
+      { pos = nil, tick = 0, refcount = 1 },
+    }
+    return 0
   end
 
-  -- If buffer or region is already tracked we increment refcount
+  -- If whole buffer already tracked, increment refcount
   if whole_buffer_region then
     whole_buffer_region.refcount = whole_buffer_region.refcount + 1
     return whole_buffer_region.tick
   end
 
-  for _, region in ipairs(regions_array) do
+  -- Check for exact region match
+  for _, region in ipairs(regions) do
     if region.pos and pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
       region.refcount = region.refcount + 1
       return region.tick
     end
   end
 
-  -- For new region we inherit tick from global if that exists
-  local inherited_tick = 0
-  if id then
-    inherited_tick = resolve_tick(tracker.global, pos) or 0
-  end
-
-  table.insert(regions_array, {
-    id = id,
+  -- New region
+  table.insert(regions, {
     pos = pos,
-    tick = inherited_tick,
+    tick = 0,
     refcount = 1,
   })
 
-  return inherited_tick
+  return 0
 end
 
---- Untrack a buffer or region
 --- @param buf integer
---- @param opts sia.tracker.Options? {pos, id}
-function M.untrack(buf, opts)
-  opts = opts or {}
-  local id = opts.id
-  if opts.global then
-    id = nil
-  end
-  local pos = opts.pos
-
-  local tracker = M.tracked_buffers[buf]
-  if not tracker or tracker.marked_for_deletion then
-    return
+--- @param tick integer
+--- @param pos [integer, integer]?
+--- @return boolean
+function Tracker:is_stale(buf, tick, pos)
+  local regions = self.buffers[buf]
+  if not regions then
+    return false
   end
 
-  local regions_array
-  if id then
-    regions_array = tracker.regions[id]
-    if not regions_array then
-      return -- no fallthrough, ever
+  for _, region in ipairs(regions) do
+    if region.pos == nil then
+      return region.tick ~= tick
     end
-  else
-    regions_array = tracker.global
+    if pos and region.pos and region.pos[1] == pos[1] and region.pos[2] == pos[2] then
+      return region.tick ~= tick
+    end
   end
 
-  if not regions_array then
+  return false
+end
+
+--- @param buf integer
+--- @param pos [integer, integer]?
+function Tracker:untrack(buf, pos)
+  local regions = self.buffers[buf]
+  if not regions then
     return
   end
 
-  for i, region in ipairs(regions_array) do
+  for i, region in ipairs(regions) do
     local matches = false
-
-    -- Check if we have a full region or perfect match
     if pos == nil and region.pos == nil then
       matches = true
     elseif
@@ -302,29 +263,11 @@ function M.untrack(buf, opts)
     if matches then
       region.refcount = region.refcount - 1
       if region.refcount <= 0 then
-        table.remove(regions_array, i)
-
-        -- If no regions left for this conversation, clean up
-        if #regions_array == 0 then
-          if id then
-            tracker.regions[id] = nil
-          else
-            -- TODO: perhaps we should cleanup global too
-            tracker.global = nil
-          end
-
-          -- Check if any (other) conversation still has regions
-          local has_any_tracking = tracker.global ~= nil
-          if not has_any_tracking then
-            for _, _ in pairs(tracker.regions) do
-              has_any_tracking = true
-              break
-            end
-          end
-
-          if not has_any_tracking then
-            tracker.marked_for_deletion = true
-          end
+        table.remove(regions, i)
+        if #regions == 0 then
+          self.buffers[buf] = nil
+          self.suppressed[buf] = nil
+          unregister_listener(buf, self)
         end
       end
       return
@@ -332,51 +275,25 @@ function M.untrack(buf, opts)
   end
 end
 
---- Execute a callback without tracking edits for a conversation
 --- @param buf integer
---- @param id integer
---- @param callback fun():any
+--- @param fn fun():any
 --- @return any
-function M.without_tracking(buf, id, callback)
-  local tracker = M.tracked_buffers[buf]
-  if tracker then
-    tracker.global_skip_tracking = true
-    tracker.skip_tracking[id] = true
-  end
-
-  local ok, result = pcall(callback)
-
-  if tracker then
-    tracker.global_skip_tracking = false
-    tracker.skip_tracking[id] = nil
-  end
-
+function Tracker:suppress(buf, fn)
+  self.suppressed[buf] = true
+  local ok, result = pcall(fn)
+  self.suppressed[buf] = nil
   if not ok then
     error(result)
   end
-
   return result
 end
 
---- Get the current tick for a buffer or region
---- @param buf integer
---- @param id integer conversation id
---- @param pos [integer,integer]?
---- @return integer tick
-function M.user_tick(buf, id, pos)
-  local tracker = M.tracked_buffers[buf]
-  if not tracker or tracker.marked_for_deletion then
-    return -1
+function Tracker:destroy()
+  for buf, _ in pairs(self.buffers) do
+    unregister_listener(buf, self)
   end
-
-  local tick = resolve_tick(tracker.regions[id], pos)
-    or resolve_tick(tracker.global, pos)
-
-  if tick == nil then
-    return -1
-  end
-
-  return tick
+  self.buffers = {}
+  self.suppressed = {}
 end
 
-return M
+return Tracker

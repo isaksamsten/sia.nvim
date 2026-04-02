@@ -4,104 +4,86 @@ local expect = MiniTest.expect
 
 T["context_manager"] = MiniTest.new_set()
 
---- Helper to create a mock message with has_content().
---- @param tbl table raw message fields
---- @return table message with has_content method
-local function make_message(tbl)
-  tbl.has_content = function(self)
-    return self.content ~= nil or self.tool_calls ~= nil
-  end
-  return tbl
+--- Helper to create a mock system entry.
+--- @param content string
+--- @return sia.SystemEntry
+local function make_system(content)
+  return { role = "system", content = content, id = tostring(math.random(1e9)) }
 end
 
---- Helper to create a mock conversation with a small context window.
---- The mock's prepare_messages filters out "dropped", "superseded", and "failed"
---- messages, matching real Conversation behavior.
+--- Helper to create a mock user entry.
+--- @param content string
+--- @return sia.UserEntry
+local function make_user(content)
+  return { role = "user", content = content, id = tostring(math.random(1e9)) }
+end
+
+--- Helper to create a mock assistant entry.
+--- @param content string
+--- @param reasoning table?
+--- @return sia.AssistantEntry
+local function make_assistant(content, reasoning)
+  return {
+    role = "assistant",
+    content = content,
+    reasoning = reasoning,
+    id = tostring(math.random(1e9)),
+  }
+end
+
+--- Helper to create a mock tool entry (self-contained: tool call + result in one entry).
+--- @param name string tool name
+--- @param args_size integer byte size of arguments
+--- @param result_size integer byte size of tool result content
+--- @param opts table? optional fields like { dropped = true }
+--- @return sia.ToolEntry tool_entry
+local function make_tool(name, args_size, result_size, opts)
+  opts = opts or {}
+  return {
+    role = "tool",
+    id = tostring(math.random(1e9)),
+    content = string.rep("r", result_size),
+    dropped = opts.dropped or nil,
+    tool_call = {
+      id = "tc_" .. name .. "_" .. tostring(math.random(1e6)),
+      name = name,
+      type = "function",
+      arguments = string.rep("x", args_size),
+    },
+  }
+end
+
+--- Helper to create a mock conversation with entries.
 --- @param context_window integer
---- @param messages table[]
+--- @param entries table[]
 --- @return table conversation mock
-local function make_conversation(context_window, messages)
+local function make_conversation(context_window, entries)
   return {
     model = {
       context_window = context_window,
     },
-    tools = {},
-    messages = messages,
-    _invalidate_cache = function() end,
-    set_message_status = function(_, message, status)
-      message.status = status
+    tool_definitions = {},
+    entries = entries,
+    add_system_message = function(self, content)
+      table.insert(self.entries, make_system(content))
     end,
-    prepare_messages = function(self)
-      local result = {}
-      for _, m in ipairs(self.messages) do
-        if
-          m.status ~= "dropped"
-          and m.status ~= "superseded"
-          and m.status ~= "failed"
-        then
-          table.insert(result, m)
-        end
-      end
-      return result
+    add_assistant_message = function(self, _, content)
+      table.insert(self.entries, make_assistant(content))
     end,
-    add_instruction = function(self, instruction)
-      table.insert(self.messages, make_message(instruction))
-    end,
-    clear_user_instructions = function(self)
-      self.messages = vim
-        .iter(self.messages)
-        :filter(function(m)
-          return m.role == "system"
-        end)
-        :totable()
+    add_user_message = function(self, content, _, hide)
+      local entry = make_user(content)
+      entry.hide = hide or false
+      table.insert(self.entries, entry)
     end,
   }
-end
-
---- Helper to make a tool call pair: an assistant message with tool_calls
---- and a matching tool result message.
---- @param id string tool call id
---- @param name string tool name
---- @param args_size integer byte size of arguments
---- @param result_size integer byte size of tool result content
---- @param status string? optional status for both messages
---- @return table assistant_msg, table tool_msg
-local function make_tool_pair(id, name, args_size, result_size, status)
-  local assistant_msg = make_message({
-    role = "assistant",
-    content = "",
-    status = status,
-    tool_calls = {
-      {
-        id = id,
-        ["function"] = {
-          name = name,
-          arguments = string.rep("x", args_size),
-        },
-      },
-    },
-  })
-  local tool_msg = make_message({
-    role = "tool",
-    content = string.rep("r", result_size),
-    status = status,
-    _tool_call = {
-      id = id,
-      ["function"] = {
-        name = name,
-        arguments = string.rep("x", args_size),
-      },
-    },
-  })
-  return assistant_msg, tool_msg
 end
 
 T["context_manager"]["estimate_tokens returns reasonable estimates"] = function()
   local cm = require("sia.context_manager")
 
   local conversation = make_conversation(128000, {
-    { role = "system", content = string.rep("a", 400) },
-    { role = "user", content = string.rep("b", 800) },
+    make_system(string.rep("a", 400)),
+    make_user(string.rep("b", 800)),
   })
 
   local tokens = cm.estimate_tokens(conversation)
@@ -113,14 +95,11 @@ T["context_manager"]["get_budget returns nil when no context_window"] = function
   local cm = require("sia.context_manager")
   local conversation = {
     model = {},
-    tools = {},
-    messages = {},
-    prepare_messages = function(_)
-      return {}
-    end,
+    tool_definitions = {},
+    entries = {},
   }
 
-  local budget = cm.get_budget(conversation)
+  local budget = cm.get_token_estimate(conversation)
   expect.equality(budget, nil)
 end
 
@@ -128,10 +107,10 @@ T["context_manager"]["get_budget returns correct structure"] = function()
   local cm = require("sia.context_manager")
 
   local conversation = make_conversation(100000, {
-    { role = "system", content = string.rep("x", 4000) },
+    make_system(string.rep("x", 4000)),
   })
 
-  local budget = cm.get_budget(conversation)
+  local budget = cm.get_token_estimate(conversation)
   expect.no_equality(budget, nil)
   expect.equality(type(budget.estimated), "number")
   expect.equality(budget.limit, 100000)
@@ -144,11 +123,11 @@ T["context_manager"]["prune_if_needed does nothing when under threshold"] = func
   local cm = require("sia.context_manager")
 
   local conversation = make_conversation(100000, {
-    { role = "system", content = string.rep("x", 400) },
+    make_system(string.rep("x", 400)),
   })
 
   local called = false
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function(pruned, compacted)
       called = true
       expect.equality(pruned, false)
@@ -159,34 +138,30 @@ T["context_manager"]["prune_if_needed does nothing when under threshold"] = func
   expect.equality(called, true)
 end
 
-T["context_manager"]["drop_oldest_tool_calls marks pairs as dropped"] = function()
+T["context_manager"]["drop_oldest_tool_calls marks entries as dropped"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000)
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
+  local t1 = make_tool("view", 100, 2000)
+  local t2 = make_tool("edit", 100, 2000)
 
   local conversation = make_conversation(1000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
+    make_system(string.rep("s", 100)),
     t1,
-    a2,
     t2,
-    { role = "user", content = "question" },
+    make_user("question"),
   })
 
-  -- Verify initial estimate includes all messages
+  -- Verify initial estimate includes all entries
   local before = cm.estimate_tokens(conversation)
   expect.equality(before > 0, true)
 
   -- Drop with a very low target so everything droppable gets dropped
   local dropped = cm.drop_oldest_tool_calls(conversation, 0)
   expect.equality(dropped, true)
-  expect.equality(a1.status, "dropped")
-  expect.equality(t1.status, "dropped")
-  expect.equality(a2.status, "dropped")
-  expect.equality(t2.status, "dropped")
+  expect.equality(t1.dropped, true)
+  expect.equality(t2.dropped, true)
 
-  -- After dropping, estimate should be lower (dropped messages filtered out)
+  -- After dropping, estimate should be lower
   local after = cm.estimate_tokens(conversation)
   expect.equality(after < before, true)
 end
@@ -194,91 +169,71 @@ end
 T["context_manager"]["drop_oldest_tool_calls drops oldest first and stops at target"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000)
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
+  local t1 = make_tool("view", 100, 2000)
+  local t2 = make_tool("edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
+    make_system(string.rep("s", 100)),
     t1,
-    a2,
     t2,
-    { role = "user", content = "question" },
+    make_user("question"),
   })
 
-  -- Set target so dropping the first pair is enough
+  -- Set target so dropping the first entry is enough
   local full_estimate = cm.estimate_tokens(conversation)
-  -- Target: drop ~one pair worth of tokens
+  -- Target: drop ~one entry worth of tokens
   local target = full_estimate - 400
 
   local dropped = cm.drop_oldest_tool_calls(conversation, target)
   expect.equality(dropped, true)
 
-  -- Oldest pair should be dropped
-  expect.equality(a1.status, "dropped")
-  expect.equality(t1.status, "dropped")
+  -- Oldest entry should be dropped
+  expect.equality(t1.dropped, true)
 
-  -- Second pair should still be active (not dropped)
-  expect.no_equality(a2.status, "dropped")
-  expect.no_equality(t2.status, "dropped")
+  -- Second entry should still be active (not dropped)
+  expect.no_equality(t2.dropped, true)
 end
 
-T["context_manager"]["outdated tool calls are droppable"] = function()
+T["context_manager"]["already-dropped entries are not re-processed"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "outdated")
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
+  local t1 = make_tool("view", 100, 2000, { dropped = true })
+  local t2 = make_tool("edit", 100, 2000)
 
   local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
+    make_system(string.rep("s", 100)),
     t1,
-    a2,
     t2,
-    { role = "user", content = "question" },
+    make_user("question"),
   })
 
-  -- Drop with target 0 so everything gets dropped
+  -- Only the second entry should be droppable, first is already dropped
   local dropped = cm.drop_oldest_tool_calls(conversation, 0)
   expect.equality(dropped, true)
-
-  -- The outdated pair should now be fully dropped (upgraded from outdated)
-  expect.equality(a1.status, "dropped")
-  expect.equality(t1.status, "dropped")
-  -- The active pair should also be dropped
-  expect.equality(a2.status, "dropped")
-  expect.equality(t2.status, "dropped")
+  expect.equality(t2.dropped, true)
 end
 
-T["context_manager"]["outdated pairs are dropped before active ones"] = function()
+T["context_manager"]["estimate_tokens decreases after dropping"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "outdated")
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
+  local t1 = make_tool("view", 100, 4000)
 
   local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
+    make_system(string.rep("s", 200)),
     t1,
-    a2,
-    t2,
-    { role = "user", content = "question" },
+    make_user(string.rep("q", 200)),
   })
 
-  -- Set target so dropping just the outdated pair is enough
-  local full_estimate = cm.estimate_tokens(conversation)
-  local target = full_estimate - 400
+  local before = cm.estimate_tokens(conversation)
 
-  local dropped = cm.drop_oldest_tool_calls(conversation, target)
-  expect.equality(dropped, true)
+  cm.drop_oldest_tool_calls(conversation, 0)
 
-  -- Outdated pair upgraded to dropped
-  expect.equality(a1.status, "dropped")
-  expect.equality(t1.status, "dropped")
+  local after = cm.estimate_tokens(conversation)
 
-  -- Active pair should NOT be dropped (we reached target)
-  expect.no_equality(a2.status, "dropped")
-  expect.no_equality(t2.status, "dropped")
+  -- The tool entry was ~4100 + 40 overhead bytes = ~1035 tokens
+  -- After dropping, those should be gone from the estimate
+  expect.equality(after < before, true)
+  expect.equality(before - after > 1000, true)
 end
 
 T["context_manager"]["prune_if_needed drops tool calls when over threshold"] = function()
@@ -286,24 +241,24 @@ T["context_manager"]["prune_if_needed drops tool calls when over threshold"] = f
 
   -- Small context window: 2000 tokens
   -- Fill it to >85%: need ~1700+ tokens = ~6800+ bytes
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 3000)
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 3000)
+  -- Each tool entry: 3200 content + 100 args + ~4 name + 40 overhead ≈ 3344 bytes
+  -- Two tools: ~6688, system: 240, user: 240, total ~7168 / 4 ≈ 1792 tokens > 1700
+  local t1 = make_tool("view", 100, 3200)
+  local t2 = make_tool("edit", 100, 3200)
 
   local conversation = make_conversation(2000, {
-    { role = "system", content = string.rep("s", 200) },
-    a1,
+    make_system(string.rep("s", 200)),
     t1,
-    a2,
     t2,
-    { role = "user", content = string.rep("q", 200) },
+    make_user(string.rep("q", 200)),
   })
 
-  local budget = cm.get_budget(conversation)
+  local budget = cm.get_token_estimate(conversation)
   -- Verify we're actually over threshold
   expect.equality(budget.percent >= 0.85, true)
 
   local called = false
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function(pruned, compacted)
       called = true
       expect.equality(pruned, true)
@@ -313,8 +268,8 @@ T["context_manager"]["prune_if_needed drops tool calls when over threshold"] = f
 
   expect.equality(called, true)
 
-  -- At least one pair should be dropped
-  local any_dropped = a1.status == "dropped" or a2.status == "dropped"
+  -- At least one entry should be dropped
+  local any_dropped = t1.dropped == true or t2.dropped == true
   expect.equality(any_dropped, true)
 
   -- After pruning, we should be under target (70% of 2000 = 1400)
@@ -322,88 +277,35 @@ T["context_manager"]["prune_if_needed drops tool calls when over threshold"] = f
   expect.equality(after <= 1400, true)
 end
 
-T["context_manager"]["already-dropped pairs are not re-processed"] = function()
-  local cm = require("sia.context_manager")
-
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "dropped")
-  local a2, t2 = make_tool_pair("tc2", "edit", 100, 2000)
-
-  local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
-    t1,
-    a2,
-    t2,
-    { role = "user", content = "question" },
-  })
-
-  -- Only the second pair should be droppable, first is already dropped
-  local dropped = cm.drop_oldest_tool_calls(conversation, 0)
-  expect.equality(dropped, true)
-  expect.equality(a2.status, "dropped")
-  expect.equality(t2.status, "dropped")
-end
-
-T["context_manager"]["superseded pairs are not droppable"] = function()
-  local cm = require("sia.context_manager")
-
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 2000, "superseded")
-
-  local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 100) },
-    a1,
-    t1,
-    { role = "user", content = "question" },
-  })
-
-  local dropped = cm.drop_oldest_tool_calls(conversation, 0)
-  -- Nothing to drop since the only pair is superseded
-  expect.equality(dropped, false)
-  expect.equality(a1.status, "superseded")
-  expect.equality(t1.status, "superseded")
-end
-
-T["context_manager"]["estimate_tokens decreases after dropping"] = function()
-  local cm = require("sia.context_manager")
-
-  local a1, t1 = make_tool_pair("tc1", "view", 100, 4000)
-
-  local conversation = make_conversation(10000, {
-    { role = "system", content = string.rep("s", 200) },
-    a1,
-    t1,
-    { role = "user", content = string.rep("q", 200) },
-  })
-
-  local before = cm.estimate_tokens(conversation)
-
-  cm.drop_oldest_tool_calls(conversation, 0)
-
-  local after = cm.estimate_tokens(conversation)
-
-  -- The tool pair was ~4300 bytes = ~1075 tokens
-  -- After dropping, those should be gone from the estimate
-  expect.equality(after < before, true)
-  expect.equality(before - after > 1000, true)
-end
-
---- Helper to mock sia.assistant.fetch_response and sia.conversation.Conversation.new
+--- Helper to mock sia.assistant.fetch_response and sia.conversation.new_conversation
 --- for testing compact_conversation end-to-end.
 --- @param summary_response string the summary text the mock summarizer returns
---- @return { captured_instructions: table[] } tracker to inspect what was sent to summarizer
+--- @return { captured_entries: table[] } tracker to inspect what was sent to summarizer
 local function mock_compaction(summary_response)
-  local tracker = { captured_instructions = {} }
+  local tracker = { captured_entries = {} }
 
-  -- Mock Conversation.new to return a lightweight object that captures instructions
+  -- Mock new_conversation to return a lightweight object that captures entries
   local real_conv = require("sia.conversation")
   tracker._real_new = real_conv.new_conversation
   real_conv.new_conversation = function(_, _)
     return {
-      add_instruction = function(_, instruction)
-        table.insert(tracker.captured_instructions, instruction)
+      add_system_message = function(_, content)
+        table.insert(tracker.captured_entries, {
+          role = "system",
+          content = content,
+        })
       end,
-      prepare_messages = function(_)
-        return {}
+      add_assistant_message = function(_, _, content)
+        table.insert(tracker.captured_entries, {
+          role = "assistant",
+          content = content,
+        })
+      end,
+      add_user_message = function(_, content)
+        table.insert(tracker.captured_entries, {
+          role = "user",
+          content = content,
+        })
       end,
     }
   end
@@ -433,22 +335,21 @@ local function mock_compaction(summary_response)
   return tracker
 end
 
-T["context_manager"]["compact includes dropped messages in summarizer input"] = function()
+T["context_manager"]["compact includes dropped entries in summarizer input"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
+  local t1 = make_tool("view", 50, 200, { dropped = true })
   local tracker = mock_compaction("Summary of conversation")
 
   local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    a1,
+    make_system("system prompt"),
     t1,
-    make_message({ role = "user", content = "hello" }),
-    make_message({ role = "assistant", content = "hi there" }),
+    make_user("hello"),
+    make_assistant("hi there"),
   })
 
   local completed = false
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function(pruned, compacted)
       completed = true
       expect.equality(pruned, true)
@@ -458,14 +359,14 @@ T["context_manager"]["compact includes dropped messages in summarizer input"] = 
 
   expect.equality(completed, true)
 
-  -- The dropped tool call messages should have been sent to the summarizer
+  -- The dropped tool entry should have been sent to the summarizer
   local found_tool_result = false
   local found_tool_call = false
-  for _, instr in ipairs(tracker.captured_instructions) do
-    if instr.content and instr.content:find("%[Tool result: view%]") then
+  for _, entry in ipairs(tracker.captured_entries) do
+    if entry.content and entry.content:find("%[Tool result: view%]") then
       found_tool_result = true
     end
-    if instr.content and instr.content:find("%[Tool call: view") then
+    if entry.content and entry.content:find("%[Tool call: view") then
       found_tool_call = true
     end
   end
@@ -476,127 +377,74 @@ T["context_manager"]["compact includes dropped messages in summarizer input"] = 
   tracker.restore()
 end
 
-T["context_manager"]["compact removes dropped messages after successful compaction"] = function()
+T["context_manager"]["compact removes dropped entries after successful compaction"] = function()
   local cm = require("sia.context_manager")
 
-  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
+  local t1 = make_tool("view", 50, 200, { dropped = true })
   local tracker = mock_compaction("Summary of conversation")
 
   local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    a1,
+    make_system("system prompt"),
     t1,
-    make_message({ role = "user", content = "hello" }),
-    make_message({ role = "assistant", content = "hi there" }),
+    make_user("hello"),
+    make_assistant("hi there"),
   })
 
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function() end,
   })
 
-  -- The originally-dropped tool pair should be completely removed
-  for _, m in ipairs(conversation.messages) do
-    if m.role == "tool" then
-      -- No tool messages should remain (a1/t1 were the only tool pair)
-      error("Tool message should have been removed")
-    end
-  end
-
-  -- Verify a1 and t1 are no longer in the messages array (by identity)
-  local found_a1, found_t1 = false, false
-  for _, m in ipairs(conversation.messages) do
-    if m == a1 then
-      found_a1 = true
-    end
-    if m == t1 then
+  -- The originally-dropped tool entry should be completely removed
+  local found_t1 = false
+  for _, entry in ipairs(conversation.entries) do
+    if entry == t1 then
       found_t1 = true
     end
   end
-  expect.equality(found_a1, false)
   expect.equality(found_t1, false)
 
   tracker.restore()
 end
 
-T["context_manager"]["compact removes superseded messages after successful compaction"] = function()
-  local cm = require("sia.context_manager")
-
-  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "superseded")
-  local tracker = mock_compaction("Summary of conversation")
-
-  local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    a1,
-    t1,
-    make_message({ role = "user", content = "hello" }),
-    make_message({ role = "assistant", content = "hi there" }),
-  })
-
-  cm.prune_if_needed(conversation, {
-    on_complete = function() end,
-  })
-
-  -- Superseded messages should be removed
-  for _, m in ipairs(conversation.messages) do
-    expect.no_equality(m.status, "superseded")
-  end
-
-  tracker.restore()
-end
-
-T["context_manager"]["compact normalizes tool calls to plain text"] = function()
+T["context_manager"]["compact normalizes tool entries to plain text"] = function()
   local cm = require("sia.context_manager")
 
   local tracker = mock_compaction("Summary")
 
-  -- Create a conversation with active (non-dropped) tool calls that will be compacted
+  -- Create a conversation with an active (non-dropped) tool entry that will be compacted
   local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    make_message({ role = "user", content = "read the file" }),
-    make_message({
-      role = "assistant",
-      content = "",
-      tool_calls = {
-        {
-          id = "toolu_anthropic_123",
-          ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
-        },
-      },
-    }),
-    make_message({
-      role = "tool",
-      content = "file contents here",
-      _tool_call = {
-        id = "toolu_anthropic_123",
-        ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
-      },
-    }),
-    make_message({ role = "assistant", content = "I read the file" }),
+    make_system("system prompt"),
+    make_user("read the file"),
+    make_tool("view", 0, 0),
+    make_assistant("I read the file"),
   })
 
-  cm.prune_if_needed(conversation, {
+  -- Manually set the tool entry args/content for verification
+  conversation.entries[3].tool_call.arguments = '{"path":"foo.lua"}'
+  conversation.entries[3].content = "file contents here"
+
+  cm.ensure_token_budget(conversation, {
     on_complete = function() end,
   })
 
-  -- All instructions sent to summarizer should be plain user/assistant messages
-  -- with no tool_calls, _tool_call fields — just normalized text
-  for _, instr in ipairs(tracker.captured_instructions) do
-    expect.equality(instr.tool_calls, nil)
-    expect.equality(instr._tool_call, nil)
-    expect.equality(type(instr.role), "string")
-    expect.equality(type(instr.content), "string")
+  -- All entries sent to summarizer should be plain user/assistant messages
+  -- with no tool_call fields — just normalized text
+  for _, entry in ipairs(tracker.captured_entries) do
+    expect.equality(entry.tool_call, nil)
+    expect.equality(type(entry.role), "string")
+    expect.equality(type(entry.content), "string")
     -- Tool role should be converted to user
-    expect.no_equality(instr.role, "tool")
+    expect.no_equality(entry.role, "tool")
   end
 
   -- Should contain the normalized tool call text
   local found_view_call = false
   local found_view_result = false
-  for _, instr in ipairs(tracker.captured_instructions) do
-    if instr.content:find("%[Tool call: view") then
+  for _, entry in ipairs(tracker.captured_entries) do
+    if entry.content:find("%[Tool call: view") then
       found_view_call = true
     end
-    if instr.content:find("%[Tool result: view%]") then
+    if entry.content:find("%[Tool result: view%]") then
       found_view_result = true
     end
   end
@@ -612,12 +460,12 @@ T["context_manager"]["compact adds summary message to conversation"] = function(
   local tracker = mock_compaction("This is the summary content")
 
   local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    make_message({ role = "user", content = "hello" }),
-    make_message({ role = "assistant", content = "hi there" }),
+    make_system("system prompt"),
+    make_user("hello"),
+    make_assistant("hi there"),
   })
 
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function(pruned, compacted)
       expect.equality(pruned, true)
       expect.equality(compacted, true)
@@ -626,14 +474,14 @@ T["context_manager"]["compact adds summary message to conversation"] = function(
 
   -- Should have the system message + the summary message
   local found_summary = false
-  for _, m in ipairs(conversation.messages) do
+  for _, entry in ipairs(conversation.entries) do
     if
-      m.content
-      and type(m.content) == "string"
-      and m.content:find("This is the summary content")
+      entry.content
+      and type(entry.content) == "string"
+      and entry.content:find("This is the summary content")
     then
       found_summary = true
-      expect.equality(m.role, "user")
+      expect.equality(entry.role, "user")
     end
   end
   expect.equality(found_summary, true)
@@ -641,36 +489,141 @@ T["context_manager"]["compact adds summary message to conversation"] = function(
   tracker.restore()
 end
 
-T["context_manager"]["compact does not include dropped messages in compact_ratio count"] = function()
+T["context_manager"]["compact does not include dropped entries in compact_ratio count"] = function()
   local cm = require("sia.context_manager")
 
-  -- 4 dropped messages + 4 active non-system messages
-  local a1, t1 = make_tool_pair("tc1", "view", 50, 200, "dropped")
-  local a2, t2 = make_tool_pair("tc2", "edit", 50, 200, "dropped")
+  -- 2 dropped tool entries + 4 active non-system entries
+  local t1 = make_tool("view", 50, 200, { dropped = true })
+  local t2 = make_tool("edit", 50, 200, { dropped = true })
   local tracker = mock_compaction("Summary")
 
   local conversation = make_conversation(50, {
-    make_message({ role = "system", content = "system prompt" }),
-    a1,
+    make_system("system prompt"),
     t1,
-    a2,
     t2,
-    make_message({ role = "user", content = "question 1" }),
-    make_message({ role = "assistant", content = "answer 1" }),
-    make_message({ role = "user", content = "question 2" }),
-    make_message({ role = "assistant", content = "answer 2" }),
+    make_user("question 1"),
+    make_assistant("answer 1"),
+    make_user("question 2"),
+    make_assistant("answer 2"),
   })
 
   -- mock_compaction sets compact_ratio = 0.5
-  -- With 4 active non-system messages, should compact 2 active + all 4 dropped = 6
+  -- With 4 active non-system entries, should compact 2 active + all 2 dropped = 4
+  -- Plus the system prompt = 5 total in captured_entries
 
-  cm.prune_if_needed(conversation, {
+  cm.ensure_token_budget(conversation, {
     on_complete = function() end,
   })
 
-  -- All 4 dropped messages + 2 of the 4 active non-system = 6 instructions + System
-  -- prompt
-  expect.equality(#tracker.captured_instructions, 7)
+  -- 2 dropped entries + 2 of the 4 active non-system + system prompt = 5 entries
+  expect.equality(#tracker.captured_entries, 5)
+
+  tracker.restore()
+end
+
+T["context_manager"]["compact removes both dropped and compacted entries"] = function()
+  local cm = require("sia.context_manager")
+
+  local t1 = make_tool("view", 50, 200, { dropped = true })
+  local tracker = mock_compaction("Summary pass 1")
+
+  local u1 = make_user("question 1")
+  local a1 = make_assistant("answer 1")
+
+  local conversation = make_conversation(50, {
+    make_system("system prompt"),
+    t1,
+    u1,
+    a1,
+    make_user("question 2"),
+    make_assistant("answer 2"),
+  })
+
+  cm.ensure_token_budget(conversation, {
+    on_complete = function() end,
+  })
+
+  -- After compaction: the dropped entry (t1) and the compacted active entries
+  -- (u1, a1) should all be removed from conversation.entries
+  for _, entry in ipairs(conversation.entries) do
+    expect.no_equality(entry, t1)
+    expect.no_equality(entry, u1)
+    expect.no_equality(entry, a1)
+  end
+
+  tracker.restore()
+end
+
+T["context_manager"]["repeated compaction does not re-summarize already compacted history"] = function()
+  local cm = require("sia.context_manager")
+
+  -- First pass
+  local tracker1 = mock_compaction("Summary of pass 1")
+
+  local conversation = make_conversation(50, {
+    make_system("system prompt"),
+    make_user("question 1"),
+    make_assistant("answer 1"),
+    make_user("question 2"),
+    make_assistant("answer 2"),
+  })
+
+  cm.ensure_token_budget(conversation, {
+    on_complete = function() end,
+  })
+
+  -- After first pass, some entries should be replaced by the summary
+  local entries_after_pass1 = #conversation.entries
+  tracker1.restore()
+
+  -- Add more entries to trigger compaction again
+  table.insert(conversation.entries, make_user("question 3"))
+  table.insert(conversation.entries, make_assistant("answer 3"))
+
+  -- Second pass
+  local tracker2 = mock_compaction("Summary of pass 2")
+
+  cm.ensure_token_budget(conversation, {
+    on_complete = function() end,
+  })
+
+  -- The second pass should NOT contain "question 1" or "answer 1" in the
+  -- summarizer input, since those were already removed in pass 1
+  for _, entry in ipairs(tracker2.captured_entries) do
+    if entry.content then
+      expect.equality(entry.content:find("question 1"), nil)
+      expect.equality(entry.content:find("answer 1"), nil)
+    end
+  end
+
+  tracker2.restore()
+end
+
+T["context_manager"]["normalize handles reasoning-only assistant entries"] = function()
+  local cm = require("sia.context_manager")
+
+  local tracker = mock_compaction("Summary")
+
+  local conversation = make_conversation(50, {
+    make_system("system prompt"),
+    make_user("think about this"),
+    make_assistant(nil, { text = "deep thought about the problem" }),
+    make_user("what did you think?"),
+    make_assistant("I thought carefully"),
+  })
+
+  cm.ensure_token_budget(conversation, {
+    on_complete = function() end,
+  })
+
+  -- The reasoning-only assistant entry should appear in the summarizer input
+  local found_reasoning = false
+  for _, entry in ipairs(tracker.captured_entries) do
+    if entry.content and entry.content:find("deep thought about the problem") then
+      found_reasoning = true
+    end
+  end
+  expect.equality(found_reasoning, true)
 
   tracker.restore()
 end

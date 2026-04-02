@@ -5,36 +5,28 @@ T["provider.prepare_messages"] = MiniTest.new_set()
 
 T["provider.prepare_messages"]["openai completion only merges adjacent user messages"] = function()
   local openai = require("sia.provider.openai")
-  --- @type any[]
+  --- @type sia.Message[]
   local messages = {
-    { role = "user", hide = false, content = "first", meta = {} },
+    { role = "user", content = "first" },
     {
       role = "user",
-      hide = false,
       content = {
         { type = "text", text = "second" },
         { type = "image", image = { url = "https://example.com/cat.png" } },
       },
-      meta = {},
     },
     {
       role = "assistant",
-      hide = false,
-      content = "thinking",
-      meta = { reasoning_opaque = "opaque-reasoning" },
+      reasoning = { text = "thinking", opaque = "opaque-reasoning" },
     },
-    { role = "assistant", hide = false, content = "final answer", meta = {} },
+    { role = "assistant", content = "final answer" },
     {
       role = "assistant",
-      hide = false,
-      content = nil,
-      meta = {},
-      tool_calls = {
-        {
-          id = "call_1",
-          type = "function",
-          ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
-        },
+      tool_call = {
+        id = "call_1",
+        type = "function",
+        name = "view",
+        arguments = '{"path":"foo.lua"}',
       },
     },
   }
@@ -52,7 +44,7 @@ T["provider.prepare_messages"]["openai completion only merges adjacent user mess
   eq("https://example.com/cat.png", data.messages[1].content[3].image_url.url)
 
   eq("assistant", data.messages[2].role)
-  eq("thinking", data.messages[2].content)
+  eq("thinking", data.messages[2].reasoning_text)
   eq("opaque-reasoning", data.messages[2].reasoning_opaque)
 
   eq("assistant", data.messages[3].role)
@@ -64,19 +56,19 @@ T["provider.prepare_messages"]["openai responses keeps assistant items separate"
   local openai = require("sia.provider.openai")
   --- @type any[]
   local messages = {
-    { role = "system", hide = false, content = "system prompt", meta = {} },
+    { role = "system", hide = false, content = "system prompt" },
     {
       role = "user",
-      hide = false,
       content = {
         { type = "text", text = "first" },
-        { type = "image", image = { url = "https://example.com/dog.png", detail = "low" } },
+        {
+          type = "image",
+          image = { url = "https://example.com/dog.png", detail = "low" },
+        },
       },
-      meta = {},
     },
     {
       role = "user",
-      hide = false,
       content = {
         {
           type = "file",
@@ -90,8 +82,8 @@ T["provider.prepare_messages"]["openai responses keeps assistant items separate"
       },
       meta = {},
     },
-    { role = "assistant", hide = false, content = "assistant one", meta = {} },
-    { role = "assistant", hide = false, content = "assistant two", meta = {} },
+    { role = "assistant", content = "assistant one" },
+    { role = "assistant", content = "assistant two" },
   }
 
   local data = {}
@@ -116,20 +108,16 @@ end
 
 T["provider.prepare_messages"]["anthropic merges adjacent assistant turns after translation"] = function()
   local anthropic = require("sia.provider.anthropic")
-  --- @type any[]
+  --- @type sia.Message[]
   local messages = {
     { role = "assistant", hide = false, content = "first", meta = {} },
     {
       role = "assistant",
-      hide = false,
-      content = nil,
-      meta = {},
-      tool_calls = {
-        {
-          id = "toolu_1",
-          type = "function",
-          ["function"] = { name = "view", arguments = '{"path":"foo.lua"}' },
-        },
+      tool_call = {
+        id = "toolu_1",
+        type = "function",
+        name = "view",
+        arguments = '{"path":"foo.lua"}',
       },
     },
   }

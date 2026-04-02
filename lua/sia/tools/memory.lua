@@ -2,9 +2,45 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
-  name = "memory",
-  system_prompt = [[
-Manage agent memory.
+  definition = {
+    type = "function",
+    name = "memory",
+    description = "Manage agent memory (view, create, edit, delete, etc.)",
+    parameters = {
+      command = {
+        type = "string",
+        enum = {
+          "view",
+          "create",
+          "str_replace",
+          "insert",
+          "delete",
+          "rename",
+          "search",
+        },
+        description = "The command to execute",
+      },
+      path = {
+        type = "string",
+        description = "Path to the memory file or directory, starting with /memories/",
+      },
+      old_path = { type = "string", description = "Old path for rename" },
+      new_path = { type = "string", description = "New path for rename" },
+      view_range = {
+        type = "array",
+        items = { type = "integer" },
+        description = "Line range [start, end] for view",
+      },
+      file_text = { type = "string", description = "Content for create" },
+      old_str = { type = "string", description = "Text to replace for str_replace" },
+      new_str = { type = "string", description = "Replacement text for str_replace" },
+      insert_line = { type = "integer", description = "Line number to insert at" },
+      insert_text = { type = "string", description = "Text to insert" },
+      query = { type = "string", description = "Search query" },
+    },
+    required = { "command" },
+  },
+  instructions = [[Manage agent memory.
 
 Use this tool to:
 - Keep track of progress on complex tasks.
@@ -15,35 +51,12 @@ Use this tool to:
 All paths MUST start with `/memories/`.
 ]],
   read_only = false,
-  message = function(args)
+  notification = function(args)
     return string.format("Executing memory command: %s", args.command)
   end,
-  description = "Manage agent memory (view, create, edit, delete, etc.)",
-  parameters = {
-    command = {
-      type = "string",
-      enum = { "view", "create", "str_replace", "insert", "delete", "rename", "search" },
-      description = "The command to execute",
-    },
-    path = { type = "string", description = "Path to the memory file or directory" },
-    old_path = { type = "string", description = "Old path for rename" },
-    new_path = { type = "string", description = "New path for rename" },
-    view_range = {
-      type = "array",
-      items = { type = "integer" },
-      description = "Line range [start, end] for view",
-    },
-    file_text = { type = "string", description = "Content for create" },
-    old_str = { type = "string", description = "Text to replace for str_replace" },
-    new_str = { type = "string", description = "Replacement text for str_replace" },
-    insert_line = { type = "integer", description = "Line number to insert at" },
-    insert_text = { type = "string", description = "Text to insert" },
-    query = { type = "string", description = "Search query" },
-  },
   auto_apply = function(args, _)
     return 1
   end,
-  required = { "command" },
 }, function(args, _, callback, opts)
   local utils = require("sia.utils")
   local matcher = require("sia.matcher")
@@ -81,8 +94,8 @@ All paths MUST start with `/memories/`.
   -- Security: If a path was provided but rejected by resolve_path, fail.
   if args.path and not path then
     callback({
-      content = { "Error: Invalid path" },
-      kind = "failed",
+      content = "Error: Invalid path",
+      ephemeral = true,
     })
     return
   end
@@ -97,8 +110,8 @@ All paths MUST start with `/memories/`.
     local stat = vim.loop.fs_stat(path)
     if not stat then
       callback({
-        content = { "Path not found: " .. (args.path or "root") },
-        kind = "failed",
+        content = "Path not found: " .. (args.path or "root"),
+        ephemeral = true,
       })
       return
     end
@@ -116,7 +129,7 @@ All paths MUST start with `/memories/`.
       end
       callback({
         content = output,
-        display_content = icons.directory .. " Viewed directory " .. (args.path or "/memories"),
+        summary = icons.directory .. " Viewed directory " .. (args.path or "/memories"),
       })
     else
       -- Read file
@@ -140,11 +153,11 @@ All paths MUST start with `/memories/`.
           .. string.format(" (lines %d-%d)", start_line, end_line)
       end
 
-      callback({ content = content, display_content = display_info })
+      callback({ content = content, summary = display_info })
     end
   elseif args.command == "create" then
     if not args.file_text then
-      callback({ content = { "Error: file_text required for create" }, kind = "failed" })
+      callback({ content = "Error: file_text required for create", ephemeral = true })
       return
     end
 
@@ -157,25 +170,25 @@ All paths MUST start with `/memories/`.
     local lines = vim.split(args.file_text, "\n")
     vim.fn.writefile(lines, path)
     callback({
-      content = { "Successfully created " .. args.path },
-      display_content = icons.save .. " Created memory " .. args.path,
+      content = "Successfully created " .. args.path,
+      summary = icons.save .. " Created memory " .. args.path,
     })
   elseif args.command == "str_replace" then
     if not args.old_str or not args.new_str then
-      callback({ content = { "Error: old_str and new_str required" }, kind = "failed" })
+      callback({ content = "Error: old_str and new_str required", ephemeral = true })
       return
     end
     if vim.fn.filereadable(path) == 0 then
-      callback({ content = { "File not found: " .. args.path }, kind = "failed" })
+      callback({ content = "File not found: " .. args.path, ephemeral = true })
       return
     end
 
     local lines = vim.fn.readfile(path)
     -- Use matcher to find the span
-    local result = matcher.find_best_match(args.old_str, lines)
+    local result = matcher.find_best_match(args.old_str, lines, false)
 
     if not result or #result.matches == 0 then
-      callback({ content = { "Could not find old_str in file" }, kind = "failed" })
+      callback({ content = "Could not find old_str in file", ephemeral = true })
       return
     end
 
@@ -216,19 +229,19 @@ All paths MUST start with `/memories/`.
 
     vim.fn.writefile(lines, path)
     callback({
-      content = { "Successfully replaced text in " .. args.path },
-      display_content = icons.edit .. " Edited memory " .. args.path,
+      content = "Successfully replaced text in " .. args.path,
+      summary = icons.edit .. " Edited memory " .. args.path,
     })
   elseif args.command == "insert" then
     if not args.insert_line or not args.insert_text then
       callback({
-        content = { "Error: insert_line and insert_text required" },
-        kind = "failed",
+        content = "Error: insert_line and insert_text required",
+        ephemeral = true,
       })
       return
     end
     if vim.fn.filereadable(path) == 0 then
-      callback({ content = { "File not found: " .. args.path }, kind = "failed" })
+      callback({ content = "File not found: " .. args.path, ephemeral = true })
       return
     end
 
@@ -242,17 +255,17 @@ All paths MUST start with `/memories/`.
 
     vim.fn.writefile(lines, path)
     callback({
-      content = { "Successfully inserted text at line " .. idx },
-      display_content = icons.edit .. " Inserted into memory " .. args.path,
+      content = "Successfully inserted text at line " .. idx,
+      summary = icons.edit .. " Inserted into memory " .. args.path,
     })
   elseif args.command == "delete" then
     if vim.fn.delete(path, "rf") == 0 then
       callback({
-        content = { "Successfully deleted " .. args.path },
-        display_content = icons.delete .. " Deleted memory " .. args.path,
+        content = "Successfully deleted " .. args.path,
+        summary = icons.delete .. " Deleted memory " .. args.path,
       })
     else
-      callback({ content = { "Failed to delete " .. args.path }, kind = "failed" })
+      callback({ content = "Failed to delete " .. args.path, ephemeral = true })
     end
   elseif args.command == "rename" then
     local old = resolve_path(args.old_path)
@@ -260,24 +273,24 @@ All paths MUST start with `/memories/`.
 
     if args.old_path and not old then
       callback({
-        content = { "Error: Invalid old_path" },
-        kind = "failed",
+        content = "Error: Invalid old_path",
+        ephemeral = true,
       })
       return
     end
 
     if args.new_path and not new then
       callback({
-        content = { "Error: Invalid new_path" },
-        kind = "failed",
+        content = "Error: Invalid new_path",
+        ephemeral = true,
       })
       return
     end
 
     if not old or not new then
       callback({
-        content = { "Error: old_path and new_path required" },
-        kind = "failed",
+        content = "Error: old_path and new_path required",
+        ephemeral = true,
       })
       return
     end
@@ -290,17 +303,15 @@ All paths MUST start with `/memories/`.
 
     if vim.fn.rename(old, new) == 0 then
       callback({
-        content = {
-          "Successfully renamed " .. args.old_path .. " to " .. args.new_path,
-        },
+        content = "Successfully renamed " .. args.old_path .. " to " .. args.new_path,
       })
     else
-      callback({ content = { "Failed to rename" }, kind = "failed" })
+      callback({ content = "Failed to rename", ephemeral = true })
     end
   else
     callback({
-      content = { "Unknown command: " .. (args.command or "nil") },
-      kind = "failed",
+      content = "Unknown command: " .. (args.command or "nil"),
+      ephemeral = true,
     })
   end
 end)

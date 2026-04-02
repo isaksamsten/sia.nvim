@@ -33,20 +33,16 @@ T["sia.tools.write"]["creates new file with parent directory"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = test_file,
       content = "print('hello')\nprint('world')",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
-        display_content = res.display_content,
-        kind = res.kind,
-        context = {kind=res.context.kind},
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+        summary = res.summary,
       }
     end, {
-      user_input = function(_, opts)
-        opts.on_accept()
-      end,
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -78,8 +74,7 @@ T["sia.tools.write"]["creates new file with parent directory"] = function()
       .. "/nested/dir/test.lua",
     result.content[1]
   )
-  eq(true, string.find(result.display_content, "💾 Created.*test%.lua") ~= nil)
-  eq("edit", result.context.kind)
+  eq(true, string.find(result.summary, "💾 Created.*test%.lua") ~= nil)
 end
 
 T["sia.tools.write"]["creates new file without nested directories"] = function()
@@ -92,18 +87,16 @@ T["sia.tools.write"]["creates new file without nested directories"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = test_file,
       content = "local x = 1",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
-        display_content = res.display_content,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+        summary = res.summary,
       }
     end, {
-      user_input = function(_, opts)
-        opts.on_accept()
-      end,
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -122,7 +115,7 @@ T["sia.tools.write"]["creates new file without nested directories"] = function()
 
   eq(true, file_exists)
   eq(true, string.find(result.content[1], "Successfully created buffer") ~= nil)
-  eq(true, string.find(result.display_content, "💾 Created") ~= nil)
+  eq(true, string.find(result.summary, "💾 Created") ~= nil)
 end
 
 T["sia.tools.write"]["overwrites existing file"] = function()
@@ -138,18 +131,16 @@ T["sia.tools.write"]["overwrites existing file"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = test_file,
       content = "new content",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
-        display_content = res.display_content,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+        summary = res.summary,
       }
     end, {
-      user_input = function(_, opts)
-        opts.on_accept()
-      end,
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -168,7 +159,7 @@ T["sia.tools.write"]["overwrites existing file"] = function()
 
   eq({ "new content" }, new_content)
   eq(true, string.find(result.content[1], "Successfully overwritten buffer") ~= nil)
-  eq(true, string.find(result.display_content, "💾 Overwrote") ~= nil)
+  eq(true, string.find(result.summary, "💾 Overwrote") ~= nil)
 end
 
 T["sia.tools.write"]["handles missing path parameter"] = function()
@@ -177,15 +168,16 @@ T["sia.tools.write"]["handles missing path parameter"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       content = "some content",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
-        display_content = res.display_content,
-        kind = res.kind,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+        summary = res.summary,
       }
-    end, nil)
+    end, {
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+    })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -197,8 +189,7 @@ T["sia.tools.write"]["handles missing path parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No file path provided", result.content[1])
-  eq("❌ Failed to write file", result.display_content)
-  eq("failed", result.kind)
+  eq("❌ Failed to write file", result.summary)
 end
 
 T["sia.tools.write"]["handles missing content parameter"] = function()
@@ -207,15 +198,16 @@ T["sia.tools.write"]["handles missing content parameter"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = "/tmp/test.lua",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
-        display_content = res.display_content,
-        kind = res.kind,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
+        summary = res.summary,
       }
-    end, nil)
+    end, {
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+    })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -227,8 +219,7 @@ T["sia.tools.write"]["handles missing content parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No content provided", result.content[1])
-  eq("❌ Failed to write file", result.display_content)
-  eq("failed", result.kind)
+  eq("❌ Failed to write file", result.summary)
 end
 
 T["sia.tools.write"]["handles multiline content correctly"] = function()
@@ -241,17 +232,15 @@ T["sia.tools.write"]["handles multiline content correctly"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = test_file,
       content = "line 1\nline 2\nline 3",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        display_content = res.display_content,
+        summary = res.summary,
       }
     end, {
-      user_input = function(_, opts)
-        opts.on_accept()
-      end,
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -269,16 +258,17 @@ T["sia.tools.write"]["handles multiline content correctly"] = function()
   local file_content = child.lua_get("_G.file_content")
 
   eq({ "line 1", "line 2", "line 3" }, file_content)
-  eq(true, string.find(result.display_content, "%(3 lines%)") ~= nil)
+  eq(true, string.find(result.summary, "%(3 lines%)") ~= nil)
 end
+
 T["sia.tools.write"]["tool metadata"] = function()
   local code = [[
     local write_tool = require("sia.tools.write")
 
-    _G.name = write_tool.name
-    _G.description = write_tool.description
-    _G.required = write_tool.required
-    _G.parameters = write_tool.parameters
+    _G.name = write_tool.definition.name
+    _G.description = write_tool.definition.description
+    _G.required = write_tool.definition.required
+    _G.parameters = write_tool.definition.parameters
   ]]
 
   child.lua(code)
@@ -304,17 +294,15 @@ T["sia.tools.write"]["creates deeply nested directory structure"] = function()
 
     local result = nil
 
-    write_tool.execute({
+    write_tool.implementation.execute({
       path = test_file,
       content = "-- deeply nested file",
-    }, { auto_confirm_tools = { write = 1 } }, function(res)
+    }, function(res)
       result = {
-        content = res.content,
+        content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, {
-      user_input = function(_, opts)
-        opts.on_accept()
-      end,
+      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -339,3 +327,4 @@ T["sia.tools.write"]["creates deeply nested directory structure"] = function()
 end
 
 return T
+

@@ -2,10 +2,41 @@ local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
-  name = "show_locations",
-  message = "Creating location list...",
-  description = "Show multiple locations in a navigable list for easy browsing",
-  system_prompt = [[SHOWS MULTIPLE LOCATIONS TO THE USER - creates a navigable quickfix list.
+  definition = {
+    type = "function",
+    name = "show_locations",
+    description = "Show multiple locations in a navigable list for easy browsing",
+    parameters = {
+      items = {
+        type = "array",
+        items = {
+          type = "object",
+          description = "Location",
+          properties = {
+            filename = { type = "string", description = "File path" },
+            lnum = { type = "integer", description = "Line number (1-based)" },
+            col = {
+              type = "integer",
+              description = "Column number (1-based, optional)",
+            },
+            text = { type = "string", description = "Description text for the item" },
+            type = {
+              type = "string",
+              description = "Item type: E (error), W (warning), I (info), N (note)",
+            },
+          },
+          required = { "filename", "lnum", "text" },
+        },
+        description = "List of quickfix items",
+      },
+      title = { type = "string", description = "Title for the quickfix list" },
+    },
+    required = { "items" },
+  },
+  notification = function()
+    return "Creating location list..."
+  end,
+  instructions = [[SHOWS MULTIPLE LOCATIONS TO THE USER - creates a navigable quickfix list.
 
 This tool is for presenting multiple locations to the USER, NOT for reading code yourself.
 Use the view tool if you need to examine file contents.
@@ -17,34 +48,12 @@ Use this for:
 
 Creates a navigable list that users can browse with :cnext/:cprev or clicking.
 Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
-  parameters = {
-    items = {
-      type = "array",
-      items = {
-        type = "object",
-        properties = {
-          filename = { type = "string", description = "File path" },
-          lnum = { type = "integer", description = "Line number (1-based)" },
-          col = { type = "integer", description = "Column number (1-based, optional)" },
-          text = { type = "string", description = "Description text for the item" },
-          type = {
-            type = "string",
-            description = "Item type: E (error), W (warning), I (info), N (note)",
-          },
-        },
-        required = { "filename", "lnum", "text" },
-      },
-      description = "List of quickfix items",
-    },
-    title = { type = "string", description = "Title for the quickfix list" },
-  },
-  required = { "items" },
 }, function(args, _, callback)
   if not args.items or #args.items == 0 then
     callback({
-      content = { "Error: No items provided for quickfix list" },
-      display_content = icons.error .. " Failed to create quickfix list",
-      kind = "failed",
+      content = "Error: No items provided for quickfix list",
+      summary = icons.error .. " Failed to create quickfix list",
+      ephemeral = true,
     })
     return
   end
@@ -55,14 +64,12 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   for i, item in ipairs(args.items) do
     if not item.filename or not item.lnum or not item.text then
       callback({
-        content = {
-          string.format(
-            "Error: Item %d missing required fields (filename, lnum, text)",
-            i
-          ),
-        },
-        display_content = icons.error .. " Failed to create quickfix list",
-        kind = "failed",
+        content = string.format(
+          "Error: Item %d missing required fields (filename, lnum, text)",
+          i
+        ),
+        summary = icons.error .. " Failed to create quickfix list",
+        ephemeral = true,
       })
       return
     end
@@ -91,11 +98,13 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
 
   local title = args.title or "Quickfix List"
   callback({
-    content = {
-      string.format("Created quickfix list `%s` with %d items", title, #qf_items),
-      "Use :cnext/:cprev to navigate, or click items in the quickfix window",
-    },
-    display_content = string.format(
+    content = string.format(
+      [[Created quickfix list `%s` with %d items.
+Use :cnext/:cprev to navigate, or click items in the quickfix window]],
+      title,
+      #qf_items
+    ),
+    summary = string.format(
       "%s Created quickfix list with %d items",
       icons.locations,
       #qf_items

@@ -1,143 +1,114 @@
---- A generic command parser that enforces `[flags...] [positional...]` grammar.
---- Flags must appear before any positional arguments. Each flag consumes one
---- value token. The parser only parses; completion and validation are the
---- caller's responsibility.
----
---- @class sia.CommandParser
---- @field private _flags table<string, true>
-local CommandParser = {}
-CommandParser.__index = CommandParser
-
---- Create a new command parser.
---- @param spec { flags: string[] }
-function CommandParser.new(spec)
-  local flags = {}
-  for _, name in ipairs(spec.flags or {}) do
-    flags[name] = true
+--- @param invocation sia.Invocation
+--- @return sia.config.ActionMode
+local function get_action_mode(invocation)
+  if invocation.bang and invocation.mode == "n" then
+    return "insert"
+  elseif invocation.bang and invocation.mode == "v" then
+    return "diff"
+  else
+    return "chat"
   end
-  return setmetatable({ _flags = flags }, CommandParser)
 end
 
---- Parse arguments into flags and positional args.
---- Flags are only recognised at the front; once a non-flag token is seen
---- everything from that point on is positional.
----
---- @param args string[]
---- @return { flags: table<string, string?>, positional: string[] }
-function CommandParser:parse(args)
-  local result = { flags = {}, positional = {} }
-  local i = 1
-  while i <= #args do
-    local name = args[i]:match("^%-(.+)$")
-    if name and self._flags[name] and not result.flags[name] then
-      if i + 1 <= #args then
-        result.flags[name] = args[i + 1]
-      end
-      i = i + 2
-    else
-      break
-    end
-  end
-  for j = i, #args do
-    table.insert(result.positional, args[j])
-  end
-  return result
-end
-
---- Return completions for a flag value if the cursor is on one.
---- Only works when the parsed result has no positional args yet (still in
---- the flag zone). The caller provides a table mapping flag names to their
---- candidate values.
----
---- @param parsed { flags: table<string, string?>, positional: string[] }
---- @param prefix string The command-line text up to the cursor
---- @param candidates table<string, string[]> Flag name → possible values
---- @return string[]|nil completions Filtered completions, or nil if not on a flag value
-function CommandParser:complete_flag(parsed, prefix, candidates)
-  if #parsed.positional > 0 then
-    return nil
-  end
-  for name, values in pairs(candidates) do
-    if self._flags[name] then
-      local partial = prefix:match("%-" .. vim.pesc(name) .. "%s+([%w%-_/.]*)$")
-      if partial then
-        local filtered = vim.tbl_filter(function(v)
-          return vim.startswith(v, partial)
-        end, values)
-        table.sort(filtered)
-        return filtered
-      end
-    end
-  end
-  return nil
-end
+local CommandParser = require("sia.utils").CommandParser
 
 local SIA_PARSER = CommandParser.new({ flags = { "m" } })
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
   local parsed = SIA_PARSER:parse(args.fargs)
-  local model = parsed.flags.m
 
-  if model and not require("sia.config").options.models[model] then
+  local chat = require("sia.strategy").get_chat()
+  if chat and not parsed.action then
+    if #parsed.positional > 0 then
+      chat:submit({
+        content = table.concat(parsed.positional, " "),
+        mode = parsed.mode,
+      })
+    end
+    return
+  end
+  --- @type sia.Invocation
+  local invocation = utils.new_invocation(args)
+
+  local config = require("sia.config")
+  --- @type sia.config.Action
+  local action
+  if parsed.action or vim.b.sia then
+    action = config.options.actions[parsed.action or vim.b.sia] --[[@as sia.config.Action]]
+    if not action then
+      error(parsed.action .. " not found")
+    end
+  else
+    action = config.options.settings.actions[get_action_mode(invocation)] --[[@as sia.config.Action]]
+    if not action then
+      error("action " .. get_action_mode(invocation) .. " is not defined")
+    end
+  end
+
+  if parsed.mode and action.mode ~= "chat" then
+    error("modes are only possible with chat actions")
+  end
+
+  if parsed.flags.m and not config.options.models[parsed.flags.m] then
     vim.notify("sia: model is not defined", vim.log.levels.ERROR)
     return
   end
 
-  local fargs = parsed.positional
-
-  if #fargs == 0 and not vim.b.sia then
-    vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
-    return
-  end
-
-  --- @type sia.ActionContext
-  local context = utils.create_context(args)
-  if vim.b.sia and #fargs == 0 then
-    fargs = { vim.b.sia }
-  end
-
-  local action, new_action, mode_entry = utils.resolve_action(fargs, context)
-
-  if not action then
-    return
-  end
-
-  if action.capture and context.mode ~= "v" then
-    local capture = action.capture(context)
+  if action.capture and invocation.mode ~= "v" then
+    local capture = action.capture(invocation)
     if not capture then
       vim.notify("sia: unable to capture current context", vim.log.levels.ERROR)
       return
     end
-    context.start_line, context.end_line = capture[1], capture[2]
-    context.pos = { capture[1], capture[2] }
-    context.mode = "v"
+    invocation.pos = { capture.start_row, capture.end_row }
+    invocation.mode = "v"
   end
 
-  if action.range == true and context.mode ~= "v" then
+  if action.range == true and invocation.mode ~= "v" then
     vim.notify(
-      "sia: action " .. fargs[1] .. " must be used with a range",
+      "sia: action " .. parsed.action .. " must be used with a range",
       vim.log.levels.ERROR
     )
     return
   end
 
-  local is_range = context.mode == "v"
+  local is_range = invocation.mode == "v"
   local is_range_valid = action.range == nil or action.range == is_range
   if utils.is_action_disabled(action) or not is_range_valid then
     vim.notify(
-      "sia: action " .. fargs[1] .. " is not enabled in the current context",
+      "sia: action " .. parsed.action .. " is not enabled in the current context",
       vim.log.levels.ERROR
     )
     return
   end
 
-  require("sia").execute_action(action, {
-    context = context,
-    model = model,
-    new_action = new_action,
-    mode = mode_entry,
+  if action.input == "require" and #parsed.positional == 0 then
+    error("requires input")
+  end
+
+  local user_input
+  if action.input ~= "ignore" then
+    user_input = parsed.positional
+  end
+
+  local conversation = require("sia.conversation").from_action(action, invocation, {
+    model = parsed.flags.m,
   })
+
+  if parsed.mode and action.mode == "chat" then
+    local info = conversation:enter_mode(parsed.mode)
+    if info and info.content then
+      conversation:add_user_message(info.content, nil, true)
+    end
+  end
+
+  if user_input then
+    conversation:add_user_message(table.concat(user_input, " "))
+  end
+
+  local strategy = require("sia.strategy").from_action(action, invocation, conversation)
+  require("sia.assistant").execute_strategy(strategy)
 end, {
   range = true,
   bang = true,
@@ -233,11 +204,11 @@ end, {
 
 vim.api.nvim_create_user_command("SiaDebug", function()
   local chat = require("sia.strategy").get_chat()
-  if not chat or not chat.conversation or not chat.conversation.prepare_messages then
+  if not chat then
     vim.notify("sia: no active chat in this buffer", vim.log.levels.WARN)
     return
   end
-  local ok, result = pcall(chat.conversation.prepare_messages, chat.conversation)
+  local ok, result = pcall(chat.conversation.serialize, chat.conversation)
   if not ok then
     vim.notify(
       "sia: error generating conversation query: " .. tostring(result),
@@ -246,11 +217,23 @@ vim.api.nvim_create_user_command("SiaDebug", function()
     return
   end
 
+  local order = {}
+  for _, message in ipairs(result) do
+    table.insert(
+      order,
+      string.format(
+        "Role: %s %s",
+        message.role,
+        (message.tool_call and message.tool_call.id or "")
+      )
+    )
+  end
+
   local provider = chat.conversation.model:get_provider()
   local data = { model = chat.conversation.model.api_name }
   provider.prepare_parameters(data, chat.conversation.model)
   provider.prepare_messages(data, chat.conversation.model.api_name, result)
-  provider.prepare_tools(data, chat.conversation.tools)
+  provider.prepare_tools(data, chat.conversation.tool_definitions)
   local json_str = vim.json.encode(data)
   local pretty = json_str
   if vim.fn.executable("jq") == 1 then
@@ -265,8 +248,9 @@ vim.api.nvim_create_user_command("SiaDebug", function()
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
   vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
   vim.api.nvim_set_option_value("filetype", "json", { buf = buf })
-  local lines = vim.split(pretty, "\n", true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  local lines = vim.split(pretty, "\n")
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, order)
+  vim.api.nvim_buf_set_lines(buf, -1, -1, false, lines)
   vim.api.nvim_buf_set_name(buf, "*SiaDebug*")
 end, {})
 
@@ -286,27 +270,6 @@ local SIA_ADD_CMD = {
     completion = function(lead)
       return vim.fn.getcompletion(lead, "file")
     end,
-    execute_global = function(args)
-      local utils = require("sia.utils")
-      local files = utils.glob_pattern_to_files(args.fargs)
-      for _, file in ipairs(files) do
-        local buf = utils.ensure_file_is_loaded(file, {
-          listed = false,
-          read_only = true,
-        })
-        if buf then
-          require("sia.conversation").Conversation.add_pending_instruction(
-            "current_context",
-            {
-              buf = buf,
-              tick = require("sia.tracker").ensure_tracked(buf),
-              kind = "context",
-              mode = "v",
-            }
-          )
-        end
-      end
-    end,
     execute_local = function(args, conversation)
       local utils = require("sia.utils")
       local files = utils.glob_pattern_to_files(args.fargs)
@@ -316,12 +279,16 @@ local SIA_ADD_CMD = {
           read_only = true,
         })
         if buf then
-          conversation:add_instruction("current_context", {
+          local get_buffer =
+            require("sia.instructions").current_buffer({ show_line_numbers = true })
+          local invocation = {
             buf = buf,
-            tick = require("sia.tracker").ensure_tracked(buf, { id = conversation.id }),
-            kind = "context",
             mode = "v",
-          })
+          }
+          local content, region = get_buffer(invocation)
+          if content then
+            conversation:add_user_message(content, region)
+          end
         end
       end
     end,
@@ -329,16 +296,14 @@ local SIA_ADD_CMD = {
   context = {
     require_range = true,
     only_visible = true,
-    execute_global = function(args)
-      local context = require("sia.utils").create_context(args)
-      require("sia.conversation").Conversation.add_pending_instruction(
-        "current_context",
-        context
-      )
-    end,
     execute_local = function(args, conversation)
-      local context = require("sia.utils").create_context(args)
-      conversation:add_instruction("current_context", context)
+      local context = require("sia.utils").new_invocation(args)
+      local get_current_context =
+        require("sia.instructions").current_context({ show_line_numbers = true })
+      local content, region = get_current_context(context)
+      if content then
+        conversation:add_user_message(content, region)
+      end
     end,
   },
   buffer = {
@@ -350,22 +315,16 @@ local SIA_ADD_CMD = {
       for _, bufname in ipairs(args.fargs) do
         local buf = vim.fn.bufnr(bufname)
         if buf ~= -1 then
-          conversation:add_instruction("current_context", {
+          local get_buffer =
+            require("sia.instructions").current_buffer({ show_line_numbers = true })
+          local context = {
             buf = buf,
-            tick = require("sia.tracker").ensure_tracked(buf, { id = conversation.id }),
             mode = "v",
-          })
-        end
-      end
-    end,
-    execute_global = function(args)
-      for _, bufname in ipairs(args.fargs) do
-        local buf = vim.fn.bufnr(bufname)
-        if buf ~= -1 then
-          require("sia.conversation").Conversation.add_pending_instruction(
-            "current_context",
-            { buf = buf, tick = require("sia.tracker").ensure_tracked(buf), mode = "v" }
-          )
+          }
+          local content, region = get_buffer(context)
+          if content then
+            conversation:add_user_message(content, region)
+          end
         end
       end
     end,
@@ -432,7 +391,7 @@ end, {
 
     local completions = {}
     local seen = {}
-    for _, msg in ipairs(chat.conversation.messages) do
+    for _, msg in ipairs(chat.conversation.entries) do
       if msg.turn_id and not seen[msg.turn_id] and msg.status ~= "dropped" then
         seen[msg.turn_id] = true
         if vim.startswith(msg.turn_id, arg_lead) then

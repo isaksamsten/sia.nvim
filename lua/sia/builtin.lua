@@ -278,27 +278,15 @@ Guidelines:
 --- We can use these as string-names for instructions when building actions.
 --- Users can provide their own in `instructions` in the config.
 local M = {
-  model_system = {
-    role = "system",
-    template = true,
-    content = [[
+  model_system = [[
 {% if model.api_name:match("gpt%-5") %}
 ]] .. gpt_5_system .. [[
 {% else %}
 ]] .. minimal_prompt .. [[
 {% end %}
     ]],
-  },
-  minimal_system = {
-    role = "system",
-    template = true,
-    content = minimal_prompt,
-  },
-  default_system = {
-    {
-      role = "system",
-      template = true,
-      content = [[
+  minimal_system = minimal_prompt,
+  default_system = [[
 <identity>
 You are a powerful AI coding assistant Sia. You operate exclusively in Neovim.
 
@@ -499,13 +487,7 @@ If the user does not explicitly restrict tool calls, call them to gather
 additional information. If the USER has already provided files, do not try
 to add them again.
 </information_gathering>]],
-    },
-  },
-  prose_system = {
-    {
-      role = "system",
-      template = true,
-      content = [[
+  prose_system = [[
 <identity>
 You are a powerful AI writing assistant Sia operating in Neovim. You collaborate with
 the USER to craft, edit, and improve their writing - whether creating new content,
@@ -596,74 +578,54 @@ Apply them when the situation matches.
 </skills>
 {% end %}
 ]],
-    },
-  },
-  directory_structure = {
-    {
-      role = "user",
-      hide = true,
-      description = "List the files in the current git repository.",
-      content = function()
-        local command
-        if vim.fn.executable("fd") == 1 then
-          command = { "fd", "--type", "f" }
-        else
-          command = { "find", ".", "-type", "f", "-not", "-path", "'./.git/*'" }
-        end
-        local obj = vim.system(command, { timeout = 1000 }):wait()
-        if obj.code ~= 0 then
-          return nil
-        end
-        local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
-        if #files == 0 then
-          return nil
-        end
-        return string.format(
-          [[Below is the current directory structure. It does not include
+  directory_structure = function()
+    local command
+    if vim.fn.executable("fd") == 1 then
+      command = { "fd", "--type", "f" }
+    else
+      command = { "find", ".", "-type", "f", "-not", "-path", "'./.git/*'" }
+    end
+    local obj = vim.system(command, { timeout = 1000 }):wait()
+    if obj.code ~= 0 then
+      return nil
+    end
+    local files = vim.split(obj.stdout or "", "\n", { trimempty = true })
+    if #files == 0 then
+      return nil
+    end
+    return string.format(
+      [[Below is the current directory structure. It does not include
 hidden files or directories. The listing is immutable and represents the start
 of the conversation. Use the glob tool to refresh your understanding.
 %s]],
-          table.concat(require("sia.utils").limit_files(files), "\n")
-        )
-      end,
-    },
-  },
-  agents_md = {
-    {
-      role = "user",
-      hide = true,
-      description = "AGENTS.md",
-      content = function()
-        local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
-        if vim.fn.filereadable(filename) ~= 1 then
-          return nil
-        end
-        local memories = vim.fn.readfile(filename)
-        return string.format(
-          [[Always follow the instructions stored in %s.
+      table.concat(require("sia.utils").limit_files(files), "\n")
+    )
+  end,
+  agents_md = function()
+    local filename = vim.fs.joinpath(vim.uv.cwd(), "AGENTS.md")
+    if vim.fn.filereadable(filename) ~= 1 then
+      return nil
+    end
+    local memories = vim.fn.readfile(filename)
+    return string.format(
+      [[Always follow the instructions stored in %s.
 Remember that you can edit this file to store user preferences. Before editing always
 read the latest version.
 ```markdown
 %s
 ```]],
-          vim.fn.fnamemodify(filename, ":."),
-          table.concat(memories, "\n")
-        )
-      end,
-    },
-  },
+      vim.fn.fnamemodify(filename, ":."),
+      table.concat(memories, "\n")
+    )
+  end,
 
-  visible_buffers = require("sia.instructions").visible_buffers(),
   current_buffer = require("sia.instructions").current_buffer({
     show_line_numbers = true,
   }),
   current_context = require("sia.instructions").current_context({
     show_line_numbers = true,
   }),
-  insert_system = {
-    role = "system",
-    template = true,
-    content = [[You are in INSERT MODE. The filetype is {{ filetype }}.
+  insert_system = [[You are in INSERT MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
@@ -694,11 +656,7 @@ Use tool calls if required to document the function or class.
 <tools>
 {{tool_instructions}}
 </tools>]],
-  },
-  diff_system = {
-    role = "system",
-    template = true,
-    content = [[You are in DIFF MODE. The filetype is {{ filetype }}.
+  diff_system = [[You are in DIFF MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
@@ -729,51 +687,39 @@ Use tool calls if required to document the function or class.
 <tools>
 {{tool_instructions}}
 </tools>]],
-  },
-  system_info = {
-    {
-      role = "user",
-      hide = true,
-      description = "System information",
-      content = function()
-        -- Get OS information
-        local os_name = vim.loop.os_uname().sysname
-        local os_version = vim.loop.os_uname().release
-        local machine = vim.loop.os_uname().machine
+  system_info = function()
+    local os_name = vim.loop.os_uname().sysname
+    local os_version = vim.loop.os_uname().release
+    local machine = vim.loop.os_uname().machine
 
-        -- Get current working directory
-        local cwd = vim.uv.cwd()
+    local cwd = vim.uv.cwd()
 
-        -- Get Neovim version
-        local nvim_version = string.format(
-          "%d.%d.%d",
-          vim.version().major,
-          vim.version().minor,
-          vim.version().patch
-        )
+    local nvim_version = string.format(
+      "%d.%d.%d",
+      vim.version().major,
+      vim.version().minor,
+      vim.version().patch
+    )
 
-        -- Get current date/time
-        local datetime = os.date("%Y-%m-%d %H:%M:%S %Z")
+    local datetime = os.date("%Y-%m-%d %H:%M:%S %Z")
 
-        -- Get environment variables that might be relevant
-        local shell = vim.env.SHELL or "unknown"
-        local term = vim.env.TERM or "unknown"
-        local user = vim.env.USER or vim.env.USERNAME or "unknown"
+    local shell = vim.env.SHELL or "unknown"
+    local term = vim.env.TERM or "unknown"
+    local user = vim.env.USER or vim.env.USERNAME or "unknown"
 
-        -- Try to get Git info if available
-        local git_info = ""
-        if vim.fn.isdirectory(".git") == 1 then
-          local branch =
-            vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
-          local commit =
-            vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
-          if branch ~= "" and commit ~= "" then
-            git_info = string.format(" Git: %s (%s)", branch, commit)
-          end
-        end
+    local git_info = ""
+    if vim.fn.isdirectory(".git") == 1 then
+      local branch =
+        vim.fn.system("git branch --show-current 2>/dev/null"):gsub("\n", "")
+      local commit =
+        vim.fn.system("git rev-parse --short HEAD 2>/dev/null"):gsub("\n", "")
+      if branch ~= "" and commit ~= "" then
+        git_info = string.format(" Git: %s (%s)", branch, commit)
+      end
+    end
 
-        return string.format(
-          [[System Information:
+    return string.format(
+      [[System Information:
 
 - OS: %s %s (%s)
 - User: %s
@@ -786,20 +732,18 @@ Use tool calls if required to document the function or class.
 
 This information shows the current system environment where the AI assistant is
 operating through Neovim.]],
-          os_name,
-          os_version,
-          machine,
-          user,
-          vim.fn.fnamemodify(shell, ":t"),
-          term,
-          nvim_version,
-          cwd,
-          git_info,
-          datetime
-        )
-      end,
-    },
-  },
+      os_name,
+      os_version,
+      machine,
+      user,
+      vim.fn.fnamemodify(shell, ":t"),
+      term,
+      nvim_version,
+      cwd,
+      git_info,
+      datetime
+    )
+  end,
 }
 
 return M

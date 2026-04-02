@@ -48,10 +48,8 @@ function M.spawn(agent_name, task, parent_conversation, opts)
     temporary = true,
   })
 
-  new_conversation:add_instruction({
-    { role = "system", content = agent_def.system_prompt },
-    { role = "user", content = task },
-  })
+  new_conversation:add_system_message(table.concat(agent_def.system_prompt, "\n"))
+  new_conversation:add_user_message(task)
   new_conversation.name = parent_conversation.name .. "-" .. agent.name
 
   agent.meta = {
@@ -179,11 +177,12 @@ function M.complete(conversation)
     return false
   end
 
-  local messages = conversation:get_messages()
+  local messages = conversation:serialize()
   local result = nil
   for i = #messages, 1, -1 do
-    if messages[i].role == "assistant" and messages[i].content then
-      result = vim.split(messages[i].content, "\n")
+    local message = messages[i]
+    if message.role == "assistant" and message.content then
+      result = vim.split(message.content, "\n")
       break
     end
   end

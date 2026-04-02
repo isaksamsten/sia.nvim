@@ -1,15 +1,20 @@
 local tool_utils = require("sia.tools.utils")
 
 return tool_utils.new_tool({
-  name = "read_todos",
+  definition = {
+    type = "function",
+    name = "read_todos",
+    description = "Get the current list of todos for this conversation",
+    parameters = vim.empty_dict(),
+    required = {},
+  },
   read_only = true,
-  message = "Reading todos...",
-  system_prompt = [[Read the current list of todos for this conversation.
-
-Returns all todos with their ID, description, and status. Use the IDs when updating todos with the write_todos tool.]],
-  description = "Get the current list of todos for this conversation",
-  parameters = vim.empty_dict(),
-  required = {},
+  notification = function()
+    return "Reading todos..."
+  end,
+  instructions = [[Read the current list of todos for this conversation.
+Returns all todos with their ID, description, and status. Use the IDs when updating
+todos with the write_todos tool.]],
   auto_apply = function(_, _)
     return 1
   end,
@@ -20,14 +25,12 @@ Returns all todos with their ID, description, and status. Use the IDs when updat
 
   if #conversation.todos.items == 0 then
     callback({
-      content = { "No todos yet. Use write_todos to add some!" },
+      content = "No todos yet. Use write_todos to add some!",
     })
     return
   end
 
   local response = { "Current todos:" }
-  table.insert(response, "")
-
   local by_status = {
     active = {},
     pending = {},
@@ -54,6 +57,6 @@ Returns all todos with their ID, description, and status. Use the IDs when updat
   end
 
   callback({
-    content = response,
+    content = table.concat(response, "\n"),
   })
 end)

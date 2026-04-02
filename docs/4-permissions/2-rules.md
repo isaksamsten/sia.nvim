@@ -59,7 +59,7 @@ Auto-approve safe git commands:
     "allow": {
       "bash": {
         "arguments": {
-          "command": ["^git status$", "^git diff", "^git log"]
+          "bash_command": ["^git status$", "^git diff", "^git log"]
         }
       }
     }
@@ -80,9 +80,9 @@ Restrict file edits to source code:
       }
     },
     "deny": {
-      "remove_file": {
+      "bash": {
         "arguments": {
-          "path": [".*\\.(config|env)"]
+          "bash_command": [".*\\.(config|env)"]
         }
       }
     }
@@ -121,14 +121,14 @@ Block dangerous commands while allowing safe ones:
     "allow": {
       "bash": {
         "arguments": {
-          "command": ["^git status$", "^git diff", "^ls"]
+          "bash_command": ["^git status$", "^git diff", "^ls"]
         }
       }
     },
     "deny": {
       "bash": {
         "arguments": {
-          "command": ["rm -rf", "sudo"]
+          "bash_command": ["rm -rf", "sudo"]
         }
       }
     }
@@ -182,7 +182,7 @@ Mark safe shell commands:
   "risk": {
     "bash": {
       "arguments": {
-        "command": [
+        "bash_command": [
           { "pattern": "^ls", "level": "safe" },
           { "pattern": "^cat", "level": "safe" },
           { "pattern": "^echo", "level": "safe" },
@@ -202,12 +202,7 @@ Highlight dangerous operations:
   "risk": {
     "bash": {
       "arguments": {
-        "command": [{ "pattern": "\\brm\\b", "level": "warn" }]
-      }
-    },
-    "remove_file": {
-      "arguments": {
-        "path": [{ "pattern": "\\.(env|config)$", "level": "warn" }]
+        "bash_command": [{ "pattern": "\\brm\\b", "level": "warn" }]
       }
     }
   }

@@ -1,14 +1,13 @@
 local diff = require("sia.diff")
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 
 local clear_outdated_tool_input = tool_utils.gen_clear_outdated_tool_input({ "text" })
 
 --- @param filename string
---- @param start_edit integer
---- @param end_edit integer
+--- @param line integer
+--- @param count integer
 --- @return string
 local function create_outdated_message(filename, line, count)
   local multiple_lines = count > 1
@@ -22,15 +21,33 @@ local function create_outdated_message(filename, line, count)
 end
 
 return tool_utils.new_tool({
-  name = "insert",
-  message = function(args)
+  definition = {
+    type = "function",
+    name = "insert",
+    description = "Insert text at a specific line in a file",
+    parameters = {
+      target_file = {
+        type = "string",
+        description = "The file path to the file to modify",
+      },
+      line = {
+        type = "integer",
+        description = "The line number where text should be inserted (1-based, text is inserted before this line)",
+      },
+      text = {
+        type = "string",
+        description = "The text content to insert",
+      },
+    },
+    required = { "target_file", "line", "text" },
+  },
+  notification = function(args)
     if args.target_file then
       return string.format("Inserting text into %s...", args.target_file)
     end
     return "Inserting text..."
   end,
-  description = "Insert text at a specific line in a file",
-  system_prompt = [[Insert text at a specific line in a file.
+  instructions = [[Insert text at a specific line in a file.
 
 This tool allows you to insert new content at a specified line number without
 needing to match existing text patterns.
@@ -48,21 +65,6 @@ Use cases:
 - For search/replace, use the edit tool.
 - For replacing regions use the replace_region.
 - For rewriting entire files, use the write tool.]],
-  parameters = {
-    target_file = {
-      type = "string",
-      description = "The file path to the file to modify",
-    },
-    line = {
-      type = "integer",
-      description = "The line number where text should be inserted (1-based, text is inserted before this line)",
-    },
-    text = {
-      type = "string",
-      description = "The text content to insert",
-    },
-  },
-  required = { "target_file", "line", "text" },
   persist_allow = function(args)
     return tool_utils.path_allow_rules("target_file", args.target_file)
   end,
@@ -72,46 +74,44 @@ Use cases:
 }, function(args, conversation, callback, opts)
   if not args.target_file then
     callback({
-      content = { "Error: No target_file was provided" },
-      display_content = icons.error .. " Failed to insert",
-      kind = "failed",
+      content = "Error: No target_file was provided",
+      summary = icons.error .. " Failed to insert",
+      ephemeral = true,
     })
     return
   end
 
   if not args.line then
     callback({
-      content = { "Error: No line number was provided" },
-      display_content = icons.error .. " Failed to insert",
-      kind = "failed",
+      content = "Error: No line number was provided",
+      summary = icons.error .. " Failed to insert",
+      ephemeral = true,
     })
     return
   end
 
   if not args.text then
     callback({
-      content = { "Error: No text was provided" },
-      display_content = icons.error .. " Failed to insert",
-      kind = "failed",
+      content = "Error: No text was provided",
+      summary = icons.error .. " Failed to insert",
+      ephemeral = true,
     })
     return
   end
   local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
   if not buf then
     callback({
-      content = { "Error: Cannot load " .. args.target_file },
-      display_content = icons.error .. " Failed to insert",
-      kind = "failed",
+      content = "Error: Cannot load " .. args.target_file,
+      summary = icons.error .. " Failed to insert",
+      ephemeral = true,
     })
     return
   end
 
   if not conversation:is_buf_valid(buf) then
     callback({
-      content = {
-        "Error: the content is stale. Read the file again to ensure that it's up to date",
-      },
-      kind = "failed",
+      content = "Error: the content is stale. Read the file again to ensure that it's up to date",
+      ephemeral = true,
     })
     return
   end
@@ -121,11 +121,9 @@ Use cases:
 
   if insert_line < 1 then
     callback({
-      content = {
-        string.format("Error: Line number must be >= 1, got %d", insert_line),
-      },
-      display_content = icons.error .. " Failed to insert",
-      kind = "failed",
+      content = string.format("Error: Line number must be >= 1, got %d", insert_line),
+      summary = icons.error .. " Failed to insert",
+      ephemeral = true,
     })
     return
   end
@@ -183,7 +181,7 @@ Use cases:
     end,
     on_accept = function()
       diff.update_baseline(buf, { turn_id = opts.turn_id })
-      tracker.without_tracking(buf, conversation.id, function()
+      conversation.tracker:suppress(buf, function()
         vim.api.nvim_buf_set_lines(
           buf,
           insert_line - 1,
@@ -217,19 +215,20 @@ Use cases:
       )
 
       callback({
-        content = { success_msg },
-        context = {
+        content = success_msg,
+        region = {
           buf = buf,
           pos = { edit_start, edit_end },
-          clear_outdated_tool_input = clear_outdated_tool_input,
-          outdated_message = create_outdated_message(
-            args.target_file,
-            insert_line,
-            edit_end - edit_start + 1
-          ),
+          stale = {
+            input = clear_outdated_tool_input,
+            content = create_outdated_message(
+              args.target_file,
+              insert_line,
+              edit_end - edit_start + 1
+            ),
+          },
         },
-        kind = "edit",
-        display_content = display_description,
+        summary = display_description,
       })
     end,
   })

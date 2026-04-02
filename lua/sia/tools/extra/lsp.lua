@@ -89,23 +89,27 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
   if command == "hover" then
     lsp_buf_request("textDocument/hover", buf, params, function(err, result)
       if err then
-        callback({ content = { "LSP Error: " .. vim.inspect(err) }, kind = "failed" })
+        callback({ content = "LSP Error: " .. vim.inspect(err), ephemeral = true })
         return
       end
       if not result or not result.contents then
-        callback({ content = { "No hover information found." }, kind = "lsp_result" })
+        callback({ content = "No hover information found.", ephemeral = true })
         return
       end
       local markdown_lines =
         vim.lsp.util.convert_input_to_markdown_lines(result.contents)
       if vim.tbl_isempty(markdown_lines) then
-        callback({ content = { "No hover information found." }, kind = "lsp_result" })
+        callback({ content = "No hover information found.", ephemeral = true })
         return
       end
       callback({
-        content = markdown_lines,
-        kind = "lsp_result",
-        display_content = string.format("%s Got documentation for '%s'", icons.lsp, args.pattern),
+        content = table.concat(markdown_lines, "\n"),
+        ephemeral = true,
+        summary = string.format(
+          "%s Got documentation for '%s'",
+          icons.lsp,
+          args.pattern
+        ),
       })
     end)
   elseif
@@ -122,11 +126,11 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
     end
     lsp_buf_request(method, buf, params, function(err, result)
       if err then
-        callback({ content = { "LSP Error: " .. vim.inspect(err) }, kind = "failed" })
+        callback({ content = { "LSP Error: " .. vim.inspect(err) }, ephemeral = true })
         return
       end
       if not result or vim.tbl_isempty(result) then
-        callback({ content = { "No locations found." }, kind = "lsp_result" })
+        callback({ content = { "No locations found." }, ephemeral = true })
         return
       end
 
@@ -148,35 +152,35 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
 
       local command_label = command:gsub("_", " ")
       callback({
-        content = locations,
-        kind = "lsp_result",
-        display_content = string.format(
-            "%s Found %d %s for '%s'",
-            icons.lsp,
-            #locations,
-            #locations == 1 and command_label or command_label .. "s",
-            args.pattern
-          ),
+        content = table.concat(locations, "\n"),
+        ephemeral = true,
+        summary = string.format(
+          "%s Found %d %s for '%s'",
+          icons.lsp,
+          #locations,
+          #locations == 1 and command_label or command_label .. "s",
+          args.pattern
+        ),
       })
     end)
   elseif command == "rename" then
     if not args.new_name then
       callback({
-        content = { "Error: new_name is required for rename command" },
-        kind = "failed",
+        content = "Error: new_name is required for rename command",
+        ephemeral = true,
       })
       return
     end
     params.newName = args.new_name
     lsp_buf_request("textDocument/rename", buf, params, function(err, result)
       if err then
-        callback({ content = { "LSP Error: " .. vim.inspect(err) }, kind = "failed" })
+        callback({ content = "LSP Error: " .. vim.inspect(err), ephemeral = true })
         return
       end
       if not result then
         callback({
-          content = { "No rename performed (LSP returned nil)." },
-          kind = "lsp_result",
+          content = "No rename performed (LSP returned nil).",
+          ephemeral = true,
         })
         return
       end
@@ -228,38 +232,70 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         or "unknown files"
 
       callback({
-        content = {
-          string.format(
-            "Renamed '%s' to '%s' in %d file%s: %s",
-            args.pattern,
-            args.new_name,
-            num_files,
-            num_files == 1 and "" or "s",
-            file_list
-          ),
-        },
-        kind = "lsp_result",
-        display_content = string.format(
-            "%s Renamed '%s' → '%s' in %d file%s",
-            icons.lsp,
-            args.pattern,
-            args.new_name,
-            num_files,
-            num_files == 1 and "" or "s"
-          ),
+        content = string.format(
+          "Renamed '%s' to '%s' in %d file%s: %s",
+          args.pattern,
+          args.new_name,
+          num_files,
+          num_files == 1 and "" or "s",
+          file_list
+        ),
+        ephemeral = true,
+        summary = string.format(
+          "%s Renamed '%s' → '%s' in %d file%s",
+          icons.lsp,
+          args.pattern,
+          args.new_name,
+          num_files,
+          num_files == 1 and "" or "s"
+        ),
       })
     end)
   else
-    callback({ content = { "Unknown command: " .. command }, kind = "failed" })
+    callback({ content = "Unknown command: " .. command, ephemeral = true })
   end
 end
 
 return tool_utils.new_tool({
-  name = "lsp",
+  definition = {
+    type = "function",
+    name = "lsp",
+    description = "Use LSP server capabilities (hover, definition, references, rename, etc.)",
+    parameters = {
+      command = {
+        type = "string",
+        enum = {
+          "hover",
+          "definition",
+          "references",
+          "implementation",
+          "type_definition",
+          "rename",
+        },
+        description = "The LSP command to execute",
+      },
+      path = { type = "string", description = "The file path" },
+      line = { type = "integer", description = "The line number (1-based)" },
+      pattern = {
+        type = "string",
+        description = "The symbol name or unique string to locate on the line",
+      },
+      occurrence = {
+        type = "integer",
+        description = "Which occurrence of the pattern to use. Default is 1.",
+      },
+      new_name = {
+        type = "string",
+        description = "The new name (required for rename command)",
+      },
+    },
+    required = { "command", "path", "line", "pattern" },
+  },
   read_only = false,
-  message = "Querying LSP...",
-  description = "Use LSP server capabilities (hover, definition, references, rename, etc.)",
-  system_prompt = [[Interact with Language Server Protocol (LSP) servers to get code intelligence features.
+  notification = function()
+    return "Querying LSP..."
+  end,
+  instructions = [[Interact with Language Server Protocol (LSP) servers to get code intelligence features.
 Supported commands:
 - hover: Get documentation for the symbol at the location.
 - definition: Find the definition of the symbol.
@@ -271,48 +307,19 @@ Supported commands:
 You must provide the file path, line number, and a pattern (symbol name) to identify the exact column.
 If the same pattern appears multiple times on the line, specify which occurrence.
 The pattern will match as a substring, so 'x' will match 'x' in 'xy' - be specific with your pattern if needed.]],
-  parameters = {
-    command = {
-      type = "string",
-      enum = {
-        "hover",
-        "definition",
-        "references",
-        "implementation",
-        "type_definition",
-        "rename",
-      },
-      description = "The LSP command to execute",
-    },
-    path = { type = "string", description = "The file path" },
-    line = { type = "integer", description = "The line number (1-based)" },
-    pattern = {
-      type = "string",
-      description = "The symbol name or unique string to locate on the line",
-    },
-    occurrence = {
-      type = "integer",
-      description = "Which occurrence of the pattern to use. Default is 1.",
-    },
-    new_name = {
-      type = "string",
-      description = "The new name (required for rename command)",
-    },
-  },
-  required = { "command", "path", "line", "pattern" },
 }, function(args, _, callback)
   local buf = utils.ensure_file_is_loaded(args.path, { listed = false })
   if not buf then
     callback({
-      content = { "Error: Could not load file " .. args.path },
-      kind = "failed",
+      content = "Error: Could not load file " .. args.path,
+      ephemeral = true,
     })
     return
   end
 
   local col, err = find_column(buf, args.line, args.pattern, args.occurrence)
   if not col then
-    callback({ content = { "Error: " .. err }, kind = "failed" })
+    callback({ content = "Error: " .. err, ephemeral = true })
     return
   end
 

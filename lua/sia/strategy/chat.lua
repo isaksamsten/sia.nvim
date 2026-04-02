@@ -119,12 +119,20 @@ function AssistantTurnRenderer:finalize()
   end
 end
 
---- @class sia.ToolCall
+--- @class sia.BaseToolCall
 --- @field id string
---- @field type "function"|"custom"
 --- @field call_id string?
---- @field function { arguments: string, name: string }? set for function tool calls
---- @field custom { name: string, input: string }? set for custom (freeform) tool calls
+--- @field name string
+
+--- @class sia.FunctionCall : sia.BaseToolCall
+--- @field type "function"
+--- @field arguments string
+
+--- @class sia.CustomCall : sia.BaseToolCall
+--- @field type "custom"
+--- @field input string
+
+--- @alias sia.ToolCall sia.FunctionCall|sia.CustomCall
 
 --- @class sia.Cancellable
 --- @field is_cancelled boolean
@@ -135,10 +143,10 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
+--- @field queue sia.chat.Submit[]
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private turn_renderer sia.chat.AssistantTurnRenderer?
---- @field private queued_instructions {instruction: sia.config.Instruction|string|sia.config.Instruction[]|nil, context: sia.Context?, mode_entry: sia.ModeEntry? }[]
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -171,7 +179,7 @@ function ChatStrategy.new(conversation, options, opts)
   obj.buf = buf
   obj.turn_renderer = nil
   obj.options = options
-  obj.queued_instructions = {}
+  obj.queue = {}
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -180,7 +188,7 @@ function ChatStrategy.new(conversation, options, opts)
   obj.conversation.name = tostring(ChatStrategy.count())
   pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
-  local messages = conversation:get_messages()
+  local messages = conversation.entries
   if opts.render_all then
     obj.canvas:render_messages(messages, obj.conversation.model.name)
     obj.has_generated_name = true
@@ -210,6 +218,45 @@ function ChatStrategy.new(conversation, options, opts)
   return obj
 end
 
+--- @class sia.chat.Submit
+--- @field content string?
+--- @field mode string?
+
+--- @param submit sia.chat.Submit
+function ChatStrategy:submit(submit)
+  -- If the current chat is executing, enqueue the submission
+  -- and realize it after the current turn.
+  if self.is_busy then
+    self:enqueue_submit(submit)
+    return
+  end
+
+  local needs_redraw = false
+  if submit.mode then
+    local info = self.conversation:enter_mode(submit.mode)
+    if info then
+      if info.truncate_after_id then
+        self.conversation:drop_after(info.truncate_after_id)
+        needs_redraw = true
+      end
+
+      if info.content then
+        self.conversation:add_user_message(info.content, nil, true)
+      end
+    end
+  end
+
+  if needs_redraw then
+    self:redraw()
+  end
+
+  if submit.content then
+    self.conversation:add_user_message(submit.content)
+  end
+  self.conversation:attach_completed_agents()
+  require("sia.assistant").execute_strategy(self)
+end
+
 function ChatStrategy:buf_is_loaded()
   return vim.api.nvim_buf_is_loaded(self.buf)
 end
@@ -219,68 +266,44 @@ function ChatStrategy:redraw()
     return
   end
   self.canvas:clear()
-  self.canvas:render_messages(
-    self.conversation:get_messages(),
-    self.conversation.model.name
-  )
+  self.canvas:render_messages(self.conversation.entries, self.conversation.model.name)
 end
 
-function ChatStrategy:queue_size()
-  return #self.queued_instructions
-end
-
---- @param instruction (sia.config.Instruction|sia.config.Instruction[]|string)?
---- @param context sia.Context?
---- @param mode_entry sia.ModeEntry?
-function ChatStrategy:queue_instruction(instruction, context, mode_entry)
-  table.insert(self.queued_instructions, {
-    instruction = instruction,
-    context = context,
-    mode_entry = mode_entry,
-  })
+--- @private
+--- @param submit sia.chat.Submit
+function ChatStrategy:enqueue_submit(submit)
+  table.insert(self.queue, submit)
 end
 
 --- @return boolean flushed
 function ChatStrategy:flush_queued_instructions()
-  if vim.tbl_isempty(self.queued_instructions) then
-    return false
-  end
-
-  local before_count = #self.conversation:prepare_messages()
-  local needs_redraw = false
-  for _, queued in ipairs(self.queued_instructions) do
-    if queued.mode_entry then
-      local info = self.conversation:enter_mode(queued.mode_entry.name, queued.context)
-      if info and info.truncate_after_id then
-        self.conversation:drop_after(info.truncate_after_id)
-        for _, instruction in ipairs(info.instructions) do
-          self.conversation:add_instruction(instruction)
-        end
-        needs_redraw = true
-      end
-      if queued.mode_entry.user_input and queued.mode_entry.user_input ~= "" then
-        self.conversation:add_instruction({
-          role = "user",
-          content = queued.mode_entry.user_input,
-        })
-      end
-    elseif queued.instruction then
-      self.conversation:add_instruction(queued.instruction, queued.context)
-    end
-  end
-
-  if self:buf_is_loaded() then
-    if needs_redraw then
-      self:redraw()
-    else
-      local prepared = self.conversation:prepare_messages()
-      local new_messages = vim.list_slice(prepared, before_count + 1)
-      self.canvas:render_messages(new_messages, self.conversation.model.name)
-    end
-  end
-
-  self.queued_instructions = {}
-  return true
+  -- if #self.queue then
+  --   return false
+  -- end
+  --
+  -- for _, queued in ipairs(self.queue) do
+  --   if queued.mode_entry then
+  --     local info = self.conversation:enter_mode(queued.mode_entry.name, queued.context)
+  --     if info and info.truncate_after_id then
+  --       self.conversation:drop_after(info.truncate_after_id)
+  --       for _, content in ipairs(info.content) do
+  --         self.conversation:add_user_message(content)
+  --       end
+  --     end
+  --     if queued.mode_entry.user_input and queued.mode_entry.user_input ~= "" then
+  --       self.conversation:add_user_message(queued.mode_entry.user_input)
+  --     end
+  --   elseif queued.content then
+  --     self.conversation:add_user_message(queued.content, queued.context)
+  --   end
+  -- end
+  --
+  -- if self:buf_is_loaded() then
+  --   self:redraw()
+  -- end
+  --
+  -- self.queue = {}
+  -- return true
 end
 
 function ChatStrategy:on_request_start()
@@ -289,7 +312,7 @@ function ChatStrategy:on_request_start()
     return false
   end
   local model = self.conversation.model
-  self.canvas:render_messages({ self.conversation:last_message() }, model.name)
+  self.canvas:render_messages({ self.conversation:get_last_entry() }, model.name)
   self.assistant_extmark = self.canvas:render_assistant_header(model.name)
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
@@ -302,32 +325,34 @@ function ChatStrategy:on_round_start()
     return false
   end
 
-  local context_manager = require("sia.context_manager")
-  context_manager.prune_if_needed(self.conversation, {
-    on_complete = function(pruned, compacted)
-      if compacted and self:buf_is_loaded() then
-        winbar.clear_status(self.buf, 1000)
-        self:redraw()
-      end
-      winbar.update_context_budget(
-        self.buf,
-        context_manager.get_budget(self.conversation)
-      )
-    end,
-    on_status = function(message)
-      if self:buf_is_loaded() then
-        winbar.update_status(self.buf, {
-          message = message,
-          status = "info",
-        })
-      end
-    end,
-  })
-
   self.canvas:update_assistant_extmark(
     self.assistant_extmark,
     { model = self.conversation.model.name }
   )
+end
+
+--- @param message string
+--- @param severity "info"|"warning"|"error"|nil
+function ChatStrategy:on_status(message, severity)
+  if not self:buf_is_loaded() then
+    return
+  end
+  winbar.update_status(self.buf, {
+    message = message,
+    status = severity or "info",
+  })
+end
+
+--- @param info { budget: table?, pruned: boolean, compacted: boolean }
+function ChatStrategy:on_context_update(info)
+  if not self:buf_is_loaded() then
+    return
+  end
+  if info.compacted then
+    winbar.clear_status(self.buf, 1000)
+    self:redraw()
+  end
+  winbar.update_context_budget(self.buf, info.budget)
 end
 
 function ChatStrategy:on_error(error)
@@ -360,7 +385,8 @@ function ChatStrategy:on_stream_start()
   return true
 end
 
-function ChatStrategy:on_content(input)
+--- @param input sia.StreamDelta
+function ChatStrategy:on_stream(input)
   if not self:buf_is_loaded() then
     return false
   end
@@ -378,9 +404,6 @@ function ChatStrategy:on_content(input)
   end
   if input.content and input.content ~= "" and self.turn_renderer then
     self.turn_renderer:append_content(input.content)
-  end
-  if input.tool_calls then
-    self.pending_tools = input.tool_calls
   end
   return true
 end
@@ -406,10 +429,58 @@ function ChatStrategy:on_cancel()
   })
 end
 
-function ChatStrategy:on_complete(control)
+--- @param statuses sia.engine.Status[]
+function ChatStrategy:on_tool_status(statuses)
+  if not self:buf_is_loaded() then
+    return
+  end
+  --- @type sia.WinbarToolStatus[]
+  local tool_statuses = {}
+  for _, s in ipairs(statuses) do
+    table.insert(tool_statuses, {
+      name = s.name,
+      message = s.notification,
+      status = s.status,
+    })
+  end
+  winbar.update_tool_status(self.buf, tool_statuses)
+end
+
+--- @param statuses sia.engine.Completed[]
+function ChatStrategy:on_tool_results(statuses)
+  if not self:buf_is_loaded() then
+    return
+  end
+  winbar.update_tool_status(self.buf, nil)
+  for _, status in ipairs(statuses) do
+    if status.summary and self.turn_renderer then
+      self.turn_renderer:append_tool_result(status.summary)
+    end
+  end
+
+  local needs_redraw = false
+  for _, status in ipairs(statuses) do
+    if status.actions["drop_after"] then
+      needs_redraw = true
+      break
+    end
+  end
+
+  if needs_redraw then
+    if self.turn_renderer then
+      self.turn_renderer:finalize()
+      self.turn_renderer = nil
+    end
+    self:redraw()
+    self.assistant_extmark =
+      self.canvas:render_assistant_header(self.conversation.model.name)
+  end
+end
+
+--- @param ctx sia.FinishContext
+function ChatStrategy:on_finish(ctx)
   if not self.turn_renderer then
     if not self:buf_is_loaded() then
-      control.finish()
       return
     end
     self:del_abort_keymap(self.buf)
@@ -419,180 +490,61 @@ function ChatStrategy:on_complete(control)
       status = "error",
     })
     vim.bo[self.buf].modifiable = false
-    control.finish()
     return
   end
 
   if not self:buf_is_loaded() then
-    control.finish()
     return
   end
 
   self.canvas:scroll_to_bottom()
-  local handle_cleanup = function()
-    if self.turn_renderer then
-      self.turn_renderer:finalize()
-    end
-    self.turn_renderer = nil
-    if not self:buf_is_loaded() then
-      control.finish()
-      return
-    end
 
-    self:del_abort_keymap(self.buf)
-    self.canvas:clear_temporary_text()
-    self.canvas:clear_progress()
-    winbar.update_status(self.buf, nil)
-    if control.usage then
-      self.canvas:update_assistant_extmark(self.assistant_extmark, {
-        usage = control.usage,
-        model = self.conversation.model.name,
-        status_text = control.turn_id:sub(1, 5),
-      })
-    end
-    vim.bo[self.buf].modifiable = false
+  -- Finalize the turn renderer
+  if self.turn_renderer then
+    self.turn_renderer:finalize()
+  end
+  self.turn_renderer = nil
 
-    local has_flushed = self:flush_queued_instructions()
-    if has_flushed then
-      self.assistant_extmark =
-        self.canvas:render_assistant_header(self.conversation.model.name)
-      control.continue_execution()
-      return
-    end
-
-    if not self.has_generated_name then
-      local fast_model =
-        require("sia.model").resolve(require("sia.config").options.settings.fast_model)
-      local name_conv = require("sia.conversation").new_conversation({
-        model = fast_model,
-        temporary = true,
-      })
-      name_conv:add_instruction({
-        { role = "system", content = SUMMARIZE_PROMPT },
-        {
-          role = "user",
-          content = table.concat(
-            vim.api.nvim_buf_get_lines(self.buf, 0, -1, true),
-            "\n"
-          ),
-        },
-      })
-      require("sia.assistant").fetch_response(name_conv, function(resp)
-        if resp then
-          self.conversation.name = resp:lower():gsub("%s+", "-")
-          pcall(
-            vim.api.nvim_buf_set_name,
-            self.buf,
-            "*sia " .. self.conversation.name .. "*"
-          )
-        end
-        self.has_generated_name = true
-        control.finish()
-      end)
-    else
-      control.finish()
-    end
+  if not self:buf_is_loaded() then
+    return
   end
 
-  self:execute_tools({
-    cancellable = self.cancellable,
-    turn_id = control.turn_id,
-    handle_status_updates = function(statuses)
-      --- @type sia.WinbarToolStatus[]
-      local tool_statuses = {}
-      for _, s in ipairs(statuses) do
-        table.insert(tool_statuses, {
-          name = s.tool.name,
-          message = s.tool.message,
-          status = s.status,
-        })
-      end
-      winbar.update_tool_status(self.buf, tool_statuses)
-    end,
-    handle_tools_completion = function(opts)
-      winbar.update_tool_status(self.buf, nil)
-      local truncate_after = nil
-      local exit_mode_result = nil
-      if opts.results then
-        for _, tool_result in ipairs(opts.results) do
-          if tool_result.result.display_content and self.turn_renderer then
-            self.turn_renderer:append_tool_result(tool_result.result.display_content)
-          end
-          if tool_result.result.truncate_after then
-            truncate_after = tool_result.result.truncate_after
-            exit_mode_result = tool_result
-          else
-            self.conversation:add_instruction({
-              { role = "assistant", tool_calls = { tool_result.tool } },
-              {
-                role = "tool",
-                content = tool_result.result.content,
-                _tool_call = tool_result.tool,
-                kind = tool_result.result.kind,
-                display_content = tool_result.result.display_content,
-                ephemeral = tool_result.result.kind == "failed"
-                  or tool_result.result.ephemeral,
-              },
-            }, tool_result.result.context, { turn_id = control.turn_id })
-          end
-        end
-      end
+  self:del_abort_keymap(self.buf)
+  self.canvas:clear_temporary_text()
+  self.canvas:clear_progress()
+  winbar.update_status(self.buf, nil)
+  if ctx.usage then
+    self.canvas:update_assistant_extmark(self.assistant_extmark, {
+      usage = ctx.usage,
+      model = self.conversation.model.name,
+      status_text = ctx.turn_id:sub(1, 5),
+    })
+  end
+  vim.bo[self.buf].modifiable = false
 
-      if truncate_after and exit_mode_result then
-        self.conversation:drop_after(truncate_after)
-        self.conversation:add_instruction({
-          { role = "assistant", tool_calls = { exit_mode_result.tool }, hide = true },
-          {
-            role = "tool",
-            content = exit_mode_result.result.content,
-            _tool_call = exit_mode_result.tool,
-            kind = exit_mode_result.result.kind,
-            display_content = exit_mode_result.result.display_content,
-          },
-        }, exit_mode_result.result.context, { turn_id = control.turn_id })
+  if not self.has_generated_name then
+    local fast_model =
+      require("sia.model").resolve(require("sia.config").options.settings.fast_model)
+    local name_conv = require("sia.conversation").new_conversation({
+      model = fast_model,
+      temporary = true,
+    })
+    name_conv:add_system_message(SUMMARIZE_PROMPT)
+    name_conv:add_user_message(
+      table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n")
+    )
+    require("sia.assistant").fetch_response(name_conv, function(resp)
+      if resp then
+        self.conversation.name = resp:lower():gsub("%s+", "-")
+        pcall(
+          vim.api.nvim_buf_set_name,
+          self.buf,
+          "*sia " .. self.conversation.name .. "*"
+        )
       end
-
-      if truncate_after and self:buf_is_loaded() then
-        if self.turn_renderer then
-          self.turn_renderer:finalize()
-          self.turn_renderer = nil
-        end
-        self:redraw()
-        self.assistant_extmark =
-          self.canvas:render_assistant_header(self.conversation.model.name)
-      end
-
-      if opts.cancelled then
-        self:confirm_continue_after_cancelled_tool({
-          continue_execution = function()
-            local has_flushed = self:flush_queued_instructions()
-            if has_flushed then
-              self.assistant_extmark =
-                self.canvas:render_assistant_header(self.conversation.model.name)
-            end
-            control.continue_execution()
-          end,
-          finish = function()
-            handle_cleanup()
-            winbar.update_status(
-              self.buf,
-              { message = "Paused by user", status = "info" }
-            )
-          end,
-        })
-      else
-        local has_flushed = self:flush_queued_instructions()
-        if has_flushed then
-          self.assistant_extmark =
-            self.canvas:render_assistant_header(self.conversation.model.name)
-        end
-        control.continue_execution()
-      end
-    end,
-    handle_empty_toolset = function()
-      handle_cleanup()
-    end,
-  })
+      self.has_generated_name = true
+    end)
+  end
 end
 
 --- Get the ChatStrategy associated with buf

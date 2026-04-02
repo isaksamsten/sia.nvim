@@ -1,12 +1,9 @@
-local M = {}
 --- @class sia.ToolResult
---- @field content string[]|sia.Content[]
---- @field context sia.Context?
---- @field kind string?
---- @field display_content string?
---- @field cancelled boolean?
+--- @field content sia.Content
+--- @field region sia.Region?
+--- @field summary string?
 --- @field ephemeral boolean?
---- @field truncate_after string?
+--- @field actions sia.ToolAction[]?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.StreamRenderer
@@ -149,10 +146,8 @@ end
 --- @class sia.Strategy
 --- @field is_busy boolean?
 --- @field cancellable sia.Cancellable
---- @field pending_tools table<integer, sia.ToolCall>
 --- @field conversation sia.Conversation
 --- @field modified [integer]
---- @field auto_continue_after_cancellation boolean?
 local Strategy = {}
 Strategy.__index = Strategy
 
@@ -162,10 +157,8 @@ Strategy.__index = Strategy
 function Strategy.new(conversation, cancellable)
   local obj = setmetatable({}, Strategy)
   obj.conversation = conversation
-  obj.pending_tools = {}
   obj.modified = {}
   obj.cancellable = cancellable or { is_cancelled = false }
-  obj.auto_continue_after_cancellation = false
   return obj
 end
 
@@ -186,8 +179,6 @@ end
 ---
 --- When: Before each API call (initial request and after tool execution)
 --- Use for: Showing status updates like "Analyzing your request..." between rounds
----
---- @return nil This is a notification callback with no return value
 function Strategy:on_round_start() end
 
 --- Called when the first data arrives from the streaming API response.
@@ -202,32 +193,51 @@ function Strategy:on_stream_start()
 end
 
 --- Called repeatedly during streaming for each piece of content that arrives.
---- Content can be text chunks, reasoning content, or tool calls. This is where
+--- Content can be text chunks or reasoning content. This is where
 --- the strategy displays the streaming response to the user.
 ---
 --- When: Multiple times during streaming as content arrives
---- Frequency: Every time a delta arrives from the API (text, reasoning, or tool_calls)
+--- Frequency: Every time a delta arrives from the API (text or reasoning)
 ---
---- @param input { content: string?, reasoning: table?, tool_calls: sia.ToolCall[]?}
+--- @param input sia.StreamDelta
 --- @return boolean success If false, streaming is aborted
-function Strategy:on_content(input)
+function Strategy:on_stream(input)
   return true
 end
 
---- Called after streaming completes. This is where the strategy executes tools
---- (if any were detected), performs cleanup, and decides whether to continue with
---- another round (if tools were used) or finish.
+--- Called with tool status updates during execution.
+--- @param statuses sia.engine.Status[]
+function Strategy:on_tool_status(statuses) end
+
+--- Called once after all tools in a round have completed, with batch results.
+--- Use for rendering summaries, updating UI state.
+--- @param statuses sia.engine.Completed[]
+--- @return string? follow_up
+function Strategy:on_tool_results(statuses) end
+
+--- Called when the round loop ends (no more tools, or stream produced content only).
+--- @param ctx sia.FinishContext
+function Strategy:on_finish(ctx) end
+
+--- Called with a transient status message during long-running operations
+--- (e.g. context compaction, tool execution).
 ---
---- When: After all content has been streamed
+--- When: During context management or other async operations
+--- Use for: Showing progress/status indicators to the user
 ---
---- The control table provides:
---- - continue_execution(): Start another round (typically after tool execution)
---- - finish(): End execution and mark strategy as not busy
---- - content: The complete streamed content as string[]
---- - usage: Token usage statistics
+--- @param message string The status message
+--- @param severity "info"|"warning"|"error"|nil The message severity (nil = info)
+function Strategy:on_status(message, severity) end
+
+--- Called after context management completes (pruning and/or compaction).
+--- The assistant calls this to inform the strategy about context budget changes
+--- so it can update its UI (e.g. winbar budget display).
 ---
---- @param control { continue_execution: (fun():nil), finish: (fun():nil), usage: sia.Usage?, content: string[]?, turn_id: string }
-function Strategy:on_complete(control) end
+--- When: After each round's context management pass
+--- Use for: Updating context budget displays, redrawing after compaction
+---
+--- @param info { budget: { estimated: integer, limit: integer, percent: number }?, pruned: boolean, compacted: boolean }
+function Strategy:on_context_update(info) end
 
 --- Called when an error occurs during execution. This can be API errors,
 --- initialization failures, or stream errors.
@@ -240,7 +250,6 @@ function Strategy:on_complete(control) end
 --- Use for: Cleanup, showing error messages to user
 ---
 --- @param error string?
---- @return nil This is a notification callback
 function Strategy:on_error(error) end
 
 --- Called when the user cancels the operation (typically via the abort keymap).
@@ -248,16 +257,11 @@ function Strategy:on_error(error) end
 --- When: User cancels via abort keymap
 ---
 --- Use for: Cleanup, showing cancellation message to user
----
---- @return nil This is a notification callback
 function Strategy:on_cancel() end
 
 --- Called when tool calls are first detected in the API response.
 --- This is a notification that tools will be included in the response, allowing
 --- the strategy to show UI feedback like "Preparing to use tools...".
----
---- Note: The actual tool call data arrives later through on_content() with
---- input.tool_calls populated. This callback just signals that tools were detected.
 ---
 --- When: During streaming, before the complete tool_calls are assembled
 --- Use for: Showing status updates like "Preparing to use tools..."
@@ -265,258 +269,6 @@ function Strategy:on_cancel() end
 --- @return boolean success If false, streaming is aborted
 function Strategy:on_tools()
   return true
-end
-
---- @protected
---- @param control { continue_execution: (fun():nil), finish: (fun():nil) }
-function Strategy:confirm_continue_after_cancelled_tool(control)
-  if
-    self.auto_continue_after_cancellation
-    or require("sia.config").options.settings.auto_continue
-  then
-    control.continue_execution()
-  else
-    vim.ui.input({
-      prompt = "Continue? (Y/n/[a]lways): ",
-    }, function(response)
-      if response ~= nil and (response:lower() == "y" or response:lower() == "yes") then
-        control.continue_execution()
-      elseif
-        response ~= nil and (response:lower() == "a" or response:lower() == "always")
-      then
-        self.auto_continue_after_cancellation = true
-        control.continue_execution()
-      else
-        control.finish()
-      end
-    end)
-  end
-end
-
---- @class sia.ParsedTool
---- @field index integer
---- @field name string?
---- @field arguments table?
---- @field tool_call sia.ToolCall
-
---- @class sia.ExecuteToolsOpts
---- @field handle_tools_completion fun(args: { results?: {tool: sia.ToolCall, result: sia.ToolResult}[], cancelled: boolean})
---- @field handle_empty_toolset fun(args: table?)
---- @field handle_status_updates? fun(statuses: table<string, {tool: sia.ParsedTool, status: string}>)
---- @field cancellable sia.Cancellable?
---- @field turn_id string
-
---- @param opts sia.ExecuteToolsOpts
-function Strategy:execute_tools(opts)
-  if not vim.tbl_isempty(self.pending_tools) then
-    --- @type sia.ParsedTool[]
-    local parallel_tools = {}
-    --- @type sia.ParsedTool[]
-    local sequential_tools = {}
-
-    --- @type { tool: sia.ParsedTool, status: string}[]
-    local all_tools = {}
-
-    --- @type {tool: sia.ToolCall, result: sia.ToolResult}[]
-    local tool_results = {}
-
-    local index = 1
-    for _, tool in pairs(self.pending_tools) do
-      local tool_name = nil
-      local tool_args = nil
-      --- @type string?
-      local tool_message = nil
-      local is_parallel = false
-      local fun = tool["function"]
-      local custom = tool["custom"]
-      if custom then
-        tool_name = custom.name
-        tool_args = { _raw_input = custom.input }
-        local tool_fn = self.conversation.tool_fn[custom.name]
-        if tool_fn then
-          if tool_fn.message ~= nil then
-            if type(tool_fn.message) == "string" then
-              tool_message = tool_fn.message
-            else
-              tool_message = tool_fn.message(tool_args)
-            end
-          end
-          is_parallel = tool_fn.allow_parallel ~= nil
-            and tool_fn.allow_parallel(self.conversation, tool_args)
-        end
-      elseif fun then
-        tool_name = fun.name
-        local status, args
-        if fun.arguments and fun.arguments:match("%S") then
-          status, args = pcall(vim.fn.json_decode, fun.arguments)
-        else
-          -- Handle empty or whitespace-only arguments
-          status, args = true, {}
-        end
-        if status then
-          tool_args = args
-          local tool_fn = self.conversation.tool_fn[fun.name]
-          if tool_fn then
-            if tool_fn.message ~= nil then
-              if type(tool_fn.message) == "string" then
-                tool_message = tool_fn.message
-              else
-                tool_message = tool_fn.message(args)
-              end
-            end
-            is_parallel = tool_fn.allow_parallel ~= nil
-              and tool_fn.allow_parallel(self.conversation, tool_args)
-          end
-        end
-      end
-      ---@type sia.ParsedTool
-      local parsed_tool = {
-        index = index,
-        message = tool_message,
-        name = tool_name,
-        arguments = tool_args,
-        tool_call = tool,
-      }
-      all_tools[index] = { tool = parsed_tool, status = "pending" }
-      tool_results[index] = nil
-      index = index + 1
-      if is_parallel then
-        table.insert(parallel_tools, parsed_tool)
-      else
-        table.insert(sequential_tools, parsed_tool)
-      end
-    end
-
-    self.pending_tools = {}
-
-    if opts.handle_status_updates then
-      opts.handle_status_updates(all_tools)
-    end
-
-    local total_tools = #sequential_tools + #parallel_tools
-    local completed_count = 0
-
-    --- @param idx integer
-    local function update_status(idx, status)
-      all_tools[idx].status = status
-      if opts.handle_status_updates then
-        opts.handle_status_updates(all_tools)
-      end
-    end
-
-    --- @param index integer
-    --- @param tool_call sia.ToolCall
-    --- @param tool_result sia.ToolResult
-    local function on_tool_finished(index, tool_call, tool_result)
-      completed_count = completed_count + 1
-      update_status(index, "done")
-      tool_results[index] = { tool = tool_call, result = tool_result }
-
-      if completed_count == total_tools then
-        local ordered_results = {}
-        local has_cancelled_tools = false
-
-        for i = 1, total_tools do
-          if tool_results[i] then
-            table.insert(ordered_results, tool_results[i])
-            if tool_results[i].result.cancelled then
-              has_cancelled_tools = true
-            end
-          end
-        end
-
-        if opts.handle_tools_completion then
-          opts.handle_tools_completion({
-            results = ordered_results,
-            cancelled = has_cancelled_tools,
-          })
-        end
-      end
-    end
-
-    for i, tool in ipairs(parallel_tools) do
-      vim.schedule(function()
-        update_status(tool.index, "running")
-        if tool.name then
-          if tool.arguments then
-            self.conversation:execute_tool(tool.name, tool.arguments, {
-              cancellable = opts.cancellable,
-              turn_id = opts.turn_id,
-              callback = vim.schedule_wrap(function(tool_result)
-                if not tool_result then
-                  tool_result =
-                    { content = { "Could not find tool..." }, kind = "failed" }
-                end
-                on_tool_finished(tool.index, tool.tool_call, tool_result)
-              end),
-            })
-          else
-            local error_message = { "Could not parse tool arguments" }
-            tool.tool_call["function"].arguments = "{}"
-            on_tool_finished(
-              tool.index,
-              tool.tool_call,
-              { content = error_message, kind = "failed" }
-            )
-          end
-        else
-          on_tool_finished(tool.index, tool.tool_call, {
-            content = { "Tool is not a function. Try without parallel tool calls." },
-            kind = "failed",
-          })
-        end
-      end)
-    end
-
-    -- Interactive tools
-    local current_tool_index = 1
-    local function process_next_tool()
-      if current_tool_index > #sequential_tools then
-        return
-      end
-      local tool = sequential_tools[current_tool_index]
-      update_status(tool.index, "running")
-      current_tool_index = current_tool_index + 1
-      if tool.name then
-        if tool.arguments then
-          self.conversation:execute_tool(tool.name, tool.arguments, {
-            cancellable = opts.cancellable,
-            turn_id = opts.turn_id,
-            callback = vim.schedule_wrap(function(tool_result)
-              if not tool_result then
-                tool_result =
-                  { content = { "Could not find tool..." }, kind = "failed" }
-              end
-              on_tool_finished(tool.index, tool.tool_call, tool_result)
-              process_next_tool()
-            end),
-          })
-        else
-          local error_message = { "Could not parse tool arguments" }
-          tool.tool_call["function"].arguments = "{}"
-          on_tool_finished(
-            tool.index,
-            tool.tool_call,
-            { content = error_message, kind = "failed" }
-          )
-          process_next_tool()
-        end
-      else
-        on_tool_finished(
-          tool.index,
-          tool.tool_call,
-          { content = { "Tool is not a function" }, kind = "failed" }
-        )
-        process_next_tool()
-      end
-    end
-
-    if #sequential_tools > 0 then
-      process_next_tool()
-    end
-  else
-    opts.handle_empty_toolset({})
-  end
 end
 
 --- @param buf integer
@@ -536,4 +288,5 @@ function Strategy:del_abort_keymap(buf)
     pcall(vim.api.nvim_buf_del_keymap, buf, "n", "x")
   end
 end
+
 return { Strategy = Strategy, StreamRenderer = StreamRenderer }

@@ -1,5 +1,88 @@
 local M = {}
 
+--- A generic command parser that enforces `[flags...] [positional...]` grammar.
+--- Flags must appear before any positional arguments. Each flag consumes one
+--- value token. The parser only parses; completion and validation are the
+--- caller's responsibility.
+---
+--- @class sia.CommandParser
+--- @field private _flags table<string, true>
+local CommandParser = {}
+CommandParser.__index = CommandParser
+
+--- Create a new command parser.
+--- @param spec { flags: string[] }
+function CommandParser.new(spec)
+  local flags = {}
+  for _, name in ipairs(spec.flags or {}) do
+    flags[name] = true
+  end
+  return setmetatable({ _flags = flags }, CommandParser)
+end
+
+--- Parse arguments into flags and positional args.
+--- Flags are only recognised at the front; once a non-flag token is seen
+--- everything from that point on is positional.
+---
+--- @param args string[]
+--- @return { flags: table<string, string?>, positional: string[], mode: string?, action: string? }
+function CommandParser:parse(args)
+  local result = { flags = {}, positional = {} }
+  local i = 1
+  while i <= #args do
+    local name = args[i]:match("^%-(.+)$")
+    if name and self._flags[name] and not result.flags[name] then
+      if i + 1 <= #args then
+        result.flags[name] = args[i + 1]
+      end
+      i = i + 2
+    else
+      break
+    end
+  end
+  if args[i] and vim.startswith(args[i], "/") then
+    result.action = args[i]:sub(2)
+    i = i + 1
+  end
+  if args[i] and vim.startswith(args[i], "@") then
+    result.mode = args[i]:sub(2)
+    i = i + 1
+  end
+
+  for j = i, #args do
+    table.insert(result.positional, args[j])
+  end
+  return result
+end
+
+--- Return completions for a flag value if the cursor is on one.
+--- Only works when the parsed result has no positional args yet (still in
+--- the flag zone). The caller provides a table mapping flag names to their
+--- candidate values.
+---
+--- @param parsed { flags: table<string, string?>, positional: string[] }
+--- @param prefix string The command-line text up to the cursor
+--- @param candidates table<string, string[]> Flag name → possible values
+--- @return string[]|nil completions Filtered completions, or nil if not on a flag value
+function CommandParser:complete_flag(parsed, prefix, candidates)
+  if #parsed.positional > 0 then
+    return nil
+  end
+  for name, values in pairs(candidates) do
+    if self._flags[name] then
+      local partial = prefix:match("%-" .. vim.pesc(name) .. "%s+([%w%-_/.]*)$")
+      if partial then
+        local filtered = vim.tbl_filter(function(v)
+          return vim.startswith(v, partial)
+        end, values)
+        table.sort(filtered)
+        return filtered
+      end
+    end
+  end
+  return nil
+end
+
 --- @type string
 local SIA_OUTPUT_DIR =
   vim.fs.joinpath(vim.uv.os_tmpdir() or "/tmp", "sia", tostring(vim.uv.os_getpid()))
@@ -40,6 +123,8 @@ M.dirs = {
 
 --- @param files string[]
 --- @param opts {max_count: integer?, max_sort: integer?}?
+--- @return string[]
+--- @return number
 function M.limit_files(files, opts)
   opts = opts or {}
   local max_count = opts.max_count or 100
@@ -113,29 +198,18 @@ function M.get_content(buf, start_line, end_line, opts)
 end
 
 --- @param args vim.api.keyset.create_user_command.command_args
---- @return sia.ActionContext
-function M.create_context(args)
-  --- @type sia.ActionContext
+--- @return sia.Invocation
+function M.new_invocation(args)
+  --- @type sia.Invocation
   local opts = {
     win = vim.api.nvim_get_current_win(),
     buf = vim.api.nvim_get_current_buf(),
     cursor = vim.api.nvim_win_get_cursor(0),
-    start_line = args.line1,
-    end_line = args.line2,
     pos = { args.line1, args.line2 },
     bang = args.bang,
+    mode = args.count == -1 and "n" or "v",
   }
-  local name = vim.api.nvim_buf_get_name(opts.buf)
-  opts.outdated_message = string.format(
-    "Previously viewed content from %s - file was modified, read file if needed",
-    vim.fn.fnamemodify(name, ":.")
-  )
 
-  if args.count == -1 then
-    opts.mode = "n"
-  else
-    opts.mode = "v"
-  end
   if
     args.line1 == 1
     and args.line2 == vim.api.nvim_buf_line_count(opts.buf)
@@ -143,8 +217,6 @@ function M.create_context(args)
   then
     opts.pos = nil
   end
-  opts.tick = require("sia.tracker").ensure_tracked(opts.buf, { pos = opts.pos })
-  opts.global = true
   return opts
 end
 
@@ -302,113 +374,6 @@ end
 --- @field name string
 --- @field user_input string|nil
 
---- Parse a @mode prefix from the first word of user input.
---- Only matches if the first non-whitespace word starts with @.
---- @param text string
---- @return string? mode_name
---- @return string rest The text without the @mode prefix
-function M.parse_mode_prefix(text)
-  local mode = text:match("^@(%w[%w_-]*)%s*")
-  if mode then
-    local rest = text:sub(#mode + 2):gsub("^%s+", "")
-    return mode, rest
-  end
-  return nil, text
-end
-
---- Resolves a given prompt based on configuration options and context.
---- This function handles both named prompts and ad-hoc prompts, adjusting the behavior
---- based on the current file type and provided options.
----
---- @param argument string[]
---- @param opts sia.ActionContext
---- @return sia.config.Action?
---- @return boolean
---- @return sia.ModeEntry?
-function M.resolve_action(argument, opts)
-  local config = require("sia.config")
-  --- @type sia.config.Action
-  local action
-  local new_action
-  local mode_entry = nil
-
-  if vim.startswith(argument[1], "/") and vim.bo.ft ~= "sia" then
-    action = vim.deepcopy(config.options.actions[argument[1]:sub(2)]) --[[@as sia.config.Action]]
-    if action == nil then
-      vim.api.nvim_echo({
-        { "sia: action '" .. argument[1] .. "' does not exist", "ErrorMsg" },
-      }, false, {})
-      return nil, true
-    end
-
-    if action.input and action.input == "require" and #argument < 2 then
-      vim.api.nvim_echo({
-        {
-          "sia: action '" .. argument[1] .. "' requires additional input",
-          "ErrorMsg",
-        },
-      }, false, {})
-      return nil, true
-    end
-
-    new_action = true
-    if #argument > 1 and not (action.input and action.input == "ignore") then
-      if
-        #argument >= 2
-        and vim.startswith(argument[2], "@")
-        and action.mode == "chat"
-      then
-        local mode_name = argument[2]:sub(2)
-        if mode_name == "default" or (action.modes and action.modes[mode_name]) then
-          --- @type sia.ModeEntry
-          mode_entry = {
-            name = mode_name,
-            user_input = #argument >= 3 and table.concat(argument, " ", 3) or nil,
-          }
-        end
-      end
-
-      if not mode_entry then
-        table.insert(
-          action.instructions,
-          { role = "user", content = table.concat(argument, " ", 2) }
-        )
-      end
-    end
-  else
-    new_action = false
-    local action_mode = M.get_action_mode(opts)
-    action = vim.deepcopy(config.options.settings.actions[action_mode]) --[[@as sia.config.Action]]
-
-    if
-      action.mode == "chat"
-      and #argument >= 1
-      and vim.startswith(argument[1], "@")
-    then
-      local mode_name = argument[1]:sub(2)
-      if mode_name == "default" or (action.modes and action.modes[mode_name]) then
-        mode_entry = {
-          name = mode_name,
-          user_input = #argument >= 2 and table.concat(argument, " ", 2) or nil,
-        }
-      end
-    end
-
-    if not mode_entry then
-      table.insert(
-        action.instructions,
-        { role = "user", content = table.concat(argument, " ", 1) }
-      )
-    end
-  end
-
-  if action.modify_instructions then
-    action.modify_instructions(action.instructions, opts)
-  end
-
-  return action, new_action, mode_entry
-end
-
 --- @param action sia.config.Action
 function M.is_action_disabled(action)
   if
@@ -418,22 +383,6 @@ function M.is_action_disabled(action)
     return true
   end
   return false
-end
-
---- @param opts sia.ActionContext
---- @return sia.config.ActionMode
-function M.get_action_mode(opts)
-  if vim.bo[opts.buf].ft == "sia" then
-    return "chat"
-  end
-
-  if opts.bang and opts.mode == "n" then
-    return "insert"
-  elseif opts.bang and opts.mode == "v" then
-    return "diff"
-  else
-    return "chat"
-  end
 end
 
 --- @param file string
@@ -921,4 +870,5 @@ function M.parse_yaml_frontmatter(lines)
   return result
 end
 
+M.CommandParser = CommandParser
 return M

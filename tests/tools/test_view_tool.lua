@@ -57,11 +57,9 @@ local function create_mock_conversation()
   }
 end
 
-local function create_mock_opts()
+local function create_execution_context()
   return {
-    user_input = function(_, opts)
-      opts.on_accept()
-    end,
+    conversation = create_mock_conversation(),
   }
 end
 
@@ -79,14 +77,14 @@ T["sia.tools.view"]["view text file basic"] = function()
     path = "test.txt",
   }
 
-  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.implementation.execute(args, callback, create_execution_context())
 
-  eq("context", result.kind)
-  eq(3, #result.content)
-  eq("     1\tline 1", result.content[1])
-  eq("     2\tline 2", result.content[2])
-  eq("     3\tline 3", result.content[3])
-  eq("📖 Viewed test.txt (3 lines)", result.display_content)
+  local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
+  eq(3, #content)
+  eq("     1\tline 1", content[1])
+  eq("     2\tline 2", content[2])
+  eq("     3\tline 3", content[3])
+  eq("📖 Viewed test.txt (3 lines)", result.summary)
 
   restore_file_loader()
   restore_tracker()
@@ -108,13 +106,13 @@ T["sia.tools.view"]["view text file with offset and limit"] = function()
     limit = 2,
   }
 
-  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.implementation.execute(args, callback, create_execution_context())
 
-  eq("context", result.kind)
-  eq(2, #result.content)
-  eq("     2\tline 2", result.content[1])
-  eq("     3\tline 3", result.content[2])
-  eq("📖 Viewed lines 2-3 from test.txt", result.display_content)
+  local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
+  eq(2, #content)
+  eq("     2\tline 2", content[1])
+  eq("     3\tline 3", content[2])
+  eq("📖 Viewed lines 2-3 from test.txt", result.summary)
 
   restore_file_loader()
   restore_tracker()
@@ -128,10 +126,11 @@ T["sia.tools.view"]["missing path parameter"] = function()
 
   local args = {}
 
-  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.implementation.execute(args, callback, create_execution_context())
 
-  eq("Error: No file path was provided", result.content[1])
-  eq("❌ Failed to view", result.display_content)
+  local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
+  eq("Error: No file path was provided", content[1])
+  eq("❌ Failed to view", result.summary)
 end
 
 T["sia.tools.view"]["file not found"] = function()
@@ -144,10 +143,11 @@ T["sia.tools.view"]["file not found"] = function()
     path = "nonexistent.txt",
   }
 
-  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.implementation.execute(args, callback, create_execution_context())
 
-  eq("Error: File cannot be found", result.content[1])
-  eq("❌ Failed to view", result.display_content)
+  local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
+  eq("Error: File cannot be found", content[1])
+  eq("❌ Failed to view", result.summary)
 end
 
 T["sia.tools.view"]["offset beyond end of file"] = function()
@@ -165,25 +165,28 @@ T["sia.tools.view"]["offset beyond end of file"] = function()
     offset = 10,
   }
 
-  view_tool.execute(args, create_mock_conversation(), callback, create_mock_opts())
+  view_tool.implementation.execute(args, callback, create_execution_context())
 
-  eq(true, vim.startswith(result.content[1], "Error: Offset 10 is beyond end of file"))
-  eq("❌ Failed to view", result.display_content)
+  -- With offset beyond end of file, the view tool clamps to the last line
+  -- and returns the content from that line
+  local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
+  eq(1, #content)
+  eq("     2\tline 2", content[1])
 
   restore_file_loader()
   restore_tracker()
 end
 
 T["sia.tools.view"]["tool metadata"] = function()
-  eq("view", view_tool.name)
-  eq("Views a file from the local filesystem.", view_tool.description)
+  eq("view", view_tool.definition.name)
+  eq("Views a file from the local filesystem.", view_tool.definition.description)
 
-  local required = view_tool.required
+  local required = view_tool.definition.required
   eq(true, vim.tbl_contains(required, "path"))
 
-  eq("string", view_tool.parameters.path.type)
-  eq("integer", view_tool.parameters.offset.type)
-  eq("integer", view_tool.parameters.limit.type)
+  eq("string", view_tool.definition.parameters.path.type)
+  eq("integer", view_tool.definition.parameters.offset.type)
+  eq("integer", view_tool.definition.parameters.limit.type)
 end
 
 return T

@@ -1,5 +1,4 @@
 local utils = require("sia.utils")
-local tracker = require("sia.tracker")
 local tool_utils = require("sia.tools.utils")
 local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
@@ -40,33 +39,36 @@ local outdated_tpl = string.format(
 )
 
 return tool_utils.new_tool({
-  name = tool_names.view,
+  definition = {
+    type = "function",
+    name = tool_names.view,
+    description = [[Views a file from the local filesystem.]],
+    parameters = {
+      path = { type = "string", description = "The file path" },
+      offset = {
+        type = "integer",
+        description = "Line offset to start reading from (1-based, optional)",
+      },
+      limit = {
+        type = "integer",
+        description = "Maximum number of lines to read (default: 2000)",
+      },
+    },
+    required = { "path" },
+  },
   read_only = true,
-  message = function(args)
+  notification = function(args)
     if args.path then
       return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
     else
       return "Viewing..."
     end
   end,
-  system_prompt = [[Views a file from the local filesystem. By default, it reads up to
+  instructions = [[Views a file from the local filesystem. By default, it reads up to
 2000 lines starting from the beginning of the file. You can optionally specify a line
 offset and limit (especially handy for long files), but it`s RECOMMENDED TO READ THE
 WHOLE FILE by not providing these parameters. Any lines longer than 2000 characters
 will be truncated.]],
-  description = [[Views a file from the local filesystem.]],
-  parameters = {
-    path = { type = "string", description = "The file path" },
-    offset = {
-      type = "integer",
-      description = "Line offset to start reading from (1-based, optional)",
-    },
-    limit = {
-      type = "integer",
-      description = "Maximum number of lines to read (default: 2000)",
-    },
-  },
-  required = { "path" },
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
@@ -84,18 +86,18 @@ will be truncated.]],
 }, function(args, conversation, callback, opts)
   if not args.path then
     callback({
-      content = { "Error: No file path was provided" },
-      display_content = icons.error .. " Failed to view",
-      kind = "failed",
+      content = "Error: No file path was provided",
+      summary = icons.error .. " Failed to view",
+      ephemeral = true,
     })
     return
   end
 
   if vim.fn.filereadable(args.path) == 0 then
     callback({
-      content = { "Error: File cannot be found" },
-      display_content = icons.error .. " Failed to view",
-      kind = "failed",
+      content = "Error: File cannot be found",
+      summary = icons.error .. " Failed to view",
+      ephemeral = true,
     })
     return
   end
@@ -123,27 +125,16 @@ will be truncated.]],
       })
       if not buf then
         callback({
-          content = { "Error: Cannot load " .. args.path },
-          display_content = icons.error .. " Failed to view",
-          kind = "failed",
+          content = "Error: Cannot load " .. args.path,
+          summary = icons.error .. " Failed to view",
+          ephemeral = true,
         })
         return
       end
       local total_lines = vim.api.nvim_buf_line_count(buf)
 
       if offset > total_lines then
-        callback({
-          content = {
-            string.format(
-              "Error: Offset %d is beyond end of file (file has %d lines)",
-              offset,
-              total_lines
-            ),
-          },
-          display_content = icons.error .. " Failed to view",
-          kind = "failed",
-        })
-        return
+        offset = total_lines
       end
 
       local start_line = math.max(1, offset)
@@ -164,9 +155,9 @@ will be truncated.]],
       local display = view_display(args.path)
       local name = display.label(args.path)
 
-      local display_content
+      local summary
       if args.offset or args.limit then
-        display_content = string.format(
+        summary = string.format(
           "%s Viewed lines %d-%d from %s",
           display.icon,
           start_line,
@@ -174,8 +165,7 @@ will be truncated.]],
           name
         )
       else
-        display_content =
-          string.format("%s Viewed %s (%d lines)", display.icon, name, #content)
+        summary = string.format("%s Viewed %s (%d lines)", display.icon, name, #content)
       end
 
       local outdated_message
@@ -193,15 +183,16 @@ will be truncated.]],
       end
 
       callback({
-        content = content,
-        context = {
+        content = table.concat(content, "\n"),
+        region = {
           buf = buf,
           pos = pos,
-          tick = tracker.ensure_tracked(buf, { id = conversation.id, pos = pos }),
-          outdated_message = outdated_message,
+          stale = {
+            content = outdated_message,
+          },
+          idempotent = true,
         },
-        kind = "context",
-        display_content = display_content,
+        summary = summary,
       })
     end,
   })

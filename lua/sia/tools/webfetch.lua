@@ -36,15 +36,29 @@ local function ensure_deps(script_dir, callback)
 end
 
 return tool_utils.new_tool({
-  name = "webfetch",
-  message = function(args)
+  definition = {
+    type = "function",
+    name = "webfetch",
+    description = "Fetch a URL, convert to clean markdown, download images and take a screenshot",
+    parameters = {
+      url = {
+        type = "string",
+        description = "The URL to fetch and convert to markdown",
+      },
+      timeout = {
+        type = "number",
+        description = "Timeout in seconds (default: 30, max: 120)",
+      },
+    },
+    required = { "url" },
+  },
+  notification = function(args)
     return string.format("Fetching %s...", args.url)
   end,
-  description = "Fetch a URL, convert to clean markdown, download images and take a screenshot",
-  is_available = function()
+  is_supported = function()
     return vim.fn.executable("npm") == 1 and vim.fn.executable("node") == 1
   end,
-  system_prompt = string.format(
+  instructions = string.format(
     [[- Fetches content from a specified URL using a headless browser
 - Cleans HTML with Mozilla Readability and converts to markdown
 - Downloads page images locally and takes a full-page screenshot
@@ -62,31 +76,20 @@ Usage notes:
     tool_names.view,
     tool_names.view_image
   ),
-  parameters = {
-    url = {
-      type = "string",
-      description = "The URL to fetch and convert to markdown",
-    },
-    timeout = {
-      type = "number",
-      description = "Timeout in seconds (default: 30, max: 120)",
-    },
-  },
-  required = { "url" },
   read_only = true,
 }, function(args, conversation, callback, opts)
   if not args.url or args.url:match("^%s*$") then
     callback({
-      content = { "Error: No URL specified" },
-      display_content = icons.error .. " Failed to fetch URL",
+      content = "Error: No URL specified",
+      summary = icons.error .. " Failed to fetch URL",
     })
     return
   end
 
   if not args.url:match("^https?://") then
     callback({
-      content = { "Error: URL must start with http:// or https://" },
-      display_content = icons.error .. " Invalid URL format",
+      content = "Error: URL must start with http:// or https://",
+      summary = icons.error .. " Invalid URL format",
     })
     return
   end
@@ -100,8 +103,8 @@ Usage notes:
 
       if vim.fn.filereadable(script) ~= 1 then
         callback({
-          content = { "Error: fetch-page script not found at " .. script },
-          display_content = icons.error .. " fetch-page script missing",
+          content = "Error: fetch-page script not found at " .. script,
+          summary = icons.error .. " fetch-page script missing",
         })
         return
       end
@@ -109,10 +112,9 @@ Usage notes:
       ensure_deps(script_dir, function(ok, err)
         if not ok then
           callback({
-            content = {
-              "Error installing fetch-page dependencies: " .. (err or "unknown"),
-            },
-            display_content = icons.error .. " npm install failed",
+            content = "Error installing fetch-page dependencies: "
+              .. (err or "unknown"),
+            summary = icons.error .. " npm install failed",
           })
           return
         end
@@ -131,8 +133,8 @@ Usage notes:
                   and result.stderr
                 or string.format("fetch-page failed (exit %d)", result.code)
               callback({
-                content = { "Error: " .. error_msg },
-                display_content = icons.error .. " Failed to fetch URL",
+                content = "Error: " .. error_msg,
+                summary = icons.error .. " Failed to fetch URL",
               })
               return
             end
@@ -144,8 +146,8 @@ Usage notes:
             local f = io.open(index_path, "r")
             if not f then
               callback({
-                content = { "Error: fetch-page produced no output" },
-                display_content = icons.error .. " Failed to fetch URL",
+                content = "Error: fetch-page produced no output",
+                summary = icons.error .. " Failed to fetch URL",
               })
               return
             end
@@ -164,7 +166,6 @@ Usage notes:
             local max_inline = 8000
 
             table.insert(content, string.format("Fetched: %s", args.url))
-            table.insert(content, "")
             table.insert(content, "Output files:")
             table.insert(content, string.format("  - Markdown: %s", index_path))
             table.insert(content, string.format("  - Screenshot: %s", screenshot_path))
@@ -174,7 +175,6 @@ Usage notes:
                 string.format("  - Images: %s (%d files)", images_dir, image_count)
               )
             end
-            table.insert(content, "")
 
             if #markdown > max_inline then
               table.insert(
@@ -186,23 +186,20 @@ Usage notes:
                   index_path
                 )
               )
-              table.insert(content, "")
               for _, line in ipairs(vim.split(markdown:sub(1, max_inline), "\n")) do
                 table.insert(content, line)
               end
-              table.insert(content, "")
               table.insert(content, "... (truncated)")
             else
               table.insert(content, "Content:")
-              table.insert(content, "")
               for _, line in ipairs(vim.split(markdown, "\n", { trimempty = true })) do
                 table.insert(content, line)
               end
             end
 
             callback({
-              content = content,
-              display_content = string.format("%s Fetched %s", icons.fetch, args.url),
+              content = table.concat(content, "\n"),
+              summary = string.format("%s Fetched %s", icons.fetch, args.url),
             })
           end)
         )

@@ -12,8 +12,7 @@ the project root. Local settings override global ones.
     "name": "openai/gpt-4.1-mini",
     "options": { "temperature": 0.1 }
   },
-  "plan_model": "openai/o3-mini",
-  "auto_continue": true,
+  "plan_model": "openai/gpt-5.2",
   "action": {
     "insert": "custom_insert_action",
     "diff": "custom_diff_action",
@@ -96,16 +95,9 @@ the project root. Local settings override global ones.
 - **risk** — visual risk level indicators. See
   [Permission Rules](../4-permissions/2-rules.md#risk-levels).
 
-### Other Options
-
-- **auto_continue** — when set to `true`, Sia automatically continues
-  execution when a tool operation is cancelled, without prompting. Useful for
-  automated workflows. Default: `false`.
-
 ## Auto-Persisted Rules
 
 When you answer a tool confirmation prompt with "always", Sia writes an allow
 rule to `.sia/auto.json`. This file has the same format as the `permission`
 section and is loaded alongside `config.json`. You can edit or delete it
 manually.
-

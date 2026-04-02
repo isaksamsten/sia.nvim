@@ -83,6 +83,7 @@ local function build_result_summary(proc, result, cwd)
       )
       table.insert(content, stdout:sub(1, max_inline))
       table.insert(content, "... (truncated)")
+      table.insert(content, "Use the view tool to see the full output")
     else
       table.insert(content, "stdout:")
       table.insert(content, stdout)
@@ -102,6 +103,7 @@ local function build_result_summary(proc, result, cwd)
       )
       table.insert(content, stderr:sub(1, max_inline))
       table.insert(content, "... (truncated)")
+      table.insert(content, "Use the view tool to see the full output")
     else
       table.insert(content, "stderr:")
       table.insert(content, stderr)
@@ -175,8 +177,8 @@ local function return_completed_result(proc, conversation, callback)
 
   local content = build_result_summary(proc, result, cwd)
   callback({
-    content = content,
-    display_content = build_display_message(proc),
+    content = table.concat(content, "\n"),
+    summary = build_display_message(proc),
   })
 end
 
@@ -263,8 +265,44 @@ local function launch_command(args, conversation, opts, on_started, on_completed
 end
 
 return tool_utils.new_tool({
-  name = "bash",
-  message = function(args)
+  definition = {
+    type = "function",
+    name = "bash",
+    description = "Execute bash commands safely within the project directory",
+    parameters = {
+      command = {
+        type = "string",
+        enum = { "start", "status", "wait", "kill" },
+        description = "The command to execute: start (launch new process), status (check process status + partial output if async), wait (wait for process completion), kill (terminate a running process)",
+      },
+      bash_command = {
+        type = "string",
+        description = "The bash command to execute (required for 'start')",
+      },
+      description = {
+        type = "string",
+        description = "Clear, concise description of what the command does in 3-10 words (required for 'start')",
+      },
+      timeout = {
+        type = "number",
+        description = "Optional timeout in milliseconds (default 120000, only for 'start')",
+      },
+      id = {
+        type = "integer",
+        description = "The process ID (required for 'status', 'wait', and 'kill')",
+      },
+      async = {
+        type = "boolean",
+        description = "If true, launch the command in the background and return a process ID immediately. Use 'status' or 'wait' to get the result later. Default is false (synchronous).",
+      },
+      wait_timeout = {
+        type = "number",
+        description = "Optional timeout in milliseconds for 'wait'. If the process hasn't completed within this time, returns partial output and the process keeps running. Omit to wait indefinitely.",
+      },
+    },
+    required = { "command" },
+  },
+  notification = function(args)
     if args.command == "start" then
       if args.description then
         return string.format("Starting: %s...", args.description)
@@ -277,8 +315,7 @@ return tool_utils.new_tool({
     end
     return "Running command..."
   end,
-  description = "Execute bash commands safely within the project directory",
-  system_prompt = string.format(
+  instructions = string.format(
     [[Executes bash commands in a persistent shell session with optional timeout,
 ensuring proper handling and security measures.
 
@@ -410,44 +447,11 @@ git commit -m "$(cat <<'EOF'
     table.concat(utils.BANNED_COMMANDS, ", "),
     tool_names.view
   ),
-
-  parameters = {
-    command = {
-      type = "string",
-      enum = { "start", "status", "wait", "kill" },
-      description = "The command to execute: start (launch new process), status (check process status + partial output if async), wait (wait for process completion), kill (terminate a running process)",
-    },
-    bash_command = {
-      type = "string",
-      description = "The bash command to execute (required for 'start')",
-    },
-    description = {
-      type = "string",
-      description = "Clear, concise description of what the command does in 3-10 words (required for 'start')",
-    },
-    timeout = {
-      type = "number",
-      description = "Optional timeout in milliseconds (default 120000, only for 'start')",
-    },
-    id = {
-      type = "integer",
-      description = "The process ID (required for 'status', 'wait', and 'kill')",
-    },
-    async = {
-      type = "boolean",
-      description = "If true, launch the command in the background and return a process ID immediately. Use 'status' or 'wait' to get the result later. Default is false (synchronous).",
-    },
-    wait_timeout = {
-      type = "number",
-      description = "Optional timeout in milliseconds for 'wait'. If the process hasn't completed within this time, returns partial output and the process keeps running. Omit to wait indefinitely.",
-    },
-  },
-  required = { "command" },
 }, function(args, conversation, callback, opts)
   if not args.command then
     callback({
-      content = { "Error: 'command' parameter is required" },
-      display_content = icons.error .. " Failed to execute command",
+      content = "Error: 'command' parameter is required",
+      summary = icons.error .. " Failed to execute command",
       kind = "failed",
     })
     return
@@ -456,8 +460,8 @@ git commit -m "$(cat <<'EOF'
   if args.command == "start" then
     if not args.bash_command or args.bash_command:match("^%s*$") then
       callback({
-        content = { "Error: 'bash_command' parameter is required for 'start'" },
-        display_content = icons.error .. " Failed to execute command",
+        content = "Error: 'bash_command' parameter is required for 'start'",
+        summary = icons.error .. " Failed to execute command",
         kind = "failed",
       })
       return
@@ -467,15 +471,15 @@ git commit -m "$(cat <<'EOF'
       launch_command(args, conversation, opts, function(proc, err)
         if err then
           callback({
-            content = { err },
-            display_content = icons.error .. " Failed to execute command",
+            content = err,
+            summary = icons.error .. " Failed to execute command",
             kind = "failed",
           })
           return
         end
         callback({
-          content = vim.split(string.format(ASYNC_START_REPLY, proc.id), "\n"),
-          display_content = string.format(
+          content = string.format(ASYNC_START_REPLY, proc.id),
+          summary = string.format(
             "%s Started %s (process %d)",
             icons.started,
             format_command(args.description or args.bash_command),
@@ -487,8 +491,8 @@ git commit -m "$(cat <<'EOF'
       launch_command(args, conversation, opts, function(_, err)
         if err then
           callback({
-            content = { err },
-            display_content = icons.error .. " Failed to execute command",
+            content = err,
+            summary = icons.error .. " Failed to execute command",
             kind = "failed",
           })
         end
@@ -501,8 +505,8 @@ git commit -m "$(cat <<'EOF'
   elseif args.command == "status" then
     if not args.id then
       callback({
-        content = { "Error: 'id' parameter is required for 'status'" },
-        display_content = icons.error .. " Missing id parameter",
+        content = "Error: 'id' parameter is required for 'status'",
+        summary = icons.error .. " Missing id parameter",
       })
       return
     end
@@ -510,12 +514,10 @@ git commit -m "$(cat <<'EOF'
     local proc = conversation:get_bash_process(args.id)
     if not proc then
       callback({
-        content = {
-          string.format(
-            "Error: Process with ID %d not found in this conversation",
-            args.id
-          ),
-        },
+        content = string.format(
+          "Error: Process with ID %d not found in this conversation",
+          args.id
+        ),
       })
       return
     end
@@ -524,7 +526,7 @@ git commit -m "$(cat <<'EOF'
   elseif args.command == "wait" then
     if not args.id then
       callback({
-        content = { "Error: 'id' parameter is required for 'wait'" },
+        content = "Error: 'id' parameter is required for 'wait'",
       })
       return
     end
@@ -532,12 +534,10 @@ git commit -m "$(cat <<'EOF'
     local proc = conversation:get_bash_process(args.id)
     if not proc then
       callback({
-        content = {
-          string.format(
-            "Error: Process with ID %d not found in this conversation",
-            args.id
-          ),
-        },
+        content = string.format(
+          "Error: Process with ID %d not found in this conversation",
+          args.id
+        ),
       })
       return
     end
@@ -554,7 +554,7 @@ git commit -m "$(cat <<'EOF'
       local current_proc = conversation:get_bash_process(args.id)
       if not current_proc then
         callback({
-          content = { "Error: Process instance was removed" },
+          content = "Error: Process instance was removed",
         })
         return
       end
@@ -583,7 +583,7 @@ git commit -m "$(cat <<'EOF'
           for i = 5, #preview do
             table.insert(content, preview[i])
           end
-          callback({ content = content })
+          callback({ content = table.concat(content, "\n") })
           return
         end
       end
@@ -595,8 +595,8 @@ git commit -m "$(cat <<'EOF'
   elseif args.command == "kill" then
     if not args.id then
       callback({
-        content = { "Error: 'id' parameter is required for 'kill'" },
-        display_content = icons.error .. " Failed to execute command",
+        content = "Error: 'id' parameter is required for 'kill'",
+        summary = icons.error .. " Failed to execute command",
         kind = "failed",
       })
       return
@@ -605,8 +605,8 @@ git commit -m "$(cat <<'EOF'
     local proc = conversation:get_bash_process(args.id)
     if not proc then
       callback({
-        content = { string.format("Error: No process with ID %d found", args.id) },
-        display_content = icons.error .. " Failed to execute command",
+        content = string.format("Error: No process with ID %d found", args.id),
+        summary = icons.error .. " Failed to execute command",
         kind = "failed",
       })
       return
@@ -615,16 +615,16 @@ git commit -m "$(cat <<'EOF'
     local content, err = proc:stop()
     if err then
       callback({
-        content = { err },
-        display_content = icons.error .. " Failed to execute command",
+        content = err,
+        summary = icons.error .. " Failed to execute command",
         kind = "failed",
       })
       return
     end
 
     callback({
-      content = content or { "Process is not running" },
-      display_content = string.format(
+      content = content and table.concat(content, "\n") or "Process is not running",
+      summary = string.format(
         "%s Killed process %d: %s",
         icons.bash_kill,
         args.id,
@@ -633,7 +633,7 @@ git commit -m "$(cat <<'EOF'
     })
   else
     callback({
-      content = { string.format("Error: Unknown command '%s'", args.command) },
+      content = string.format("Error: Unknown command '%s'", args.command),
     })
   end
 end)
