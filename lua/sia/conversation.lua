@@ -1104,65 +1104,60 @@ end
 
 --- Check if the new interval completely encompasses an existing interval
 --- Returns true if the existing interval should be masked (new is superset of existing)
---- @param new_interval sia.Region
---- @param existing_interval sia.TrackedRegion
+--- @param new_region sia.Region
+--- @param old_region sia.TrackedRegion
 --- @return boolean
-local function should_mask_existing(new_interval, existing_interval)
-  if new_interval.buf ~= existing_interval.buf then
+local function is_region_overlapping(new_region, old_region)
+  if not old_region.idempotent then
     return false
   end
 
-  if not new_interval.pos then
+  if new_region.buf ~= old_region.buf then
+    return false
+  end
+
+  if not new_region.pos then
     return true
   end
 
-  if not existing_interval.pos then
+  if not old_region.pos then
     return false
   end
 
-  local new_start, new_end = new_interval.pos[1], new_interval.pos[2]
-  local existing_start, existing_end =
-    existing_interval.pos[1], existing_interval.pos[2]
+  local new_start, new_end = new_region.pos[1], new_region.pos[2]
+  local existing_start, existing_end = old_region.pos[1], old_region.pos[2]
 
   return new_start <= existing_start and existing_end <= new_end
 end
 
---- Mark overlapping messages as superseded instead of removing them
---- Handle tool call sequences as atomic units to maintain conversation integrity
 --- @private
 --- @param region sia.Region
 function Conversation:outdate_overlapping_entries(region)
-  if not region or not region.buf or not region.idempotent then
+  if not region.idempotent then
     return
   end
 
-  local messages_to_remove = {}
-
+  local entries_to_remove = {}
   for i, message in ipairs(self.entries) do
     local old_region = message.region
-    if
-      old_region
-      and old_region.buf
-      and old_region.idempotent
-      and (message.role == "user" or message.role == "tool")
-    then
-      if should_mask_existing(region, old_region) then
-        messages_to_remove[i] = true
+    if old_region and (message.role == "user" or message.role == "tool") then
+      if is_region_overlapping(region, old_region) then
+        entries_to_remove[i] = true
       end
     end
   end
 
-  local had_superseded = false
-  local kept = {}
-  for i, message in ipairs(self.entries) do
-    if messages_to_remove[i] then
-      had_superseded = true
+  local is_overlap = false
+  local new_entries = {}
+  for i, entry in ipairs(self.entries) do
+    if entries_to_remove[i] then
+      is_overlap = true
     else
-      kept[#kept + 1] = message
+      new_entries[#new_entries + 1] = entry
     end
   end
-  if had_superseded then
-    self.entries = kept
+  if is_overlap then
+    self.entries = new_entries
   end
 end
 
