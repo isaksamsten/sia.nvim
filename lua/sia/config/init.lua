@@ -562,9 +562,9 @@ M._raw_options = {
       insert = {
         mode = "insert",
         input = "require",
-        system = { messages.system.insert_system },
+        system = { messages.system.insert },
         user = {
-          messages.user.current_buffer({
+          messages.user.buffer({
             show_line_numbers = true,
             include_cursor = true,
           }),
@@ -577,9 +577,9 @@ M._raw_options = {
       diff = {
         mode = "diff",
         input = "require",
-        system = { messages.system.diff_system },
+        system = { messages.system.diff },
         user = {
-          messages.user.current_context({
+          messages.user.selection({
             show_line_numbers = true,
             fences = false,
           }),
@@ -593,15 +593,15 @@ M._raw_options = {
       chat = {
         mode = "chat",
         system = {
-          messages.system.model_system,
+          messages.system.adaptive,
         },
         modes = {
           plan = require("sia.modes").plan,
         },
         input = "require",
         user = {
-          messages.user.system_info,
-          messages.user.directory_structure,
+          messages.user.environment,
+          messages.user.file_tree,
           messages.user.agents_md,
           messages.user.visible_buffers,
         },
@@ -640,17 +640,10 @@ M._raw_options = {
     prose = {
       mode = "chat",
       system = {
-        "prose_system",
-        "system_info",
-        "directory_structure",
-        "agents_md",
-        "visible_buffers",
+        messages.system.prose,
       },
       user = {
-        role = "user",
-        content = function()
-          return "current_context"
-        end,
+        messages.user.selection(),
       },
       tools = function(model)
         local tools = require("sia.tools")

@@ -7,7 +7,7 @@ local function get_filename(buf, query)
   return vim.fn.fnamemodify(full_path, query or ":t")
 end
 
-function M.system_info()
+function M.environment()
   local os_name = vim.loop.os_uname().sysname
   local os_version = vim.loop.os_uname().release
   local machine = vim.loop.os_uname().machine
@@ -64,7 +64,7 @@ operating through Neovim.]],
   )
 end
 
-function M.directory_structure()
+function M.file_tree()
   local command
   if vim.fn.executable("fd") == 1 then
     command = { "fd", "--type", "f" }
@@ -107,7 +107,7 @@ end
 
 --- @param global {show_line_numbers: boolean?, include_cursor: boolean?}
 --- @return sia.config.UserMessage
-function M.current_buffer(global)
+function M.buffer(global)
   global = global or {}
   return function(ctx)
     if not vim.api.nvim_buf_is_loaded(ctx.buf) then
@@ -155,7 +155,7 @@ end
 
 --- @param global {show_line_numbers: boolean?}?
 --- @return sia.config.UserMessage
-function M.current_context(global)
+function M.selection(global)
   global = global or {}
   return function(ctx)
     if not vim.api.nvim_buf_is_loaded(ctx.buf) then

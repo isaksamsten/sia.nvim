@@ -1,4 +1,5 @@
 local M = {}
+local messages = require("sia.config.messages")
 
 local MAX_INDENT = 2 ^ 31 - 1
 
@@ -124,7 +125,7 @@ Requirements:
    maintains proper indentation for easy insertion into code.]],
     },
     user = {
-      require("sia.instructions").current_context({
+      messages.user.selection({
         show_line_numbers = false,
       }),
       "Please document the provided context",

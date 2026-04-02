@@ -27,6 +27,8 @@ Sia includes these built-in actions:
 Define custom actions in `setup()`:
 
 ```lua
+local messages = require("sia.config.messages")
+
 require("sia").setup({
   actions = {
     yoda = {
@@ -36,7 +38,7 @@ require("sia").setup({
         "You are a helpful writer, rewriting prose as Yoda.",
       },
       user = {
-        require("sia.instructions").current_context(),
+        messages.user.current_context(),
       },
       range = true,
     },
@@ -106,13 +108,13 @@ Actions use two arrays to define what is sent to the model:
 
 System messages are strings or functions returning strings.
 
-You can also use these as functions from `require("sia.builtin")`:
+You can also use these as functions from `require("sia.config.messages").system`:
 
 ```lua
+local messages = require("sia.config.messages")
+
 system = {
-  require("sia.builtin").model_system,
-  require("sia.builtin").directory_structure,
-  require("sia.builtin").agents_md,
+  messages.system.adaptive,
 },
 ```
 
@@ -133,14 +135,16 @@ Functions receive an `invocation` context and can return content and an optional
 region (for tracking file changes):
 
 ```lua
+local messages = require("sia.config.messages")
+
 user = {
-  require("sia.instructions").current_context({ show_line_numbers = true }),
-  require("sia.instructions").current_buffer({ show_line_numbers = true }),
+  messages.user.current_context({ show_line_numbers = true }),
+  messages.user.current_buffer({ show_line_numbers = true }),
   "Please review this code",
 },
 ```
 
-Built-in user instruction functions from `require("sia.instructions")`:
+Built-in user instruction functions from `require("sia.config.messages").user`:
 
 | Function            | Description                                                 |
 | ------------------- | ----------------------------------------------------------- |
@@ -152,8 +156,10 @@ Built-in user instruction functions from `require("sia.instructions")`:
 Options for `current_context()` and `current_buffer()`:
 
 ```lua
-require("sia.instructions").current_context({ show_line_numbers = true })
-require("sia.instructions").current_buffer({ show_line_numbers = true, include_cursor = true })
+local user = require("sia.config.messages").user
+
+user.current_context({ show_line_numbers = true })
+user.current_buffer({ show_line_numbers = true, include_cursor = true })
 ```
 
 To hide a user message from the UI (useful for context that clutters the chat):
@@ -216,6 +222,8 @@ the pattern `NOTES_`. All other tools use the default permission rules.
 ### Example: Custom Review Mode
 
 ```lua
+local messages = require("sia.config.messages")
+
 require("sia").setup({
   actions = {
     chat = {
@@ -239,12 +247,12 @@ require("sia").setup({
         },
       },
       system = {
-        require("sia.builtin").model_system,
+        messages.system.adaptive,
       },
       user = {
-        require("sia.builtin").system_info,
-        require("sia.builtin").directory_structure,
-        require("sia.instructions").visible_buffers,
+        messages.user.system_info,
+        messages.user.directory_structure,
+        messages.user.visible_buffers,
       },
       -- ... other chat action options
     },
@@ -269,6 +277,8 @@ details.
 Generate a code summary formatted as a comment block:
 
 ```lua
+local messages = require("sia.config.messages")
+
 actions = {
   summarize = {
     mode = "insert",
@@ -276,7 +286,7 @@ actions = {
       "Generate a brief 1-2 sentence summary of the provided code.",
     },
     user = {
-      require("sia.instructions").current_context(),
+      messages.user.current_context(),
     },
     range = true,
     insert = {
@@ -301,6 +311,8 @@ actions = {
 ### Diff Mode for Refactoring
 
 ```lua
+local messages = require("sia.config.messages")
+
 actions = {
   refactor = {
     mode = "diff",
@@ -314,7 +326,7 @@ actions = {
         .. "Output the complete refactored code.",
     },
     user = {
-      require("sia.instructions").current_context(),
+      messages.user.current_context(),
       "Refactor this code following best practices.",
     },
     range = true,

@@ -276,15 +276,15 @@ Guidelines:
 
 --- System-level prompt templates used in action definitions.
 local M = {
-  model_system = [[
+  adaptive = [[
 {% if model.api_name:match("gpt%-5") %}
 ]] .. gpt_5_system .. [[
 {% else %}
 ]] .. minimal_prompt .. [[
 {% end %}
     ]],
-  minimal_system = minimal_prompt,
-  default_system = [[
+  minimal = minimal_prompt,
+  collaborative = [[
 <identity>
 You are a powerful AI coding assistant Sia. You operate exclusively in Neovim.
 
@@ -485,7 +485,7 @@ If the user does not explicitly restrict tool calls, call them to gather
 additional information. If the USER has already provided files, do not try
 to add them again.
 </information_gathering>]],
-  prose_system = [[
+  prose = [[
 <identity>
 You are a powerful AI writing assistant Sia operating in Neovim. You collaborate with
 the USER to craft, edit, and improve their writing - whether creating new content,
@@ -576,7 +576,7 @@ Apply them when the situation matches.
 </skills>
 {% end %}
 ]],
-  insert_system = [[You are in INSERT MODE. The filetype is {{ filetype }}.
+  insert = [[You are in INSERT MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
@@ -607,7 +607,7 @@ Use tool calls if required to document the function or class.
 <tools>
 {{tool_instructions}}
 </tools>]],
-  diff_system = [[You are in DIFF MODE. The filetype is {{ filetype }}.
+  diff = [[You are in DIFF MODE. The filetype is {{ filetype }}.
 
 WORKFLOW:
 1. Use tools and provide explanations as needed in your conversation
