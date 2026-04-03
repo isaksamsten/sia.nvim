@@ -22,6 +22,20 @@ The chat window persists, so you can continue the conversation by typing
 follow-up queries. When the assistant makes file edits, you can review them
 with the [change review workflow](3-reviewing-changes.md).
 
+### Queueing Input While Busy
+
+You can submit follow-up messages or switch modes while the assistant is still
+working. Sia queues your input and processes it automatically:
+
+- **Follow-up messages** are injected between tool rounds so the assistant sees
+  your guidance as early as possible. If you send multiple messages, they are
+  combined into a single user turn.
+- **Mode changes** (e.g., `@plan`) are applied after the current request
+  finishes. Only one mode change can be queued at a time.
+
+The winbar shows a queue indicator with the number of pending items so you can
+see that your input was received.
+
 ### Compose Window
 
 You can open a floating compose window to start a new conversation with
