@@ -143,7 +143,8 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
---- @field queue sia.chat.Submit[]
+--- @field queued_contents string[]
+--- @field queued_mode sia.chat.Submit?
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private turn_renderer sia.chat.AssistantTurnRenderer?
@@ -179,7 +180,8 @@ function ChatStrategy.new(conversation, options, opts)
   obj.buf = buf
   obj.turn_renderer = nil
   obj.options = options
-  obj.queue = {}
+  obj.queued_contents = {}
+  obj.queued_mode = nil
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -272,38 +274,63 @@ end
 --- @private
 --- @param submit sia.chat.Submit
 function ChatStrategy:enqueue_submit(submit)
-  table.insert(self.queue, submit)
+  if submit.mode then
+    -- Mode-changing submits overwrite: last mode wins
+    self.queued_mode = submit
+  elseif submit.content then
+    table.insert(self.queued_contents, submit.content)
+  end
 end
 
 --- @return boolean flushed
 function ChatStrategy:flush_queued_instructions()
-  -- if #self.queue then
-  --   return false
-  -- end
-  --
-  -- for _, queued in ipairs(self.queue) do
-  --   if queued.mode_entry then
-  --     local info = self.conversation:enter_mode(queued.mode_entry.name, queued.context)
-  --     if info and info.truncate_after_id then
-  --       self.conversation:drop_after(info.truncate_after_id)
-  --       for _, content in ipairs(info.content) do
-  --         self.conversation:add_user_message(content)
-  --       end
-  --     end
-  --     if queued.mode_entry.user_input and queued.mode_entry.user_input ~= "" then
-  --       self.conversation:add_user_message(queued.mode_entry.user_input)
-  --     end
-  --   elseif queued.content then
-  --     self.conversation:add_user_message(queued.content, queued.context)
-  --   end
-  -- end
-  --
-  -- if self:buf_is_loaded() then
-  --   self:redraw()
-  -- end
-  --
-  -- self.queue = {}
-  -- return true
+  if not self.queued_mode and #self.queued_contents == 0 then
+    return false
+  end
+
+  if not self:buf_is_loaded() then
+    self.queued_mode = nil
+    self.queued_contents = {}
+    return false
+  end
+
+  local needs_redraw = false
+
+  -- Apply mode change first (last mode wins)
+  if self.queued_mode then
+    local submit = self.queued_mode
+    if submit.mode then
+      local info = self.conversation:enter_mode(submit.mode)
+      if info then
+        if info.truncate_after_id then
+          self.conversation:drop_after(info.truncate_after_id)
+          needs_redraw = true
+        end
+        if info.content then
+          self.conversation:add_user_message(info.content, nil, true)
+        end
+      end
+    end
+    -- If the mode submit also carries content, add it
+    if submit.content then
+      self.conversation:add_user_message(submit.content)
+    end
+  end
+
+  -- Apply all queued content messages in order
+  for _, content in ipairs(self.queued_contents) do
+    self.conversation:add_user_message(content)
+  end
+
+  self.conversation:attach_completed_agents()
+
+  if needs_redraw then
+    self:redraw()
+  end
+
+  self.queued_mode = nil
+  self.queued_contents = {}
+  return true
 end
 
 function ChatStrategy:on_request_start()
@@ -423,10 +450,17 @@ function ChatStrategy:on_cancel()
   if not self:buf_is_loaded() then
     return false
   end
+  self.queued_mode = nil
+  self.queued_contents = {}
   winbar.update_status(self.buf, {
     message = "Operation cancelled",
     status = "warning",
   })
+end
+
+--- @return boolean
+function ChatStrategy:on_request_complete()
+  return self:flush_queued_instructions()
 end
 
 --- @param statuses sia.engine.Status[]

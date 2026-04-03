@@ -259,6 +259,20 @@ function Strategy:on_error(error) end
 --- Use for: Cleanup, showing cancellation message to user
 function Strategy:on_cancel() end
 
+--- Called by the assistant after a request completes (on_finish or after tool
+--- results) to ask whether the strategy has queued work that should trigger a
+--- new execution round. The strategy should prepare the conversation (add
+--- messages, apply mode changes, redraw) and return true if re-execution is
+--- needed, false otherwise.
+---
+--- The assistant owns the re-execution decision: it checks this return value
+--- and calls execute_strategy itself when true.
+---
+--- @return boolean should_reexecute
+function Strategy:on_request_complete()
+  return false
+end
+
 --- Called when tool calls are first detected in the API response.
 --- This is a notification that tools will be included in the response, allowing
 --- the strategy to show UI feedback like "Preparing to use tools...".

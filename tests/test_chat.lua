@@ -191,29 +191,99 @@ T["strategy.chat"]["is_busy flag management"]["prevents concurrent execution"] =
   strategy.is_busy = false
 end
 
--- T["strategy.chat"]["queued instructions"] = MiniTest.new_set()
---
--- T["strategy.chat"]["queued instructions"]["are flushed between rounds"] = function()
---   local model = require("sia.model").resolve("openai/test")
---   local conversation = Conversation.new_conversation({
---     model = model,
---   })
---   conversation:add_instruction({ role = "system", content = "Ok" })
---   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
---
---   strategy:enqueue_submit({ role = "user", content = "Queued follow-up" }, nil)
---
---   eq(#strategy.queue, 1)
---
---   local flushed = strategy:flush_queued_instructions()
---
---   eq(flushed, true)
---   eq(#strategy.queue, 0)
---   eq(
---     strategy.conversation.entries[#strategy.conversation.entries].content,
---     "Queued follow-up"
---   )
--- end
+T["strategy.chat"]["queued instructions"] = MiniTest.new_set()
+
+T["strategy.chat"]["queued instructions"]["content messages are flushed in order"] = function()
+  local model = require("sia.model").resolve("openai/test")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  strategy:enqueue_submit({ content = "First follow-up" })
+  strategy:enqueue_submit({ content = "Second follow-up" })
+
+  eq(#strategy.queued_contents, 2)
+  eq(strategy.queued_mode, nil)
+
+  local flushed = strategy:flush_queued_instructions()
+
+  eq(flushed, true)
+  eq(#strategy.queued_contents, 0)
+  eq(strategy.queued_mode, nil)
+
+  local entries = strategy.conversation.entries
+  eq(entries[#entries - 1].content, "First follow-up")
+  eq(entries[#entries].content, "Second follow-up")
+end
+
+T["strategy.chat"]["queued instructions"]["last mode wins"] = function()
+  local model = require("sia.model").resolve("openai/test")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  strategy:enqueue_submit({ mode = "mode-a", content = "first mode content" })
+  strategy:enqueue_submit({ mode = "mode-b", content = "second mode content" })
+
+  -- Only the last mode submit is kept
+  eq(strategy.queued_mode ~= nil, true)
+  eq(strategy.queued_mode.mode, "mode-b")
+  eq(strategy.queued_mode.content, "second mode content")
+end
+
+T["strategy.chat"]["queued instructions"]["empty queue returns false"] = function()
+  local model = require("sia.model").resolve("openai/test")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  eq(strategy:flush_queued_instructions(), false)
+  eq(strategy:on_request_complete(), false)
+end
+
+T["strategy.chat"]["queued instructions"]["cancel clears queues"] = function()
+  local model = require("sia.model").resolve("openai/test")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  strategy:enqueue_submit({ content = "queued content" })
+  strategy:enqueue_submit({ mode = "some-mode" })
+
+  eq(#strategy.queued_contents, 1)
+  eq(strategy.queued_mode ~= nil, true)
+
+  strategy:on_cancel()
+
+  eq(#strategy.queued_contents, 0)
+  eq(strategy.queued_mode, nil)
+end
+
+T["strategy.chat"]["queued instructions"]["on_request_complete delegates to flush"] = function()
+  local model = require("sia.model").resolve("openai/test")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  strategy:enqueue_submit({ content = "queued message" })
+
+  local result = strategy:on_request_complete()
+
+  eq(result, true)
+  eq(#strategy.queued_contents, 0)
+  local entries = strategy.conversation.entries
+  eq(entries[#entries].content, "queued message")
+end
 
 T["strategy.chat"]["reasoning rendering"] = MiniTest.new_set({
   hooks = {

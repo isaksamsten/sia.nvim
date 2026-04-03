@@ -300,6 +300,10 @@ function M.execute_strategy(strategy)
               if strategy.cancellable.is_cancelled then
                 strategy:on_cancel()
                 strategy.is_busy = false
+              elseif strategy:on_request_complete() then
+                -- Queue was flushed mid-interaction; restart execution
+                strategy.is_busy = false
+                M.execute_strategy(strategy)
               else
                 execute_round(false)
               end
@@ -312,6 +316,9 @@ function M.execute_strategy(strategy)
             turn_id = turn_id,
           })
           strategy.is_busy = false
+          if strategy:on_request_complete() then
+            M.execute_strategy(strategy)
+          end
         end
       end,
       stream = true,
