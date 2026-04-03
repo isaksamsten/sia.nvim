@@ -163,7 +163,7 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function queue_section(data)
-  local size = #data.strategy.queue
+  local size = #data.strategy.user_queue + (data.strategy.next_mode and 1 or 0)
   if size <= 0 then
     return ""
   end
@@ -577,8 +577,13 @@ end
 --- @param buf integer
 --- @param timeout integer?
 function M.clear_status(buf, timeout)
+  local entry = entries[buf]
+  local status = entry and entry.status or nil
   vim.defer_fn(function()
-    M.update_status(buf, nil)
+    local current = entries[buf]
+    if current and current.status == status then
+      M.update_status(buf, nil)
+    end
   end, timeout or 500)
 end
 

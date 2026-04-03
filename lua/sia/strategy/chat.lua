@@ -143,7 +143,8 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
---- @field queue sia.chat.Submit[]
+--- @field user_queue string[]
+--- @field next_mode sia.chat.Submit?
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private turn_renderer sia.chat.AssistantTurnRenderer?
@@ -179,7 +180,7 @@ function ChatStrategy.new(conversation, options, opts)
   obj.buf = buf
   obj.turn_renderer = nil
   obj.options = options
-  obj.queue = {}
+  obj.user_queue = {}
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -218,34 +219,43 @@ function ChatStrategy.new(conversation, options, opts)
   return obj
 end
 
+--- @private
+--- @param chat sia.ChatStrategy
+--- @param mode string
+local function enter_mode(chat, mode)
+  if mode then
+    local info = chat.conversation:enter_mode(mode)
+    if info then
+      if info.truncate_after_id then
+        chat.conversation:drop_after(info.truncate_after_id)
+        return true
+      end
+
+      if info.content then
+        chat.conversation:add_user_message(info.content, nil, true)
+      end
+    end
+  end
+  return false
+end
 --- @class sia.chat.Submit
 --- @field content string?
 --- @field mode string?
 
 --- @param submit sia.chat.Submit
 function ChatStrategy:submit(submit)
-  -- If the current chat is executing, enqueue the submission
-  -- and realize it after the current turn.
+  -- While a request is running, queue mode changes for the next request but let
+  -- plain user messages steer the current round as soon as tools finish.
   if self.is_busy then
-    self:enqueue_submit(submit)
+    if submit.content and not submit.mode then
+      table.insert(self.user_queue, submit.content)
+    elseif submit.mode and not self.next_mode then
+      self.next_mode = submit
+    end
     return
   end
 
-  local needs_redraw = false
-  if submit.mode then
-    local info = self.conversation:enter_mode(submit.mode)
-    if info then
-      if info.truncate_after_id then
-        self.conversation:drop_after(info.truncate_after_id)
-        needs_redraw = true
-      end
-
-      if info.content then
-        self.conversation:add_user_message(info.content, nil, true)
-      end
-    end
-  end
-
+  local needs_redraw = enter_mode(self, submit.mode)
   if needs_redraw then
     self:redraw()
   end
@@ -269,41 +279,30 @@ function ChatStrategy:redraw()
   self.canvas:render_messages(self.conversation.entries, self.conversation.model.name)
 end
 
---- @private
---- @param submit sia.chat.Submit
-function ChatStrategy:enqueue_submit(submit)
-  table.insert(self.queue, submit)
-end
+function ChatStrategy:on_request_end()
+  if not self.next_mode and #self.user_queue == 0 then
+    return false
+  end
 
---- @return boolean flushed
-function ChatStrategy:flush_queued_instructions()
-  -- if #self.queue then
-  --   return false
-  -- end
-  --
-  -- for _, queued in ipairs(self.queue) do
-  --   if queued.mode_entry then
-  --     local info = self.conversation:enter_mode(queued.mode_entry.name, queued.context)
-  --     if info and info.truncate_after_id then
-  --       self.conversation:drop_after(info.truncate_after_id)
-  --       for _, content in ipairs(info.content) do
-  --         self.conversation:add_user_message(content)
-  --       end
-  --     end
-  --     if queued.mode_entry.user_input and queued.mode_entry.user_input ~= "" then
-  --       self.conversation:add_user_message(queued.mode_entry.user_input)
-  --     end
-  --   elseif queued.content then
-  --     self.conversation:add_user_message(queued.content, queued.context)
-  --   end
-  -- end
-  --
-  -- if self:buf_is_loaded() then
-  --   self:redraw()
-  -- end
-  --
-  -- self.queue = {}
-  -- return true
+  local redraw = false
+  if self.next_mode then
+    redraw = enter_mode(self, self.next_mode.mode)
+    if self.next_mode.content then
+      self.conversation:add_user_message(self.next_mode.content)
+    end
+  end
+
+  self.conversation:attach_completed_agents()
+  if redraw then
+    self:redraw()
+  end
+
+  if #self.user_queue > 0 then
+    self.conversation:add_user_message(table.concat(self.user_queue, "\n"))
+  end
+  self.user_queue = {}
+  self.next_mode = nil
+  return true
 end
 
 function ChatStrategy:on_request_start()
@@ -311,9 +310,11 @@ function ChatStrategy:on_request_start()
   if not self:buf_is_loaded() then
     return false
   end
-  local model = self.conversation.model
-  self.canvas:render_messages({ self.conversation:get_last_entry() }, model.name)
-  self.assistant_extmark = self.canvas:render_assistant_header(model.name)
+  self.canvas:render_messages({
+    self.conversation:get_last_entry(),
+  }, self.conversation.model.name)
+  self.assistant_extmark =
+    self.canvas:render_assistant_header(self.conversation.model.name)
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
@@ -329,6 +330,16 @@ function ChatStrategy:on_round_start()
     self.assistant_extmark,
     { model = self.conversation.model.name }
   )
+end
+
+function ChatStrategy:on_round_end()
+  if #self.user_queue > 0 then
+    self.conversation:add_user_message(table.concat(self.user_queue, "\n"))
+    self.canvas:render_messages({
+      self.conversation:get_last_entry(),
+    }, self.conversation.model.name)
+  end
+  self.user_queue = {}
 end
 
 --- @param message string
@@ -423,6 +434,8 @@ function ChatStrategy:on_cancel()
   if not self:buf_is_loaded() then
     return false
   end
+  self.next_mode = nil
+  self.user_queue = {}
   winbar.update_status(self.buf, {
     message = "Operation cancelled",
     status = "warning",

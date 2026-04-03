@@ -181,6 +181,9 @@ end
 --- Use for: Showing status updates like "Analyzing your request..." between rounds
 function Strategy:on_round_start() end
 
+--- Called after one round has completed.
+function Strategy:on_round_end() end
+
 --- Called when the first data arrives from the streaming API response.
 --- This signals that streaming has begun and the strategy should prepare to
 --- receive content chunks. At this point, the API has responded successfully.
@@ -204,6 +207,8 @@ end
 function Strategy:on_stream(input)
   return true
 end
+
+function Strategy:on_stream_end() end
 
 --- Called with tool status updates during execution.
 --- @param statuses sia.engine.Status[]
@@ -258,6 +263,17 @@ function Strategy:on_error(error) end
 ---
 --- Use for: Cleanup, showing cancellation message to user
 function Strategy:on_cancel() end
+
+--- Called by the assistant after a request completes (on_finish or after tool
+--- results) to ask whether the strategy has queued work that should trigger a
+--- new execution round.
+---
+--- The assistant owns the re-execution decision: it checks this return value
+--- and calls execute_strategy itself when true.
+--- @return boolean should_reexecute
+function Strategy:on_request_end()
+  return false
+end
 
 --- Called when tool calls are first detected in the API response.
 --- This is a notification that tools will be included in the response, allowing

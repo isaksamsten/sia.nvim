@@ -213,11 +213,12 @@ function M.execute_strategy(strategy)
               end
             else
               -- Line doesn't start with "data:" - check if it's a known SSE field
-              -- that should be ignored (like "event:", "id:", "retry:")
+              -- that should be ignored (like "event:", "id:", "retry:", comments)
               if
                 not string.match(resp, "^event:")
                 and not string.match(resp, "^id:")
                 and not string.match(resp, "^retry:")
+                and not string.match(resp, "^:")
               then
                 -- Not a known SSE field - it's likely a partial line
                 -- from TCP splitting. Buffer it for the next callback.
@@ -283,7 +284,7 @@ function M.execute_strategy(strategy)
           end
         end
 
-        if round and round.tool_calls and #round.tool_calls > 0 then
+        if round.tool_calls and #round.tool_calls > 0 then
           require("sia.engine").execute_tools(round.tool_calls, strategy.conversation, {
             cancellable = strategy.cancellable,
             turn_id = turn_id,
@@ -301,6 +302,7 @@ function M.execute_strategy(strategy)
                 strategy:on_cancel()
                 strategy.is_busy = false
               else
+                strategy:on_round_end()
                 execute_round(false)
               end
             end,
@@ -312,6 +314,9 @@ function M.execute_strategy(strategy)
             turn_id = turn_id,
           })
           strategy.is_busy = false
+          if strategy:on_request_end() then
+            M.execute_strategy(strategy)
+          end
         end
       end,
       stream = true,

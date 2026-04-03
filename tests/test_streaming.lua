@@ -250,6 +250,45 @@ T["assistant.streaming"]["handles SSE event lines"]["ignores event lines and pro
   -- that event: lines don't corrupt data: line processing
 end
 
+-- Test that SSE comment lines are ignored instead of being buffered into the
+-- next data event.
+T["assistant.streaming"]["handles SSE comment lines"] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      mock.mock_fn_jobstart_custom(function(_, job_opts)
+        job_opts.on_stdout(1, {
+          ": keep-alive",
+          'data: {"choices":[{"delta":{"content":"Hello"}}]}',
+          ": ping",
+          'data: {"choices":[{"delta":{"content":" World"}}]}',
+        }, 10)
+        job_opts.on_stdout(1, {
+          "data: " .. vim.json.encode({
+            choices = { { delta = {} } },
+            usage = { total_tokens = 5 },
+          }),
+        }, 10)
+        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_exit(1, 0, nil)
+        return 1
+      end)
+    end,
+    post_case = function()
+      mock.unmock_assistant()
+    end,
+  },
+})
+
+T["assistant.streaming"]["handles SSE comment lines"]["ignores keepalive comments"] = function()
+  local strategy = TestStrategy.new()
+  assistant.execute_strategy(strategy)
+
+  eq(true, strategy.completed)
+  eq(nil, strategy.error)
+  eq(true, vim.tbl_contains(strategy.contents, "Hello"))
+  eq(true, vim.tbl_contains(strategy.contents, " World"))
+end
+
 -- Test that empty string content deltas are filtered at the provider level
 T["assistant.streaming"]["empty content deltas"] = MiniTest.new_set({
   hooks = {
