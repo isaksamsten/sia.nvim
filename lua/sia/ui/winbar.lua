@@ -163,11 +163,11 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function queue_section(data)
-  local size = #data.strategy.user_queue + (data.strategy.next_mode and 1 or 0)
-  if size <= 0 then
+  local n = #data.strategy.user_queue
+  if n <= 0 then
     return ""
   end
-  return section("NonText", string.format("%s%d", ICONS.queue, size))
+  return section("NonText", string.format("%s%d", ICONS.queue, n))
 end
 
 --- @param data sia.WinbarData
@@ -266,13 +266,24 @@ local function push_part(parts, value)
   end
 end
 
---- @param conversation sia.Conversation
+--- @param data sia.WinbarData
 --- @return string
-local function mode_section(conversation)
-  if not conversation.active_mode then
+local function mode_section(data)
+  local active = data.conversation.active_mode
+  local pending = data.strategy.next_mode
+
+  if not active and not pending then
     return ""
   end
-  return section("SiaMode", " " .. conversation.active_mode.name)
+
+  local parts = {}
+  if active then
+    table.insert(parts, section("SiaMode", " " .. active.name))
+  end
+  if pending and pending.mode then
+    table.insert(parts, section("NonText", " " .. pending.mode))
+  end
+  return table.concat(parts)
 end
 
 --- @param conversation sia.Conversation
@@ -292,7 +303,7 @@ local function default_left_sections(data)
   local parts = {}
   push_part(parts, spinner_section(data))
   push_part(parts, id_section(data.conversation))
-  push_part(parts, mode_section(data.conversation))
+  push_part(parts, mode_section(data))
   push_part(parts, queue_section(data))
   push_part(parts, tool_section(data))
   push_part(parts, agents_section(data.conversation))

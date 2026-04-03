@@ -9,23 +9,6 @@ T["winbar"] = MiniTest.new_set({
   },
 })
 
-T["winbar"]["counts queued mode changes even without queued user text"] = function()
-  local winbar = require("sia.ui.winbar")
-  local Conversation = require("sia.conversation")
-  local conversation = Conversation.new_conversation({ temporary = true })
-
-  local left = winbar.default_left({
-    conversation = conversation,
-    strategy = {
-      is_busy = false,
-      user_queue = {},
-      next_mode = { mode = "diff" },
-    },
-  })
-
-  eq(true, left:find(" 1", 1, true) ~= nil)
-end
-
 T["winbar"]["clear_status preserves newer statuses"] = function()
   local winbar = require("sia.ui.winbar")
   local Conversation = require("sia.conversation")
