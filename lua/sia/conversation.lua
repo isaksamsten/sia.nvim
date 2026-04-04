@@ -856,15 +856,18 @@ function Conversation:exit_mode(summary)
   end
 
   local definition = active.definition
-  local prompt
+  --- @type string[]
+  local prompt = summary and { summary } or {}
   if type(definition.exit_prompt) == "function" then
-    prompt = definition.exit_prompt(active.state, summary or "")
+    table.insert(prompt, definition.exit_prompt(active.state))
   else
-    local ctx = vim.tbl_extend("force", active.state, { summary = summary or "" })
-    prompt = require("sia.template").render(tostring(definition.exit_prompt), ctx)
+    table.insert(
+      prompt,
+      require("sia.template").render(tostring(definition.exit_prompt), active.state)
+    )
   end
 
-  local info = { content = prompt }
+  local info = { content = table.concat(prompt, "\n") }
   if definition.truncate and active.truncate_after_id then
     info.truncate_after_id = active.truncate_after_id
   end

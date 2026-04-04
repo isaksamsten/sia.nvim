@@ -145,7 +145,7 @@ local settings_proxy = setmetatable({}, {
 --- @field permissions sia.config.ModePermissions?
 --- @field deny_message (fun(tool_name: string, args: table, kind: "denied"|"restricted"):string[])?
 --- @field enter_prompt string|fun(state: table):string
---- @field exit_prompt string|fun(state: table, summary: string):string
+--- @field exit_prompt string|fun(state: table):string
 --- @field init_state (fun(): table)?
 --- @field truncate boolean?
 
