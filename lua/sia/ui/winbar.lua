@@ -163,7 +163,7 @@ end
 --- @param data sia.WinbarData
 --- @return string
 local function queue_section(data)
-  local n = #data.strategy.user_queue
+  local n = data.conversation:pending_user_message_count()
   if n <= 0 then
     return ""
   end

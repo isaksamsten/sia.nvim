@@ -19,7 +19,6 @@ T["winbar"]["clear_status preserves newer statuses"] = function()
   vim.api.nvim_win_set_buf(win, buf)
   winbar.attach(buf, conversation, {
     is_busy = false,
-    user_queue = {},
     next_mode = nil,
   })
 
@@ -35,6 +34,26 @@ T["winbar"]["clear_status preserves newer statuses"] = function()
 
   winbar.detach(buf)
   vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["winbar"]["default_left shows pending user message count from conversation"] = function()
+  local winbar = require("sia.ui.winbar")
+  local Conversation = require("sia.conversation")
+  local conversation = Conversation.new_conversation({ temporary = true })
+
+  conversation:add_pending_user_message("Queued follow-up")
+  conversation:add_pending_user_message("Another queued follow-up")
+
+  local rendered = winbar.default_left({
+    conversation = conversation,
+    strategy = {
+      is_busy = false,
+      next_mode = nil,
+    },
+    total_usage = 0,
+  })
+
+  eq(true, rendered:find(" 2", 1, true) ~= nil)
 end
 
 return T

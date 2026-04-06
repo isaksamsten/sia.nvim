@@ -26,6 +26,11 @@ end
 --- @field description string
 --- @field status string
 
+--- @class sia.conversation.PendingUserMessage
+--- @field content sia.Content
+--- @field region sia.Region?
+--- @field hide boolean?
+
 --- @class sia.conversation.BashProcess
 --- @field id integer
 --- @field command string
@@ -656,6 +661,7 @@ end
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
 --- @field parent { agent_id: integer, conversation: sia.Conversation }?
+--- @field pending_user_messages sia.conversation.PendingUserMessage[]
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -691,6 +697,7 @@ function Conversation.new(opts)
   obj.usage_history = {}
   obj.agents = {}
   obj.bash_processes = {}
+  obj.pending_user_messages = {}
   obj.active_mode = nil
   obj.modes = opts.modes or {}
   obj.tool_definitions = {}
@@ -745,6 +752,47 @@ function Conversation:add_user_message(content, region, hide)
     self.entries,
     UserEntry.new(content, region and self:track_region(region), hide)
   )
+end
+
+--- @param content sia.Content
+--- @param region sia.Region?
+--- @param hide boolean?
+function Conversation:add_pending_user_message(content, region, hide)
+  table.insert(self.pending_user_messages, {
+    content = content,
+    region = region,
+    hide = hide,
+  })
+end
+
+--- @return integer
+function Conversation:pending_user_message_count()
+  return #self.pending_user_messages
+end
+
+--- @return boolean
+function Conversation:has_pending_user_messages()
+  return self:pending_user_message_count() > 0
+end
+
+function Conversation:clear_pending_user_messages()
+  self.pending_user_messages = {}
+end
+
+--- @return boolean attached_any
+function Conversation:attach_pending_user_messages()
+  if not self:has_pending_user_messages() then
+    return false
+  end
+
+  local messages = self.pending_user_messages
+  self.pending_user_messages = {}
+
+  for _, message in ipairs(messages) do
+    self:add_user_message(message.content, message.region, message.hide)
+  end
+
+  return true
 end
 
 --- @param turn_id string

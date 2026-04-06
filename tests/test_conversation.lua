@@ -37,6 +37,28 @@ T["conversation basics"]["add_user_message adds user entry"] = function()
   eq("Hello world", conv.entries[1].content)
 end
 
+T["conversation basics"]["pending user messages attach at round boundary"] = function()
+  local conv = require("sia.conversation").new_conversation({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conv:add_pending_user_message("Hidden context", nil, true)
+  conv:add_pending_user_message("Follow-up question")
+
+  eq(true, conv:has_pending_user_messages())
+  eq(2, conv:pending_user_message_count())
+
+  eq(true, conv:attach_pending_user_messages())
+  eq(false, conv:has_pending_user_messages())
+  eq(0, conv:pending_user_message_count())
+  eq(2, #conv.entries)
+  eq("Hidden context", conv.entries[1].content)
+  eq(true, conv.entries[1].hide)
+  eq("Follow-up question", conv.entries[2].content)
+  eq(false, conv.entries[2].hide)
+end
+
 T["conversation basics"]["add_assistant_message adds assistant entry"] = function()
   local conv = require("sia.conversation").new_conversation({
     temporary = true,

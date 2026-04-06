@@ -143,7 +143,6 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
---- @field user_queue sia.chat.PendingUserMessage[]
 --- @field next_mode sia.chat.Submit?
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
@@ -180,7 +179,6 @@ function ChatStrategy.new(conversation, options, opts)
   obj.buf = buf
   obj.turn_renderer = nil
   obj.options = options
-  obj.user_queue = {}
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -243,13 +241,9 @@ end
 --- @field hidden_messages string[]?
 --- @field mode string?
 
---- @class sia.chat.PendingUserMessage
---- @field content string
---- @field hide boolean?
-
 --- @param submit sia.chat.Submit
---- @return sia.chat.PendingUserMessage[]
-local function submit_messages(submit)
+--- @return sia.conversation.PendingUserMessage[]
+local function submit_to_messages(submit)
   local messages = {}
   for _, content in ipairs(submit.hidden_messages or {}) do
     table.insert(messages, {
@@ -264,22 +258,28 @@ local function submit_messages(submit)
 end
 
 --- @param conversation sia.Conversation
---- @param messages sia.chat.PendingUserMessage[]
+--- @param messages sia.conversation.PendingUserMessage[]
 local function append_user_messages(conversation, messages)
   for _, message in ipairs(messages) do
-    conversation:add_user_message(message.content, nil, message.hide)
+    conversation:add_user_message(message.content, message.region, message.hide)
   end
 end
 
 --- @param submit sia.chat.Submit
 function ChatStrategy:submit(submit)
-  local messages = submit_messages(submit)
+  local messages = submit_to_messages(submit)
 
   -- While a request is running, queue mode changes for the next request but let
   -- plain user messages steer the current round as soon as tools finish.
   if self.is_busy then
     if #messages > 0 and not submit.mode then
-      vim.list_extend(self.user_queue, messages)
+      for _, message in ipairs(messages) do
+        self.conversation:add_pending_user_message(
+          message.content,
+          message.region,
+          message.hide
+        )
+      end
     elseif submit.mode and not self.next_mode then
       self.next_mode = {
         mode = submit.mode,
@@ -313,14 +313,14 @@ function ChatStrategy:redraw()
 end
 
 function ChatStrategy:on_request_end()
-  if not self.next_mode and #self.user_queue == 0 then
+  if not self.next_mode and not self.conversation:has_pending_user_messages() then
     return false
   end
 
   local redraw = false
   if self.next_mode then
     redraw = enter_mode(self, self.next_mode.mode)
-    append_user_messages(self.conversation, submit_messages(self.next_mode))
+    append_user_messages(self.conversation, submit_to_messages(self.next_mode))
   end
 
   self.conversation:attach_completed_agents()
@@ -328,10 +328,7 @@ function ChatStrategy:on_request_end()
     self:redraw()
   end
 
-  if #self.user_queue > 0 then
-    append_user_messages(self.conversation, self.user_queue)
-  end
-  self.user_queue = {}
+  self.conversation:attach_pending_user_messages()
   self.next_mode = nil
   return true
 end
@@ -364,13 +361,11 @@ function ChatStrategy:on_round_start()
 end
 
 function ChatStrategy:on_round_end()
-  if #self.user_queue > 0 then
-    append_user_messages(self.conversation, self.user_queue)
+  if self.conversation:attach_pending_user_messages() then
     self.canvas:render_messages({
       self.conversation:get_last_entry(),
     }, self.conversation.model.name)
   end
-  self.user_queue = {}
 end
 
 --- @param message string
@@ -466,7 +461,7 @@ function ChatStrategy:on_cancel()
     return false
   end
   self.next_mode = nil
-  self.user_queue = {}
+  self.conversation:clear_pending_user_messages()
   winbar.update_status(self.buf, {
     message = "Operation cancelled",
     status = "warning",

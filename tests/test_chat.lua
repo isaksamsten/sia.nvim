@@ -133,14 +133,15 @@ T["strategy.chat"]["submit queues hidden skill messages while busy"] = function(
     content = "Queued visible prompt",
   })
 
-  eq(2, #strategy.user_queue)
-  eq("Queued skill payload", strategy.user_queue[1].content)
-  eq(true, strategy.user_queue[1].hide)
-  eq("Queued visible prompt", strategy.user_queue[2].content)
-  eq(nil, strategy.user_queue[2].hide)
+  eq(2, conversation:pending_user_message_count())
+  eq("Queued skill payload", conversation.pending_user_messages[1].content)
+  eq(true, conversation.pending_user_messages[1].hide)
+  eq("Queued visible prompt", conversation.pending_user_messages[2].content)
+  eq(nil, conversation.pending_user_messages[2].hide)
 
   strategy.is_busy = false
   eq(true, strategy:on_request_end())
+  eq(0, conversation:pending_user_message_count())
   eq("Queued skill payload", strategy.conversation.entries[2].content)
   eq(true, strategy.conversation.entries[2].hide)
   eq("Queued visible prompt", strategy.conversation.entries[3].content)
