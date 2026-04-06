@@ -499,7 +499,8 @@ M.chat = {
         completion = "customlist,v:lua.sia_model_complete",
       }, function(input)
         if input and input ~= "" then
-          if config.options.models[input] then
+          local registry = require("sia.provider")
+          if registry.has_model(input) then
             vim.b[buf].sia_prompt_model = input
             update_title(win)
           end
@@ -565,8 +566,18 @@ M.chat = {
 }
 
 _G.sia_model_complete = function(arg_lead, cmd_line, cursor_pos)
+  local registry = require("sia.provider")
+  local available_models = registry.list()
+
+  -- Also include aliases from local config
   local config = require("sia.config")
-  local available_models = vim.tbl_keys(config.options.models)
+  local lc = config.get_local_config()
+  if lc and lc.aliases then
+    for alias_name, _ in pairs(lc.aliases) do
+      table.insert(available_models, alias_name)
+    end
+  end
+
   table.sort(available_models)
 
   local matches = {}

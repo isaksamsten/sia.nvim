@@ -1,5 +1,6 @@
 local common = require("sia.provider.common")
 
+local M = {}
 -- Pricing per 1M tokens (USD) - Standard tier
 -- Last updated: 2025-01-10
 -- Source: https://www.anthropic.com/pricing
@@ -80,8 +81,8 @@ function AnthropicStream:finalize()
   }
 end
 
---- @type sia.config.Provider
-return {
+--- @type sia.Provider
+M.messages = {
   base_url = "https://api.anthropic.com/",
   chat_endpoint = "v1/messages",
   api_key = function()
@@ -231,3 +232,80 @@ return {
   new_stream = AnthropicStream.new,
   get_stats = common.create_cost_stats(PRICING, { read = 0.1, write = 1.25 }),
 }
+
+--- @param callback fun(entries: table<string, sia.provider.ModelSpec>?, err: string?)
+local function discover(callback)
+  local api_key = M.messages.api_key()
+  if not api_key then
+    callback(nil, "ANTHROPIC_API_KEY not set")
+    return
+  end
+
+  vim.system(
+    {
+      "curl",
+      "--silent",
+      "--header",
+      "x-api-key: " .. api_key,
+      "--header",
+      "anthropic-version: 2023-06-01",
+      "https://api.anthropic.com/v1/models",
+    },
+    { text = true },
+    vim.schedule_wrap(function(response)
+      if response.code ~= 0 then
+        callback(nil, "curl failed with code " .. response.code)
+        return
+      end
+
+      local ok, json = pcall(vim.json.decode, response.stdout)
+      if not ok or not json then
+        callback(nil, "JSON decode failed")
+        return
+      end
+
+      if json.error then
+        local msg = json.error.message or vim.inspect(json.error)
+        callback(nil, msg)
+        return
+      end
+
+      if not json.data or not vim.islist(json.data) then
+        callback(nil, "unexpected response format")
+        return
+      end
+
+      local entries = {}
+      for _, model in ipairs(json.data) do
+        local id = model.id
+        if id then
+          --- @type sia.provider.ModelSpec
+          local entry = {
+            -- Use the full API id as api_name since Anthropic uses
+            -- versioned IDs like "claude-4.5-sonnet-20260620"
+            api_name = id,
+          }
+          entries[id] = entry
+        end
+      end
+
+      callback(entries)
+    end)
+  )
+end
+
+--- @type sia.provider.ProviderSpec
+M.spec = {
+  implementations = {
+    default = M.messages,
+  },
+  seed = {
+    ["claude-sonnet-4.5"] = {
+      api_name = "claude-4.5-sonnet",
+      context_window = 200000,
+    },
+  },
+  discover = discover,
+}
+
+return M

@@ -15,10 +15,9 @@ end
 T["strategy.chat"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
-      config.options.models["openai/test"] = { "openai", "test-model" }
-      config.options.settings.model = "openai/test"
-      config.options.settings.fast_model = "openai/test"
-      config.options.settings.plan_model = "openai/test"
+      config.options.settings.model = "openai/gpt-4.1"
+      config.options.settings.fast_model = "openai/gpt-4.1"
+      config.options.settings.plan_model = "openai/gpt-4.1"
       vim.notify = function() end
     end,
     post_once = function()
@@ -59,7 +58,7 @@ T["strategy.chat"]["simple message"] = MiniTest.new_set({
 })
 T["strategy.chat"]["simple message"]["test correct output"] = function()
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -76,7 +75,7 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_name(buf, "buffer " .. buf)
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_user_message("Here's the content of the file", { buf = buf })
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -114,7 +113,7 @@ T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({
 })
 
 T["strategy.chat"]["is_busy flag management"]["is reset after successful completion"] = function()
-  local model = require("sia.model").resolve("openai/test")
+  local model = require("sia.model").resolve("openai/gpt-4.1")
   local conversation = Conversation.new_conversation({
     model = model,
   })
@@ -127,7 +126,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset after successful complet
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on init failure"] = function()
-  local model = require("sia.model").resolve("openai/test")
+  local model = require("sia.model").resolve("openai/gpt-4.1")
   local conversation = Conversation.new_conversation({
     model = model,
   })
@@ -139,7 +138,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset on init failure"] = func
 end
 
 T["strategy.chat"]["is_busy flag management"]["is reset on start failure"] = function()
-  local model = require("sia.model").resolve("openai/test")
+  local model = require("sia.model").resolve("openai/gpt-4.1")
   local conversation = Conversation.new_conversation({
     model = model,
   })
@@ -166,7 +165,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = fu
     },
   })
 
-  local model = require("sia.model").resolve("openai/test")
+  local model = require("sia.model").resolve("openai/gpt-4.1")
   local conversation = Conversation.new_conversation({
     model = model,
   })
@@ -179,7 +178,7 @@ T["strategy.chat"]["is_busy flag management"]["is reset on error response"] = fu
 end
 
 T["strategy.chat"]["is_busy flag management"]["prevents concurrent execution"] = function()
-  local model = require("sia.model").resolve("openai/test")
+  local model = require("sia.model").resolve("openai/gpt-4.1")
   local conversation = Conversation.new_conversation({
     model = model,
   })
@@ -194,7 +193,7 @@ end
 -- T["strategy.chat"]["queued instructions"] = MiniTest.new_set()
 --
 -- T["strategy.chat"]["queued instructions"]["are flushed between rounds"] = function()
---   local model = require("sia.model").resolve("openai/test")
+--   local model = require("sia.model").resolve("openai/gpt-4.1")
 --   local conversation = Conversation.new_conversation({
 --     model = model,
 --   })
@@ -250,7 +249,7 @@ T["strategy.chat"]["reasoning rendering"]["inserts folded reasoning into the buf
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -323,7 +322,7 @@ T["strategy.chat"]["chunked reasoning"]["assembles reasoning from multiple delta
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -371,7 +370,7 @@ T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = func
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
 
   conversation:add_system_message("Ok")
@@ -632,7 +631,7 @@ T["strategy.chat"]["empty deltas rendering"]["empty delta between content does n
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -689,7 +688,7 @@ T["strategy.chat"]["empty deltas with newlines"]["no extra empty lines between c
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -746,7 +745,7 @@ T["strategy.chat"]["standalone newline deltas"]["produce exactly one blank line"
   vim.api.nvim_win_set_buf(0, source_buf)
 
   local conversation = Conversation.new_conversation({
-    model = require("sia.model").resolve("openai/test"),
+    model = require("sia.model").resolve("openai/gpt-4.1"),
   })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })

@@ -94,9 +94,9 @@ end
 --- @field message_id string
 
 --- @class sia.RoundResult
---- @field content string?           -- raw assistant text (nil if tools-only)
---- @field reasoning sia.Reasoning?  -- opaque + summary if present
---- @field tool_calls sia.ToolCall[] -- empty table if no tools
+--- @field content string?
+--- @field reasoning sia.Reasoning?
+--- @field tool_calls sia.ToolCall[]
 
 --- @class sia.StreamReasoning
 --- @field content string

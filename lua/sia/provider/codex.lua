@@ -5,6 +5,8 @@
 local openai = require("sia.provider.openai")
 local common = require("sia.provider.common")
 
+local M = {}
+
 local CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 local ISSUER = "https://auth.openai.com"
 local CODEX_API_BASE = "https://chatgpt.com/backend-api/codex/"
@@ -635,7 +637,30 @@ local codex = openai.responses_compatible(CODEX_API_BASE, CODEX_CHAT_ENDPOINT, {
 
 codex.get_stats = common.create_cost_stats()
 
-return {
-  responses = codex,
+--- @type sia.provider.ProviderSpec
+M.spec = {
+  implementations = {
+    default = codex,
+  },
+  seed = {
+    ["gpt-5.3-codex"] = {
+      context_window = 400000,
+      support = { document = true, reasoning = true },
+    },
+    ["gpt-5.2-codex"] = {
+      context_window = 400000,
+      support = { document = true, reasoning = true },
+    },
+    ["gpt-5.2"] = {
+      context_window = 400000,
+      support = { image = true, document = true },
+    },
+    ["gpt-5.4"] = {
+      context_window = 400000,
+      support = { image = true, document = true },
+    },
+  },
   authorize = browser_authorize,
 }
+
+return M

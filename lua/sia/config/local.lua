@@ -369,8 +369,9 @@ local validate = {
           )
       end
 
+      local provider = require("sia.provider")
       local aliases = json.aliases or {}
-      if not raw_options().models[model_name] and not aliases[model_name] then
+      if not provider.has_model(model_name) and not aliases[model_name] then
         return false,
           string.format(
             "'%s' must be one of the allowed models or aliases, got '%s'",
@@ -391,27 +392,46 @@ local validate = {
       return false, "'models' must be an object, got " .. type(models)
     end
 
-    for model_name, overrides in pairs(models) do
-      if type(model_name) ~= "string" then
-        return false, "models keys must be strings (model names)"
+    local provider = require("sia.provider")
+
+    for provider_name, provider_models in pairs(models) do
+      if type(provider_name) ~= "string" then
+        return false, "models keys must be strings (provider names)"
       end
 
-      if not raw_options().models[model_name] then
+      if type(provider_models) ~= "table" then
         return false,
           string.format(
-            "models.%s: '%s' is not a valid model name",
-            model_name,
-            model_name
+            "models.%s must be an object with model overrides, got %s",
+            provider_name,
+            type(provider_models)
           )
       end
 
-      if type(overrides) ~= "table" then
+      if not provider.is_enabled(provider_name) then
         return false,
           string.format(
-            "models.%s must be an object with override parameters, got %s",
-            model_name,
-            type(overrides)
+            "models.%s: '%s' is not a registered provider",
+            provider_name,
+            provider_name
           )
+      end
+
+      for model_name, overrides in pairs(provider_models) do
+        if type(model_name) ~= "string" then
+          return false,
+            string.format("models.%s keys must be strings (model names)", provider_name)
+        end
+
+        if type(overrides) ~= "table" then
+          return false,
+            string.format(
+              "models.%s.%s must be an object with override parameters, got %s",
+              provider_name,
+              model_name,
+              type(overrides)
+            )
+        end
       end
     end
 
@@ -426,6 +446,8 @@ local validate = {
     if type(aliases) ~= "table" then
       return false, "'aliases' must be an object, got " .. type(aliases)
     end
+
+    local provider = require("sia.provider")
 
     for alias_name, alias_def in pairs(aliases) do
       if type(alias_name) ~= "string" then
@@ -449,7 +471,7 @@ local validate = {
           )
       end
 
-      if not raw_options().models[alias_def.name] then
+      if not provider.has_model(alias_def.name) then
         return false,
           string.format(
             "aliases.%s: '%s' is not a valid model name",

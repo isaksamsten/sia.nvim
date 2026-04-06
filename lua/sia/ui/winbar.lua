@@ -449,7 +449,7 @@ local function maybe_refresh_stats(buf, entry)
     return
   end
 
-  local provider = model:get_provider()
+  local provider = model.provider
   if not provider or not provider.get_stats then
     return
   end

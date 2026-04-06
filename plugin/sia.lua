@@ -50,7 +50,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     error("modes are only possible with chat actions")
   end
 
-  if parsed.flags.m and not config.options.models[parsed.flags.m] then
+  if parsed.flags.m and not require("sia.provider").has_model(parsed.flags.m) then
     vim.notify("sia: model is not defined", vim.log.levels.ERROR)
     return
   end
@@ -135,7 +135,7 @@ end, {
     local parsed = SIA_PARSER:parse(args_before)
 
     local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
-      m = vim.tbl_keys(config.options.models),
+      m = require("sia.provider").list(),
     })
     if flag_completions then
       return flag_completions
@@ -542,9 +542,9 @@ end, {
         table.insert(args_before, arg)
       end
 
-      local parsed = SIA_PARSER:parse(args_before)
+      local parsed = SIA_FORK_PARSER:parse(args_before)
 
-      local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
+      local flag_completions = SIA_FORK_PARSER:complete_flag(parsed, prefix, {
         t = vim.tbl_keys(chat.conversation:turn_ids()),
       })
       if flag_completions then
@@ -857,40 +857,6 @@ end, {
   end,
 })
 
---- @type table<string, { authorize: fun(callback: fun(data: any?)?), label: string }>
-local SIA_AUTH_PROVIDERS = {
-  codex = {
-    label = "Codex",
-    authorize = function(callback)
-      require("sia.provider.codex").authorize(function(token_data)
-        if token_data then
-          vim.notify("sia: ready to use codex/ models", vim.log.levels.INFO)
-        else
-          vim.notify("sia: codex authorization failed", vim.log.levels.ERROR)
-        end
-        if callback then
-          callback(token_data)
-        end
-      end)
-    end,
-  },
-  copilot = {
-    label = "Copilot",
-    authorize = function(callback)
-      require("sia.provider.copilot").authorize(function(token_data)
-        if token_data then
-          vim.notify("sia: ready to use copilot/ models", vim.log.levels.INFO)
-        else
-          vim.notify("sia: copilot authorization failed", vim.log.levels.ERROR)
-        end
-        if callback then
-          callback(token_data)
-        end
-      end)
-    end,
-  },
-}
-
 vim.api.nvim_create_user_command("SiaAuth", function(args)
   local provider_name = args.fargs[1]
   if not provider_name then
@@ -898,29 +864,138 @@ vim.api.nvim_create_user_command("SiaAuth", function(args)
     return
   end
 
-  local provider = SIA_AUTH_PROVIDERS[provider_name]
-  if not provider then
-    vim.notify(
-      string.format(
-        "sia: unknown provider '%s'. available: %s",
-        provider_name,
-        table.concat(vim.tbl_keys(SIA_AUTH_PROVIDERS), ", ")
-      ),
-      vim.log.levels.ERROR
-    )
-    return
-  end
-
-  provider.authorize()
+  local registry = require("sia.provider")
+  registry.authorize(provider_name, function(data)
+    if data then
+      vim.notify(
+        string.format("sia: ready to use %s/ models", provider_name),
+        vim.log.levels.INFO
+      )
+    else
+      vim.notify(
+        string.format("sia: %s authorization failed", provider_name),
+        vim.log.levels.ERROR
+      )
+    end
+  end)
 end, {
   nargs = 1,
   complete = function(arg_lead)
+    local registry = require("sia.provider")
     local completions = {}
-    for name, _ in pairs(SIA_AUTH_PROVIDERS) do
+    for _, name in ipairs(registry.list_authorizers()) do
       if vim.startswith(name, arg_lead) then
         table.insert(completions, name)
       end
     end
     return completions
+  end,
+})
+
+vim.api.nvim_create_user_command("SiaModel", function(args)
+  local subcmd = args.fargs[1]
+  local target = args.fargs[2]
+  local registry = require("sia.provider")
+
+  if not subcmd or subcmd == "list" then
+    local models = registry.list(target)
+    if #models > 0 then
+      vim.notify(table.concat(models, "\n"), vim.log.levels.INFO)
+    end
+  elseif subcmd == "show" then
+    if not target then
+      return
+    end
+    local ok, entry = pcall(registry.resolve_model, target)
+    if not ok then
+      return
+    end
+
+    local lines = {
+      string.format("Model: %s", entry.name),
+      string.format("  Provider: %s", entry.provider_name),
+      string.format("  API Name: %s", entry.api_name),
+    }
+    if entry.context_window then
+      table.insert(lines, string.format("  Context Window: %d", entry.context_window))
+    end
+    if entry.support then
+      local flags = {}
+      for k, v in pairs(entry.support) do
+        if v then
+          table.insert(flags, k)
+        end
+      end
+      if #flags > 0 then
+        table.sort(flags)
+        table.insert(lines, "  Support: " .. table.concat(flags, ", "))
+      end
+    end
+    if entry.pricing then
+      table.insert(
+        lines,
+        string.format(
+          "  Pricing: $%.2f/$%.2f per 1M tokens",
+          entry.pricing.input,
+          entry.pricing.output
+        )
+      )
+    end
+    vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+  elseif subcmd == "refresh" then
+    registry.refresh(vim.schedule_wrap(function(results)
+      local refreshed = {}
+      for provider_name, result in pairs(results) do
+        if result.ok then
+          table.insert(refreshed, provider_name)
+        end
+      end
+      if #refreshed > 0 then
+        vim.notify(
+          string.format("sia: %s are up to date", table.concat(refreshed, ", "))
+        )
+      end
+    end))
+  else
+    vim.notify(
+      "sia: unknown subcommand '" .. subcmd .. "'. Use: list, show, refresh",
+      vim.log.levels.ERROR
+    )
+  end
+end, {
+  nargs = "*",
+  complete = function(arg_lead, cmd_line)
+    local registry = require("sia.provider")
+    local parts = vim.split(cmd_line, "%s+")
+    if #parts <= 2 then
+      local subcmds = { "list", "show", "refresh" }
+      local matches = {}
+      for _, s in ipairs(subcmds) do
+        if vim.startswith(s, arg_lead) then
+          table.insert(matches, s)
+        end
+      end
+      return matches
+    elseif parts[2] == "show" then
+      local models = registry.list()
+      local matches = {}
+      for _, m in ipairs(models) do
+        if vim.startswith(m, arg_lead) then
+          table.insert(matches, m)
+        end
+      end
+      return matches
+    elseif parts[2] == "list" then
+      local provider_names = registry.list_providers()
+      table.sort(provider_names)
+      local matches = {}
+      for _, p in ipairs(provider_names) do
+        if vim.startswith(p, arg_lead) then
+          table.insert(matches, p)
+        end
+      end
+      return matches
+    end
+    return {}
   end,
 })

@@ -1,5 +1,7 @@
 local openai = require("sia.provider.openai")
 
+local M = {}
+
 local GITHUB_OAUTH_CLIENT_ID = "Iv1.b507a08c87ecfe98"
 local DEVICE_CODE_URL = "https://github.com/login/device/code"
 local ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
@@ -459,8 +461,219 @@ local responses =
 responses.get_stats = get_stats
 responses.on_http_error = copilot_on_http_error
 
-return {
-  completion = completion,
-  responses = responses,
-  authorize = authorize,
+local CHAT_TYPES = {
+  ["chat"] = true,
 }
+
+--- @param supported_endpoints string[]?
+--- @return "default"|"responses"|nil
+local function infer_implementation(supported_endpoints)
+  if not supported_endpoints then
+    return nil
+  end
+  for _, ep in ipairs(supported_endpoints) do
+    if ep:match("responses") then
+      return "responses"
+    end
+  end
+  return "default"
+end
+
+--- @param capabilities table?
+--- @return sia.config.Support?
+local function map_support(capabilities)
+  if not capabilities then
+    return nil
+  end
+  local supports = capabilities.supports or {}
+  local support = {}
+  local has_any = false
+
+  if supports.vision then
+    support.image = true
+    has_any = true
+  end
+  if supports.tool_calls then
+    support.tool_calls = true
+    has_any = true
+  end
+  if supports.adaptive_thinking then
+    support.adaptive_thinking = true
+    support.reasoning = true
+    has_any = true
+  elseif supports.reasoning then
+    support.reasoning = true
+    has_any = true
+  end
+
+  return has_any and support or nil
+end
+
+--- @param capabilities table?
+--- @return integer?
+local function get_context_window(capabilities)
+  if not capabilities then
+    return nil
+  end
+  local limits = capabilities.limits
+  if limits and limits.max_context_window_tokens then
+    return limits.max_context_window_tokens
+  end
+  return nil
+end
+
+--- @param callback fun(entries: table<string, sia.provider.ModelSpec>?, err: string?)
+local function discover(callback)
+  local api_key = completion.api_key()
+  if not api_key then
+    callback(nil, "Copilot not authorized (run :SiaAuth copilot)")
+    return
+  end
+
+  vim.system(
+    {
+      "curl",
+      "--silent",
+      "--header",
+      "Authorization: Bearer " .. api_key,
+      "--header",
+      "Copilot-Integration-Id: vscode-chat",
+      "--header",
+      "openai-intent: conversation-agent",
+      "--header",
+      "x-github-api-version: 2025-10-01",
+      "--header",
+      "Accept: application/json",
+      "https://api.githubcopilot.com/models",
+    },
+    { text = true },
+    vim.schedule_wrap(function(response)
+      if response.code ~= 0 then
+        callback(nil, "curl failed with code " .. response.code)
+        return
+      end
+
+      local ok, json = pcall(vim.json.decode, response.stdout)
+      if not ok or not json then
+        callback(nil, "JSON decode failed")
+        return
+      end
+
+      if not json.data or not vim.islist(json.data) then
+        callback(nil, "unexpected response format")
+        return
+      end
+
+      local entries = {}
+      for _, model in ipairs(json.data) do
+        local id = model.id
+        if not id then
+          goto continue
+        end
+
+        local cap_type = model.capabilities and model.capabilities.type
+        if cap_type and not CHAT_TYPES[cap_type] then
+          goto continue
+        end
+
+        local entry = {}
+
+        local impl = infer_implementation(model.supported_endpoints)
+        if impl then
+          entry.implementation = impl
+        end
+
+        local support = map_support(model.capabilities)
+        if support then
+          entry.support = support
+        end
+
+        local ctx = get_context_window(model.capabilities)
+        if ctx then
+          entry.context_window = ctx
+        end
+
+        entries[id] = entry
+
+        ::continue::
+      end
+
+      callback(entries)
+    end)
+  )
+end
+
+M.spec = {
+  implementations = {
+    default = completion,
+    responses = responses,
+  },
+  seed = {
+    ["gpt-4.1"] = {
+      context_window = 128000,
+    },
+    ["gpt-5.2"] = {
+      implementation = "responses",
+      context_window = 128000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5.4"] = {
+      implementation = "responses",
+      context_window = 128000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5-mini"] = {
+      context_window = 128000,
+      support = { image = true },
+    },
+    ["gpt-5.2-codex"] = {
+      implementation = "responses",
+      context_window = 128000,
+      support = { document = true, reasoning = true },
+    },
+    ["claude-haiku-4.5"] = {
+      context_window = 128000,
+      support = { image = true, reasoning = true },
+    },
+    ["claude-opus-4.6"] = {
+      context_window = 128000,
+      support = { image = true, reasoning = true, adaptive_thinking = true },
+      options = {
+        top_p = 1,
+        max_tokens = 16000,
+        thinking_budget = 4000,
+        thinking = { type = "adaptive" },
+        output_config = { effort = "high" },
+      },
+    },
+    ["claude-sonnet-4.5"] = {
+      context_window = 128000,
+    },
+    ["claude-sonnet-4.6"] = {
+      context_window = 128000,
+      support = { image = true, adaptive_thinking = true, reasoning = true },
+      options = {
+        top_p = 1,
+        max_tokens = 16000,
+        thinking_budget = 4000,
+        thinking = { type = "adaptive" },
+        output_config = { effort = "high" },
+      },
+    },
+    ["gemini-3.1-pro"] = {
+      api_name = "gemini-3.1-pro-preview",
+      context_window = 128000,
+    },
+    ["gemini-3-flash"] = {
+      api_name = "gemini-3-flash-preview",
+      context_window = 128000,
+    },
+    ["grok-code-fast-1"] = {
+      context_window = 109000,
+    },
+  },
+  authorize = authorize,
+  discover = discover,
+}
+
+return M

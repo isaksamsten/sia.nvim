@@ -107,7 +107,7 @@ T["provider.prepare_messages"]["openai responses keeps assistant items separate"
 end
 
 T["provider.prepare_messages"]["anthropic merges adjacent assistant turns after translation"] = function()
-  local anthropic = require("sia.provider.anthropic")
+  local anthropic = require("sia.provider.anthropic").messages
   --- @type sia.Message[]
   local messages = {
     { role = "assistant", hide = false, content = "first", meta = {} },

@@ -274,11 +274,10 @@ function OpenAIResponsesStream:finalize()
 end
 
 local M = {
-  --- @type sia.config.Provider
+  --- @type sia.Provider
   completion = {
     base_url = "https://api.openai.com/",
     chat_endpoint = "v1/chat/completions",
-    embedding_endpoint = "v1/embeddings",
     api_key = function()
       return os.getenv("OPENAI_API_KEY")
     end,
@@ -439,22 +438,9 @@ local M = {
     end,
     new_stream = OpenAICompletionStream.new,
     get_stats = get_stats,
-    prepare_embedding = function(data, strings, model)
-      data.encoding_format = "float"
-      data.input = strings
-    end,
-    process_embeddings = function(json)
-      if json.data then
-        local embeddings = {}
-        for _, datum in ipairs(json.data) do
-          embeddings[datum.index + 1] = datum.embedding
-        end
-        return embeddings
-      end
-    end,
   },
 
-  --- @type sia.config.Provider
+  --- @type sia.Provider
   responses = {
     base_url = "https://api.openai.com/",
     chat_endpoint = "v1/responses",
@@ -685,9 +671,9 @@ local M = {
 
 --- @param base_url string
 --- @param opts sia.openai.CompatibleOpts
---- @return sia.config.Provider
+--- @return sia.Provider
 function M.completion_compatible(base_url, chat_endpoint, opts)
-  --- @type sia.config.Provider
+  --- @type sia.Provider
   return {
     base_url = base_url,
     chat_endpoint = chat_endpoint,
@@ -730,9 +716,9 @@ end
 --- @param base_url string
 --- @param chat_endpoint string
 --- @param opts sia.openai.CompatibleOpts
---- @return sia.config.Provider
+--- @return sia.Provider
 function M.responses_compatible(base_url, chat_endpoint, opts)
-  --- @type sia.config.Provider
+  --- @type sia.Provider
   return {
     base_url = base_url,
     chat_endpoint = chat_endpoint,
@@ -776,5 +762,132 @@ function M.responses_compatible(base_url, chat_endpoint, opts)
     new_stream = M.responses.new_stream,
   }
 end
+
+local COMPLETION_MODELS = {
+  ["gpt-4.1"] = true,
+  ["gpt-4.1-mini"] = true,
+  ["gpt-4.1-nano"] = true,
+}
+
+local EXCLUDE_PREFIXES = {
+  "dall-e",
+  "tts-",
+  "whisper",
+  "text-embedding",
+  "babbage",
+  "davinci",
+  "omni-moderation",
+  "o1-",
+  "o3-",
+  "o4-",
+  "codex-",
+  "chatgpt-",
+  "gpt-3",
+}
+
+--- @param id string
+--- @return boolean
+local function should_exclude(id)
+  for _, prefix in ipairs(EXCLUDE_PREFIXES) do
+    if id:sub(1, #prefix) == prefix then
+      return true
+    end
+  end
+  if id:match(":ft%-") or id:match("%-preview$") then
+    return true
+  end
+  return false
+end
+
+--- @param callback fun(entries: table<string, sia.provider.ModelSpec>?, err: string?)
+local function discover(callback)
+  local api_key = M.responses.api_key()
+  if not api_key then
+    callback(nil, "OPENAI_API_KEY not set")
+    return
+  end
+
+  vim.system(
+    {
+      "curl",
+      "--silent",
+      "--header",
+      "Authorization: Bearer " .. api_key,
+      "https://api.openai.com/v1/models",
+    },
+    { text = true },
+    vim.schedule_wrap(function(response)
+      if response.code ~= 0 then
+        callback(nil, "curl failed with code " .. response.code)
+        return
+      end
+
+      local ok, json = pcall(vim.json.decode, response.stdout)
+      if not ok or not json then
+        callback(nil, "JSON decode failed")
+        return
+      end
+
+      if json.error then
+        callback(nil, json.error.message or vim.inspect(json.error))
+        return
+      end
+
+      if not json.data or not vim.islist(json.data) then
+        callback(nil, "unexpected response format")
+        return
+      end
+
+      local entries = {}
+      for _, model in ipairs(json.data) do
+        local id = model.id
+        if id and not should_exclude(id) then
+          local entry = {}
+          if COMPLETION_MODELS[id] then
+            entry.implementation = "completion"
+          end
+          entries[id] = entry
+        end
+      end
+
+      callback(entries)
+    end)
+  )
+end
+
+--- @type sia.provider.ProviderSpec
+M.spec = {
+  implementations = {
+    default = M.responses,
+    completion = M.completion,
+  },
+  seed = {
+    ["gpt-5.4"] = {
+      context_window = 400000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5.2"] = {
+      context_window = 400000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5.2-codex"] = {
+      context_window = 400000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5.1"] = {
+      context_window = 400000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-5.1-codex"] = {
+      context_window = 400000,
+      support = { image = true, document = true, reasoning = true },
+    },
+    ["gpt-4.1"] = {
+      implementation = "completion",
+      context_window = 1047576,
+    },
+  },
+  discover = discover,
+}
 
 return M

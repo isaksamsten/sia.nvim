@@ -99,11 +99,11 @@ local settings_proxy = setmetatable({}, {
 
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
---- @field model sia.config.ModelSpec?
---- @field fast_model sia.config.ModelSpec?
---- @field plan_model sia.config.ModelSpec?
---- @field models table<string, sia.config.ModelSpec>?
---- @field aliases table<string, {name: string}>?
+--- @field model {name: string}?
+--- @field fast_model {name: string}?
+--- @field plan_model {name: string}?
+--- @field models table<string, sia.config.ModelOptions>?
+--- @field aliases table<string, {name: string, options: table<string, any>?}>?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
 --- @field risk table?
 --- @field context sia.config.Context?
@@ -222,7 +222,6 @@ local settings_proxy = setmetatable({}, {
 --- @field model string
 --- @field fast_model string
 --- @field plan_model string
---- @field embedding_model string?
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field context_management sia.config.ContextManagement?
@@ -247,261 +246,20 @@ local settings_proxy = setmetatable({}, {
 --- @field reasoning boolean?
 --- @field [string] boolean?
 
---- @class sia.config.ModelSpec
---- @field [1] string provider name
---- @field [2] string provider model api name
---- @field context_window integer?
---- @field response_format table?
---- @field pricing {input: number, output: number}?
---- @field cache_multiplier {read: number, write: number}?
---- @field support sia.config.Support?
---- @field options table<string, any>?
-
---- @alias sia.config.Models table<string, sia.config.ModelSpec>
-
---- @class sia.config.EmbeddingSpec
---- @field [1] string Provider name
---- @field [2] string API model name
---- @field context_window integer?
-
---- @alias sia.config.Embeddings table<string, sia.config.EmbeddingSpec>
-
---- @class sia.config.Provider
---- @field base_url string
---- @field chat_endpoint string
---- @field embedding_endpoint string?
---- @field api_key fun():string?
---- @field process_usage (fun(obj:table):sia.Usage?)?
---- @field process_response fun(json:table):string?
---- @field process_embeddings (fun(json:table):number[][])?
---- @field prepare_messages fun(data: table, model:string, prompt:sia.Message[])
---- @field prepare_tools fun(data: table, tools:sia.tool.Definition[])
---- @field prepare_parameters fun(data: table, model: sia.Model)?
---- @field prepare_embedding fun(data: table, strings: string[], model: sia.Model)?
---- @field get_headers (fun(model: sia.Model, api_key:string?, messages:sia.Message[]? ):string[])?
---- @field translate_http_error (fun(code: integer):string?)?
---- @field on_http_error (fun(code: integer):boolean)?
---- @field new_stream fun(strategy: sia.Strategy):sia.ProviderStream
---- @field get_stats fun(callback:fun(stats: sia.conversation.Stats), conversation: sia.Conversation)?
+--- @alias sia.config.ModelOptions table<string, table<string, any>>
 
 --- @class sia.config.Options
---- @field models sia.config.Models
---- @field embeddings sia.config.Embeddings?
 --- @field settings sia.config.Settings
+--- @field models table<string, sia.config.ModelOptions>?
 --- @field actions table<string, sia.config.Action>
---- @field providers table<string, sia.config.Provider>
+--- @field providers table<string, sia.provider.ProviderSpec|boolean>
 M._raw_options = {
   providers = {},
-  models = {
-    ["zai/glm-4.5"] = { "zai", "GLM-4.5", context_window = 128000 },
-    ["zai/glm-4.6"] = { "zai", "GLM-4.6", context_window = 128000 },
-    ["openai/gpt-5.4"] = {
-      "openai_responses",
-      "gpt-5.4",
-      context_window = 400000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["openai/gpt-5.2"] = {
-      "openai_responses",
-      "gpt-5.2",
-      context_window = 400000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["openai/gpt-5.2-codex"] = {
-      "openai_responses",
-      "gpt-5.2-codex",
-      context_window = 400000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["openai/gpt-5.1"] = {
-      "openai_responses",
-      "gpt-5.1",
-      context_window = 400000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["openai/gpt-5.1-codex"] = {
-      "openai_responses",
-      "gpt-5.1-codex",
-      context_window = 400000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["openai/gpt-4.1"] = { "openai", "gpt-4.1", context_window = 1047576 },
-    ["codex/gpt-5.3-codex"] = {
-      "codex",
-      "gpt-5.3-codex",
-      context_window = 400000,
-      support = { document = true, reasoning = true },
-    },
-    ["codex/gpt-5.2-codex"] = {
-      "codex",
-      "gpt-5.2-codex",
-      context_window = 400000,
-      support = { document = true, reasoning = true },
-    },
-    ["codex/gpt-5.2"] = {
-      "codex",
-      "gpt-5.2",
-      context_window = 400000,
-      support = { image = true, document = true },
-    },
-    ["codex/gpt-5.4"] = {
-      "codex",
-      "gpt-5.4",
-      context_window = 400000,
-      support = { image = true, document = true },
-    },
-    ["copilot/gpt-4.1"] = { "copilot", "gpt-4.1", context_window = 128000 },
-    ["copilot/gpt-5.2"] = {
-      "copilot_responses",
-      "gpt-5.2",
-      context_window = 128000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["copilot/gpt-5.4"] = {
-      "copilot_responses",
-      "gpt-5.4",
-      context_window = 128000,
-      support = { image = true, document = true, reasoning = true },
-    },
-    ["copilot/gpt-5-mini"] = {
-      "copilot",
-      "gpt-5-mini",
-      context_window = 128000,
-      support = { image = true },
-    },
-    ["copilot/gpt-5.2-codex"] = {
-      "copilot_responses",
-      "gpt-5.2-codex",
-      context_window = 128000,
-      support = { document = true, reasoning = true },
-    },
-    ["copilot/claude-haiku-4.5"] = {
-      "copilot",
-      "claude-haiku-4.5",
-      support = { image = true, reasoning = true },
-      context_window = 128000,
-    },
-    ["copilot/claude-opus-4.6"] = {
-      "copilot",
-      "claude-opus-4.6",
-      support = { image = true, reasoning = true, adaptive_thinking = true },
-      context_window = 128000,
-      options = {
-        top_p = 1,
-        max_tokens = 16000,
-        thinking_budget = 4000,
-        thinking = { type = "adaptive" },
-        output_config = { effort = "high" },
-      },
-    },
-    ["copilot/claude-sonnet-4.5"] = {
-      "copilot",
-      "claude-sonnet-4.5",
-      context_window = 128000,
-    },
-    ["copilot/claude-sonnet-4.6"] = {
-      "copilot",
-      "claude-sonnet-4.6",
-      context_window = 128000,
-      support = { image = true, adaptive_thinking = true, reasoning = true },
-      options = {
-        top_p = 1,
-        max_tokens = 16000,
-        thinking_budget = 4000,
-        thinking = { type = "adaptive" },
-        output_config = { effort = "high" },
-      },
-    },
-    ["copilot/gemini-3.1-pro"] = {
-      "copilot",
-      "gemini-3.1-pro-preview",
-      context_window = 128000,
-    },
-    ["copilot/gemini-3-flash"] = {
-      "copilot",
-      "gemini-3-flash-preview",
-      context_window = 128000,
-    },
-    ["copilot/grok-code-fast-1"] = {
-      "copilot",
-      "grok-code-fast-1",
-      context_window = 109000,
-    },
-    ["anthropic/claude-sonnet-4.5"] = {
-      "anthropic",
-      "claude-4.5-sonnet",
-      context_window = 200000,
-    },
-    ["openrouter/claude-sonnet-4"] = {
-      "openrouter",
-      "anthropic/claude-sonnet-4",
-      pricing = { input = 3.00, output = 15.00 },
-      cache_multiplier = { read = 0.1, write = 1.25 },
-      context_window = 200000,
-    },
-    ["openrouter/claude-sonnet-4.5"] = {
-      "openrouter",
-      "anthropic/claude-sonnet-4.5",
-      pricing = { input = 3.00, output = 15.00 },
-      cache_multiplier = { read = 0.1, write = 1.25 },
-      context_window = 200000,
-    },
-    ["openrouter/claude-sonnet-4.6"] = {
-      "openrouter",
-      "anthropic/claude-sonnet-4.6",
-      pricing = { input = 3.00, output = 15.00 },
-      cache_multiplier = { read = 0.1, write = 1.25 },
-      context_window = 200000,
-    },
-    ["openrouter/claude-haiku-4.5"] = {
-      "openrouter",
-      "anthropic/claude-haiku-4.5",
-      pricing = { input = 1.00, output = 5.00 },
-      cache_multiplier = { read = 0.1, write = 1.25 },
-      context_window = 200000,
-    },
-    ["openrouter/gemini-2.5-pro"] = {
-      "openrouter",
-      "google/gemini-2.5-pro",
-      pricing = { input = 1.25, output = 5.00 },
-      cache_multiplier = { read = 0.1, write = 1.25 },
-      context_window = 1000000,
-    },
-    ["openrouter/glm-4.5"] = {
-      "openrouter",
-      "z-ai/glm-4.5",
-      pricing = { input = 0.35, output = 2.00 },
-      context_window = 128000,
-    },
-    ["openrouter/glm-4.6"] = {
-      "openrouter",
-      "z-ai/glm-4.6",
-      pricing = { input = 0.45, output = 1.50 },
-      context_window = 128000,
-    },
-    ["openrouter/qwen3-coder"] = {
-      "openrouter",
-      "qwen/qwen3-coder",
-      pricing = { input = 0.07, output = 0.26 },
-      context_window = 262144,
-    },
-    ["openrouter/kimi-k2"] = {
-      "openrouter",
-      "moonshotai/kimi-k2",
-      pricing = { input = 0.40, output = 2.0 },
-      context_window = 131072,
-    },
-  },
-  embeddings = {
-    ["openai/text-embedding-3-small"] = { "openai", "text-embedding-3-small" },
-    ["openai/text-embedding-3-large"] = { "openai", "text-embedding-3-large" },
-  },
   --- @type sia.config.Settings
   settings = {
     model = "openai/gpt-5.2",
     fast_model = "openai/gpt-4.1",
     plan_model = "openai/gpt-5.2",
-    embedding_model = "openai/text-embedding-3-small",
     icons = "emoji",
     history = { enable = true },
     context = {
@@ -687,70 +445,6 @@ M.options = setmetatable({}, {
     if key == "settings" then
       return settings_proxy
     end
-    if key == "models" then
-      local raw_models = M._raw_options.models
-      local lc = M.get_local_config()
-      local aliases = lc and lc.aliases or nil
-      local model_overrides = lc and lc.models or nil
-
-      if not aliases and not model_overrides then
-        return raw_models
-      end
-
-      --- Resolve a model spec by applying local overrides and alias params.
-      --- @param name string The model or alias name
-      --- @return table? The enriched spec, or nil if unknown
-      local function resolve_spec(name)
-        local base_name = name
-        local alias_params = nil
-
-        if aliases and aliases[name] then
-          local alias = aliases[name]
-          base_name = alias.name
-          alias_params = alias
-        end
-
-        local base_spec = raw_models[base_name]
-        if not base_spec then
-          return nil
-        end
-
-        local spec = vim.tbl_extend("force", {}, base_spec)
-        if model_overrides and model_overrides[base_name] then
-          local overrides = model_overrides[base_name]
-          if overrides.options and spec.options then
-            overrides = vim.tbl_extend("force", {}, overrides)
-            overrides.options = vim.tbl_extend("force", spec.options, overrides.options)
-          end
-          spec = vim.tbl_extend("force", spec, overrides)
-        end
-
-        if alias_params then
-          for k, v in pairs(alias_params) do
-            if k == "options" and spec.options then
-              spec.options = vim.tbl_extend("force", spec.options, v)
-            elseif k ~= "name" then
-              spec[k] = v
-            end
-          end
-        end
-
-        return spec
-      end
-
-      local combined = {}
-      for k, _ in pairs(raw_models) do
-        combined[k] = resolve_spec(k)
-      end
-      if aliases then
-        for alias_name, _ in pairs(aliases) do
-          if not combined[alias_name] then
-            combined[alias_name] = resolve_spec(alias_name)
-          end
-        end
-      end
-      return combined
-    end
     return M._raw_options[key]
   end,
   __newindex = function(_, key, value)
@@ -767,6 +461,8 @@ M.update_auto_config = local_config.update_auto_config
 
 function M.setup(options)
   M._raw_options = vim.tbl_deep_extend("force", {}, M._raw_options, options or {})
+  local registry = require("sia.provider")
+  registry.bootstrap(M._raw_options.models, M._raw_options.providers)
 end
 
 return M
