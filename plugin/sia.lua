@@ -59,6 +59,7 @@ local function resolve_invoked_skill_message(conversation, skill_name)
     "- entrypoint: " .. skill.filepath,
     "- directory: " .. skill.dir,
     "",
+    "If you need to reopen this skill later, use the `skills` tool with the same skill name.",
     "If you need supporting files, examples, or scripts for this skill, inspect the skill directory above with your normal file tools.",
     "",
     string.format('<invoked_skill name="%s">', skill.name),

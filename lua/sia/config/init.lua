@@ -377,6 +377,7 @@ M._raw_options = {
           local all = {
             tools.ask_user,
             tools.grep,
+            tools.skills,
             tools.write,
             tools.insert,
             tools.view,
@@ -417,6 +418,7 @@ M._raw_options = {
         local all = {
           tools.ask_user,
           tools.grep,
+          tools.skills,
           tools.write,
           tools.insert,
           tools.view,

@@ -6,6 +6,7 @@ local M = {}
 --- @type table<string, string>
 M.tool_names = {
   view = "view",
+  skills = "skills",
   view_image = "view_image",
   view_document = "view_document",
   grep = "grep",

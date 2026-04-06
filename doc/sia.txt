@@ -2555,6 +2555,9 @@ FILE OPERATIONS ~
   view         ★         View file contents with optional line offset and limit
                          (up to 2000 lines)
 
+  skills       ★         Read a named skill definition with metadata and
+                         markdown body
+
   write        ★         Write complete file contents (create new or overwrite)
 
   edit         ★         Targeted search-and-replace edits with fuzzy matching
@@ -2655,6 +2658,8 @@ CORE TOOLS ~
   Tool            Key arguments           Description
   --------------- ----------------------- --------------------------------------
   view            path                    File path to read
+
+  skills          name                    Skill name to resolve and read
 
   write           path                    File path to write
 

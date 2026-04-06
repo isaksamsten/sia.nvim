@@ -1,5 +1,6 @@
 return {
   agent = require("sia.tools.agent"),
+  skills = require("sia.tools.skills"),
   view = require("sia.tools.view"),
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),

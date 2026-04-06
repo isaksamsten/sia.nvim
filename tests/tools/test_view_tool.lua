@@ -90,6 +90,25 @@ T["sia.tools.view"]["view text file basic"] = function()
   restore_tracker()
 end
 
+T["sia.tools.view"]["skill files use the normal file summary"] = function()
+  local skill_path = ".sia/skills/example/SKILL.md"
+  local buf = create_test_buffer({ "# Skill" })
+  local restore_file_loader = mock_file_loader(buf, skill_path)
+  local restore_tracker = mock_tracker()
+
+  local result = nil
+  local callback = function(res)
+    result = res
+  end
+
+  view_tool.implementation.execute({ path = skill_path }, callback, create_execution_context())
+
+  eq("📖 Viewed .sia/skills/example/SKILL.md (1 lines)", result.summary)
+
+  restore_file_loader()
+  restore_tracker()
+end
+
 T["sia.tools.view"]["view text file with offset and limit"] = function()
   local buf = create_test_buffer({ "line 1", "line 2", "line 3", "line 4", "line 5" })
   local restore_file_loader = mock_file_loader(buf, "test.txt")

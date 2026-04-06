@@ -13,6 +13,7 @@ are included in the default chat action.
 | Tool           | Default | Description                                                               |
 | -------------- | ------- | ------------------------------------------------------------------------- |
 | **view**       | ★       | View file contents with optional line offset and limit (up to 2000 lines) |
+| **skills**     | ★       | Read a named skill definition with metadata and markdown body              |
 | **write**      | ★       | Write complete file contents (create new or overwrite)                    |
 | **edit**       | ★       | Targeted search-and-replace edits with fuzzy matching                     |
 | **insert**     | ★       | Insert text at a specific line (1-based, before the line)                 |
@@ -81,6 +82,7 @@ tool that are useful for permission and risk patterns.
 | Tool              | Key arguments                                   | Description                                                                   |
 | ----------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
 | **view**          | **path**                                        | File path to read                                                             |
+| **skills**        | **name**                                        | Skill name to resolve and read                                                |
 | **write**         | **path**                                        | File path to write                                                            |
 | **edit**          | **target_file**, **old_string**, **new_string** | File to modify and the strings involved                                       |
 | **insert**        | **target_file**, **text**                       | File to modify and the text to insert                                         |

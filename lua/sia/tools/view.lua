@@ -16,15 +16,6 @@ local function view_display(path)
     }
   end
 
-  if require("sia.skills.registry").is_skill_path(path) then
-    return {
-      icon = icons.view_skill,
-      label = function(p)
-        return "skill " .. vim.fn.fnamemodify(p, ":h:t")
-      end,
-    }
-  end
-
   return {
     icon = icons.view,
     label = function(p)
@@ -75,9 +66,6 @@ will be truncated.]],
   auto_apply = function(args, _)
     if args.path then
       if require("sia.utils").dirs.is_safe(args.path) then
-        return 1
-      end
-      if require("sia.skills.registry").is_skill_path(args.path) then
         return 1
       end
     end
