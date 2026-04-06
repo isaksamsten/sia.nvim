@@ -1,4 +1,4 @@
-*sia.txt*             For Neovim >= 0.11            Last change: 2026 April 03
+*sia.txt*             For Neovim >= 0.11            Last change: 2026 April 06
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -23,6 +23,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Conversation Management             |sia-commands-conversation-management|
   - Shell Process Management           |sia-commands-shell-process-management|
   - Agent Management                           |sia-commands-agent-management|
+  - Model Management                           |sia-commands-model-management|
   - Authentication                               |sia-commands-authentication|
 5. Reviewing Changes                                   |sia-reviewing-changes|
   - Workflow                                  |sia-reviewing-changes-workflow|
@@ -38,7 +39,8 @@ Table of Contents                                      *sia-table-of-contents*
   - Full Settings Reference             |sia-settings-full-settings-reference|
   - Context Management                       |sia-settings-context-management|
 8. Models and Providers                             |sia-models-and-providers|
-  - Defining Custom Models   |sia-models-and-providers-defining-custom-models|
+  - Provider Registry             |sia-models-and-providers-provider-registry|
+  - Overriding Model Parameters|sia-models-and-providers-overriding-model-parameters|
   - Cost Tracking                     |sia-models-and-providers-cost-tracking|
   - Model Aliases                     |sia-models-and-providers-model-aliases|
   - Provider Parameters         |sia-models-and-providers-provider-parameters|
@@ -574,6 +576,23 @@ AGENT MANAGEMENT                               *sia-commands-agent-management*
 See |sia-agents| for the full agent interaction workflow.
 
 
+MODEL MANAGEMENT                               *sia-commands-model-management*
+
+  ------------------------------------------------------------------------
+  Command                     Description
+  --------------------------- --------------------------------------------
+  :SiaModel list [provider]   List all available models, optionally by
+                              provider
+
+  :SiaModel show <model>      Show details for a model (context, support,
+                              pricing)
+
+  :SiaModel refresh           Refresh model lists from all providers
+  ------------------------------------------------------------------------
+`:SiaModel refresh` queries each provider’s API to discover available models.
+Results are cached across sessions. See |sia-models-and-providers| for details.
+
+
 AUTHENTICATION                                   *sia-commands-authentication*
 
   -----------------------------------------------------------------------
@@ -793,7 +812,6 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
         model = "openai/gpt-5.2",                              -- Main conversational model
         fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
         plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
-        embedding_model = "openai/text-embedding-3-small",      -- Model for semantic embeddings
     
         -- Icon set: "emoji" or a custom table
         icons = "emoji",
@@ -859,7 +877,10 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
       -- Custom actions (see Actions documentation)
       actions = {},
     
-      -- Custom model definitions (see Models documentation)
+      -- Custom provider overrides (see Models documentation)
+      providers = {},
+    
+      -- Model option overrides by provider (see Models documentation)
       models = {},
     })
 <
@@ -957,36 +978,99 @@ Sia supports multiple LLM providers. Each model is identified by a
 `copilot/claude-sonnet-4.6`).
 
 
-DEFINING CUSTOM MODELS       *sia-models-and-providers-defining-custom-models*
+PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
-You can register custom models in `setup()` with pricing and context window
-information:
+Sia uses a central provider registry that manages model discovery, resolution,
+and configuration. Built-in providers (openai, copilot, codex, anthropic,
+openrouter, gemini, zai) register automatically at startup. Each provider ships
+with a set of seed models that are available immediately.
+
+
+DYNAMIC MODEL DISCOVERY ~
+
+Providers that support it can discover available models from the API at
+runtime. Run `:SiaModel refresh` to fetch the latest model lists from all
+providers. Discovered models are cached in
+`~/.local/state/nvim/sia/models-v1.json` and persist across sessions.
+
+
+LISTING AND INSPECTING MODELS ~
+
+Use the `:SiaModel` command to browse available models:
+
+>vim
+    " List all models
+    :SiaModel list
+    
+    " List models from a specific provider
+    :SiaModel list openai
+    
+    " Show details for a model (context window, support, pricing)
+    :SiaModel show openai/gpt-5.2
+<
+
+
+DISABLING A PROVIDER ~
+
+Pass `false` for a provider in the `providers` table to disable it entirely:
 
 >lua
     require("sia").setup({
-      models = {
-        ["openrouter/custom-model"] = {
-          "openrouter",                                        -- Provider name
-          "provider/model-name",                               -- API model identifier
-          pricing = { input = 3.00, output = 15.00 },          -- Per 1M tokens in USD
-          cache_multiplier = { read = 0.1, write = 1.25 },     -- Optional cache pricing
-          context_window = 128000,                              -- Context window in tokens
+      providers = {
+        zai = false,        -- Disable the ZAI provider
+        gemini = false,     -- Disable Gemini
+      },
+    })
+<
+
+
+REGISTERING A CUSTOM PROVIDER ~
+
+Pass a provider spec table to register a custom provider:
+
+>lua
+    require("sia").setup({
+      providers = {
+        my_provider = {
+          implementations = { default = my_transport },
+          seed = {
+            ["my-model"] = {
+              context_window = 128000,
+              support = { image = true },
+            },
+          },
         },
       },
     })
 <
 
-All built-in models include `context_window` and `pricing` values. If you
-define custom models, set `context_window` so that Sia can track context usage
-and manage conversation length automatically. Without it, context tracking and
-automatic pruning are disabled for that model.
+
+OVERRIDING MODEL PARAMETERS*sia-models-and-providers-overriding-model-parameters*
+
+You can override parameters for specific models in `setup()`. The `models`
+table maps `provider_name` to a table of `model_name` to option overrides:
+
+>lua
+    require("sia").setup({
+      models = {
+        openai = {
+          ["gpt-5.2"] = { temperature = 0.7 },
+        },
+        anthropic = {
+          ["claude-sonnet-4.6"] = { max_tokens = 16000 },
+        },
+      },
+    })
+<
+
+These overrides are merged into the model’s `options` when it is resolved.
 
 
 COST TRACKING                         *sia-models-and-providers-cost-tracking*
 
 The chat winbar displays real-time token usage and cost. This works
 automatically for built-in models. For custom models, add `pricing` to the
-model definition.
+model definition in the provider’s `seed` table.
 
 **Cache pricing multipliers:**
 
@@ -1000,7 +1084,7 @@ multipliers automatically.
 MODEL ALIASES                         *sia-models-and-providers-model-aliases*
 
 You can create aliases for models with custom parameters. Define them in
-|sia-project-configuration| or in the `models` table:
+|sia-project-configuration|:
 
 >json
     {
@@ -1029,7 +1113,7 @@ API supports can be used.
 
 OPENAI COMPLETION API ~
 
-Used by: `openai`
+Used by: `openai` (completion implementation)
 
   -------------------------------------------------------------------------------
   Parameter          Type      Description
@@ -1049,7 +1133,7 @@ Used by: `openai`
 
 OPENAI RESPONSES API ~
 
-Used by: `openai_responses`, `codex`
+Used by: `openai` (default implementation), `codex`
 
   -----------------------------------------------------------------------------
   Parameter     Type      Description
@@ -1069,13 +1153,13 @@ The **reasoning** object:
   --------- -------- -------------------------
   effort    string   "low", "medium", "high"
   summary   string   "concise" or "detailed"
-Example for a Codex reasoning model:
+Example for a Codex reasoning model (in project configuration):
 
 >json
     {
       "models": {
-        "codex/gpt-5.3-codex": {
-          "options": {
+        "codex": {
+          "gpt-5.3-codex": {
             "reasoning": { "effort": "medium" }
           }
         }
@@ -1086,7 +1170,7 @@ Example for a Codex reasoning model:
 
 ANTHROPIC API ~
 
-Used by: `anthropic`, `claude_code`
+Used by: `anthropic`
 
   Parameter     Type      Description
   ------------- --------- ------------------------------------------
@@ -1113,13 +1197,13 @@ Claude models support extended thinking in two modes:
 When thinking is enabled, **max_tokens** must be set and covers both thinking
 and response tokens.
 
-Adaptive thinking with medium effort:
+Adaptive thinking with medium effort (in project configuration):
 
 >json
     {
       "models": {
-        "anthropic/claude-sonnet-4.6": {
-          "options": {
+        "anthropic": {
+          "claude-sonnet-4.6": {
             "max_tokens": 16000,
             "thinking": { "type": "adaptive" },
             "output_config": { "effort": "medium" }
@@ -1134,8 +1218,8 @@ Manual thinking with a fixed budget:
 >json
     {
       "models": {
-        "anthropic/claude-sonnet-4.5": {
-          "options": {
+        "anthropic": {
+          "claude-sonnet-4.5": {
             "max_tokens": 16000,
             "thinking": { "type": "enabled", "budget_tokens": 4000 }
           }
@@ -1168,13 +1252,13 @@ Claude models through Copilot support extended thinking:
 
   output_config        object    { effort: "high" }
   -------------------------------------------------------------------------
-Example:
+Example (in project configuration):
 
 >json
     {
       "models": {
-        "copilot/claude-sonnet-4.6": {
-          "options": {
+        "copilot": {
+          "claude-sonnet-4.6": {
             "max_tokens": 16000,
             "top_p": 1,
             "thinking_budget": 4000,
@@ -1244,12 +1328,12 @@ MODEL OVERRIDES ~
 - **model** — override the main model. Accepts a string (`"openai/gpt-4.1"`) or
     an object (`{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }`).
 - **fast_model** / **plan_model** — same format as **model**.
-- **models** — override parameters for specific models by name:
+- **models** — override parameters for specific models, organized by provider:
     >json
         {
           "models": {
-            "openai/gpt-5.1": {
-              "options": { "reasoning_effort": "medium" }
+            "openai": {
+              "gpt-5.1": { "reasoning_effort": "medium" }
             }
           }
         }

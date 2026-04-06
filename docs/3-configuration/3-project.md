@@ -37,13 +37,13 @@ the project root. Local settings override global ones.
 - **model** — override the main model. Accepts a string (`"openai/gpt-4.1"`)
   or an object (`{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }`).
 - **fast_model** / **plan_model** — same format as **model**.
-- **models** — override parameters for specific models by name:
+- **models** — override parameters for specific models, organized by provider:
 
   ```json
   {
     "models": {
-      "openai/gpt-5.1": {
-        "options": { "reasoning_effort": "medium" }
+      "openai": {
+        "gpt-5.1": { "reasoning_effort": "medium" }
       }
     }
   }

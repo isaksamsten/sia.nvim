@@ -23,7 +23,6 @@ require("sia").setup({
     model = "openai/gpt-5.2",                              -- Main conversational model
     fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
     plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
-    embedding_model = "openai/text-embedding-3-small",      -- Model for semantic embeddings
 
     -- Icon set: "emoji" or a custom table
     icons = "emoji",
@@ -89,7 +88,10 @@ require("sia").setup({
   -- Custom actions (see Actions documentation)
   actions = {},
 
-  -- Custom model definitions (see Models documentation)
+  -- Custom provider overrides (see Models documentation)
+  providers = {},
+
+  -- Model option overrides by provider (see Models documentation)
   models = {},
 })
 ```

@@ -97,6 +97,18 @@ export OPENROUTER_API_KEY="sk-or-..."
 export ZAI_CODING_API_KEY="..."
 ```
 
+## Discover Available Models
+
+Sia ships with a set of seed models for each provider, but you can fetch the
+full list of models available to your account by running:
+
+```vim
+:SiaModel refresh
+```
+
+Results are cached across sessions. Use `:SiaModel list` to see all available
+models, or `:SiaModel list openai` to filter by provider.
+
 ## First Commands
 
 Open any file and try these:

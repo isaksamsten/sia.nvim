@@ -3,35 +3,93 @@
 Sia supports multiple LLM providers. Each model is identified by a
 `provider/model-name` string (e.g., `openai/gpt-4.1`, `copilot/claude-sonnet-4.6`).
 
-## Defining Custom Models
+## Provider Registry
 
-You can register custom models in `setup()` with pricing and context window
-information:
+Sia uses a central provider registry that manages model discovery, resolution,
+and configuration. Built-in providers (openai, copilot, codex, anthropic,
+openrouter, gemini, zai) register automatically at startup. Each provider ships
+with a set of seed models that are available immediately.
+
+### Dynamic Model Discovery
+
+Providers that support it can discover available models from the API at runtime.
+Run `:SiaModel refresh` to fetch the latest model lists from all providers.
+Discovered models are cached in `~/.local/state/nvim/sia/models-v1.json` and
+persist across sessions.
+
+### Listing and Inspecting Models
+
+Use the `:SiaModel` command to browse available models:
+
+```vim
+" List all models
+:SiaModel list
+
+" List models from a specific provider
+:SiaModel list openai
+
+" Show details for a model (context window, support, pricing)
+:SiaModel show openai/gpt-5.2
+```
+
+### Disabling a Provider
+
+Pass `false` for a provider in the `providers` table to disable it entirely:
 
 ```lua
 require("sia").setup({
-  models = {
-    ["openrouter/custom-model"] = {
-      "openrouter",                                        -- Provider name
-      "provider/model-name",                               -- API model identifier
-      pricing = { input = 3.00, output = 15.00 },          -- Per 1M tokens in USD
-      cache_multiplier = { read = 0.1, write = 1.25 },     -- Optional cache pricing
-      context_window = 128000,                              -- Context window in tokens
+  providers = {
+    zai = false,        -- Disable the ZAI provider
+    gemini = false,     -- Disable Gemini
+  },
+})
+```
+
+### Registering a Custom Provider
+
+Pass a provider spec table to register a custom provider:
+
+```lua
+require("sia").setup({
+  providers = {
+    my_provider = {
+      implementations = { default = my_transport },
+      seed = {
+        ["my-model"] = {
+          context_window = 128000,
+          support = { image = true },
+        },
+      },
     },
   },
 })
 ```
 
-All built-in models include `context_window` and `pricing` values. If you
-define custom models, set `context_window` so that Sia can track context usage
-and manage conversation length automatically. Without it, context tracking and
-automatic pruning are disabled for that model.
+## Overriding Model Parameters
+
+You can override parameters for specific models in `setup()`. The `models` table
+maps `provider_name` to a table of `model_name` to option overrides:
+
+```lua
+require("sia").setup({
+  models = {
+    openai = {
+      ["gpt-5.2"] = { temperature = 0.7 },
+    },
+    anthropic = {
+      ["claude-sonnet-4.6"] = { max_tokens = 16000 },
+    },
+  },
+})
+```
+
+These overrides are merged into the model's `options` when it is resolved.
 
 ## Cost Tracking
 
 The chat winbar displays real-time token usage and cost. This works
 automatically for built-in models. For custom models, add `pricing` to the
-model definition.
+model definition in the provider's `seed` table.
 
 **Cache pricing multipliers:**
 
@@ -44,7 +102,7 @@ multipliers automatically.
 ## Model Aliases
 
 You can create aliases for models with custom parameters. Define them in
-[project configuration](3-project.md) or in the `models` table:
+[project configuration](3-project.md):
 
 ```json
 {
@@ -71,7 +129,7 @@ API supports can be used.
 
 ### OpenAI Completion API
 
-Used by: `openai`
+Used by: `openai` (completion implementation)
 
 | Parameter            | Type    | Description                                                       |
 | -------------------- | ------- | ----------------------------------------------------------------- |
@@ -83,7 +141,7 @@ Used by: `openai`
 
 ### OpenAI Responses API
 
-Used by: `openai_responses`, `codex`
+Used by: `openai` (default implementation), `codex`
 
 | Parameter       | Type    | Description                                                       |
 | --------------- | ------- | ----------------------------------------------------------------- |
@@ -99,13 +157,13 @@ The **reasoning** object:
 | **effort**  | string | `"low"`, `"medium"`, `"high"` |
 | **summary** | string | `"concise"` or `"detailed"`   |
 
-Example for a Codex reasoning model:
+Example for a Codex reasoning model (in project configuration):
 
 ```json
 {
   "models": {
-    "codex/gpt-5.3-codex": {
-      "options": {
+    "codex": {
+      "gpt-5.3-codex": {
         "reasoning": { "effort": "medium" }
       }
     }
@@ -115,7 +173,7 @@ Example for a Codex reasoning model:
 
 ### Anthropic API
 
-Used by: `anthropic`, `claude_code`
+Used by: `anthropic`
 
 | Parameter       | Type    | Description                              |
 | --------------- | ------- | ---------------------------------------- |
@@ -141,13 +199,13 @@ Claude models support extended thinking in two modes:
 When thinking is enabled, **max_tokens** must be set and covers both thinking
 and response tokens.
 
-Adaptive thinking with medium effort:
+Adaptive thinking with medium effort (in project configuration):
 
 ```json
 {
   "models": {
-    "anthropic/claude-sonnet-4.6": {
-      "options": {
+    "anthropic": {
+      "claude-sonnet-4.6": {
         "max_tokens": 16000,
         "thinking": { "type": "adaptive" },
         "output_config": { "effort": "medium" }
@@ -162,8 +220,8 @@ Manual thinking with a fixed budget:
 ```json
 {
   "models": {
-    "anthropic/claude-sonnet-4.5": {
-      "options": {
+    "anthropic": {
+      "claude-sonnet-4.5": {
         "max_tokens": 16000,
         "thinking": { "type": "enabled", "budget_tokens": 4000 }
       }
@@ -190,13 +248,13 @@ Claude models through Copilot support extended thinking:
 | **top_p**           | number  | Typically set to 1 with thinking        |
 | **output_config**   | object  | `{ effort: "high" }`                    |
 
-Example:
+Example (in project configuration):
 
 ```json
 {
   "models": {
-    "copilot/claude-sonnet-4.6": {
-      "options": {
+    "copilot": {
+      "claude-sonnet-4.6": {
         "max_tokens": 16000,
         "top_p": 1,
         "thinking_budget": 4000,

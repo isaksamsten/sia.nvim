@@ -96,6 +96,18 @@ messages before that turn). Tab-completion is available for turn IDs.
 See [Agents](../5-features/2-agents.md) for the full agent interaction
 workflow.
 
+## Model Management
+
+| Command                       | Description                                      |
+| ----------------------------- | ------------------------------------------------ |
+| `:SiaModel list [provider]`   | List all available models, optionally by provider |
+| `:SiaModel show <model>`      | Show details for a model (context, support, pricing) |
+| `:SiaModel refresh`           | Refresh model lists from all providers            |
+
+`:SiaModel refresh` queries each provider's API to discover available models.
+Results are cached across sessions. See
+[Models and Providers](../3-configuration/2-models.md) for details.
+
 ## Authentication
 
 | Command            | Description                                          |
