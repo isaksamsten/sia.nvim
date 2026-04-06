@@ -6,14 +6,28 @@ local START_REPLY = [[
 Async agent launched successfully.
 agentId: %d (This is an internal ID for your use, do not mention it to the user. Use
 this ID to retrieve results with agent(id=id, command="wait") when the agent finishes.
-The agent is currently working in the background. If you have other tasks you you should
+The agent is currently working in the background. If you have other tasks you should
 continue working on them now. Wait to call agent(command="wait") until either:
 - If you want to check on the agent's progress - call agent(command="status") to get an
   immediate update on the agent's status
 - If you run out of things to do and the agent is still running - call
   agent(command="wait") to idle and wait for the agent's result (do not use
   "wait" unless you completely run out of things to do as it will waste time).
+If the user sends a message while you are waiting, the wait may yield early with a
+status update. You will then see the user's message in the conversation and should
+respond before calling wait or status again.
 ]]
+
+--- @param agent sia.conversation.Agent
+--- @return string
+local function waiting_yield_message(agent)
+  return string.format(
+    "Agent %d (%s) is still running. Yielding to process user input.\n\n%s",
+    agent.id,
+    agent.name,
+    agent:get_preview()
+  )
+end
 
 return tool_utils.new_tool({
   definition = {
@@ -80,6 +94,9 @@ Usage notes:
   (search, file reads, web fetches, etc.), since it is not aware of the user's intent
 - If the agent description mentions that it should be used proactively, then you should
   try your best to use it without the user having to ask for it first. Use your judgement.
+- If the user sends a message while you are waiting on `agent(command="wait")`, the wait
+  may yield early with a status update. Respond to the user first, then call `wait` or
+  `status` again when you are ready.
 - If the user specifies that they want you to run agents "in parallel", you MUST send a
   single message with multiple tark tool use content blocks. For example, if
   you need to launch both a code-reviewer agent and a test-runner agent in parallel, send
@@ -221,6 +238,10 @@ Usage notes:
             current_agent.name
           ),
           summary = string.format("%s Agent %d cancelled", icons.error, args.id),
+        })
+      elseif conversation:has_pending_user_messages() then
+        callback({
+          content = waiting_yield_message(current_agent),
         })
       elseif current_agent.status == "opened" then
         vim.defer_fn(poll, 1000)

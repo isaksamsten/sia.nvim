@@ -13,7 +13,20 @@ continue working on them now. Wait to call bash(command="wait") until either:
 - You run out of things to do and the process is still running - call
   bash(command="wait") to idle and wait for the result (do not use
   "wait" unless you completely run out of things to do as it will waste time).
+If the user sends a message while you are waiting, the wait may yield early with a
+status update. You will then see the user's message in the conversation and should
+respond before calling wait or status again.
 ]]
+
+--- @param proc sia.conversation.BashProcess
+--- @return string
+local function waiting_yield_message(proc)
+  return string.format(
+    "Process %d is still running. Yielding to process user input.\n\n%s",
+    proc.id,
+    proc:get_preview()
+  )
+end
 
 --- Ensure the shell is initialized for the conversation
 --- @param conversation sia.Conversation
@@ -182,6 +195,82 @@ local function return_completed_result(proc, conversation, callback)
   })
 end
 
+--- Wait for a tracked bash process to finish, optionally yielding early when the user
+--- has queued follow-up input or when a wait timeout elapses.
+--- @param proc_id integer
+--- @param conversation sia.Conversation
+--- @param callback fun(result:sia.ToolResult)
+--- @param wait_timeout number?
+local function wait_for_process(proc_id, conversation, callback, wait_timeout)
+  local proc = conversation:get_bash_process(proc_id)
+  if not proc then
+    callback({
+      content = string.format(
+        "Error: Process with ID %d not found in this conversation",
+        proc_id
+      ),
+    })
+    return
+  end
+
+  if proc.status ~= "running" then
+    return_completed_result(proc, conversation, callback)
+    return
+  end
+
+  local start_time = vim.uv.hrtime() / 1e6
+
+  local function poll()
+    local current_proc = conversation:get_bash_process(proc_id)
+    if not current_proc then
+      callback({
+        content = "Error: Process instance was removed",
+      })
+      return
+    end
+
+    if current_proc.status ~= "running" then
+      return_completed_result(current_proc, conversation, callback)
+      return
+    end
+
+    if conversation:has_pending_user_messages() then
+      callback({
+        content = waiting_yield_message(current_proc),
+      })
+      return
+    end
+
+    if wait_timeout then
+      local elapsed = (vim.uv.hrtime() / 1e6) - start_time
+      if elapsed >= wait_timeout then
+        local content = {
+          string.format("Process %d is still running.", current_proc.id),
+          string.format("Command: %s", current_proc.command),
+          string.format(
+            "Running for: %.1fs",
+            (vim.uv.hrtime() / 1e9) - current_proc.started_at
+          ),
+          string.format(
+            "Wait timed out after %.1fs. Use status to check progress or wait again.",
+            wait_timeout / 1000
+          ),
+        }
+        local preview = current_proc:get_preview()
+        for i = 5, #preview do
+          table.insert(content, preview[i])
+        end
+        callback({ content = table.concat(content, "\n") })
+        return
+      end
+    end
+
+    vim.defer_fn(poll, 500)
+  end
+
+  poll()
+end
+
 --- Handle completion of a shell command, updating the process record
 --- @param proc sia.conversation.BashProcess
 --- @param result sia.ShellResult
@@ -322,7 +411,9 @@ ensuring proper handling and security measures.
 ## Commands
 
 - **start**: Execute a bash command. By default, blocks until the command completes
-  and returns the result directly. Set `async=true` to launch in the background.
+  and returns the result directly. If the user sends a follow-up message while you are
+  waiting, it may yield early with a status update while the command keeps running.
+  Set `async=true` to launch in the background immediately.
 - **status**: Check if an async process has completed (non-blocking). For running
   processes, includes the last 20 lines of stdout/stderr so you can monitor progress.
 - **wait**: Block until an async process completes and return its result. Use
@@ -350,6 +441,10 @@ use `async=true`:
 4. Use `wait` when you need the result and have nothing else to do.
 5. Use `wait` with `wait_timeout` to peek at partial output without blocking forever.
 6. Use `kill` to terminate a running process that is no longer needed.
+7. If the user sends a message while you are waiting on `bash(command="wait")` or a
+   blocking `bash(command="start", async=false)`, the call may yield early with a
+   status update. Respond to the user first, then call `wait` or `status` again when
+   you are ready.
 
 <good-example>
 // Launch two independent commands concurrently:
@@ -488,19 +583,17 @@ git commit -m "$(cat <<'EOF'
         })
       end, nil)
     else
-      launch_command(args, conversation, opts, function(_, err)
+      launch_command(args, conversation, opts, function(proc, err)
         if err then
           callback({
             content = err,
             summary = icons.error .. " Failed to execute command",
             kind = "failed",
           })
+          return
         end
-      end, function(proc)
-        vim.schedule(function()
-          return_completed_result(proc, conversation, callback)
-        end)
-      end)
+        wait_for_process(proc.id, conversation, callback, nil)
+      end, nil)
     end
   elseif args.command == "status" then
     if not args.id then
@@ -531,67 +624,7 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
-    local proc = conversation:get_bash_process(args.id)
-    if not proc then
-      callback({
-        content = string.format(
-          "Error: Process with ID %d not found in this conversation",
-          args.id
-        ),
-      })
-      return
-    end
-
-    if proc.status ~= "running" then
-      return_completed_result(proc, conversation, callback)
-      return
-    end
-
-    local wait_timeout = args.wait_timeout
-    local start_time = vim.uv.hrtime() / 1e6
-
-    local function poll()
-      local current_proc = conversation:get_bash_process(args.id)
-      if not current_proc then
-        callback({
-          content = "Error: Process instance was removed",
-        })
-        return
-      end
-
-      if current_proc.status ~= "running" then
-        return_completed_result(current_proc, conversation, callback)
-        return
-      end
-
-      if wait_timeout then
-        local elapsed = (vim.uv.hrtime() / 1e6) - start_time
-        if elapsed >= wait_timeout then
-          local content = {
-            string.format("Process %d is still running.", current_proc.id),
-            string.format("Command: %s", current_proc.command),
-            string.format(
-              "Running for: %.1fs",
-              (vim.uv.hrtime() / 1e9) - current_proc.started_at
-            ),
-            string.format(
-              "Wait timed out after %.1fs. Use status to check progress or wait again.",
-              wait_timeout / 1000
-            ),
-          }
-          local preview = current_proc:get_preview()
-          for i = 5, #preview do
-            table.insert(content, preview[i])
-          end
-          callback({ content = table.concat(content, "\n") })
-          return
-        end
-      end
-
-      vim.defer_fn(poll, 500)
-    end
-
-    poll()
+    wait_for_process(args.id, conversation, callback, args.wait_timeout)
   elseif args.command == "kill" then
     if not args.id then
       callback({
