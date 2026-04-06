@@ -8,6 +8,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Requirements                            |sia-getting-started-requirements|
   - Installation                            |sia-getting-started-installation|
   - Authentication                        |sia-getting-started-authentication|
+  - Discover Available Models  |sia-getting-started-discover-available-models|
   - First Commands                        |sia-getting-started-first-commands|
   - Three Interaction Modes      |sia-getting-started-three-interaction-modes|
 3. Interaction Modes                                   |sia-interaction-modes|
@@ -203,6 +204,19 @@ ZAI ~
 >bash
     export ZAI_CODING_API_KEY="..."
 <
+
+
+DISCOVER AVAILABLE MODELS      *sia-getting-started-discover-available-models*
+
+Sia ships with a set of seed models for each provider, but you can fetch the
+full list of models available to your account by running:
+
+>vim
+    :SiaModel refresh
+<
+
+Results are cached across sessions. Use `:SiaModel list` to see all available
+models, or `:SiaModel list openai` to filter by provider.
 
 
 FIRST COMMANDS                            *sia-getting-started-first-commands*
