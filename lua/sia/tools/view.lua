@@ -102,7 +102,7 @@ will be truncated.]],
     return
   end
 
-  local offset = args.offset or 1
+  local offset = tonumber(args.offset) or 1
   local limit = args.limit or 2000
   local max_line_length = 2000
   local confirm_message
