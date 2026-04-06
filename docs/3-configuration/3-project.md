@@ -19,10 +19,19 @@ the project root. Local settings override global ones.
     "chat": "custom_chat_action"
   },
   "context": {
-    "max_tool": 50,
-    "exclude": ["grep", "glob"],
-    "clear_input": false,
-    "keep": 10
+    "tools": {
+      "max_calls": 50,
+      "preserve": ["grep", "glob"],
+      "strip_inputs": false,
+      "keep_last": 10
+    },
+    "tokens": {
+      "prune": {
+        "at_fraction": 0.9,
+        "to_fraction": 0.75
+      },
+      "compact": { "oldest_fraction": 0.4 }
+    }
   },
   "skills": ["monitor-logs", "tmux-interactive"],
   "skills_extras": ["~/my-custom-skills"],
@@ -76,8 +85,13 @@ the project root. Local settings override global ones.
 
 ### Context Settings
 
-- **context** — project-specific tool pruning settings. Same fields as the
-  global `context` option (`max_tool`, `exclude`, `clear_input`, `keep`).
+- **context** — project-specific context retention settings. Same structure as
+  the global `context` option:
+  - **tools** — tool call pruning (`max_calls`, `preserve`, `strip_inputs`, `keep_last`)
+  - **tokens** — token-budget control (`prune.at_fraction`, `prune.to_fraction`, `compact.oldest_fraction`)
+
+Local `context` values override the global value directly, including arrays such
+as `context.tools.preserve`.
 
 ### Agents and Skills
 

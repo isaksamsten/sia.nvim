@@ -312,4 +312,104 @@ T["validate_permissions"]["accepts multiple allow rules for a single tool"] = fu
   eq(type(result.permission.allow.view), "table")
 end
 
+T["context_config"] = MiniTest.new_set()
+
+T["context_config"]["accepts nested context settings"] = function()
+  local success, result = load_config({
+    context = {
+      tools = {
+        max_calls = 50,
+        preserve = { "bash" },
+        strip_inputs = false,
+        keep_last = 10,
+      },
+      tokens = {
+        prune = {
+          at_fraction = 0.8,
+          to_fraction = 0.65,
+        },
+        compact = {
+          oldest_fraction = 0.4,
+        },
+      },
+    },
+  })
+
+  eq(success, true)
+  eq(result.context.tools.max_calls, 50)
+  eq(result.context.tools.keep_last, 10)
+  eq(result.context.tools.strip_inputs, false)
+  eq(result.context.tokens.prune.at_fraction, 0.8)
+  eq(result.context.tokens.prune.to_fraction, 0.65)
+  eq(result.context.tokens.compact.oldest_fraction, 0.4)
+end
+
+T["context_config"]["rejects invalid nested tool settings"] = function()
+  local success, err = load_config({
+    context = {
+      tools = {
+        max_calls = -1,
+      },
+    },
+  })
+
+  eq(success, false)
+  eq(err:match("context.tools.max_calls must be a non%-negative integer") ~= nil, true)
+end
+
+T["context_config"]["local context overrides list values instead of merging"] = function()
+  with_mock_local_config({
+    context = {
+      tools = {
+        max_calls = 50,
+        keep_last = 5,
+        preserve = { "bash" },
+      },
+      tokens = {
+        prune = {
+          at_fraction = 0.9,
+          to_fraction = 0.6,
+        },
+        compact = {
+          oldest_fraction = 0.3,
+        },
+      },
+    },
+  }, function()
+    local config = require("sia.config")
+    local context = config.options.settings.context
+
+    eq(context.tools.max_calls, 50)
+    eq(context.tools.keep_last, 5)
+    eq(context.tools.strip_inputs, true)
+    eq(vim.tbl_contains(context.tools.preserve, "bash"), true)
+    eq(vim.tbl_contains(context.tools.preserve, "grep"), false)
+    eq(context.tokens.prune.at_fraction, 0.9)
+    eq(context.tokens.prune.to_fraction, 0.6)
+    eq(context.tokens.compact.oldest_fraction, 0.3)
+  end)
+end
+
+T["context_config"]["rejects legacy context_management"] = function()
+  local success, err = load_config({
+    context_management = {
+      prune_threshold = 0.9,
+    },
+  })
+
+  eq(success, false)
+  eq(err:match("'context_management' is not supported") ~= nil, true)
+end
+
+T["context_config"]["rejects flat legacy context fields"] = function()
+  local success, err = load_config({
+    context = {
+      max_tool = 25,
+    },
+  })
+
+  eq(success, false)
+  eq(err:match("context.max_tool is not supported") ~= nil, true)
+end
+
 return T

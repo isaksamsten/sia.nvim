@@ -58,19 +58,23 @@ require("sia").setup({
       -- args can also be a function returning string[]
     },
 
-    -- Tool call pruning (count-based)
+    -- Context retention
     context = {
-      max_tool = 200,                             -- Start pruning after this many tool calls
-      exclude = { "grep", "glob", "read_todos" }, -- Tools that are never pruned
-      clear_input = true,                         -- Clear tool input parameters during pruning
-      keep = 20,                                  -- Recent tool calls to retain after pruning
-    },
-
-    -- Context window management (size-based)
-    context_management = {
-      prune_threshold = 0.85,     -- Start pruning at 85% of context window
-      target_after_prune = 0.70,  -- Target 70% usage after pruning
-      compact_ratio = 0.5,        -- Fraction of oldest messages to compact (last resort)
+      tools = {
+        max_calls = 200,                              -- Start pruning after this many tool calls
+        preserve = { "grep", "glob", "read_todos" },  -- Tools that should never be pruned
+        strip_inputs = true,                          -- Remove tool arguments from retained entries
+        keep_last = 20,                               -- Keep the newest tool calls once pruning starts
+      },
+      tokens = {
+        prune = {
+          at_fraction = 0.85,  -- Start shrinking context at 85% of the model window
+          to_fraction = 0.70,  -- Aim to get back down to 70%
+        },
+        compact = {
+          oldest_fraction = 0.5, -- Fraction of the oldest history to summarize as a last resort
+        },
+      },
     },
 
     -- Chat window defaults
@@ -98,35 +102,43 @@ require("sia").setup({
 
 ## Context Management
 
-Sia has two layers of context management that work together to keep
-conversations within limits.
+Sia keeps context under control with one `context` setting that is split into
+two clear parts:
+
+- `context.tools` handles pruning old tool calls.
+- `context.tokens` handles the overall token budget for the conversation.
 
 ### Tool Call Pruning
 
-Controlled by `context`, this prunes individual tool call results based on
-count. When the number of tool calls exceeds **max_tool**, Sia removes the
-oldest tool call results, keeping the most recent **keep** calls. Tools listed
-in **exclude** are never pruned.
+Controlled by `context.tools`, this prunes individual tool call results based
+on count. When the number of tool calls exceeds **max_calls**, Sia removes the
+oldest tool call results, keeping the most recent **keep_last** calls. Tools
+listed in **preserve** are never pruned.
 
-Set **clear_input** to also strip the tool input parameters (the arguments the
-assistant sent), not just the results.
+Set **strip_inputs** to also remove the tool input parameters (the arguments
+the assistant sent), not just the results.
 
 ### Context Window Management
 
-Controlled by `context_management`, this prevents conversations from exceeding
+Controlled by `context.tokens`, this prevents conversations from exceeding
 the model's context window. Sia estimates token usage by dividing the total byte
 size of all messages by 4 (roughly 4 bytes per token for English text and code).
 
-When estimated tokens exceed **prune_threshold** of the model's context window,
+When estimated tokens exceed **prune.at_fraction** of the model's context
+window,
 Sia applies increasingly aggressive strategies:
 
 1. **Drop oldest tool call pairs** — removes the assistant's tool call message
    and the matching result message, starting from the oldest. Outdated messages
    (from cross-conversation invalidation) are dropped first. Tools in
-   `context.exclude` are never dropped.
+   `context.tools.preserve` are never dropped.
 
 2. **Compact the conversation** (last resort) — summarizes the conversation
    history using `fast_model` and replaces old messages with the summary.
+
+`prune.to_fraction` controls how far Sia tries to shrink the conversation
+before it stops. `compact.oldest_fraction` controls how much of the oldest
+history is summarized when simple tool pruning is not enough.
 
 The chat winbar displays a context budget indicator when the model has a
 `context_window` defined:

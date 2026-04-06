@@ -1,5 +1,9 @@
 local M = {}
 
+local function get_context_config()
+  return require("sia.config").options.settings.context or {}
+end
+
 --- @param entry sia.Entry
 --- @return { role: "user"|"assistant", content: string }
 local function normalize_for_summary(entry)
@@ -60,7 +64,7 @@ end
 
 --- Compact a conversation by summarizing previous entries
 --- @param conversation sia.Conversation The conversation object to compact
---- @param opts { ratio: number?, on_complete: fun(content: string?)? }
+--- @param opts { oldest_fraction: number?, on_complete: fun(content: string?)? }
 local compact_conversation = function(conversation, opts)
   opts = opts or {}
   local model =
@@ -123,8 +127,8 @@ the path to the directory.]
   end
 
   local compact_count = #non_system
-  if opts.ratio and opts.ratio > 0 and opts.ratio < 1 then
-    compact_count = math.max(1, math.floor(#non_system * opts.ratio))
+  if opts.oldest_fraction and opts.oldest_fraction > 0 and opts.oldest_fraction < 1 then
+    compact_count = math.max(1, math.floor(#non_system * opts.oldest_fraction))
   end
 
   for _, entry in ipairs(dropped_entries) do
@@ -280,8 +284,8 @@ end
 --- @param conversation sia.Conversation
 --- @return { index: integer, entry: sia.ToolEntry }[]
 local function find_droppable_tool_entries(conversation)
-  local context_config = require("sia.config").options.settings.context
-  local exclude = context_config and context_config.exclude or {}
+  local context_config = get_context_config()
+  local preserve = context_config.tools and context_config.tools.preserve or {}
 
   --- @type { index: integer, entry: sia.ToolEntry }[]
   local result = {}
@@ -291,7 +295,7 @@ local function find_droppable_tool_entries(conversation)
       entry.role == "tool"
       and entry.tool_call
       and not entry.dropped
-      and not vim.tbl_contains(exclude, entry.tool_call.name)
+      and not vim.tbl_contains(preserve, entry.tool_call.name)
     then
       table.insert(result, { index = i, entry = entry })
     end
@@ -345,7 +349,7 @@ end
 --- @param conversation sia.Conversation
 --- @param opts { on_complete: fun(pruned: boolean, compacted: boolean), on_status: fun(message:string)? }
 function M.ensure_token_budget(conversation, opts)
-  local config = require("sia.config").options.settings.context_management
+  local config = get_context_config().tokens
   if not config then
     if opts.on_complete then
       opts.on_complete(false, false)
@@ -361,8 +365,9 @@ function M.ensure_token_budget(conversation, opts)
     return
   end
 
-  local prune_threshold = config.prune_threshold or 0.85
-  local target_after_prune = config.target_after_prune or 0.70
+  local prune_config = config.prune or {}
+  local prune_threshold = prune_config.at_fraction or 0.85
+  local target_after_prune = prune_config.to_fraction or 0.70
 
   -- Not over threshold yet
   if budget.percent < prune_threshold then
@@ -395,7 +400,7 @@ function M.ensure_token_budget(conversation, opts)
   end
 
   compact_conversation(conversation, {
-    ratio = config.compact_ratio,
+    oldest_fraction = config.compact and config.compact.oldest_fraction,
     on_complete = function(content)
       if content and opts.on_status then
         local common = require("sia.provider.common")

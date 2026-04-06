@@ -53,18 +53,12 @@ local settings_proxy = setmetatable({}, {
     end
 
     if key == "context" then
-      local global = M._raw_options.settings.context or {}
-      if not lc or not lc.context then
-        return global
-      end
-
-      local merged = vim.tbl_deep_extend("keep", lc.context, global)
-
-      if lc.context.exclude and global.exclude then
-        merged.exclude =
-          vim.list_extend(vim.deepcopy(global.exclude or {}), lc.context.exclude)
-      end
-      return merged
+      return vim.tbl_deep_extend(
+        "force",
+        {},
+        M._raw_options.settings.context,
+        lc and lc.context or {}
+      )
     end
 
     if MODEL_KEYS[key] then
@@ -207,16 +201,26 @@ local settings_proxy = setmetatable({}, {
 
 --- @alias sia.config.Action sia.config.ChatAction|sia.config.InsertAction|sia.config.DiffAction|sia.config.HiddenAction
 
---- @class sia.config.Context
---- @field max_tool integer?
---- @field exclude string[]?
---- @field clear_input boolean?
---- @field keep integer?
+--- @class sia.config.ContextTools
+--- @field max_calls integer?
+--- @field preserve string[]?
+--- @field strip_inputs boolean?
+--- @field keep_last integer?
 
---- @class sia.config.ContextManagement
---- @field prune_threshold number? Start pruning when context exceeds this fraction (default 0.85)
---- @field target_after_prune number? Target fraction after pruning tool calls (default 0.70)
---- @field compact_ratio number? Fraction of oldest messages to include in compaction (default 0.5)
+--- @class sia.config.ContextTokensCompact
+--- @field oldest_fraction number?
+
+--- @class sia.config.ContextTokensPrune
+--- @field at_fraction number?
+--- @field to_fraction number?
+
+--- @class sia.config.ContextTokens
+--- @field prune sia.config.ContextTokensPrune?
+--- @field compact sia.config.ContextTokensCompact?
+
+--- @class sia.config.Context
+--- @field tools sia.config.ContextTools?
+--- @field tokens sia.config.ContextTokens?
 
 --- @class sia.config.Settings
 --- @field model string
@@ -224,7 +228,6 @@ local settings_proxy = setmetatable({}, {
 --- @field plan_model string
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
---- @field context_management sia.config.ContextManagement?
 --- @field actions {diff: sia.config.DiffAction, chat: sia.config.ChatAction, insert: sia.config.InsertAction }
 --- @field chat sia.config.Chat
 --- @field diff sia.config.Diff
@@ -263,15 +266,21 @@ M._raw_options = {
     icons = "emoji",
     history = { enable = true },
     context = {
-      max_tool = 200,
-      keep = 20,
-      clear_input = true,
-      exclude = { "grep", "glob", "read_todos" },
-    },
-    context_management = {
-      prune_threshold = 0.85,
-      target_after_prune = 0.70,
-      compact_ratio = 0.5,
+      tools = {
+        max_calls = 200,
+        keep_last = 20,
+        strip_inputs = true,
+        preserve = { "grep", "glob", "read_todos" },
+      },
+      tokens = {
+        prune = {
+          at_fraction = 0.85,
+          to_fraction = 0.70,
+        },
+        compact = {
+          oldest_fraction = 0.5,
+        },
+      },
     },
     chat = {
       cmd = "botright vnew",

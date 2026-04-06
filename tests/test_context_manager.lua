@@ -317,19 +317,25 @@ local function mock_compaction(summary_response)
     callback(summary_response)
   end
 
-  -- Ensure context_management config is set so prune_if_needed proceeds
+  -- Force compaction by making the token budget extremely small.
   local config = require("sia.config")
-  tracker._old_context_management = config.options.settings.context_management
-  config.options.settings.context_management = {
-    prune_threshold = 0.01,
-    target_after_prune = 0.001,
-    compact_ratio = 0.5,
-  }
+  tracker._old_context = vim.deepcopy(config._raw_options.settings.context)
+  config.options.settings.context = vim.tbl_deep_extend("force", {}, tracker._old_context, {
+    tokens = {
+      prune = {
+        at_fraction = 0.01,
+        to_fraction = 0.001,
+      },
+      compact = {
+        oldest_fraction = 0.5,
+      },
+    },
+  })
 
   tracker.restore = function()
     real_conv.new_conversation = tracker._real_new
     assistant.fetch_response = tracker._real_fetch
-    config.options.settings.context_management = tracker._old_context_management
+    config.options.settings.context = tracker._old_context
   end
 
   return tracker
@@ -507,7 +513,7 @@ T["context_manager"]["compact does not include dropped entries in compact_ratio 
     make_assistant("answer 2"),
   })
 
-  -- mock_compaction sets compact_ratio = 0.5
+  -- mock_compaction sets compact.oldest_fraction = 0.5
   -- With 4 active non-system entries, should compact 2 active + all 2 dropped = 4
   -- Plus the system prompt = 5 total in captured_entries
 

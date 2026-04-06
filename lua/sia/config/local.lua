@@ -229,47 +229,169 @@ local validate = {
     end
 
     if context.max_tool ~= nil then
-      if
-        type(context.max_tool) ~= "number"
-        or context.max_tool < 0
-        or context.max_tool ~= math.floor(context.max_tool)
-      then
-        return false,
-          "context.max_tool must be a non-negative integer, got " .. type(
-            context.max_tool
-          )
-      end
+      return false, "context.max_tool is not supported; use context.tools.max_calls"
+    end
+    if context.keep ~= nil then
+      return false, "context.keep is not supported; use context.tools.keep_last"
+    end
+    if context.clear_input ~= nil then
+      return false,
+        "context.clear_input is not supported; use context.tools.strip_inputs"
+    end
+    if context.exclude ~= nil then
+      return false, "context.exclude is not supported; use context.tools.preserve"
+    end
+    if context.prune_threshold ~= nil then
+      return false,
+        "context.prune_threshold is not supported; use context.tokens.prune.at_fraction"
+    end
+    if context.target_after_prune ~= nil then
+      return false,
+        "context.target_after_prune is not supported; use context.tokens.prune.to_fraction"
+    end
+    if context.compact_ratio ~= nil then
+      return false,
+        "context.compact_ratio is not supported; use context.tokens.compact.oldest_fraction"
     end
 
-    if context.exclude ~= nil then
-      if type(context.exclude) ~= "table" then
-        return false, "context.exclude must be an array, got " .. type(context.exclude)
+    local function validate_non_negative_integer(value, path)
+      if value == nil then
+        return true
       end
+      if type(value) ~= "number" or value < 0 or value ~= math.floor(value) then
+        return false, path .. " must be a non-negative integer, got " .. type(value)
+      end
+      return true
+    end
 
-      for i, item in ipairs(context.exclude) do
+    local function validate_boolean(value, path)
+      if value == nil then
+        return true
+      end
+      if type(value) ~= "boolean" then
+        return false, path .. " must be a boolean, got " .. type(value)
+      end
+      return true
+    end
+
+    local function validate_string_array(value, path)
+      if value == nil then
+        return true
+      end
+      if type(value) ~= "table" then
+        return false, path .. " must be an array, got " .. type(value)
+      end
+      for i, item in ipairs(value) do
         if type(item) ~= "string" then
-          return false,
-            "context.exclude[" .. i .. "] must be a string, got " .. type(item)
+          return false, path .. "[" .. i .. "] must be a string, got " .. type(item)
         end
       end
+      return true
     end
 
-    if context.clear_input ~= nil then
-      if type(context.clear_input) ~= "boolean" then
-        return false,
-          "context.clear_input must be a boolean, got " .. type(context.clear_input)
+    local function validate_ratio(value, path)
+      if value == nil then
+        return true
       end
+      if type(value) ~= "number" or value < 0 or value > 1 then
+        return false, path .. " must be a number between 0 and 1, got " .. type(value)
+      end
+      return true
     end
 
-    if context.keep ~= nil then
-      if
-        type(context.keep) ~= "number"
-        or context.keep < 0
-        or context.keep ~= math.floor(context.keep)
-      then
-        return false,
-          "context.keep must be a non-negative integer, got " .. type(context.keep)
+    local function validate_tool_settings(value, path)
+      if value == nil then
+        return true
       end
+      if type(value) ~= "table" then
+        return false, path .. " must be an object, got " .. type(value)
+      end
+
+      local ok, err =
+        validate_non_negative_integer(value.max_calls, path .. ".max_calls")
+      if not ok then
+        return false, err
+      end
+      ok, err = validate_non_negative_integer(value.keep_last, path .. ".keep_last")
+      if not ok then
+        return false, err
+      end
+      ok, err = validate_boolean(value.strip_inputs, path .. ".strip_inputs")
+      if not ok then
+        return false, err
+      end
+      ok, err = validate_string_array(value.preserve, path .. ".preserve")
+      if not ok then
+        return false, err
+      end
+
+      return true
+    end
+
+    local function validate_token_settings(value, path)
+      if value == nil then
+        return true
+      end
+      if type(value) ~= "table" then
+        return false, path .. " must be an object, got " .. type(value)
+      end
+
+      if value.prune ~= nil then
+        if type(value.prune) ~= "table" then
+          return false, path .. ".prune must be an object, got " .. type(value.prune)
+        end
+        local ok, err =
+          validate_ratio(value.prune.at_fraction, path .. ".prune.at_fraction")
+        if not ok then
+          return false, err
+        end
+        ok, err = validate_ratio(value.prune.to_fraction, path .. ".prune.to_fraction")
+        if not ok then
+          return false, err
+        end
+      end
+
+      if value.prune_at ~= nil then
+        return false,
+          path .. ".prune_at is not supported; use " .. path .. ".prune.at_fraction"
+      end
+      if value.target ~= nil then
+        return false,
+          path .. ".target is not supported; use " .. path .. ".prune.to_fraction"
+      end
+
+      if value.compact ~= nil then
+        if type(value.compact) ~= "table" then
+          return false,
+            path .. ".compact must be an object, got " .. type(value.compact)
+        end
+        local ok, err = validate_ratio(
+          value.compact.oldest_fraction,
+          path .. ".compact.oldest_fraction"
+        )
+        if not ok then
+          return false, err
+        end
+        if value.compact.ratio ~= nil then
+          return false,
+            path
+              .. ".compact.ratio is not supported; use "
+              .. path
+              .. ".compact.oldest_fraction"
+        end
+      end
+
+      return true
+    end
+
+    local ok, err = validate_tool_settings(context.tools, "context.tools")
+    if not ok then
+      return false, err
+    end
+
+    ok, err = validate_token_settings(context.tokens, "context.tokens")
+    if not ok then
+      return false, err
     end
 
     return true
