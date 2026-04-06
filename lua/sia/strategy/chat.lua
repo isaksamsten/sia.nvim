@@ -143,7 +143,7 @@ end
 --- @field options sia.config.Chat options for the chat
 --- @field canvas sia.Canvas the canvas used to draw the conversation
 --- @field total_tokens integer?
---- @field user_queue string[]
+--- @field user_queue sia.chat.PendingUserMessage[]
 --- @field next_mode sia.chat.Submit?
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
@@ -240,17 +240,52 @@ local function enter_mode(chat, mode)
 end
 --- @class sia.chat.Submit
 --- @field content string?
+--- @field hidden_messages string[]?
 --- @field mode string?
+
+--- @class sia.chat.PendingUserMessage
+--- @field content string
+--- @field hide boolean?
+
+--- @param submit sia.chat.Submit
+--- @return sia.chat.PendingUserMessage[]
+local function submit_messages(submit)
+  local messages = {}
+  for _, content in ipairs(submit.hidden_messages or {}) do
+    table.insert(messages, {
+      content = content,
+      hide = true,
+    })
+  end
+  if submit.content then
+    table.insert(messages, { content = submit.content })
+  end
+  return messages
+end
+
+--- @param conversation sia.Conversation
+--- @param messages sia.chat.PendingUserMessage[]
+local function append_user_messages(conversation, messages)
+  for _, message in ipairs(messages) do
+    conversation:add_user_message(message.content, nil, message.hide)
+  end
+end
 
 --- @param submit sia.chat.Submit
 function ChatStrategy:submit(submit)
+  local messages = submit_messages(submit)
+
   -- While a request is running, queue mode changes for the next request but let
   -- plain user messages steer the current round as soon as tools finish.
   if self.is_busy then
-    if submit.content and not submit.mode then
-      table.insert(self.user_queue, submit.content)
+    if #messages > 0 and not submit.mode then
+      vim.list_extend(self.user_queue, messages)
     elseif submit.mode and not self.next_mode then
-      self.next_mode = submit
+      self.next_mode = {
+        mode = submit.mode,
+        hidden_messages = submit.hidden_messages,
+        content = submit.content,
+      }
     end
     return
   end
@@ -260,9 +295,7 @@ function ChatStrategy:submit(submit)
     self:redraw()
   end
 
-  if submit.content then
-    self.conversation:add_user_message(submit.content)
-  end
+  append_user_messages(self.conversation, messages)
   self.conversation:attach_completed_agents()
   require("sia.assistant").execute_strategy(self)
 end
@@ -287,9 +320,7 @@ function ChatStrategy:on_request_end()
   local redraw = false
   if self.next_mode then
     redraw = enter_mode(self, self.next_mode.mode)
-    if self.next_mode.content then
-      self.conversation:add_user_message(self.next_mode.content)
-    end
+    append_user_messages(self.conversation, submit_messages(self.next_mode))
   end
 
   self.conversation:attach_completed_agents()
@@ -298,7 +329,7 @@ function ChatStrategy:on_request_end()
   end
 
   if #self.user_queue > 0 then
-    self.conversation:add_user_message(table.concat(self.user_queue, "\n"))
+    append_user_messages(self.conversation, self.user_queue)
   end
   self.user_queue = {}
   self.next_mode = nil
@@ -334,7 +365,7 @@ end
 
 function ChatStrategy:on_round_end()
   if #self.user_queue > 0 then
-    self.conversation:add_user_message(table.concat(self.user_queue, "\n"))
+    append_user_messages(self.conversation, self.user_queue)
     self.canvas:render_messages({
       self.conversation:get_last_entry(),
     }, self.conversation.model.name)

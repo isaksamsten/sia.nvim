@@ -74,6 +74,7 @@ Table of Contents                                      *sia-table-of-contents*
 14. Skills                                                        |sia-skills|
   - Creating Skills                               |sia-skills-creating-skills|
   - Enabling Skills                               |sia-skills-enabling-skills|
+  - Invoking a Skill Explicitly       |sia-skills-invoking-a-skill-explicitly|
   - Resolution Order                             |sia-skills-resolution-order|
   - Skills vs Agents                             |sia-skills-skills-vs-agents|
 15. Tools                                                          |sia-tools|
@@ -474,9 +475,17 @@ MAIN COMMANDS                                     *sia-commands-main-commands*
                                mode)
 
   :Sia -m model [query]        Override the model for this conversation
+
+  :Sia -s skill [query]        Inject a skill for this turn or conversation
   -------------------------------------------------------------------------
 Any Vim range works. For example, `:%Sia explain this file` sends the entire
 buffer to chat.
+
+`-s` works for both new and ongoing chats. Sia resolves the named `SKILL.md`,
+adds a hidden user message with the skill body plus its source path, and keeps
+the visible prompt as your normal query. That hidden message becomes part of
+the conversation history, so later turns in the same chat still see it unless
+the history is pruned.
 
 
 BUFFER-LOCAL DEFAULT PROMPT ~
@@ -861,19 +870,23 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
           -- args can also be a function returning string[]
         },
     
-        -- Tool call pruning (count-based)
+        -- Context retention
         context = {
-          max_tool = 200,                             -- Start pruning after this many tool calls
-          exclude = { "grep", "glob", "read_todos" }, -- Tools that are never pruned
-          clear_input = true,                         -- Clear tool input parameters during pruning
-          keep = 20,                                  -- Recent tool calls to retain after pruning
-        },
-    
-        -- Context window management (size-based)
-        context_management = {
-          prune_threshold = 0.85,     -- Start pruning at 85% of context window
-          target_after_prune = 0.70,  -- Target 70% usage after pruning
-          compact_ratio = 0.5,        -- Fraction of oldest messages to compact (last resort)
+          tools = {
+            max_calls = 200,                              -- Start pruning after this many tool calls
+            preserve = { "grep", "glob", "read_todos" },  -- Tools that should never be pruned
+            strip_inputs = true,                          -- Remove tool arguments from retained entries
+            keep_last = 20,                               -- Keep the newest tool calls once pruning starts
+          },
+          tokens = {
+            prune = {
+              at_fraction = 0.85,  -- Start shrinking context at 85% of the model window
+              to_fraction = 0.70,  -- Aim to get back down to 70%
+            },
+            compact = {
+              oldest_fraction = 0.5, -- Fraction of the oldest history to summarize as a last resort
+            },
+          },
         },
     
         -- Chat window defaults
@@ -902,41 +915,48 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
 
 CONTEXT MANAGEMENT                           *sia-settings-context-management*
 
-Sia has two layers of context management that work together to keep
-conversations within limits.
+Sia keeps context under control with one `context` setting that is split into
+two clear parts:
+
+- `context.tools` handles pruning old tool calls.
+- `context.tokens` handles the overall token budget for the conversation.
 
 
 TOOL CALL PRUNING ~
 
-Controlled by `context`, this prunes individual tool call results based on
-count. When the number of tool calls exceeds **max_tool**, Sia removes the
-oldest tool call results, keeping the most recent **keep** calls. Tools listed
-in **exclude** are never pruned.
+Controlled by `context.tools`, this prunes individual tool call results based
+on count. When the number of tool calls exceeds **max_calls**, Sia removes the
+oldest tool call results, keeping the most recent **keep_last** calls. Tools
+listed in **preserve** are never pruned.
 
-Set **clear_input** to also strip the tool input parameters (the arguments the
-assistant sent), not just the results.
+Set **strip_inputs** to also remove the tool input parameters (the arguments
+the assistant sent), not just the results.
 
 
 CONTEXT WINDOW MANAGEMENT ~
 
-Controlled by `context_management`, this prevents conversations from exceeding
-the model’s context window. Sia estimates token usage by dividing the total
-byte size of all messages by 4 (roughly 4 bytes per token for English text and
+Controlled by `context.tokens`, this prevents conversations from exceeding the
+model’s context window. Sia estimates token usage by dividing the total byte
+size of all messages by 4 (roughly 4 bytes per token for English text and
 code).
 
-When estimated tokens exceed **prune_threshold** of the model’s context
+When estimated tokens exceed **prune.at_fraction** of the model’s context
 window, Sia applies increasingly aggressive strategies:
 
 1. **Drop oldest tool call pairs** — removes the assistant’s tool call message
 and the matching result message, starting from the oldest. Outdated messages
 (from cross-conversation invalidation) are dropped first. Tools in
-`context.exclude` are never dropped.
+`context.tools.preserve` are never dropped.
 
 
 2. **Compact the conversation** (last resort) — summarizes the conversation
 history using `fast_model` and replaces old messages with the summary.
 
 
+
+`prune.to_fraction` controls how far Sia tries to shrink the conversation
+before it stops. `compact.oldest_fraction` controls how much of the oldest
+history is summarized when simple tool pruning is not enough.
 
 The chat winbar displays a context budget indicator when the model has a
 `context_window` defined:
@@ -1322,10 +1342,19 @@ EXAMPLE                                    *sia-project-configuration-example*
         "chat": "custom_chat_action"
       },
       "context": {
-        "max_tool": 50,
-        "exclude": ["grep", "glob"],
-        "clear_input": false,
-        "keep": 10
+        "tools": {
+          "max_calls": 50,
+          "preserve": ["grep", "glob"],
+          "strip_inputs": false,
+          "keep_last": 10
+        },
+        "tokens": {
+          "prune": {
+            "at_fraction": 0.9,
+            "to_fraction": 0.75
+          },
+          "compact": { "oldest_fraction": 0.4 }
+        }
       },
       "skills": ["monitor-logs", "tmux-interactive"],
       "skills_extras": ["~/my-custom-skills"],
@@ -1378,8 +1407,13 @@ ACTION OVERRIDES ~
 
 CONTEXT SETTINGS ~
 
-- **context** — project-specific tool pruning settings. Same fields as the
-    global `context` option (`max_tool`, `exclude`, `clear_input`, `keep`).
+- **context** — project-specific context retention settings. Same structure as
+    the global `context` option:
+    - **tools** — tool call pruning (`max_calls`, `preserve`, `strip_inputs`, `keep_last`)
+    - **tokens** — token-budget control (`prune.at_fraction`, `prune.to_fraction`, `compact.oldest_fraction`)
+
+Local `context` values override the global value directly, including arrays
+such as `context.tools.preserve`.
 
 
 AGENTS AND SKILLS ~
@@ -2375,8 +2409,7 @@ TIPS                                                         *sia-agents-tips*
 
 Skills are reusable technique descriptions that teach the assistant how to
 combine tools effectively for specific tasks. Unlike agents (which run
-autonomously), skills are injected into the system prompt as knowledge the
-assistant can draw on.
+autonomously), skills give the assistant reusable workflows it can draw on.
 
 
 CREATING SKILLS                                   *sia-skills-creating-skills*
@@ -2427,9 +2460,11 @@ FRONTMATTER FIELDS ~
   tools          no         Tool names the skill requires (used for
                             filtering)
   --------------------------------------------------------------------------
-The markdown body after the frontmatter is the actual skill content injected
-into the system prompt. You can use `{{skill_dir}}` in the body, which is
-replaced with the absolute path to the skill’s directory.
+The markdown body after the frontmatter is the actual skill content. If the
+skill refers to supporting files, scripts, or examples, keep those files next
+to `SKILL.md` and describe them from the skill itself. When Sia injects a skill
+explicitly, it includes both the `SKILL.md` path and the skill directory so the
+assistant can inspect those files directly.
 
 
 ENABLING SKILLS                                   *sia-skills-enabling-skills*
@@ -2449,6 +2484,28 @@ A skill is included in the system prompt only if:
 2. All tools listed in the skill’s `tools` field are available in the current
 conversation.
 
+Configured skills are advertised in the base prompt by name and description so
+the assistant knows they exist.
+
+
+INVOKING A SKILL EXPLICITLY           *sia-skills-invoking-a-skill-explicitly*
+
+Use `:Sia -s <skill> [query]` to apply a skill immediately, even if it is not
+listed in the project’s `skills` array.
+
+For explicit invocation, Sia:
+
+1. Resolves the named skill using the normal search order.
+2. Verifies that the conversation has all tools required by the skill.
+3. Adds a hidden user message containing the skill body, the `SKILL.md` path,
+and the skill directory.
+
+This works for both a new conversation and an already-running chat. Because the
+skill arrives as a hidden user message, it affects the current turn without
+rewriting the conversation’s system prompt. The hidden message is also kept
+in the chat history, so follow-up turns continue to see the explicitly invoked
+skill until the relevant history is pruned away.
+
 
 RESOLUTION ORDER                                 *sia-skills-resolution-order*
 
@@ -2464,13 +2521,13 @@ SKILLS VS AGENTS                                 *sia-skills-skills-vs-agents*
   --------------------------------------------------------------------------
                 Skills                             Agents
   ------------- ---------------------------------- -------------------------
-  How they work Injected into the system prompt as Run as separate
-                knowledge                          autonomous conversations
+  How they work Guide the main assistant with      Run as separate
+                reusable workflow text             autonomous conversations
 
   Tool use      Assistant uses its own tools,      Agent has its own
                 guided by skill content            dedicated tool set
 
-  Interaction   Part of the main conversation      Background task with
+  Interaction   Stay inside the main conversation  Background task with
                                                    results returned
 
   Use case      Teaching techniques and workflows  Delegating independent

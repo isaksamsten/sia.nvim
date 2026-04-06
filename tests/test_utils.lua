@@ -12,6 +12,33 @@ local T = MiniTest.new_set({
 
 local eq = MiniTest.expect.equality
 
+T["sia.utils.CommandParser"] = MiniTest.new_set()
+
+T["sia.utils.CommandParser"]["parses multiple flags before action and mode"] = function()
+  local code = [[
+    local parser = require("sia.utils").CommandParser.new({ flags = { "m", "s" } })
+    _G.parsed = parser:parse({
+      "-m",
+      "openai/gpt-4.1",
+      "-s",
+      "update-docs",
+      "/doc",
+      "@plan",
+      "refresh",
+      "docs",
+    })
+  ]]
+
+  child.lua(code)
+
+  local parsed = child.lua_get("_G.parsed")
+  eq("openai/gpt-4.1", parsed.flags.m)
+  eq("update-docs", parsed.flags.s)
+  eq("doc", parsed.action)
+  eq("plan", parsed.mode)
+  eq({ "refresh", "docs" }, parsed.positional)
+end
+
 T["sia.utils.ensure_file_is_loaded"] = MiniTest.new_set()
 
 -- Regression test: ensure_file_is_loaded("task2.py") must NOT return the

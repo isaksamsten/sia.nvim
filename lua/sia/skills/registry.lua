@@ -68,20 +68,12 @@ local function parse_skill_file(filepath, name)
     return nil, "Invalid field: tools (must be a list)"
   end
 
-  local dir = vim.fn.fnamemodify(filepath, ":h")
-
-  -- Resolve {{skill_dir}} in body lines
-  local resolved_body = {}
-  for _, line in ipairs(body) do
-    table.insert(resolved_body, (line:gsub("{{skill_dir}}", dir)))
-  end
-
   return {
     name = metadata.name,
     description = metadata.description,
     tools = tools or {},
-    content = resolved_body,
-    dir = dir,
+    content = body,
+    dir = vim.fn.fnamemodify(filepath, ":h"),
     filepath = filepath,
   }
 end
@@ -157,6 +149,55 @@ local function get_skills_config()
   return skill_names, extra_paths
 end
 
+--- Get every directory that may contain skills, in resolution order.
+--- @return string[]
+local function get_search_dirs()
+  local _, extra_paths = get_skills_config()
+  local dirs = {}
+
+  local local_dir = get_project_skills_dir()
+  if local_dir then
+    table.insert(dirs, local_dir)
+  end
+  table.insert(dirs, get_default_skills_dir())
+
+  for _, extra_dir in ipairs(extra_paths) do
+    table.insert(dirs, vim.fn.expand(extra_dir))
+  end
+
+  return dirs
+end
+
+--- Collect all discovered skills, using first match wins on name collisions.
+--- @param error_report boolean?
+--- @return table<string, sia.skills.registry.SkillDef>
+local function collect_skills(error_report)
+  local all_skills = {}
+
+  for _, dir in ipairs(get_search_dirs()) do
+    for name, skill in pairs(scan_skills_dir(dir, error_report)) do
+      if not all_skills[name] then
+        all_skills[name] = skill
+      end
+    end
+  end
+
+  return all_skills
+end
+
+--- @param skill sia.skills.registry.SkillDef
+--- @param has_tool fun(name: string):boolean
+--- @return string[]
+local function get_missing_tools(skill, has_tool)
+  local missing = {}
+  for _, required_tool in ipairs(skill.tools) do
+    if not has_tool(required_tool) then
+      table.insert(missing, required_tool)
+    end
+  end
+  return missing
+end
+
 --- Get all available skill definitions, filtered by project config
 --- Skills are only included if:
 --- 1. They are listed in the project's config.json `skills` array
@@ -166,67 +207,19 @@ end
 --- @param error_report boolean?
 --- @return sia.skills.registry.SkillDef[] skills
 function M.get_skills(has_tool, error_report)
-  local enabled_names, extra_paths = get_skills_config()
+  local enabled_names = get_skills_config()
 
   if #enabled_names == 0 then
     return {}
   end
 
-  -- Build lookup set for enabled skill names
-  local enabled_set = {}
-  for _, name in ipairs(enabled_names) do
-    enabled_set[name] = true
-  end
-
-  -- Scan all search paths. First match wins on name collision.
-  -- Resolution order (first match wins):
-  --   1. Local project .sia/skills/  (overrides global for same name)
-  --   2. Global ~/.config/sia/skills/
-  --   3. Extra paths from config
-  --- @type table<string, sia.skills.registry.SkillDef>
-  local all_skills = {}
-
-  -- 1. Local project skills take highest priority
-  local local_dir = get_project_skills_dir()
-  if local_dir then
-    for name, skill in pairs(scan_skills_dir(local_dir, error_report)) do
-      if enabled_set[name] and not all_skills[name] then
-        all_skills[name] = skill
-      end
-    end
-  end
-
-  -- 2. Global default location
-  local default_dir = M._get_default_skills_dir()
-  for name, skill in pairs(scan_skills_dir(default_dir, error_report)) do
-    if enabled_set[name] and not all_skills[name] then
-      all_skills[name] = skill
-    end
-  end
-
-  -- 3. Extra paths from config
-  for _, extra_dir in ipairs(extra_paths) do
-    -- Expand ~ in paths
-    local expanded = vim.fn.expand(extra_dir)
-    for name, skill in pairs(scan_skills_dir(expanded, error_report)) do
-      if enabled_set[name] and not all_skills[name] then
-        all_skills[name] = skill
-      end
-    end
-  end
+  local all_skills = collect_skills(error_report)
 
   -- Filter by tool availability
   local result = {}
-  for _, skill in pairs(all_skills) do
-    local tools_met = true
-    for _, required_tool in ipairs(skill.tools) do
-      if not has_tool(required_tool) then
-        tools_met = false
-        break
-      end
-    end
-
-    if tools_met then
+  for _, name in ipairs(enabled_names) do
+    local skill = all_skills[name]
+    if skill and #get_missing_tools(skill, has_tool) == 0 then
       table.insert(result, skill)
     end
   end
@@ -246,48 +239,38 @@ end
 ---   2. Global ~/.config/sia/skills/
 ---   3. Extra paths from config
 --- @param name string
---- @return sia.skills.registry.SkillDef?
-function M.get_skill(name)
-  local _, extra_paths = get_skills_config()
-
-  -- 1. Local project skills
-  local local_dir = get_project_skills_dir()
-  if local_dir then
-    local skill_file = vim.fs.joinpath(local_dir, name, "SKILL.md")
+--- @param error_report boolean?
+--- @return sia.skills.registry.SkillDef?, string?
+function M.get_skill(name, error_report)
+  for _, dir in ipairs(get_search_dirs()) do
+    local skill_file = vim.fs.joinpath(dir, name, "SKILL.md")
     local stat = vim.uv.fs_stat(skill_file)
     if stat and stat.type == "file" then
-      local skill = parse_skill_file(skill_file, name)
-      if skill then
-        return skill
-      end
+      return parse_skill_file(skill_file, name)
     end
   end
 
-  -- 2. Global default location
-  local default_dir = M._get_default_skills_dir()
-  local skill_file = vim.fs.joinpath(default_dir, name, "SKILL.md")
-  local stat = vim.uv.fs_stat(skill_file)
-  if stat and stat.type == "file" then
-    local skill = parse_skill_file(skill_file, name)
-    if skill then
-      return skill
-    end
+  if error_report then
+    vim.notify("sia: skill '" .. name .. "' was not found", vim.log.levels.WARN)
   end
+  return nil, "skill not found"
+end
 
-  -- 3. Extra paths
-  for _, extra_dir in ipairs(extra_paths) do
-    local expanded = vim.fn.expand(extra_dir)
-    skill_file = vim.fs.joinpath(expanded, name, "SKILL.md")
-    stat = vim.uv.fs_stat(skill_file)
-    if stat and stat.type == "file" then
-      local skill = parse_skill_file(skill_file, name)
-      if skill then
-        return skill
-      end
-    end
-  end
+--- List all discovered skill names, regardless of project skill enablement.
+--- @param error_report boolean?
+--- @return string[]
+function M.list_skill_names(error_report)
+  local names = vim.tbl_keys(collect_skills(error_report))
+  table.sort(names)
+  return names
+end
 
-  return nil
+--- Return the required tools that are missing for a given skill.
+--- @param skill sia.skills.registry.SkillDef
+--- @param has_tool fun(name: string):boolean
+--- @return string[]
+function M.get_missing_tools(skill, has_tool)
+  return get_missing_tools(skill, has_tool)
 end
 
 --- Check if a file path is inside any enabled skill directory

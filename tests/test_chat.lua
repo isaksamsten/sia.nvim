@@ -91,6 +91,61 @@ T["strategy.chat"]["simple message"]["test tracking context"] = function()
   ChatStrategy.remove(strategy.buf)
 end
 
+T["strategy.chat"]["submit adds hidden skill messages before visible input"] = function()
+  local model = require("sia.model").resolve("openai/gpt-4.1")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  local original_execute = assistant.execute_strategy
+  local executed = false
+  assistant.execute_strategy = function()
+    executed = true
+  end
+
+  strategy:submit({
+    hidden_messages = { "Skill payload" },
+    content = "Visible prompt",
+  })
+
+  assistant.execute_strategy = original_execute
+
+  eq(true, executed)
+  eq("Skill payload", strategy.conversation.entries[2].content)
+  eq(true, strategy.conversation.entries[2].hide)
+  eq("Visible prompt", strategy.conversation.entries[3].content)
+  eq(false, strategy.conversation.entries[3].hide)
+end
+
+T["strategy.chat"]["submit queues hidden skill messages while busy"] = function()
+  local model = require("sia.model").resolve("openai/gpt-4.1")
+  local conversation = Conversation.new_conversation({
+    model = model,
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy.is_busy = true
+
+  strategy:submit({
+    hidden_messages = { "Queued skill payload" },
+    content = "Queued visible prompt",
+  })
+
+  eq(2, #strategy.user_queue)
+  eq("Queued skill payload", strategy.user_queue[1].content)
+  eq(true, strategy.user_queue[1].hide)
+  eq("Queued visible prompt", strategy.user_queue[2].content)
+  eq(nil, strategy.user_queue[2].hide)
+
+  strategy.is_busy = false
+  eq(true, strategy:on_request_end())
+  eq("Queued skill payload", strategy.conversation.entries[2].content)
+  eq(true, strategy.conversation.entries[2].hide)
+  eq("Queued visible prompt", strategy.conversation.entries[3].content)
+end
+
 T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({
   hooks = {
     pre_once = function()

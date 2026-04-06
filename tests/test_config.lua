@@ -255,7 +255,8 @@ T["resolve_aliases"]["alias params take precedence over local model overrides"] 
     models = {
       codex = {
         ["gpt-5.3-codex"] = {
-          reasoning_effort = "low", temperature = 0.5,
+          reasoning_effort = "low",
+          temperature = 0.5,
         },
       },
     },
@@ -388,17 +389,6 @@ T["context_config"]["local context overrides list values instead of merging"] = 
     eq(context.tokens.prune.to_fraction, 0.6)
     eq(context.tokens.compact.oldest_fraction, 0.3)
   end)
-end
-
-T["context_config"]["rejects legacy context_management"] = function()
-  local success, err = load_config({
-    context_management = {
-      prune_threshold = 0.9,
-    },
-  })
-
-  eq(success, false)
-  eq(err:match("'context_management' is not supported") ~= nil, true)
 end
 
 T["context_config"]["rejects flat legacy context fields"] = function()

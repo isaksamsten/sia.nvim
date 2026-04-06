@@ -12,7 +12,63 @@ end
 
 local CommandParser = require("sia.utils").CommandParser
 
-local SIA_PARSER = CommandParser.new({ flags = { "m" } })
+local SIA_PARSER = CommandParser.new({ flags = { "m", "s" } })
+
+--- @param conversation sia.Conversation
+--- @param skill_name string?
+--- @return string?
+local function resolve_invoked_skill_message(conversation, skill_name)
+  if not skill_name then
+    return nil
+  end
+
+  local registry = require("sia.skills.registry")
+  local skill, err = registry.get_skill(skill_name)
+  if not skill then
+    vim.notify(
+      string.format("sia: failed to load skill '%s': %s", skill_name, err or "unknown error"),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+
+  local missing_tools = registry.get_missing_tools(skill, function(name)
+    return conversation:has_tool(name)
+  end)
+  if #missing_tools > 0 then
+    vim.notify(
+      string.format(
+        "sia: skill '%s' requires unavailable tools: %s",
+        skill_name,
+        table.concat(missing_tools, ", ")
+      ),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+  local lines = {
+    string.format(
+      "The user explicitly invoked the skill `%s` for this conversation.",
+      skill.name
+    ),
+    "Use it when it helps with the user's current request unless they redirect you.",
+    "",
+    "Skill definition:",
+    "- name: " .. skill.name,
+    "- description: " .. skill.description,
+    "- entrypoint: " .. skill.filepath,
+    "- directory: " .. skill.dir,
+    "",
+    "If you need supporting files, examples, or scripts for this skill, inspect the skill directory above with your normal file tools.",
+    "",
+    string.format('<invoked_skill name="%s">', skill.name),
+    table.concat(skill.content, "\n"),
+    "</invoked_skill>",
+  }
+
+  return table.concat(lines, "\n")
+end
+
 vim.api.nvim_create_user_command("Sia", function(args)
   local utils = require("sia.utils")
 
@@ -20,10 +76,18 @@ vim.api.nvim_create_user_command("Sia", function(args)
 
   local chat = require("sia.strategy").get_chat()
   if chat and not parsed.action then
-    if #parsed.positional > 0 then
+    local skill_message =
+      resolve_invoked_skill_message(chat.conversation, parsed.flags.s)
+    if parsed.flags.s and not skill_message then
+      return
+    end
+
+    if #parsed.positional > 0 or parsed.mode or skill_message then
       chat:submit({
-        content = table.concat(parsed.positional, " "),
+        content = #parsed.positional > 0 and table.concat(parsed.positional, " ")
+          or nil,
         mode = parsed.mode,
+        hidden_messages = skill_message and { skill_message } or nil,
       })
     end
     return
@@ -103,6 +167,14 @@ vim.api.nvim_create_user_command("Sia", function(args)
     end
   end
 
+  local skill_message = resolve_invoked_skill_message(conversation, parsed.flags.s)
+  if parsed.flags.s and not skill_message then
+    return
+  end
+  if skill_message then
+    conversation:add_user_message(skill_message, nil, true)
+  end
+
   if user_input then
     conversation:add_user_message(table.concat(user_input, " "))
   end
@@ -136,6 +208,7 @@ end, {
 
     local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
       m = require("sia.provider").list(),
+      s = require("sia.skills.registry").list_skill_names(false),
     })
     if flag_completions then
       return flag_completions

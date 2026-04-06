@@ -12,9 +12,16 @@
 | `:'<,'>Sia [query]`            | Send selection to chat                            |
 | `:'<,'>Sia! [query]`           | Show suggested changes as inline diff (diff mode) |
 | `:Sia -m model [query]`        | Override the model for this conversation          |
+| `:Sia -s skill [query]`        | Inject a skill for this turn or conversation      |
 
 Any Vim range works. For example, `:%Sia explain this file` sends the entire
 buffer to chat.
+
+`-s` works for both new and ongoing chats. Sia resolves the named `SKILL.md`,
+adds a hidden user message with the skill body plus its source path, and keeps
+the visible prompt as your normal query. That hidden message becomes part of the
+conversation history, so later turns in the same chat still see it unless the
+history is pruned.
 
 ### Buffer-Local Default Prompt
 

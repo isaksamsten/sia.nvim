@@ -2,8 +2,7 @@
 
 Skills are reusable technique descriptions that teach the assistant how to
 combine tools effectively for specific tasks. Unlike agents (which run
-autonomously), skills are injected into the system prompt as knowledge the
-assistant can draw on.
+autonomously), skills give the assistant reusable workflows it can draw on.
 
 ## Creating Skills
 
@@ -47,9 +46,11 @@ When asked to monitor or analyze logs, follow these steps:
 | **description** | yes      | Shown to the AI as a trigger description           |
 | **tools**       | no       | Tool names the skill requires (used for filtering) |
 
-The markdown body after the frontmatter is the actual skill content injected
-into the system prompt. You can use `{{skill_dir}}` in the body, which is
-replaced with the absolute path to the skill's directory.
+The markdown body after the frontmatter is the actual skill content. If the
+skill refers to supporting files, scripts, or examples, keep those files next
+to `SKILL.md` and describe them from the skill itself. When Sia injects a skill
+explicitly, it includes both the `SKILL.md` path and the skill directory so the
+assistant can inspect those files directly.
 
 ## Enabling Skills
 
@@ -68,6 +69,27 @@ A skill is included in the system prompt only if:
 2. All tools listed in the skill's `tools` field are available in the current
    conversation.
 
+Configured skills are advertised in the base prompt by name and description so
+the assistant knows they exist.
+
+## Invoking a Skill Explicitly
+
+Use `:Sia -s <skill> [query]` to apply a skill immediately, even if it is not
+listed in the project's `skills` array.
+
+For explicit invocation, Sia:
+
+1. Resolves the named skill using the normal search order.
+2. Verifies that the conversation has all tools required by the skill.
+3. Adds a hidden user message containing the skill body, the `SKILL.md` path,
+   and the skill directory.
+
+This works for both a new conversation and an already-running chat. Because the
+skill arrives as a hidden user message, it affects the current turn without
+rewriting the conversation's system prompt. The hidden message is also kept in
+the chat history, so follow-up turns continue to see the explicitly invoked
+skill until the relevant history is pruned away.
+
 ## Resolution Order
 
 When the same skill name exists in multiple locations, the first match wins:
@@ -80,7 +102,7 @@ When the same skill name exists in multiple locations, the first match wins:
 
 |                   | Skills                                                | Agents                                   |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------- |
-| **How they work** | Injected into the system prompt as knowledge          | Run as separate autonomous conversations |
+| **How they work** | Guide the main assistant with reusable workflow text  | Run as separate autonomous conversations |
 | **Tool use**      | Assistant uses its own tools, guided by skill content | Agent has its own dedicated tool set     |
-| **Interaction**   | Part of the main conversation                         | Background task with results returned    |
+| **Interaction**   | Stay inside the main conversation                     | Background task with results returned    |
 | **Use case**      | Teaching techniques and workflows                     | Delegating independent subtasks          |

@@ -141,7 +141,7 @@ T["sia.skills.registry"]["parse_skill_file defaults tools to empty when omitted"
   eq({}, skill.tools)
 end
 
-T["sia.skills.registry"]["parse_skill_file resolves skill_dir template"] = function()
+T["sia.skills.registry"]["parse_skill_file preserves body references and records skill dir"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/tmux-skill", "p")
@@ -168,8 +168,101 @@ T["sia.skills.registry"]["parse_skill_file resolves skill_dir template"] = funct
   local skill = child.lua_get("_G.skill")
   local expected_dir = child.lua_get("_G.expected_dir")
 
-  eq("Run: `bash " .. expected_dir .. "/scripts/tmux-send.sh`", skill.content[1])
+  eq("Run: `bash {{skill_dir}}/scripts/tmux-send.sh`", skill.content[1])
   eq(expected_dir, skill.dir)
+end
+
+T["sia.skills.registry"]["list_skill_names includes skills outside enabled project config"] = function()
+  child.lua([[
+    local tmpdir = vim.fn.tempname()
+    local skills_dir = tmpdir .. "/skills"
+    vim.fn.mkdir(skills_dir .. "/alpha-skill", "p")
+    vim.fn.mkdir(skills_dir .. "/beta-skill", "p")
+
+    vim.fn.writefile({
+      "---",
+      "name: alpha-skill",
+      "description: Alpha",
+      "---",
+      "Use alpha",
+    }, skills_dir .. "/alpha-skill/SKILL.md")
+
+    vim.fn.writefile({
+      "---",
+      "name: beta-skill",
+      "description: Beta",
+      "---",
+      "Use beta",
+    }, skills_dir .. "/beta-skill/SKILL.md")
+
+    local config = require("sia.config")
+    local old_local_config = config.get_local_config
+    config.get_local_config = function()
+      return {
+        skills = {},
+        skills_extras = { skills_dir },
+      }
+    end
+
+    local registry = require("sia.skills.registry")
+    _G.skill_names = registry.list_skill_names(false)
+
+    config.get_local_config = old_local_config
+    vim.fn.delete(tmpdir, "rf")
+  ]])
+
+  local names = child.lua_get("_G.skill_names")
+  eq(true, vim.tbl_contains(names, "alpha-skill"))
+  eq(true, vim.tbl_contains(names, "beta-skill"))
+end
+
+T["sia.skills.registry"]["get_skill reports parse errors from highest-priority match"] = function()
+  child.lua([[
+    local tmpdir = vim.fn.tempname()
+    local local_skills = tmpdir .. "/project/.sia/skills"
+    local extra_skills = tmpdir .. "/extra"
+    vim.fn.mkdir(local_skills .. "/update-docs", "p")
+    vim.fn.mkdir(extra_skills .. "/update-docs", "p")
+
+    vim.fn.writefile({
+      "---",
+      "name: update-docs",
+      "---",
+      "broken local skill",
+    }, local_skills .. "/update-docs/SKILL.md")
+
+    vim.fn.writefile({
+      "---",
+      "name: update-docs",
+      "description: Valid fallback",
+      "---",
+      "valid extra skill",
+    }, extra_skills .. "/update-docs/SKILL.md")
+
+    local old_cwd = vim.fn.getcwd()
+    vim.cmd("cd " .. vim.fn.fnameescape(tmpdir .. "/project"))
+
+    local config = require("sia.config")
+    local old_local_config = config.get_local_config
+    config.get_local_config = function()
+      return {
+        skills = {},
+        skills_extras = { extra_skills },
+      }
+    end
+
+    local registry = require("sia.skills.registry")
+    local skill, err = registry.get_skill("update-docs")
+    _G.skill = skill
+    _G.err = err
+
+    config.get_local_config = old_local_config
+    vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+    vim.fn.delete(tmpdir, "rf")
+  ]])
+
+  eq(vim.NIL, child.lua_get("_G.skill"))
+  eq("Missing required field: description", child.lua_get("_G.err"))
 end
 
 T["sia.skills.registry"]["get_skills filters by conversation tools"] = function()
@@ -260,7 +353,7 @@ T["sia.skills.registry"]["parse_skill_file fails on empty body"] = function()
   eq("Missing skill content body", err)
 end
 
-T["sia.skills.registry"]["parse_skill_file uses name from frontmatter over directory"] = function()
+T["sia.skills.registry"]["parse_skill_file rejects frontmatter name that differs from directory"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/dir-name", "p")
@@ -290,7 +383,7 @@ T["sia.skills.registry"]["parse_skill_file uses name from frontmatter over direc
   eq("name must match directory", err)
 end
 
-T["sia.skills.registry"]["parse_skill_file falls back to directory name when name omitted"] = function()
+T["sia.skills.registry"]["parse_skill_file requires name field"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/dir-name", "p")
