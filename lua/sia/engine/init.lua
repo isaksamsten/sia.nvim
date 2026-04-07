@@ -86,7 +86,7 @@ end
 --- @param opts sia.engine.ExecuteOpts
 function M.execute_tools(tool_calls, conversation, opts)
   if #tool_calls == 0 then
-    opts.on_complete({}, {}, false)
+    opts.on_complete({}, {})
     return
   end
 
