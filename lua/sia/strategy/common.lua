@@ -217,7 +217,6 @@ function Strategy:on_tool_status(statuses) end
 --- Called once after all tools in a round have completed, with batch results.
 --- Use for rendering summaries, updating UI state.
 --- @param statuses sia.engine.Completed[]
---- @return string? follow_up
 function Strategy:on_tool_results(statuses) end
 
 --- Called when the round loop ends (no more tools, or stream produced content only).

@@ -109,9 +109,12 @@ function DiffStrategy:on_tool_results(statuses)
     end
   end
   self.writer:append_newline()
-  if #statuses > 0 then
-    return "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement."
-  end
+end
+
+function DiffStrategy:on_round_end()
+  self.conversation:add_user_message(
+    "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement."
+  )
 end
 
 --- @param ctx sia.FinishContext

@@ -124,9 +124,12 @@ function InsertStrategy:on_tool_results(statuses)
   if not self.writer:is_empty() then
     self.writer:append_newline()
   end
-  if #statuses > 0 then
-    return "If you're ready to insert the text now, output ONLY the text to insert - no explanations, no 'Here's the code:', no 'Now I'll insert:', nothing else. Your entire next response will be inserted verbatim into the file."
-  end
+end
+
+function InsertStrategy:on_round_end()
+  self.conversation:add_user_message(
+    "If you're ready to replace the selected text now, output ONLY the replacement text - no explanations, no 'Here's the updated code:', no 'I've made these changes:', nothing else. Your entire next response will be used verbatim as the replacement."
+  )
 end
 
 --- @param ctx sia.FinishContext

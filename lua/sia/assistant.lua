@@ -293,11 +293,7 @@ function M.execute_strategy(strategy)
             end,
             on_complete = function(results, statuses)
               apply_tool_results(strategy.conversation, turn_id, results)
-              local follow_up = strategy:on_tool_results(statuses)
-              if follow_up then
-                strategy.conversation:add_user_message(follow_up)
-              end
-
+              strategy:on_tool_results(statuses)
               if strategy.cancellable.is_cancelled then
                 strategy:on_cancel()
                 strategy.is_busy = false
