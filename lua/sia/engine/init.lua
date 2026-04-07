@@ -1,33 +1,32 @@
 local M = {}
 
 --- @class sia.engine.ToolCall
+--- @field key string?
 --- @field index integer
 --- @field tool_call sia.ToolCall
 --- @field name string?
 --- @field args any
---- @field summary string?
+--- @field summary sia.ToolSummary?
 --- @field parallel boolean
 --- @field error string?
 
 --- @class sia.engine.Status
---- @field name string
---- @field summary string?
+--- @field key string
+--- @field index integer
+--- @field name string?
+--- @field summary sia.ToolSummary?
 --- @field status "pending"|"running"|"done"
+--- @field actions table<string, boolean>?
 
 --- @class sia.engine.Entry
 --- @field tool sia.engine.ToolCall
 --- @field result sia.ToolResult
 
---- @class sia.engine.Completed
---- @field name string
---- @field summary string?
---- @field actions table<string, boolean>
-
 --- @class sia.engine.ExecuteOpts
 --- @field cancellable sia.Cancellable?
 --- @field turn_id string
 --- @field on_status fun(statuses: sia.engine.Status[])?
---- @field on_complete fun(results: sia.engine.Entry[], status: sia.engine.Completed[])
+--- @field on_complete fun(results: sia.engine.Entry[], status: sia.engine.Status[])
 
 --- @param tool_call sia.ToolCall
 --- @param index integer
@@ -36,6 +35,7 @@ local M = {}
 local function parse_tool_call(tool_call, index, conversation)
   --- @type sia.engine.ToolCall
   local parsed = {
+    key = tool_call.key,
     index = index,
     tool_call = tool_call,
     name = nil,
@@ -102,6 +102,8 @@ function M.execute_tools(tool_calls, conversation, opts)
   for i, tool_call in ipairs(tool_calls) do
     local parsed = parse_tool_call(tool_call, i, conversation)
     all_statuses[i] = {
+      key = parsed.key,
+      index = parsed.index,
       name = parsed.name,
       summary = parsed.summary,
       status = "pending",
@@ -136,6 +138,9 @@ function M.execute_tools(tool_calls, conversation, opts)
   --- @param parsed sia.engine.ToolCall
   --- @param result sia.ToolResult
   local function on_tool_finished(parsed, result)
+    if result.summary == nil then
+      result.summary = parsed.summary
+    end
     completed_count = completed_count + 1
     update_status(parsed.index, "done")
     tool_results[parsed.index] = { tool = parsed, result = result }
@@ -143,7 +148,7 @@ function M.execute_tools(tool_calls, conversation, opts)
     if completed_count == total_tools then
       --- @type sia.engine.Entry[]
       local ordered_results = {}
-      --- @type sia.engine.Completed[]
+      --- @type sia.engine.Status[]
       local statuses = {}
       for i = 1, #tool_calls do
         if tool_results[i] then
@@ -157,10 +162,13 @@ function M.execute_tools(tool_calls, conversation, opts)
             end
           end
           table.insert(statuses, {
+            key = tool_results[i].tool.key,
+            index = tool_results[i].tool.index,
             name = tool_results[i].tool.name,
             summary = tool_results[i].result.summary,
+            status = "done",
             actions = actions,
-          })
+          } --[[@as sia.engine.Status]])
         end
       end
       opts.on_complete(ordered_results, statuses)

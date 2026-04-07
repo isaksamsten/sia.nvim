@@ -70,9 +70,10 @@ local function make_conversation(context_window, entries)
     add_assistant_message = function(self, _, content)
       table.insert(self.entries, make_assistant(content))
     end,
-    add_user_message = function(self, content, _, hide)
+    add_user_message = function(self, content, _, opts)
       local entry = make_user(content)
-      entry.hide = hide or false
+      opts = opts or {}
+      entry.hide = opts.hide or false
       table.insert(self.entries, entry)
     end,
   }
@@ -320,17 +321,22 @@ local function mock_compaction(summary_response)
   -- Force compaction by making the token budget extremely small.
   local config = require("sia.config")
   tracker._old_context = vim.deepcopy(config._raw_options.settings.context)
-  config.options.settings.context = vim.tbl_deep_extend("force", {}, tracker._old_context, {
-    tokens = {
-      prune = {
-        at_fraction = 0.01,
-        to_fraction = 0.001,
+  config.options.settings.context = vim.tbl_deep_extend(
+    "force",
+    {},
+    tracker._old_context,
+    {
+      tokens = {
+        prune = {
+          at_fraction = 0.01,
+          to_fraction = 0.001,
+        },
+        compact = {
+          oldest_fraction = 0.5,
+        },
       },
-      compact = {
-        oldest_fraction = 0.5,
-      },
-    },
-  })
+    }
+  )
 
   tracker.restore = function()
     real_conv.new_conversation = tracker._real_new

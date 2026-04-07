@@ -341,6 +341,8 @@ local function launch_command(args, conversation, opts, on_started, on_completed
         )
         proc.detached_handle = handle
       else
+        -- TODO: pass proc or something so we can cancell
+        -- a running command
         shell:exec(
           args.bash_command,
           args.timeout or 120000,

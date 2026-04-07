@@ -25,7 +25,7 @@ function _G.__sia_add_buffer()
         mode = "v",
       })
       if content then
-        strategy.conversation:add_user_message(content, region, true)
+        strategy.conversation:add_user_message(content, region, { hide = true })
       end
     end,
     only_visible = true,
@@ -47,7 +47,7 @@ function _G.__sia_add_context(type)
           mode = "v",
         })
         if content then
-          strategy.conversation:add_user_message(content, region, true)
+          strategy.conversation:add_user_message(content, region, { hide = true })
         end
       end,
       only_visible = true,

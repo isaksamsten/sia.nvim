@@ -3,6 +3,7 @@ local winbar = require("sia.ui.winbar")
 
 local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
+local TOOL_RENDER_NS = vim.api.nvim_create_namespace("sia_chat_inline_tools")
 
 local SUMMARIZE_PROMPT = [[Summarize the interaction. Make it suitable for a
 buffer name in neovim using three to five words separated by
@@ -13,8 +14,21 @@ spaces. Only output the name, nothing else.]]
 --- @field buf integer
 --- @field content_writer sia.StreamRenderer
 --- @field reasoning_writer sia.StreamRenderer?
+--- @field tool_status table<string, boolean>
+--- @field tool_order string[]
+--- @field tool_block_extmark integer?
+--- @field tool_block_line_count integer
+--- @field has_tool_blocks boolean
 local AssistantTurnRenderer = {}
 AssistantTurnRenderer.__index = AssistantTurnRenderer
+
+--- @class sia.chat.ToolRenderState
+--- @field key string
+--- @field index integer?
+--- @field status "pending"|"running"|"done"
+--- @field header string?
+--- @field details string?
+--- @field name string?
 
 --- @param opts { canvas: sia.Canvas, buf: integer, line: integer }
 --- @return sia.chat.AssistantTurnRenderer
@@ -29,6 +43,11 @@ function AssistantTurnRenderer.new(opts)
       temporary = false,
     }),
     reasoning_writer = nil,
+    tool_status = {},
+    tool_order = {},
+    tool_block_extmark = nil,
+    tool_block_line_count = 0,
+    has_tool_blocks = false,
   }
   return setmetatable(obj, AssistantTurnRenderer)
 end
@@ -102,37 +121,64 @@ function AssistantTurnRenderer:append_reasoning(content)
   end
 end
 
---- @param content string
-function AssistantTurnRenderer:append_tool_result(content)
-  self.content_writer:append_newline_if_needed()
-  local line = self.content_writer.line
-  self.content_writer:append(content)
-  self.content_writer:append_newline()
-  self.canvas:highlight_tool(line, self.content_writer.line)
-  self.content_writer:append_newline_if_needed()
+--- @param key string
+function AssistantTurnRenderer:ensure_order(key)
+  local render = self.tool_status[key]
+  if render then
+    return
+  end
+
+  self.tool_status[key] = true
+  table.insert(self.tool_order, key)
+  return render
 end
 
---- Clean up the layout after a turn is complete.
+function AssistantTurnRenderer:_render_tool_block() end
+
+--- @param statuses sia.engine.Status[]
+function AssistantTurnRenderer:update_tool_blocks(statuses)
+  local keyed_statuses = {}
+  for _, status in ipairs(statuses) do
+    self:ensure_order(status.key)
+    keyed_statuses[status.key] = status
+  end
+
+  if not self.tool_block_extmark then
+    self.content_writer:append_newline_if_needed()
+    local line = self.content_writer.line
+    local current_line = vim.api.nvim_buf_get_lines(self.buf, line, line + 1, false)[1]
+    local reuses_placeholder = current_line == ""
+    self.tool_block_extmark =
+      vim.api.nvim_buf_set_extmark(self.buf, TOOL_RENDER_NS, line, 0, {
+        right_gravity = false,
+      })
+    self.tool_block_line_count = reuses_placeholder and 1 or 0
+    self.has_tool_blocks = true
+  end
+
+  local position = vim.api.nvim_buf_get_extmark_by_id(
+    self.buf,
+    TOOL_RENDER_NS,
+    self.tool_block_extmark,
+    {}
+  )
+  self.tool_block_line_count = self.canvas:update_tool_block(
+    position,
+    self.tool_block_line_count,
+    keyed_statuses,
+    self.tool_order
+  )
+end
+
 function AssistantTurnRenderer:finalize()
-  if self.reasoning_writer and self.content_writer:is_empty() then
+  if
+    self.reasoning_writer
+    and self.content_writer:is_empty()
+    and not self.has_tool_blocks
+  then
     self.canvas:remove_line_at(self.content_writer.line)
   end
 end
-
---- @class sia.BaseToolCall
---- @field id string
---- @field call_id string?
---- @field name string
-
---- @class sia.FunctionCall : sia.BaseToolCall
---- @field type "function"
---- @field arguments string
-
---- @class sia.CustomCall : sia.BaseToolCall
---- @field type "custom"
---- @field input string
-
---- @alias sia.ToolCall sia.FunctionCall|sia.CustomCall
 
 --- @class sia.Cancellable
 --- @field is_cancelled boolean
@@ -230,7 +276,7 @@ local function enter_mode(chat, mode)
       end
 
       if info.content then
-        chat.conversation:add_user_message(info.content, nil, true)
+        chat.conversation:add_user_message(info.content, nil, { hide = true })
       end
     end
   end
@@ -261,7 +307,11 @@ end
 --- @param messages sia.conversation.PendingUserMessage[]
 local function append_user_messages(conversation, messages)
   for _, message in ipairs(messages) do
-    conversation:add_user_message(message.content, message.region, message.hide)
+    conversation:add_user_message(
+      message.content,
+      message.region,
+      { hide = message.hide }
+    )
   end
 end
 
@@ -313,6 +363,7 @@ function ChatStrategy:redraw()
 end
 
 function ChatStrategy:on_request_end()
+  self.conversation:attach_completed_agents()
   if not self.next_mode and not self.conversation:has_pending_user_messages() then
     return false
   end
@@ -323,12 +374,17 @@ function ChatStrategy:on_request_end()
     append_user_messages(self.conversation, submit_to_messages(self.next_mode))
   end
 
-  self.conversation:attach_completed_agents()
   if redraw then
     self:redraw()
   end
 
-  self.conversation:attach_pending_user_messages()
+  local visible = self.conversation:attach_pending_user_messages()
+  if visible and #visible > 1 then
+    self.canvas:render_messages(
+      vim.list_slice(visible, 1, #visible - 1),
+      self.conversation.model.name
+    )
+  end
   self.next_mode = nil
   return true
 end
@@ -360,11 +416,12 @@ function ChatStrategy:on_round_start()
   )
 end
 
-function ChatStrategy:on_round_end()
-  if self.conversation:attach_pending_user_messages() then
-    self.canvas:render_messages({
-      self.conversation:get_last_entry(),
-    }, self.conversation.model.name)
+--- @param turn_id string
+function ChatStrategy:on_round_end(turn_id)
+  local visible = self.conversation:attach_pending_user_messages()
+  if visible then
+    self.canvas:render_messages(visible, self.conversation.model.name)
+    self.canvas:render_assistant_header(self.conversation.model.name)
   end
 end
 
@@ -473,28 +530,18 @@ function ChatStrategy:on_tool_status(statuses)
   if not self:buf_is_loaded() then
     return
   end
-  --- @type sia.WinbarToolStatus[]
-  local tool_statuses = {}
-  for _, s in ipairs(statuses) do
-    table.insert(tool_statuses, {
-      name = s.name,
-      message = s.summary,
-      status = s.status,
-    })
+  if self.turn_renderer then
+    self.turn_renderer:update_tool_blocks(statuses)
   end
-  winbar.update_tool_status(self.buf, tool_statuses)
 end
 
---- @param statuses sia.engine.Completed[]
+--- @param statuses sia.engine.Status[]
 function ChatStrategy:on_tool_results(statuses)
   if not self:buf_is_loaded() then
     return
   end
-  winbar.update_tool_status(self.buf, nil)
-  for _, status in ipairs(statuses) do
-    if status.summary and self.turn_renderer then
-      self.turn_renderer:append_tool_result(status.summary)
-    end
+  if self.turn_renderer then
+    self.turn_renderer:update_tool_blocks(statuses)
   end
 
   local needs_redraw = false

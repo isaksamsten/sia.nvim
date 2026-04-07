@@ -38,6 +38,7 @@ function M.gen_clear_outdated_tool_input(clear_args)
     if call.type == "custom" then
       --- @return sia.ToolCall
       return {
+        key = call.key,
         id = call.id,
         call_id = call.call_id,
         type = call.type,
@@ -59,6 +60,7 @@ function M.gen_clear_outdated_tool_input(clear_args)
       end
       --- @type sia.ToolCall
       return {
+        key = call.key,
         id = call.id,
         call_id = call.call_id,
         type = "function",
@@ -173,13 +175,13 @@ end
 --- @field is_supported (fun(model: sia.Model):boolean)?
 --- @field auto_apply (fun(args: any, conversation:sia.Conversation):integer?)?
 --- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
---- @field summary (fun(args:table):string)?
+--- @field summary (fun(args:table):sia.ToolSummary?)?
 --- @field instructions string?
 
 --- @class sia.NewToolExecuteUserChoiceOpts
 --- @field choices string[]
 --- @field on_accept fun(choice:integer):nil
---- @field on_cancel fun()?
+--- @field on_cancel fun(reason: string?)?
 --- @field level sia.RiskLevel?
 
 --- @class sia.NewToolExecuteUserInputOpts

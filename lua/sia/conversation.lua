@@ -58,6 +58,28 @@ end
 --- @alias sia.MultiPart sia.TextContent|sia.FileContent|sia.ImageContent
 --- @alias sia.Content (sia.MultiPart)[]|string
 
+--- @class sia.ToolSummaryParts
+--- @field header string
+--- @field details string?
+---
+--- @alias sia.ToolSummary string|sia.ToolSummaryParts
+
+--- @class sia.BaseToolCall
+--- @field key string?
+--- @field id string
+--- @field call_id string?
+--- @field name string
+
+--- @class sia.FunctionCall : sia.BaseToolCall
+--- @field type "function"
+--- @field arguments string
+
+--- @class sia.CustomCall : sia.BaseToolCall
+--- @field type "custom"
+--- @field input string
+
+--- @alias sia.ToolCall sia.FunctionCall|sia.CustomCall
+
 --- @class sia.tool.BaseType
 --- @field description string
 
@@ -112,7 +134,7 @@ end
 
 --- @class sia.tool.Implementation
 --- @field instructions string?
---- @field summary fun(args: any):string
+--- @field summary fun(args: any):sia.ToolSummary?
 --- @field allow_parallel (fun(args: any, conversation: sia.Conversation):boolean)?
 --- @field is_supported (fun(model: sia.Model):boolean)?
 --- @field execute fun(args: any, callback: fun(res: sia.ToolResult?), opts: sia.tool.ExecutionContext)
@@ -219,10 +241,11 @@ UserEntry.__index = UserEntry
 --- @param content sia.Content?
 --- @param region sia.TrackedRegion?
 --- @param hide boolean?
-function UserEntry.new(content, region, hide)
+--- @param turn_id string?
+function UserEntry.new(content, region, hide, turn_id)
   local self = setmetatable(
     BaseEntry.new({
-      turn_id = require("sia.utils").new_uuid(),
+      turn_id = turn_id or require("sia.utils").new_uuid(),
       content = content,
       hide = hide == true,
     }),
@@ -231,7 +254,7 @@ function UserEntry.new(content, region, hide)
   self.role = "user"
   self.region = region
   self.dropped = false
-  return self
+  return self --[[@as sia.UserEntry]]
 end
 
 --- @class sia.Reasoning
@@ -265,7 +288,7 @@ end
 --- @class sia.ToolEntry : sia.BaseEntry
 --- @field role "tool"
 --- @field content sia.Content?
---- @field summary string?
+--- @field summary sia.ToolSummary?
 --- @field region sia.TrackedRegion?
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean
@@ -279,7 +302,7 @@ ToolEntry.__index = ToolEntry
 --- @field region sia.TrackedRegion?
 
 --- @param content sia.Content?
---- @param summary string?
+--- @param summary sia.ToolSummary?
 --- @param args sia.NewToolEntry
 function ToolEntry.new(content, summary, args)
   local self = setmetatable(
@@ -736,16 +759,17 @@ end
 
 --- @param content sia.Content
 --- @param region sia.Region?
---- @param hide boolean?
-function Conversation:add_user_message(content, region, hide)
+--- @param opts {hide: boolean?, turn_id: string?}?
+--- @return sia.UserEntry
+function Conversation:add_user_message(content, region, opts)
   if region then
     self:outdate_overlapping_entries(region)
   end
 
-  table.insert(
-    self.entries,
-    UserEntry.new(content, region and self:track_region(region), hide)
-  )
+  opts = opts or {}
+  local entry = UserEntry.new(content, region and self:track_region(region), opts.hide)
+  table.insert(self.entries, entry)
+  return entry
 end
 
 --- @param content sia.Content
@@ -773,20 +797,30 @@ function Conversation:clear_pending_user_messages()
   self.pending_user_messages = {}
 end
 
---- @return boolean attached_any
-function Conversation:attach_pending_user_messages()
+--- @param turn_id string?
+--- @return sia.Entry[]?
+function Conversation:attach_pending_user_messages(turn_id)
   if not self:has_pending_user_messages() then
-    return false
+    return nil
   end
 
   local messages = self.pending_user_messages
   self.pending_user_messages = {}
 
+  --- @type sia.Entry[]
+  local visible = {}
   for _, message in ipairs(messages) do
-    self:add_user_message(message.content, message.region, message.hide)
+    local entry = self:add_user_message(
+      message.content,
+      message.region,
+      { hide = message.hide, turn_id = turn_id }
+    )
+    if not message.hide then
+      table.insert(visible, entry)
+    end
   end
 
-  return true
+  return visible
 end
 
 --- @param turn_id string
@@ -808,7 +842,7 @@ end
 --- @param turn_id string
 --- @param tool sia.ToolCall
 --- @param content sia.Content
---- @param opts {summary: string?, ephemeral: boolean, region: sia.Region?}?
+--- @param opts {summary: sia.ToolSummary?, ephemeral: boolean, region: sia.Region?}?
 function Conversation:add_tool_message(turn_id, tool, content, opts)
   opts = opts or {}
   if opts.region and not opts.ephemeral then
@@ -1115,7 +1149,7 @@ function Conversation:attach_completed_agents()
         "",
       }
       vim.list_extend(content, agent.result)
-      self:add_user_message(table.concat(content, "\n"), nil, true)
+      self:add_user_message(table.concat(content, "\n"), nil, { hide = true })
       agent.status = "attached"
       agent.meta = nil
       attached_any = true
@@ -1426,7 +1460,7 @@ local function from_action(action, invocation, overrides)
     if type(user) == "function" then
       local content, region = user(invocation)
       if content then
-        conversation:add_user_message(content, region, true)
+        conversation:add_user_message(content, region, { hide = true })
       end
     elseif type(user) == "string" then
       conversation:add_user_message(user)
@@ -1434,13 +1468,13 @@ local function from_action(action, invocation, overrides)
       if type(user.content) == "function" then
         local content, region = user.content(invocation)
         if content then
-          conversation:add_user_message(content, region, user.hide)
+          conversation:add_user_message(content, region, { hide = user.hide })
         end
       else
         conversation:add_user_message(
           user.content --[[@as sia.Content]],
           nil,
-          user.hide
+          { hide = user.hide }
         )
       end
     else

@@ -101,7 +101,7 @@ function DiffStrategy:on_stream(input)
   return false
 end
 
---- @param statuses sia.engine.Completed[]
+--- @param statuses sia.engine.Status[]
 function DiffStrategy:on_tool_results(statuses)
   for _, status in ipairs(statuses) do
     if status.summary then

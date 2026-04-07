@@ -1,7 +1,7 @@
 --- @class sia.ToolResult
 --- @field content sia.Content
 --- @field region sia.Region?
---- @field summary string?
+--- @field summary sia.ToolSummary?
 --- @field ephemeral boolean?
 --- @field actions sia.ToolAction[]?
 
@@ -182,7 +182,8 @@ end
 function Strategy:on_round_start() end
 
 --- Called after one round has completed.
-function Strategy:on_round_end() end
+--- @param turn_id string
+function Strategy:on_round_end(turn_id) end
 
 --- Called when the first data arrives from the streaming API response.
 --- This signals that streaming has begun and the strategy should prepare to
@@ -216,7 +217,7 @@ function Strategy:on_tool_status(statuses) end
 
 --- Called once after all tools in a round have completed, with batch results.
 --- Use for rendering summaries, updating UI state.
---- @param statuses sia.engine.Completed[]
+--- @param statuses sia.engine.Status[]
 function Strategy:on_tool_results(statuses) end
 
 --- Called when the round loop ends (no more tools, or stream produced content only).

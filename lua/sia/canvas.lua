@@ -4,6 +4,109 @@ local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
 local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
 local TEMPORARY_NS = vim.api.nvim_create_namespace("sia_chat_temporary")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
+local REASONING_META_PREFIX = ">| "
+local TOOL_META_PREFIX = ">! "
+
+--- @param summary sia.ToolSummary
+--- @return sia.ToolSummaryParts
+local function normalize_tool_summary(summary)
+  if type(summary) == "string" then
+    return { header = summary }
+  end
+
+  return summary
+end
+
+--- @param lines string[]
+--- @return string[]
+local function trim_trailing_empty(lines)
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+  return lines
+end
+
+--- @param details string
+--- @return string[]?
+local function format_tool_detail_lines(details)
+  local lines = trim_trailing_empty(vim.split(details, "\n", { plain = true }))
+  if vim.tbl_isempty(lines) then
+    return nil
+  end
+
+  local formatted = {}
+  for _, line in ipairs(lines) do
+    if line == "" then
+      table.insert(formatted, TOOL_META_PREFIX)
+    else
+      table.insert(formatted, TOOL_META_PREFIX .. line)
+    end
+  end
+
+  return formatted
+end
+
+--- @param status "pending"|"done"|"running"
+--- @param summary sia.ToolSummary
+--- @return string[]?
+local function format_tool_summary_lines(status, summary)
+  summary = normalize_tool_summary(summary)
+  local lines = { summary.header }
+  if status == "done" and summary.details then
+    local detail_lines = format_tool_detail_lines(summary.details)
+    if detail_lines then
+      vim.list_extend(lines, detail_lines)
+    end
+  end
+
+  return lines
+end
+
+--- @param line string
+--- @return "reasoning"|"tool"|nil
+local function meta_line_kind(line)
+  if line == ">|" or line:match("^>| ") ~= nil then
+    return "reasoning"
+  end
+  if line == ">!" or line:match("^>! ") ~= nil then
+    return "tool"
+  end
+  return nil
+end
+
+--- @param line string
+--- @param kind "reasoning"|"tool"
+--- @return string
+local function strip_meta_prefix(line, kind)
+  if kind == "reasoning" then
+    return (line:gsub("^>|%s?", ""))
+  end
+  return (line:gsub("^>!%s?", ""))
+end
+
+--- @param content string
+--- @return string[]?
+local function format_reasoning_lines(content)
+  if type(content) ~= "string" or content == "" then
+    return nil
+  end
+
+  local lines = trim_trailing_empty(vim.split(content, "\n", { plain = true }))
+  if vim.tbl_isempty(lines) then
+    return nil
+  end
+
+  local formatted = {}
+  for _, line in ipairs(lines) do
+    if line == "" then
+      table.insert(formatted, REASONING_META_PREFIX)
+    else
+      table.insert(formatted, REASONING_META_PREFIX .. line)
+    end
+  end
+
+  return formatted
+end
 
 --- @class sia.CanvasOpts
 --- @field temporary_text_hl string?
@@ -56,12 +159,52 @@ end
 --- @param line integer
 --- @param end_line integer
 function Canvas:highlight_tool(line, end_line)
-  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
+  vim.api.nvim_buf_set_extmark(self.buf, TOOL_RESULT_NS, line, 0, {
     end_line = end_line,
     hl_mode = "combine",
     hl_eol = true,
     hl_group = "SiaToolResult",
   })
+end
+
+--- @param tool_renders table<string, sia.engine.Status>
+--- @param tool_order string[]
+--- @return string[], { start: integer, finish: integer }[]
+local function build_tool_block(tool_renders, tool_order)
+  local lines = {}
+  local highlights = {}
+
+  for _, key in ipairs(tool_order) do
+    local render = tool_renders[key]
+    if render and render.summary then
+      local block_lines = format_tool_summary_lines(render.status, render.summary)
+      if block_lines then
+        local start = #lines
+        vim.list_extend(lines, block_lines)
+        table.insert(highlights, {
+          start = start,
+          finish = #lines,
+        })
+      end
+    end
+  end
+
+  if #lines > 0 then
+    table.insert(lines, "")
+  end
+
+  return lines, highlights
+end
+
+--- @param start_line integer?
+--- @param end_line integer?
+function Canvas:clear_tool_highlights(start_line, end_line)
+  vim.api.nvim_buf_clear_namespace(
+    self.buf,
+    TOOL_RESULT_NS,
+    start_line or 0,
+    end_line or -1
+  )
 end
 
 function Canvas:clear_temporary_text()
@@ -76,48 +219,16 @@ function Canvas:clear_progress()
   self.progress_extmark = nil
 end
 
-local function is_reasoning_line(line)
-  return line == ">|" or line:match("^>| ") ~= nil
-end
-
-local function trim_trailing_empty(lines)
-  while #lines > 0 and lines[#lines] == "" do
-    table.remove(lines)
-  end
-  return lines
-end
-
---- @return string[]?
-local function format_reasoning_lines(content)
-  if type(content) ~= "string" or content == "" then
-    return nil
-  end
-
-  local lines = trim_trailing_empty(vim.split(content, "\n", { plain = true }))
-  if vim.tbl_isempty(lines) then
-    return nil
-  end
-
-  local formatted = {}
-  for _, line in ipairs(lines) do
-    if line == "" then
-      table.insert(formatted, ">|")
-    else
-      table.insert(formatted, ">| " .. line)
-    end
-  end
-
-  return formatted
-end
-
 --- @param lnum integer
 --- @return string|integer
 function M.blockquote_foldexpr(lnum)
   local line = vim.fn.getline(lnum)
   local prev = lnum > 1 and vim.fn.getline(lnum - 1) or ""
+  local line_kind = meta_line_kind(line)
+  local prev_kind = meta_line_kind(prev)
 
-  if is_reasoning_line(line) then
-    if not is_reasoning_line(prev) then
+  if line_kind then
+    if line_kind ~= prev_kind then
       return ">1"
     end
     return 1
@@ -133,7 +244,8 @@ function M.blockquote_foldtext()
   local num_lines = foldend - foldstart + 1
 
   local first_line = vim.fn.getline(foldstart)
-  local preview = first_line:gsub("^>|%s?", "")
+  local kind = meta_line_kind(first_line)
+  local preview = kind and strip_meta_prefix(first_line, kind) or first_line
   local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
   if #preview > max_width then
     preview = preview:sub(1, max_width) .. "…"
@@ -242,31 +354,121 @@ function Canvas:_set_user_extmark(line)
     hl_group = "SiaUser",
   })
 end
+
+--- @param message sia.Entry
+--- @return boolean
+local function is_renderable_message(message)
+  return message.hide ~= true and message.role ~= "system" and not message.dropped
+end
+
+--- @param messages sia.Entry[]
+--- @param index integer
+--- @return sia.Entry?
+local function next_renderable_message(messages, index)
+  for next_index = index + 1, #messages do
+    local next_message = messages[next_index]
+    if is_renderable_message(next_message) then
+      return next_message
+    end
+  end
+  return nil
+end
+
+--- @param buf integer
+--- @return string
+local function get_last_line(buf)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  return vim.api.nvim_buf_get_lines(buf, line_count - 1, line_count, false)[1] or ""
+end
+
+--- @param buf integer
+--- @param lines string[]
+--- @return integer start_line
+local function append_meta_block(buf, lines)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  local last_line = get_last_line(buf)
+  local start_line = line_count
+
+  if last_line == "" then
+    start_line = line_count - 1
+    vim.api.nvim_buf_set_lines(buf, start_line, line_count, false, lines)
+  else
+    vim.api.nvim_buf_set_lines(buf, line_count, line_count, false, lines)
+  end
+
+  return start_line
+end
+
 --- @param messages sia.Entry[]
 --- @param model string?
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
   local last_assistant_turn_id = nil
-  for _, message in ipairs(messages) do
-    if message.hide == true or message.role == "system" or message.dropped then
+  for index, message in ipairs(messages) do
+    if not is_renderable_message(message) then
       goto continue
     end
 
     if message.role == "tool" then
-      -- if message.summary then
-      --   local line_count = vim.api.nvim_buf_line_count(self.buf)
-      --   local start_line = line_count
-      --   vim.api.nvim_buf_set_lines(
-      --     self.buf,
-      --     start_line,
-      --     start_line,
-      --     false,
-      --     vim.split(message.summary, "\n")
-      --   )
-      --   line_count = vim.api.nvim_buf_line_count(self.buf)
-      --   self:highlight_tool(start_line, line_count)
-      --   vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
-      -- end
+      -- If this tool entry belongs to a turn that hasn't rendered an
+      -- assistant header yet, render /sia before the tool block so the
+      -- rendered output matches what the user saw during streaming.
+      local inserted_turn_header = false
+      if message.turn_id and message.turn_id ~= last_assistant_turn_id then
+        local line_count = vim.api.nvim_buf_line_count(self.buf)
+        local status_text = message.turn_id:sub(1, 6)
+        if line_count == 1 then
+          vim.api.nvim_buf_set_lines(
+            self.buf,
+            line_count - 1,
+            line_count,
+            false,
+            { "/sia", "" }
+          )
+          self:_set_assistant_extmark(line_count, model, status_text)
+        else
+          vim.api.nvim_buf_set_lines(
+            self.buf,
+            line_count,
+            line_count,
+            false,
+            { "", "/sia", "" }
+          )
+          self:_set_assistant_extmark(line_count + 2, model, status_text)
+        end
+        last_assistant_turn_id = message.turn_id
+        inserted_turn_header = true
+      end
+
+      local tool_lines = format_tool_summary_lines("done", message.summary)
+      if tool_lines then
+        local start_line
+        if inserted_turn_header then
+          start_line = vim.api.nvim_buf_line_count(self.buf)
+          vim.api.nvim_buf_set_lines(
+            self.buf,
+            start_line,
+            start_line,
+            false,
+            tool_lines
+          )
+        else
+          start_line = append_meta_block(self.buf, tool_lines)
+        end
+        self:highlight_tool(start_line, start_line + #tool_lines)
+
+        local next_message = next_renderable_message(messages, index)
+        if
+          next_message
+          and next_message.role == "assistant"
+          and next_message.turn_id == message.turn_id
+        then
+          local line_count = vim.api.nvim_buf_line_count(self.buf)
+          -- Leave a single placeholder line so the assistant continuation can
+          -- reuse it, matching the streaming layout for tool-only rounds.
+          vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
+        end
+      end
       goto continue
     end
 
@@ -317,6 +519,8 @@ function Canvas:render_messages(messages, model)
             self:_set_assistant_extmark(line_count + 2, model, status_text)
           else
             self:_set_user_extmark(line_count + 2)
+            -- We need to render a new assistant header
+            last_assistant_turn_id = nil
           end
         end
       end
@@ -359,6 +563,37 @@ function Canvas:render_messages(messages, model)
   end
   vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()
+end
+
+--- @param position [integer, integer]
+--- @param previous_line_count integer
+--- @param tool_renders table<string, sia.engine.Status>
+--- @param tool_order string[]
+--- @return integer
+function Canvas:update_tool_block(
+  position,
+  previous_line_count,
+  tool_renders,
+  tool_order
+)
+  if not position or #position == 0 then
+    return previous_line_count
+  end
+
+  local line = position[1]
+  local lines, highlights = build_tool_block(tool_renders, tool_order)
+  if #lines == 0 then
+    return previous_line_count
+  end
+
+  local previous_end = line + previous_line_count
+  vim.bo[self.buf].modifiable = true
+  vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, lines)
+  self:clear_tool_highlights(line, math.max(previous_end, line + #lines))
+  for _, highlight in ipairs(highlights) do
+    self:highlight_tool(line + highlight.start, line + highlight.finish)
+  end
+  return #lines
 end
 
 --- @param model string?

@@ -112,7 +112,7 @@ function InsertStrategy:on_stream(input)
   return true
 end
 
---- @param statuses sia.engine.Completed[]
+--- @param statuses sia.engine.Status[]
 function InsertStrategy:on_tool_results(statuses)
   for _, status in ipairs(statuses) do
     if status.summary then

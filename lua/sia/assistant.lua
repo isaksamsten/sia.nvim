@@ -285,6 +285,9 @@ function M.execute_strategy(strategy)
         end
 
         if round.tool_calls and #round.tool_calls > 0 then
+          for _, tool_call in ipairs(round.tool_calls) do
+            tool_call.key = tool_call.key or require("sia.utils").new_uuid()
+          end
           require("sia.engine").execute_tools(round.tool_calls, strategy.conversation, {
             cancellable = strategy.cancellable,
             turn_id = turn_id,
@@ -298,7 +301,7 @@ function M.execute_strategy(strategy)
                 strategy:on_cancel()
                 strategy.is_busy = false
               else
-                strategy:on_round_end()
+                strategy:on_round_end(turn_id)
                 execute_round(false)
               end
             end,

@@ -9,6 +9,18 @@ local eq = MiniTest.expect.equality
 
 local settings = config._raw_options.settings
 local vim_notify = vim.notify
+
+local function cleanup_chat_test_state()
+  pcall(vim.cmd, "silent! only!")
+
+  for _, chat in ipairs(ChatStrategy.all()) do
+    if vim.api.nvim_buf_is_valid(chat.buf) then
+      pcall(vim.api.nvim_buf_delete, chat.buf, { force = true })
+    end
+    ChatStrategy.remove(chat.buf)
+  end
+end
+
 config.get_local_config = function()
   return nil
 end
@@ -23,6 +35,9 @@ T["strategy.chat"] = MiniTest.new_set({
     post_once = function()
       config._raw_options.settings = settings
       vim.notify = vim_notify
+    end,
+    post_case = function()
+      cleanup_chat_test_state()
     end,
   },
 })
@@ -447,6 +462,124 @@ T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = func
   ChatStrategy.remove(strategy.buf)
 end
 
+T["strategy.chat"]["tool summaries render inline and preserve details on redraw"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conversation:add_system_message("Ok")
+  local turn_id = conversation:new_turn()
+  conversation:add_assistant_message(turn_id, nil, { text = "Plan the check" })
+  conversation:add_tool_message(
+    turn_id,
+    {
+      key = "tool-1",
+      id = "call_1",
+      call_id = "call_1",
+      type = "function",
+      name = "bash",
+      arguments = '{"bash_command":"make test"}',
+    },
+    "test output",
+    {
+      summary = {
+        header = "Ran make test",
+        details = "Last lines:\n- 120 passed\n- 2 skipped",
+      },
+    }
+  )
+  conversation:add_assistant_message(turn_id, "All good")
+
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  local expected = {
+    "/sia",
+    "",
+    ">| Plan the check",
+    "Ran make test",
+    ">! Last lines:",
+    ">! - 120 passed",
+    ">! - 2 skipped",
+    "All good",
+  }
+
+  strategy:redraw()
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  local win = strategy:get_win()
+  vim.api.nvim_set_current_win(win)
+  eq(5, vim.fn.foldclosed(5))
+
+  strategy:redraw()
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq(5, vim.fn.foldclosed(5))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["tool summaries render inline while running"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  conversation:add_system_message("Ok")
+
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  eq(true, strategy:on_request_start())
+  eq(true, strategy:on_stream_start())
+  strategy.turn_renderer:append_reasoning("Plan the check")
+
+  strategy:on_tool_status({
+    {
+      key = "tool-1",
+      index = 1,
+      name = "bash",
+      summary = "Running bash: make test",
+      status = "running",
+    },
+  })
+
+  eq({
+    "/sia",
+    "",
+    ">| Plan the check",
+    "",
+    "Running bash: make test",
+    "",
+  }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  strategy:on_tool_results({
+    {
+      key = "tool-1",
+      index = 1,
+      name = "bash",
+      summary = {
+        header = "Ran make test",
+        details = "Last lines:\n- 120 passed",
+      },
+      status = "done",
+      actions = {},
+    },
+  })
+
+  eq({
+    "/sia",
+    "",
+    ">| Plan the check",
+    "",
+    "Ran make test",
+    ">! Last lines:",
+    ">! - 120 passed",
+    "",
+  }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
 local child = MiniTest.new_child_neovim()
 
 T["strategy.chat"]["multi-turn reasoning"] = MiniTest.new_set({
@@ -544,6 +677,7 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
     "",
     ">| Let me check",
     "",
+    "test_tool",
     ">| Now I know",
     "",
     "The answer",
@@ -634,12 +768,195 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
     ">| First thought",
     "",
     "First content",
-    "",
+    "test_tool",
     ">| Second thought",
     "",
     "Second content",
   }
   eq(expected, lines)
+end
+
+T["strategy.chat"]["multi-turn reasoning"]["tool-only round gets /sia header matching redraw"] = function()
+  child.lua([[
+    local mock = require("tests.mock")
+    local assistant = require("sia.assistant")
+    local ChatStrategy = require("sia.strategy").ChatStrategy
+    local Conversation = require("sia.conversation")
+
+    local call_count = 0
+    mock.mock_fn_jobstart_custom(function(_, job_opts)
+      call_count = call_count + 1
+      local rounds = {
+        -- Round 1: tool call only (no content, no reasoning)
+        {
+          {
+            choices = {
+              {
+                delta = {
+                  tool_calls = {
+                    {
+                      index = 0,
+                      id = "call_1",
+                      type = "function",
+                      ["function"] = { name = "test_tool", arguments = '{"q":"x"}' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        -- Round 2: content response
+        {
+          { choices = { { delta = { content = "The answer" } } } },
+        },
+      }
+      local round = rounds[call_count]
+      if round then
+        for _, datum in ipairs(round) do
+          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+        end
+      end
+      job_opts.on_stdout(1, {
+        "data: " .. vim.json.encode({
+          choices = { { delta = {} } },
+          usage = { total_tokens = 10 * call_count },
+        }),
+      }, 10)
+      job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+      job_opts.on_exit(1, 0, nil)
+      return 1
+    end)
+
+    local source_buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_win_set_buf(0, source_buf)
+
+    local conversation = Conversation.new_conversation({
+      model = require("sia.model").resolve("openai/gpt-4.1"),
+    })
+    conversation:add_system_message("Ok")
+
+    conversation.tool_implementation["test_tool"] = {
+      summary = function() return "test_tool" end,
+      execute = function(_args, callback, _opts)
+        callback({ content = "tool result" })
+      end,
+    }
+
+    _G._test_strategy = ChatStrategy.new(conversation, { cmd = "split" })
+    assistant.execute_strategy(_G._test_strategy)
+  ]])
+
+  child.lua([[
+    _G._test_lines = vim.api.nvim_buf_get_lines(_G._test_strategy.buf, 0, -1, false)
+  ]])
+
+  local lines = child.lua_get("_G._test_lines")
+  local expected = {
+    "/sia",
+    "",
+    "test_tool",
+    "The answer",
+  }
+  eq(expected, lines)
+
+  -- Verify redraw produces the same output
+  child.lua([[
+    _G._test_strategy:redraw()
+    _G._test_redraw_lines = vim.api.nvim_buf_get_lines(_G._test_strategy.buf, 0, -1, false)
+  ]])
+
+  local redraw_lines = child.lua_get("_G._test_redraw_lines")
+  eq(expected, redraw_lines)
+end
+
+T["strategy.chat"]["tool-only round renders /sia header on redraw"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conversation:add_system_message("Ok")
+  local turn_id = conversation:new_turn()
+  -- No assistant entry for this turn (model returned only tool calls)
+  conversation:add_tool_message(
+    turn_id,
+    {
+      key = "tool-1",
+      id = "call_1",
+      call_id = "call_1",
+      type = "function",
+      name = "bash",
+      arguments = '{"bash_command":"ls"}',
+    },
+    "file1.txt\nfile2.txt",
+    {
+      summary = "Ran ls",
+    }
+  )
+  conversation:add_assistant_message(turn_id, "Here are the files")
+
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:redraw()
+
+  local expected = {
+    "/sia",
+    "",
+    "Ran ls",
+    "Here are the files",
+  }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  -- Verify redraw is idempotent
+  strategy:redraw()
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["tool-only round with multiple tools renders single /sia header"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new_conversation({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conversation:add_system_message("Ok")
+  local turn_id = conversation:new_turn()
+  conversation:add_tool_message(turn_id, {
+    key = "tool-1",
+    id = "call_1",
+    call_id = "call_1",
+    type = "function",
+    name = "bash",
+    arguments = '{"bash_command":"ls"}',
+  }, "file1.txt", { summary = "Ran ls" })
+  conversation:add_tool_message(turn_id, {
+    key = "tool-2",
+    id = "call_2",
+    call_id = "call_2",
+    type = "function",
+    name = "grep",
+    arguments = '{"pattern":"hello"}',
+  }, "match found", { summary = "Searched for hello" })
+  conversation:add_assistant_message(turn_id, "Found it")
+
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:redraw()
+
+  local expected = {
+    "/sia",
+    "",
+    "Ran ls",
+    "Searched for hello",
+    "Found it",
+  }
+  eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+
+  ChatStrategy.remove(strategy.buf)
 end
 
 -- Test that empty string deltas don't produce extra empty lines in the chat buffer

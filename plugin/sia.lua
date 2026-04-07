@@ -26,7 +26,11 @@ local function resolve_invoked_skill_message(conversation, skill_name)
   local skill, err = registry.get_skill(skill_name)
   if not skill then
     vim.notify(
-      string.format("sia: failed to load skill '%s': %s", skill_name, err or "unknown error"),
+      string.format(
+        "sia: failed to load skill '%s': %s",
+        skill_name,
+        err or "unknown error"
+      ),
       vim.log.levels.ERROR
     )
     return nil
@@ -99,7 +103,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   local config = require("sia.config")
   --- @type sia.config.Action
   local action
-  if parsed.action or vim.b.sia then
+  if parsed.action then
     action = config.options.actions[parsed.action or vim.b.sia] --[[@as sia.config.Action]]
     if not action then
       error(parsed.action .. " not found")
@@ -164,7 +168,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
   if parsed.mode and action.mode == "chat" then
     local info = conversation:enter_mode(parsed.mode)
     if info and info.content then
-      conversation:add_user_message(info.content, nil, true)
+      conversation:add_user_message(info.content, nil, { hide = true })
     end
   end
 
@@ -173,7 +177,7 @@ vim.api.nvim_create_user_command("Sia", function(args)
     return
   end
   if skill_message then
-    conversation:add_user_message(skill_message, nil, true)
+    conversation:add_user_message(skill_message, nil, { hide = true })
   end
 
   if user_input then

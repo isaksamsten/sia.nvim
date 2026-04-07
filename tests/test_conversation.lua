@@ -49,7 +49,7 @@ T["conversation basics"]["pending user messages attach at round boundary"] = fun
   eq(true, conv:has_pending_user_messages())
   eq(2, conv:pending_user_message_count())
 
-  eq(true, conv:attach_pending_user_messages())
+  eq(2, conv:attach_pending_user_messages())
   eq(false, conv:has_pending_user_messages())
   eq(0, conv:pending_user_message_count())
   eq(2, #conv.entries)
@@ -92,6 +92,27 @@ T["conversation basics"]["add_tool_message adds tool entry"] = function()
   eq("file content", conv.entries[2].content)
   eq("Viewed file", conv.entries[2].summary)
   eq(tool_call, conv.entries[2].tool_call)
+end
+
+T["conversation basics"]["add_tool_message retains structured summaries"] = function()
+  local conv = require("sia.conversation").new_conversation({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conv:add_user_message("Run tests")
+  local turn_id = conv:new_turn()
+  local tool_call = create_tool_call("call_2", "bash")
+  local summary = {
+    header = "Ran make test",
+    details = "Last lines:\n- 120 passed\n- 2 skipped",
+  }
+
+  conv:add_tool_message(turn_id, tool_call, "test output", {
+    summary = summary,
+  })
+
+  eq(summary, conv.entries[2].summary)
 end
 
 T["serialization"] = MiniTest.new_set()

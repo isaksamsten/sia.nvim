@@ -169,7 +169,7 @@ the path to the directory.]
         end)
         :totable()
 
-      conversation:add_user_message(content, nil, true)
+      conversation:add_user_message(content, nil, { hide = true })
       if opts.on_complete then
         opts.on_complete(content)
       end
