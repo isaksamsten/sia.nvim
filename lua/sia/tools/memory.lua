@@ -128,7 +128,7 @@ All paths MUST start with `/memories/`.
         table.insert(output, "- " .. name .. type_suffix)
       end
       callback({
-        content = output,
+        content = table.concat(output, "\n"),
         summary = icons.directory .. " Viewed directory " .. (args.path or "/memories"),
       })
     else
@@ -153,7 +153,7 @@ All paths MUST start with `/memories/`.
           .. string.format(" (lines %d-%d)", start_line, end_line)
       end
 
-      callback({ content = content, summary = display_info })
+      callback({ content = table.concat(content, "\n"), summary = display_info })
     end
   elseif args.command == "create" then
     if not args.file_text then
