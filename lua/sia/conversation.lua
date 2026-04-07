@@ -1,15 +1,5 @@
-math.randomseed(os.time())
-
 ---@type integer
 local CONVERSATION_ID = 1
-
-local function new_uuid()
-  local uuid_template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
-  return string.gsub(uuid_template, "[xy]", function(c)
-    local v = (c == "x") and math.random(0, 0xf) or math.random(8, 0xb)
-    return string.format("%x", v)
-  end)
-end
 
 local function new_conversation_id()
   local id = CONVERSATION_ID
@@ -197,7 +187,7 @@ BaseEntry.__index = BaseEntry
 --- @param args sia.NewBaseEntry
 function BaseEntry.new(args)
   return setmetatable({
-    id = new_uuid(),
+    id = require("sia.utils").new_uuid(),
     turn_id = args.turn_id,
     content = args.content,
     ephemeral = args.ephemeral or false,
@@ -213,7 +203,7 @@ SystemEntry.__index = SystemEntry
 --- @param content (string|sia.Content)?
 function SystemEntry.new(content)
   local self = setmetatable(
-    BaseEntry.new({ turn_id = new_uuid(), content = content }),
+    BaseEntry.new({ turn_id = require("sia.utils").new_uuid(), content = content }),
     SystemEntry
   )
   self.role = "system"
@@ -231,7 +221,11 @@ UserEntry.__index = UserEntry
 --- @param hide boolean?
 function UserEntry.new(content, region, hide)
   local self = setmetatable(
-    BaseEntry.new({ turn_id = new_uuid(), content = content, hide = hide == true }),
+    BaseEntry.new({
+      turn_id = require("sia.utils").new_uuid(),
+      content = content,
+      hide = hide == true,
+    }),
     UserEntry
   )
   self.role = "user"
@@ -681,7 +675,7 @@ function Conversation.new(opts)
   obj.model = opts.model
   obj.id = new_conversation_id()
   obj.name = string.format("**%d**", obj.id)
-  obj.uuid = new_uuid()
+  obj.uuid = require("sia.utils").new_uuid()
   obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
   if obj.model then
     obj.logger:created(obj.model)
@@ -964,7 +958,7 @@ end
 
 ---@return string turn_id
 function Conversation:new_turn()
-  local turn_id = new_uuid()
+  local turn_id = require("sia.utils").new_uuid()
   self.entries[#self.entries].turn_id = turn_id
   return turn_id
 end

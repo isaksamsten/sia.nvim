@@ -1,5 +1,13 @@
 local M = {}
 
+math.randomseed(os.time())
+function M.new_uuid()
+  local uuid_template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+  return string.gsub(uuid_template, "[xy]", function(c)
+    local v = (c == "x") and math.random(0, 0xf) or math.random(8, 0xb)
+    return string.format("%x", v)
+  end)
+end
 --- A generic command parser that enforces `[flags...] [positional...]` grammar.
 --- Flags must appear before any positional arguments. Each flag consumes one
 --- value token. The parser only parses; completion and validation are the
