@@ -330,27 +330,19 @@ local function launch_command(args, conversation, opts, on_started, on_completed
       local proc = conversation:new_bash_process(args.bash_command, args.description)
 
       if args.async then
-        local handle = shell:spawn_detached(
-          args.bash_command,
-          nil, -- no timeout for async; use kill command or :SiaShell stop
-          opts and opts.cancellable,
-          function(result)
-            proc.detached_handle = nil
-            handle_completion(proc, result, conversation, on_completed)
-          end
-        )
+        local handle = shell:spawn_detached(args.bash_command, nil, function()
+          return opts and opts.cancellable.is_cancelled
+        end, function(result)
+          proc.detached_handle = nil
+          handle_completion(proc, result, conversation, on_completed)
+        end)
         proc.detached_handle = handle
       else
-        -- TODO: pass proc or something so we can cancell
-        -- a running command
-        shell:exec(
-          args.bash_command,
-          args.timeout or 120000,
-          opts and opts.cancellable,
-          function(result)
-            handle_completion(proc, result, conversation, on_completed)
-          end
-        )
+        shell:exec(args.bash_command, args.timeout or 120000, function()
+          return opts and opts.cancellable.is_cancelled or proc.cancellable.is_cancelled
+        end, function(result)
+          handle_completion(proc, result, conversation, on_completed)
+        end)
       end
 
       on_started(proc)

@@ -31,8 +31,8 @@ Shell.__index = Shell
 ---@field command string the command to execute
 ---@field timeout number? timeout in milliseconds
 ---@field callback function callback to call with result
----@field cancellable sia.Cancellable? cancellation token
----@field cancel_timer userdata? timer for polling cancellation status
+---@field is_cancelled (fun():boolean)?
+---@field cancel_timer uv_timer_t?
 
 ---@class sia.ShellResult
 ---@field stdout string command output (may be truncated for large outputs)
@@ -151,16 +151,16 @@ end
 ---Execute a command and return the result
 ---@param command string the command to execute
 ---@param timeout number? timeout in milliseconds
----@param cancellable sia.Cancellable? cancellation token
+---@param is_cancelled (fun():boolean)?
 ---@param callback function callback to call with result
-function Shell:exec(command, timeout, cancellable, callback)
+function Shell:exec(command, timeout, is_cancelled, callback)
   timeout = math.min(timeout or DEFAULT_TIMEOUT, MAX_TIMEOUT)
 
   table.insert(self.command_queue, {
     command = command,
     timeout = timeout,
     callback = callback,
-    cancellable = cancellable,
+    is_cancelled = is_cancelled,
   })
 
   self:_process_queue()
@@ -190,14 +190,14 @@ function Shell:_process_queue()
   end
 
   self.is_executing = true
+  --- @type sia.ShellCommand
   local cmd = table.remove(self.command_queue, 1)
 
   local cancelled = false
-  if cmd.cancellable then
-    -- Check cancellation status periodically
+  if cmd.is_cancelled then
     cmd.cancel_timer = vim.uv.new_timer()
-    cmd.cancel_timer:start(0, 100, function() -- Check every 100ms
-      if cmd.cancellable.is_cancelled then
+    cmd.cancel_timer:start(0, 100, function()
+      if cmd.is_cancelled() then
         cancelled = true
         self:_kill_children()
         pcall(cmd.cancel_timer.stop, cmd.cancel_timer)
@@ -392,10 +392,10 @@ end
 ---The returned handle can be killed or polled for completion.
 ---@param command string the command to execute
 ---@param timeout number? timeout in milliseconds (nil = no timeout, capped at MAX_TIMEOUT if set)
----@param cancellable sia.Cancellable? cancellation token
+---@param is_cancelled (fun():boolean)?
 ---@param callback fun(result: sia.ShellResult) called when the process finishes
 ---@return sia.DetachedProcess
-function Shell:spawn_detached(command, timeout, cancellable, callback)
+function Shell:spawn_detached(command, timeout, is_cancelled, callback)
   local cwd = self:pwd()
   -- Security: ensure cwd is within project root
   local resolved_cwd = vim.fn.resolve(cwd)
@@ -463,10 +463,10 @@ function Shell:spawn_detached(command, timeout, cancellable, callback)
 
   -- Cancellation polling
   local cancel_timer
-  if cancellable then
+  if is_cancelled then
     cancel_timer = vim.uv.new_timer()
     cancel_timer:start(0, 100, function()
-      if cancellable.is_cancelled and not done then
+      if is_cancelled() and not done then
         timed_out = true
         proc:kill(15)
         pcall(cancel_timer.stop, cancel_timer)

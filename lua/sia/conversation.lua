@@ -21,22 +21,6 @@ end
 --- @field region sia.Region?
 --- @field hide boolean?
 
---- @class sia.conversation.BashProcess
---- @field id integer
---- @field command string
---- @field description string?
---- @field status "running"|"completed"|"failed"|"timed_out"
---- @field code integer?
---- @field stdout_file string? temp file path with full stdout
---- @field stderr_file string? temp file path with full stderr
---- @field interrupted boolean?
---- @field started_at number
---- @field completed_at number?
---- @field detached_handle sia.DetachedProcess? handle for async/detached processes
---- @field _conversation_id integer?
---- @field get_preview fun(self: sia.conversation.BashProcess, opts?: { tail_lines?: integer }): string
---- @field stop fun(self: sia.conversation.BashProcess): string[]?, string?
-
 --- @class sia.CacheControl
 --- @field type "ephemeral"
 
@@ -346,6 +330,20 @@ local STATUS_OUTPUT_TAIL_LINES = 20
 local Agent = {}
 Agent.__index = Agent
 
+--- @class sia.conversation.BashProcess
+--- @field id integer
+--- @field command string
+--- @field description string?
+--- @field status "running"|"completed"|"failed"|"timed_out"
+--- @field code integer?
+--- @field stdout_file string? temp file path with full stdout
+--- @field stderr_file string? temp file path with full stderr
+--- @field interrupted boolean?
+--- @field started_at number
+--- @field completed_at number?
+--- @field cancellable sia.Cancellable
+--- @field detached_handle sia.DetachedProcess? handle for async/detached processes
+--- @field _conversation_id integer?
 local BashProcess = {}
 BashProcess.__index = BashProcess
 
@@ -581,26 +579,25 @@ function BashProcess:stop()
       )
   end
 
-  if not self.detached_handle then
-    return nil,
-      string.format(
-        "Error: Process %d is a synchronous process and cannot be killed",
-        self.id
-      )
-  end
-
-  local output = self.detached_handle.get_output()
-  self.detached_handle.kill()
-  self.detached_handle = nil
-
-  self.status = "failed"
-  self.code = 143
-  self.interrupted = true
   self.completed_at = vim.uv.hrtime() / 1e9
-  self.stdout_file =
-    write_bash_output(output.stdout, self._conversation_id, self.id, "stdout")
-  self.stderr_file =
-    write_bash_output(output.stderr, self._conversation_id, self.id, "stderr")
+  local stdout, stderr
+  if not self.detached_handle then
+    self.cancellable.is_cancelled = true
+  else
+    local output = self.detached_handle.get_output()
+    stdout = output.stdout
+    stderr = output.stderr
+    self.detached_handle.kill()
+    self.detached_handle = nil
+
+    self.status = "failed"
+    self.code = 143
+    self.interrupted = true
+    self.stdout_file =
+      write_bash_output(output.stdout, self._conversation_id, self.id, "stdout")
+    self.stderr_file =
+      write_bash_output(output.stderr, self._conversation_id, self.id, "stderr")
+  end
 
   local content = {
     string.format("Process %d terminated.", self.id),
@@ -610,8 +607,8 @@ function BashProcess:stop()
 
   append_output_sections(
     content,
-    output.stdout,
-    output.stderr,
+    stdout,
+    stderr,
     STATUS_OUTPUT_TAIL_LINES,
     "Final",
     "No output captured."
@@ -1170,6 +1167,7 @@ function Conversation:new_bash_process(command, description)
     status = "running",
     started_at = vim.uv.hrtime() / 1e9,
     _conversation_id = self.id,
+    cancellable = { is_cancelled = false },
   }, BashProcess)
   table.insert(self.bash_processes, instance)
   return instance
