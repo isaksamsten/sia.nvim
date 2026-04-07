@@ -23,7 +23,7 @@ return tool_utils.new_tool({
     required = { "prompt", "options", "default" },
   },
   read_only = true,
-  notification = function()
+  summary = function()
     return "Asking user for input..."
   end,
   instructions = [[Ask the USER to choose from a list of options using an interactive selection interface. ]],

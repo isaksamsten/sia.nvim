@@ -16,7 +16,11 @@ T["sia.tools.edit"] = MiniTest.new_set()
 
 -- Mock tracker that just runs the function
 local function mock_tracker()
-  return { suppress = function(_, _, fn) fn() end }
+  return {
+    suppress = function(_, _, fn)
+      fn()
+    end,
+  }
 end
 
 T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
@@ -465,10 +469,7 @@ T["sia.tools.edit"]["multiple matches found"] = function()
   child.lua(code)
   local result = child.lua_get("_G.result")
 
-  eq(
-    true,
-    string.find(result.content[1], "Failed to edit test.txt because") ~= nil
-  )
+  eq(true, string.find(result.content[1], "Failed to edit test.txt because") ~= nil)
   eq("❌ Failed to edit test.txt", result.summary)
 end
 
@@ -707,7 +708,7 @@ T["sia.tools.edit"]["tool metadata"] = function()
 
     _G.name = edit_tool.definition.name
     _G.description = edit_tool.definition.description
-    _G.notification = edit_tool.implementation.notification(args)
+    _G.summary = edit_tool.implementation.summary(args)
     _G.required = edit_tool.definition.required
     _G.parameters = edit_tool.definition.parameters
   ]]
@@ -716,7 +717,7 @@ T["sia.tools.edit"]["tool metadata"] = function()
 
   eq("edit", child.lua_get("_G.name"))
   eq("Tool for editing files", child.lua_get("_G.description"))
-  eq("Making changes to test.txt...", child.lua_get("_G.notification"))
+  eq("Making changes to test.txt...", child.lua_get("_G.summary"))
 
   local required = child.lua_get("_G.required")
   eq(true, vim.tbl_contains(required, "target_file"))
@@ -782,4 +783,3 @@ T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function
 end
 
 return T
-

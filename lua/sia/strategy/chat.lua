@@ -478,7 +478,7 @@ function ChatStrategy:on_tool_status(statuses)
   for _, s in ipairs(statuses) do
     table.insert(tool_statuses, {
       name = s.name,
-      message = s.notification,
+      message = s.summary,
       status = s.status,
     })
   end

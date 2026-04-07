@@ -55,7 +55,7 @@ return tool_utils.new_tool({
     },
     required = { "command" },
   },
-  notification = function()
+  summary = function()
     return "Launching autonomous agent..."
   end,
   read_only = true,

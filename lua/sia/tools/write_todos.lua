@@ -62,7 +62,7 @@ return tool_utils.new_tool({
     required = {},
   },
   read_only = false,
-  notification = function(args)
+  summary = function(args)
     local parts = {}
     if args.replace and #args.replace > 0 then
       table.insert(parts, string.format("replacing with %d todo(s)", #args.replace))

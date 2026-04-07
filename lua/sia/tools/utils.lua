@@ -173,7 +173,7 @@ end
 --- @field is_supported (fun(model: sia.Model):boolean)?
 --- @field auto_apply (fun(args: any, conversation:sia.Conversation):integer?)?
 --- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
---- @field notification (fun(args:table):string)?
+--- @field summary (fun(args:table):string)?
 --- @field instructions string?
 
 --- @class sia.NewToolExecuteUserChoiceOpts
@@ -558,7 +558,7 @@ M.new_tool = function(opts, execute)
     implementation = {
       instructions = opts.instructions,
       is_supported = opts.is_supported,
-      notification = opts.notification,
+      summary = opts.summary,
       allow_parallel = function(args, conversation)
         if
           opts.read_only

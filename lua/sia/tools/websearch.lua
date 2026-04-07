@@ -22,7 +22,7 @@ return tool_utils.new_tool({
     return os.getenv("GOOGLE_SEARCH_API_KEY") ~= nil
       and os.getenv("GOOGLE_SEARCH_CX") ~= nil
   end,
-  notification = function(args)
+  summary = function(args)
     if args.description then
       return string.format("%s...", args.description)
     end

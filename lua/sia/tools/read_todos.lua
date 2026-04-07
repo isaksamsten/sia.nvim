@@ -9,7 +9,7 @@ return tool_utils.new_tool({
     required = {},
   },
   read_only = true,
-  notification = function()
+  summary = function()
     return "Reading todos..."
   end,
   instructions = [[Read the current list of todos for this conversation.

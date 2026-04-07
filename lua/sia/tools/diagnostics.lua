@@ -13,7 +13,7 @@ return tool_utils.new_tool({
     required = { "file" },
   },
   read_only = true,
-  notification = function()
+  summary = function()
     return "Retrieving diagnostics..."
   end,
   instructions = [[Get LSP diagnostics for a specific file - includes syntax errors,

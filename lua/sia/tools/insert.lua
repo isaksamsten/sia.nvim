@@ -41,7 +41,7 @@ return tool_utils.new_tool({
     },
     required = { "target_file", "line", "text" },
   },
-  notification = function(args)
+  summary = function(args)
     if args.target_file then
       return string.format("Inserting text into %s...", args.target_file)
     end

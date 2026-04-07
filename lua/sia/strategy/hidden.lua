@@ -53,8 +53,7 @@ function HiddenStrategy:on_tool_status(statuses)
   end, statuses)
   if #running > 0 then
     local status = running[1]
-    local message = status.notification
-      or ("Using " .. (status.name or "tool") .. "...")
+    local message = status.summary or ("Using " .. (status.name or "tool") .. "...")
     notify(message)
   end
 end

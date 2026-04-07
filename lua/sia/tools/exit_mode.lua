@@ -14,7 +14,7 @@ return tool_utils.new_tool({
     required = {},
   },
   read_only = true,
-  notification = function(args)
+  summary = function(args)
     if args.summary and args.summary ~= "" then
       return "Exiting mode: " .. args.summary:sub(1, 60)
     end
@@ -40,7 +40,7 @@ that are restricted in the current mode. Provide a brief summary of what was acc
     callback({
       content = info.content,
       actions = info.truncate_after_id and {
-        { type = "drop_after", message_id = info.truncate_after_id }
+        { type = "drop_after", message_id = info.truncate_after_id },
       } or nil,
     })
   else

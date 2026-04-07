@@ -254,7 +254,7 @@ Usage:
 - Use the task tool for open-ended searches requiring multiple rounds
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
-  notification = function(args)
+  summary = function(args)
     return string.format("Searching for %s...", args.pattern)
   end,
   auto_apply = function(args, conversation)

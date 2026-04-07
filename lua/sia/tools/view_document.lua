@@ -49,7 +49,7 @@ return tool_utils.new_tool({
     return model.support.document == true
   end,
   read_only = true,
-  notification = function(args)
+  summary = function(args)
     if args.path then
       return "Viewing document " .. vim.fn.fnamemodify(args.path, ":t")
     else

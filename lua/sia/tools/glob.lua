@@ -35,7 +35,7 @@ return tool_utils.new_tool({
   and grepping, use the Agent tool instead
 - You can call multiple tools in a single response. It is always better to speculatively
   perform multiple searches in parallel if they are potentially useful.]],
-  notification = function()
+  summary = function()
     return "Searching for files..."
   end,
   auto_apply = function(args, conversation)

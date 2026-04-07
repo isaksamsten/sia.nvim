@@ -52,7 +52,7 @@ return tool_utils.new_tool({
     },
     required = { "url" },
   },
-  notification = function(args)
+  summary = function(args)
     return string.format("Fetching %s...", args.url)
   end,
   is_supported = function()

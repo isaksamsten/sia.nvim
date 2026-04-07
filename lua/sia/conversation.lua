@@ -112,7 +112,7 @@ end
 
 --- @class sia.tool.Implementation
 --- @field instructions string?
---- @field notification fun(args: any):string
+--- @field summary fun(args: any):string
 --- @field allow_parallel (fun(args: any, conversation: sia.Conversation):boolean)?
 --- @field is_supported (fun(model: sia.Model):boolean)?
 --- @field execute fun(args: any, callback: fun(res: sia.ToolResult?), opts: sia.tool.ExecutionContext)

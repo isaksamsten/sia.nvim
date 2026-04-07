@@ -292,7 +292,7 @@ return tool_utils.new_tool({
     required = { "command", "path", "line", "pattern" },
   },
   read_only = false,
-  notification = function()
+  summary = function()
     return "Querying LSP..."
   end,
   instructions = [[Interact with Language Server Protocol (LSP) servers to get code intelligence features.

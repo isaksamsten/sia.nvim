@@ -48,7 +48,7 @@ return tool_utils.new_tool({
     required = { "path" },
   },
   read_only = true,
-  notification = function(args)
+  summary = function(args)
     if args.path then
       return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
     else

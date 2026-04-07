@@ -524,7 +524,7 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
     conversation:add_system_message("Ok")
 
     conversation.tool_implementation["test_tool"] = {
-      notification = function() return "test_tool" end,
+      summary = function() return "test_tool" end,
       execute = function(_args, callback, _opts)
         callback({ content = "tool result" })
       end,
@@ -613,7 +613,7 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
       conversation:add_system_message("Ok")
 
       conversation.tool_implementation["test_tool"] = {
-        notification = function() return "test_tool" end,
+        summary = function() return "test_tool" end,
         execute = function(_args, callback, _opts)
           callback({ content = "tool result" })
         end,

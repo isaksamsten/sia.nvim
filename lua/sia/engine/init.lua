@@ -5,13 +5,13 @@ local M = {}
 --- @field tool_call sia.ToolCall
 --- @field name string?
 --- @field args any
---- @field notification string?
+--- @field summary string?
 --- @field parallel boolean
 --- @field error string?
 
 --- @class sia.engine.Status
 --- @field name string
---- @field notification string?
+--- @field summary string?
 --- @field status "pending"|"running"|"done"
 
 --- @class sia.engine.Entry
@@ -40,7 +40,7 @@ local function parse_tool_call(tool_call, index, conversation)
     tool_call = tool_call,
     name = nil,
     args = nil,
-    notification = nil,
+    summary = nil,
     parallel = false,
     error = nil,
   }
@@ -50,7 +50,7 @@ local function parse_tool_call(tool_call, index, conversation)
     parsed.args = tool_call.input
     local implementation = conversation.tool_implementation[tool_call.name]
     if implementation then
-      parsed.notification = implementation.notification(parsed.args)
+      parsed.summary = implementation.summary(parsed.args)
       parsed.parallel = implementation.allow_parallel ~= nil
         and implementation.allow_parallel(parsed.args, conversation)
     end
@@ -66,7 +66,7 @@ local function parse_tool_call(tool_call, index, conversation)
       parsed.args = args
       local implementation = conversation.tool_implementation[tool_call.name]
       if implementation then
-        parsed.notification = implementation.notification(args)
+        parsed.summary = implementation.summary(args)
         parsed.parallel = implementation.allow_parallel ~= nil
           and implementation.allow_parallel(args, conversation)
       end
@@ -103,7 +103,7 @@ function M.execute_tools(tool_calls, conversation, opts)
     local parsed = parse_tool_call(tool_call, i, conversation)
     all_statuses[i] = {
       name = parsed.name,
-      notification = parsed.notification,
+      summary = parsed.summary,
       status = "pending",
     }
     tool_results[i] = nil

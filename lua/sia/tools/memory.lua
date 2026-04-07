@@ -51,7 +51,7 @@ Use this tool to:
 All paths MUST start with `/memories/`.
 ]],
   read_only = false,
-  notification = function(args)
+  summary = function(args)
     return string.format("Executing memory command: %s", args.command)
   end,
   auto_apply = function(args, _)

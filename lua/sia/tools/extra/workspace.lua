@@ -11,7 +11,7 @@ return tool_utils.new_tool({
     parameters = vim.empty_dict(),
     required = {},
   },
-  notification = function()
+  summary = function()
     return "Getting workspace information..."
   end,
   instructions = [[Use this tool to get information about which files and line

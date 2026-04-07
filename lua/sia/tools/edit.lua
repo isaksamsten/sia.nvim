@@ -191,7 +191,7 @@ return tool_utils.new_tool({
     },
     required = { "target_file", "old_string", "new_string" },
   },
-  notification = function(args)
+  summary = function(args)
     if args.target_file then
       return string.format("Making changes to %s...", args.target_file)
     end

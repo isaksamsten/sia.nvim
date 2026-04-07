@@ -103,7 +103,7 @@ return tool_utils.new_tool({
       definition = APPLY_PATCH_GRAMMAR,
     },
   },
-  notification = function()
+  summary = function()
     return "Applying diff..."
   end,
   instructions = [[Use the `apply_diff` tool to make changes to existing files.

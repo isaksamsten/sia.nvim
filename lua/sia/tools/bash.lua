@@ -394,7 +394,7 @@ return tool_utils.new_tool({
     },
     required = { "command" },
   },
-  notification = function(args)
+  summary = function(args)
     if args.command == "start" then
       if args.description then
         return string.format("Starting: %s...", args.description)

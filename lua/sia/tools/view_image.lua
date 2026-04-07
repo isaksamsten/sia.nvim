@@ -39,7 +39,7 @@ return tool_utils.new_tool({
     return model.support.image == true
   end,
   read_only = true,
-  notification = function(args)
+  summary = function(args)
     if args.path then
       return "Viewing image " .. vim.fn.fnamemodify(args.path, ":t")
     else
