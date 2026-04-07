@@ -235,7 +235,10 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
     end
 
     if conversation:has_pending_user_messages() then
+      local desc = current_proc.description or current_proc.command
+      local cmd = format_command(current_proc.command)
       callback({
+        summary = string.format("%s Paused %s: %s", icons.bash_exec, desc, cmd),
         content = waiting_yield_message(current_proc),
       })
       return
