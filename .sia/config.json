@@ -32,9 +32,11 @@
   },
   "auto_continue": true,
   "context": {
-    "max_tool": 250,
-    "keep": 50,
-    "clear_input": true
+    "tools": {
+      "max_calls": 250,
+      "keep_last": 50,
+      "strip_inputs": true
+    }
   },
   "skills": ["update-docs"],
   "agents": ["code/review", "code/explore", "git/commit"],
