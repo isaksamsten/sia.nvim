@@ -49,7 +49,7 @@ T["conversation basics"]["pending user messages attach at round boundary"] = fun
   eq(true, conv:has_pending_user_messages())
   eq(2, conv:pending_user_message_count())
 
-  eq(2, conv:attach_pending_user_messages())
+  eq(1, #conv:attach_pending_user_messages())
   eq(false, conv:has_pending_user_messages())
   eq(0, conv:pending_user_message_count())
   eq(2, #conv.entries)

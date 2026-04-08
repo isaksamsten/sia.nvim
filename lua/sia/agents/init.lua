@@ -8,14 +8,14 @@ local M = {}
 ---
 --- @class sia.agents.SpawnOpts
 --- @field source "tool"|"user"? Source of the spawn (default: "user")
---- @field on_complete (fun(agent: sia.conversation.Agent))? Called when the agent finishes (success or failure)
---- @field on_progress (fun(agent: sia.conversation.Agent, msg: string))? Called on progress updates
+--- @field on_complete (fun(agent: sia.agents.Agent))? Called when the agent finishes (success or failure)
+--- @field on_progress (fun(agent: sia.agents.Agent, msg: string))? Called on progress updates
 
 --- @param agent_name string
 --- @param task string
 --- @param parent_conversation sia.Conversation
 --- @param opts sia.agents.SpawnOpts?
---- @return sia.conversation.Agent?
+--- @return sia.agents.Agent?
 function M.spawn(agent_name, task, parent_conversation, opts)
   opts = opts or {}
 
@@ -30,8 +30,7 @@ function M.spawn(agent_name, task, parent_conversation, opts)
   local agent = parent_conversation:new_agent(agent_name, task, opts.source or "user")
   local tools = require("sia.tools")
 
-  local Conversation = require("sia.conversation")
-  local new_conversation = Conversation.new_conversation({
+  local new_conversation = require("sia.conversation").new_conversation({
     model = require("sia.model").resolve(
       agent_def.model or config.options.settings.fast_model
     ),
@@ -110,7 +109,7 @@ function M.spawn(agent_name, task, parent_conversation, opts)
 end
 
 --- Open an agent's conversation as a full interactive chat.
---- @param agent sia.conversation.Agent
+--- @param agent sia.agents.Agent
 function M._open_agent_chat(agent)
   if agent.status == "opened" or not agent.meta then
     return
@@ -197,6 +196,104 @@ function M.complete(conversation)
   agent.meta = nil
   conversation.parent = nil
   return true
+end
+
+--- @class sia.conversation.AgentMeta
+--- @field parent sia.Conversation
+--- @field current sia.Conversation
+--- @field strategy sia.ChatStrategy?
+
+--- @class sia.agents.Agent
+--- @field id integer
+--- @field source "tool"|"user"
+--- @field status "running"|"completed"|"failed"|"attached"|"cancelled"|"opened"
+--- @field progress string?
+--- @field result string[]?
+--- @field error string?
+--- @field name string
+--- @field task string
+--- @field started_at number
+--- @field usage sia.Usage?
+--- @field cancellable sia.Cancellable?
+--- @field open boolean
+--- @field meta sia.conversation.AgentMeta?
+local Agent = {}
+Agent.__index = Agent
+
+function M.new(id, name, task, source)
+  return setmetatable({
+    id = id,
+    name = name,
+    task = task,
+    source = source or "tool",
+    status = "running",
+    started_at = vim.uv.hrtime() / 1e9,
+    cancellable = { is_cancelled = false },
+  }, Agent)
+end
+
+--- @return string
+function Agent:get_preview()
+  local content = {
+    string.format("Agent ID: %d", self.id),
+    string.format("Agent: %s", self.name),
+    string.format("Status: %s", self.status),
+    string.format("Task: %s", self.task),
+  }
+
+  if self.status == "running" then
+    if self.open then
+      table.insert(content, "Will open as chat on completion.")
+    end
+    if self.progress and #self.progress > 0 then
+      table.insert(content, string.format("Progress: %s", self.progress))
+    end
+    if self.cancellable and self.cancellable.is_cancelled then
+      table.insert(content, "Cancellation requested: yes")
+    end
+  elseif self.status == "opened" then
+    table.insert(
+      content,
+      "Opened as interactive chat. Use :SiaAgent complete to send result back."
+    )
+  elseif self.status == "completed" and self.result then
+    table.insert(content, "")
+    table.insert(content, "Result:")
+    vim.list_extend(content, self.result)
+  elseif self.status == "failed" and self.error then
+    table.insert(content, "")
+    table.insert(content, string.format("Error: %s", self.error))
+  end
+
+  return table.concat(content, "\n")
+end
+
+function Agent:cancel()
+  if self.status ~= "running" then
+    return
+  end
+
+  if not self.cancellable then
+    return
+  end
+
+  if self.cancellable.is_cancelled then
+    return
+  end
+
+  self.cancellable.is_cancelled = true
+  self.progress = "Cancellation requested"
+end
+
+function Agent:can_open()
+  return self.status == "running" or self.status == "completed" and self.meta ~= nil
+end
+
+function Agent:close()
+  if self.status == "opened" then
+    self.open = nil
+    self.status = "cancelled"
+  end
 end
 
 return M

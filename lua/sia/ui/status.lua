@@ -110,7 +110,7 @@ local function command_lines(command)
   return lines
 end
 
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @return string stdout
 --- @return string stderr
 --- @return string? note
@@ -160,7 +160,7 @@ local function add_output_sections(d, stdout, stderr, empty_message)
   end
 end
 
---- @param agent sia.conversation.Agent
+--- @param agent sia.agents.Agent
 --- @return sia.ui.RenderSpec
 local function render_agent(agent)
   local cfg = AGENT_STATUS[agent.status] or AGENT_STATUS.failed
@@ -223,7 +223,7 @@ local function render_agent(agent)
   }
 end
 
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @return sia.ui.RenderSpec
 local function render_process(proc)
   local status_name = BASH_STATUS[proc.status] and proc.status or "failed"

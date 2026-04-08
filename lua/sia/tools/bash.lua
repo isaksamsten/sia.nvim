@@ -18,7 +18,7 @@ status update. You will then see the user's message in the conversation and shou
 respond before calling wait or status again.
 ]]
 
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @return string
 local function waiting_yield_message(proc)
   return string.format(
@@ -33,7 +33,7 @@ end
 --- @return sia.Shell
 local function ensure_shell(conversation)
   if not conversation.shell then
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local config = require("sia.config")
     local project_root = vim.fn.getcwd()
     conversation.shell = Shell.new(project_root, config.options.settings.shell)
@@ -59,7 +59,7 @@ local function write_temp_output(content, conversation_id, proc_id, stream)
 end
 
 --- Build a summary of the bash process result (for returning to the AI)
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @param result sia.ShellResult
 --- @param cwd string
 --- @return string[] content
@@ -143,7 +143,7 @@ local function format_command(command)
 end
 
 --- Build a display message for the bash process
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @return string
 local function build_display_message(proc)
   local desc = proc.description or proc.command
@@ -163,7 +163,7 @@ local function build_display_message(proc)
 end
 
 --- Helper to finalize a completed process and call the callback
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 local function return_completed_result(proc, conversation, callback)
@@ -275,10 +275,10 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
 end
 
 --- Handle completion of a shell command, updating the process record
---- @param proc sia.conversation.BashProcess
+--- @param proc sia.process.Process
 --- @param result sia.ShellResult
 --- @param conversation sia.Conversation
---- @param on_completed (fun(proc: sia.conversation.BashProcess))?
+--- @param on_completed (fun(proc: sia.process.Process))?
 local function handle_completion(proc, result, conversation, on_completed)
   proc.stdout_file =
     write_temp_output(result.stdout, conversation.id, proc.id, "stdout")
@@ -305,8 +305,8 @@ end
 --- @param args table tool arguments
 --- @param conversation sia.Conversation
 --- @param opts sia.NewToolExecuteOpts
---- @param on_started fun(proc: sia.conversation.BashProcess?, err: string?) called immediately after launch
---- @param on_completed (fun(proc: sia.conversation.BashProcess))? called when process finishes
+--- @param on_started fun(proc: sia.process.Process?, err: string?) called immediately after launch
+--- @param on_completed (fun(proc: sia.process.Process))? called when process finishes
 local function launch_command(args, conversation, opts, on_started, on_completed)
   local banned, reason = utils.is_command_banned(args.bash_command)
   if banned then

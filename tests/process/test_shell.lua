@@ -1,7 +1,7 @@
 local T = MiniTest.new_set()
 local eq = MiniTest.expect.equality
 
-T["sia.shell"] = MiniTest.new_set({
+T["sia.process.shell"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
       T.child = MiniTest.new_child_neovim()
@@ -13,9 +13,9 @@ T["sia.shell"] = MiniTest.new_set({
   },
 })
 
-T["sia.shell"]["spawn_detached runs command and returns result"] = function()
+T["sia.process.shell"]["spawn_detached runs command and returns result"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -39,9 +39,9 @@ T["sia.shell"]["spawn_detached runs command and returns result"] = function()
   eq("", result.stderr)
 end
 
-T["sia.shell"]["spawn_detached captures stderr"] = function()
+T["sia.process.shell"]["spawn_detached captures stderr"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -63,9 +63,9 @@ T["sia.shell"]["spawn_detached captures stderr"] = function()
   eq("err\n", result.stderr)
 end
 
-T["sia.shell"]["spawn_detached does not block main shell queue"] = function()
+T["sia.process.shell"]["spawn_detached does not block main shell queue"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local detached_done = false
     local sync_done = false
@@ -105,9 +105,9 @@ T["sia.shell"]["spawn_detached does not block main shell queue"] = function()
   eq("fast", sync_result.stdout)
 end
 
-T["sia.shell"]["spawn_detached inherits cwd from main shell"] = function()
+T["sia.process.shell"]["spawn_detached inherits cwd from main shell"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -141,9 +141,9 @@ T["sia.shell"]["spawn_detached inherits cwd from main shell"] = function()
   eq(project_root .. "\n", result.stdout)
 end
 
-T["sia.shell"]["spawn_detached inherits cwd within project"] = function()
+T["sia.process.shell"]["spawn_detached inherits cwd within project"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local project_root = vim.fn.getcwd()
     local shell = Shell.new(project_root)
     local completed = false
@@ -176,9 +176,9 @@ T["sia.shell"]["spawn_detached inherits cwd within project"] = function()
   eq(expected_cwd .. "\n", result.stdout)
 end
 
-T["sia.shell"]["spawn_detached times out"] = function()
+T["sia.process.shell"]["spawn_detached times out"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -202,14 +202,14 @@ T["sia.shell"]["spawn_detached times out"] = function()
   eq(true, result.stderr:find("timed out") ~= nil)
 end
 
-T["sia.shell"]["spawn_detached can be cancelled"] = function()
+T["sia.process.shell"]["spawn_detached can be cancelled"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
     local cancellable = { is_cancelled = false }
 
-    shell:spawn_detached("sleep 10", 30000, cancellable, function(result)
+    shell:spawn_detached("sleep 10", 30000, function() return cancellable.is_cancelled end, function(result)
       _G.result = result
       completed = true
     end)
@@ -231,9 +231,9 @@ T["sia.shell"]["spawn_detached can be cancelled"] = function()
   eq(true, result.interrupted)
 end
 
-T["sia.shell"]["spawn_detached does not inherit shell exports"] = function()
+T["sia.process.shell"]["spawn_detached does not inherit shell exports"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -264,9 +264,9 @@ T["sia.shell"]["spawn_detached does not inherit shell exports"] = function()
   eq("VAR=\n", result.stdout)
 end
 
-T["sia.shell"]["spawn_detached kill stops the process"] = function()
+T["sia.process.shell"]["spawn_detached kill stops the process"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -295,9 +295,9 @@ T["sia.shell"]["spawn_detached kill stops the process"] = function()
   eq(true, result.interrupted)
 end
 
-T["sia.shell"]["multiple spawn_detached run concurrently"] = function()
+T["sia.process.shell"]["multiple spawn_detached run concurrently"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local results = {}
     local count = 0
@@ -325,9 +325,9 @@ T["sia.shell"]["multiple spawn_detached run concurrently"] = function()
   end
 end
 
-T["sia.shell"]["spawn_detached strips ansi codes"] = function()
+T["sia.process.shell"]["spawn_detached strips ansi codes"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -348,9 +348,9 @@ T["sia.shell"]["spawn_detached strips ansi codes"] = function()
   eq("red text", result.stdout)
 end
 
-T["sia.shell"]["spawn_detached get_output returns partial output while running"] = function()
+T["sia.process.shell"]["spawn_detached get_output returns partial output while running"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -391,9 +391,9 @@ T["sia.shell"]["spawn_detached get_output returns partial output while running"]
   eq(true, final_result.stdout:find("line3") ~= nil)
 end
 
-T["sia.shell"]["spawn_detached get_output returns empty when no output yet"] = function()
+T["sia.process.shell"]["spawn_detached get_output returns empty when no output yet"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 
@@ -418,9 +418,9 @@ T["sia.shell"]["spawn_detached get_output returns empty when no output yet"] = f
   eq("", partial_stderr)
 end
 
-T["sia.shell"]["spawn_detached tail -f sees new data on subsequent get_output"] = function()
+T["sia.process.shell"]["spawn_detached tail -f sees new data on subsequent get_output"] = function()
   T.child.lua([[
-    local Shell = require("sia.shell")
+    local Shell = require("sia.process.shell")
     local shell = Shell.new(vim.fn.getcwd())
     local completed = false
 

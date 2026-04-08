@@ -18,7 +18,7 @@ status update. You will then see the user's message in the conversation and shou
 respond before calling wait or status again.
 ]]
 
---- @param agent sia.conversation.Agent
+--- @param agent sia.agents.Agent
 --- @return string
 local function waiting_yield_message(agent)
   return string.format(
@@ -55,8 +55,15 @@ return tool_utils.new_tool({
     },
     required = { "command" },
   },
-  summary = function()
-    return "Launching autonomous agent..."
+  summary = function(args)
+    if args.command == "start" then
+      return string.format(
+        icons.agents .. " Starting agent '%s'",
+        args.agent or "unknown"
+      )
+    elseif args.command == "wait" then
+      return string.format(icons.agents .. " Wating for agent '%s'", tostring(args.id))
+    end
   end,
   read_only = true,
   instructions = string.format(
@@ -178,7 +185,7 @@ Usage notes:
       return
     end
 
-    --- @cast agent sia.conversation.Agent
+    --- @cast agent sia.agents.Agent
     callback({ content = agent:get_preview() })
   elseif args.command == "wait" then
     if not args.id then
