@@ -51,7 +51,7 @@ end
 --- @return string[]?
 local function format_tool_summary_lines(status, summary)
   summary = normalize_tool_summary(summary)
-  local lines = { summary.header }
+  local lines = vim.split(summary.header, "\n", { plain = true })
   if status == "done" and summary.details then
     local detail_lines = format_tool_detail_lines(summary.details)
     if detail_lines then

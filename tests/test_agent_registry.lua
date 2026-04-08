@@ -12,13 +12,13 @@ local T = MiniTest.new_set({
 
 local eq = MiniTest.expect.equality
 
-T["sia.agents.registry"] = MiniTest.new_set()
+T["sia.agent.registry"] = MiniTest.new_set()
 
 -- ─── name_from_path ───────────────────────────────────────────────────────────
 
-T["sia.agents.registry"]["name_from_path strips base dir and .md extension"] = function()
+T["sia.agent.registry"]["name_from_path strips base dir and .md extension"] = function()
   child.lua([[
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     _G.r1 = registry._name_from_path("/cfg/sia/agents", "/cfg/sia/agents/coder.md")
     _G.r2 = registry._name_from_path("/cfg/sia/agents", "/cfg/sia/agents/code/review.md")
     _G.r3 = registry._name_from_path("/cfg/sia/agents/", "/cfg/sia/agents/coder.md")
@@ -31,7 +31,7 @@ end
 
 -- ─── parse_agent_file ─────────────────────────────────────────────────────────
 
-T["sia.agents.registry"]["parse_agent_file parses valid agent markdown"] = function()
+T["sia.agent.registry"]["parse_agent_file parses valid agent markdown"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -50,7 +50,7 @@ T["sia.agents.registry"]["parse_agent_file parses valid agent markdown"] = funct
       "Always write clean code.",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "coder")
     _G.agent = agent
     _G.err = err
@@ -72,7 +72,7 @@ T["sia.agents.registry"]["parse_agent_file parses valid agent markdown"] = funct
   eq("You are a helpful coding agent.", agent.system_prompt[2])
 end
 
-T["sia.agents.registry"]["parse_agent_file uses name from parameter"] = function()
+T["sia.agent.registry"]["parse_agent_file uses name from parameter"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/code", "p")
@@ -86,7 +86,7 @@ T["sia.agents.registry"]["parse_agent_file uses name from parameter"] = function
       "Review code carefully.",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "code/review")
     _G.agent = agent
     _G.err = err
@@ -101,7 +101,7 @@ T["sia.agents.registry"]["parse_agent_file uses name from parameter"] = function
   eq("code/review", agent.name)
 end
 
-T["sia.agents.registry"]["parse_agent_file defaults require_confirmation to true"] = function()
+T["sia.agent.registry"]["parse_agent_file defaults require_confirmation to true"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -115,7 +115,7 @@ T["sia.agents.registry"]["parse_agent_file defaults require_confirmation to true
       "System prompt here.",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "simple")
     _G.agent = agent
     _G.err = err
@@ -133,7 +133,7 @@ T["sia.agents.registry"]["parse_agent_file defaults require_confirmation to true
   eq(true, model_is_nil)
 end
 
-T["sia.agents.registry"]["parse_agent_file fails on missing frontmatter"] = function()
+T["sia.agent.registry"]["parse_agent_file fails on missing frontmatter"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -143,7 +143,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing frontmatter"] = func
       "Just content",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "bad")
     _G.agent = agent
     _G.err = err
@@ -155,7 +155,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing frontmatter"] = func
   eq("Invalid format: missing frontmatter", child.lua_get("_G.err"))
 end
 
-T["sia.agents.registry"]["parse_agent_file fails on missing system prompt"] = function()
+T["sia.agent.registry"]["parse_agent_file fails on missing system prompt"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -168,7 +168,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing system prompt"] = fu
       "---",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "no-prompt")
     _G.agent = agent
     _G.err = err
@@ -180,7 +180,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing system prompt"] = fu
   eq("Missing system prompt content", child.lua_get("_G.err"))
 end
 
-T["sia.agents.registry"]["parse_agent_file fails on missing description"] = function()
+T["sia.agent.registry"]["parse_agent_file fails on missing description"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -193,7 +193,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing description"] = func
       "System prompt.",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "no-desc")
     _G.agent = agent
     _G.err = err
@@ -205,7 +205,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing description"] = func
   eq("Missing required field: description", child.lua_get("_G.err"))
 end
 
-T["sia.agents.registry"]["parse_agent_file fails on missing tools"] = function()
+T["sia.agent.registry"]["parse_agent_file fails on missing tools"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -217,7 +217,7 @@ T["sia.agents.registry"]["parse_agent_file fails on missing tools"] = function()
       "System prompt.",
     }, filepath)
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local agent, err = registry._parse_agent_file(filepath, "no-tools")
     _G.agent = agent
     _G.err = err
@@ -232,13 +232,13 @@ T["sia.agents.registry"]["parse_agent_file fails on missing tools"] = function()
   )
 end
 
-T["sia.agents.registry"]["get_agents returns empty when no agents configured"] = function()
+T["sia.agent.registry"]["get_agents returns empty when no agents configured"] = function()
   child.lua([[
     local config = require("sia.config")
     local orig = config.get_local_config
     config.get_local_config = function() return nil end
 
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     _G.result = registry.get_agents()
 
     config.get_local_config = orig
@@ -247,10 +247,10 @@ T["sia.agents.registry"]["get_agents returns empty when no agents configured"] =
   eq({}, child.lua_get("_G.result"))
 end
 
-T["sia.agents.registry"]["get_agents loads global agents by name"] = function()
+T["sia.agent.registry"]["get_agents loads global agents by name"] = function()
   child.lua([[
     local config = require("sia.config")
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
 
@@ -295,10 +295,10 @@ T["sia.agents.registry"]["get_agents loads global agents by name"] = function()
   eq("Research agent", result.researcher.description)
 end
 
-T["sia.agents.registry"]["get_agents supports subdirectory names"] = function()
+T["sia.agent.registry"]["get_agents supports subdirectory names"] = function()
   child.lua([[
     local config = require("sia.config")
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir .. "/code", "p")
 
@@ -333,10 +333,10 @@ T["sia.agents.registry"]["get_agents supports subdirectory names"] = function()
   eq("Code review agent", result["code/review"].description)
 end
 
-T["sia.agents.registry"]["get_agents local overrides global"] = function()
+T["sia.agent.registry"]["get_agents local overrides global"] = function()
   child.lua([[
     local config = require("sia.config")
-    local registry = require("sia.agents.registry")
+    local registry = require("sia.agent.registry")
 
     local global_dir = vim.fn.tempname()
     vim.fn.mkdir(global_dir, "p")
@@ -388,7 +388,7 @@ end
 
 -- ─── utils.parse_yaml_frontmatter ─────────────────────────────────────────────
 
-T["sia.agents.registry"]["utils.parse_yaml_frontmatter handles boolean values"] = function()
+T["sia.agent.registry"]["utils.parse_yaml_frontmatter handles boolean values"] = function()
   child.lua([[
     local utils = require("sia.utils")
     local result = utils.parse_yaml_frontmatter({

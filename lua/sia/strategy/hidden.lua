@@ -14,11 +14,22 @@ HiddenStrategy.__index = HiddenStrategy
 --- @param conversation sia.Conversation
 --- @param options sia.config.Hidden
 --- @param cancellable sia.Cancellable?
+--- @return sia.HiddenStrategy
 function HiddenStrategy.new(buf, conversation, options, cancellable)
   local obj = setmetatable(Strategy.new(conversation, cancellable), HiddenStrategy)
   obj.buf = buf
   obj.options = options
-  return obj
+  return obj --[[@as sia.HiddenStrategy]]
+end
+
+--- @param content string
+function HiddenStrategy:submit(content)
+  if self.is_busy then
+    self.conversation:add_pending_user_message(content)
+  else
+    self.conversation:add_user_message(content)
+    require("sia.assistant").execute_strategy(self)
+  end
 end
 
 local function default_notify(msg)
@@ -56,6 +67,14 @@ function HiddenStrategy:on_tool_status(statuses)
     local message = status.summary or ("Using " .. (status.name or "tool") .. "...")
     notify(message)
   end
+end
+
+function HiddenStrategy:on_request_end()
+  self.conversation:attach_pending_user_messages()
+end
+
+function HiddenStrategy:on_round_end()
+  self.conversation:attach_pending_user_messages()
 end
 
 --- @param ctx sia.FinishContext

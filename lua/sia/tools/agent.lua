@@ -3,16 +3,19 @@ local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local START_REPLY = [[
-Async agent launched successfully.
-agentId: %d (This is an internal ID for your use, do not mention it to the user. Use
-this ID to retrieve results with agent(id=id, command="wait") when the agent finishes.
+Persistent agent launched successfully.
+agentId: %d (This is an internal ID for your use, do not mention it to the user.)
 The agent is currently working in the background. If you have other tasks you should
-continue working on them now. Wait to call agent(command="wait") until either:
-- If you want to check on the agent's progress - call agent(command="status") to get an
-  immediate update on the agent's status
-- If you run out of things to do and the agent is still running - call
-  agent(command="wait") to idle and wait for the agent's result (do not use
-  "wait" unless you completely run out of things to do as it will waste time).
+continue working on them now.
+
+When you need to interact with this agent again:
+- Call agent(command="status", id=id) to check progress or inspect the current state
+- Call agent(command="wait", id=id) to wait for the next unread reply
+- After the agent replies, call agent(command="send", id=id, message="...") to send a
+  follow-up message and continue the same session
+
+Do not call "wait" unless you have nothing else to do, as it will idle until the
+agent replies or yields for user input.
 If the user sends a message while you are waiting, the wait may yield early with a
 status update. You will then see the user's message in the conversation and should
 respond before calling wait or status again.
@@ -29,92 +32,89 @@ local function waiting_yield_message(agent)
   )
 end
 
+--- @param agent sia.agents.Agent
+--- @param callback fun(result:sia.ToolResult)
+local function return_pending_result(agent, callback)
+  local content = {
+    string.format("Agent %d (%s) replied:", agent.id, agent.name),
+    "",
+  }
+  local assistant_content = agent.conversation:get_last_assistant_content()
+  if assistant_content and assistant_content ~= "" then
+    table.insert(content, assistant_content)
+  else
+    table.insert(content, "(no assistant message)")
+  end
+  agent.status = "idle"
+  callback({
+    content = table.concat(content, "\n"),
+    summary = string.format("%s Agent %s replied", icons.agents, agent.name),
+  })
+end
+
 return tool_utils.new_tool({
   definition = {
     type = "function",
     name = "agent",
-    description = [[Launch a new agent to handle complex, multi-step tasks autonomously.]],
+    description = [[Manage persistent agent sessions for complex, multi-step subtasks.]],
     parameters = {
       command = {
         type = "string",
-        enum = { "start", "status", "wait" },
-        description = "The command to execute:  start (launch new agent), status (check agent status), wait (wait for agent completion)",
+        enum = { "start", "send", "status", "wait" },
+        description = "The command to execute: start a new agent, send a follow-up message, check status, or wait for the next reply",
       },
       agent = {
         type = "string",
         description = "The name of the agent type to launch (required for 'start' command)",
       },
-      task = {
-        type = "string",
-        description = "The task for the agent to perform (required for 'start' command)",
-      },
       id = {
         type = "integer",
-        description = "The ID of an already running agent (required for 'status' and 'wait' commands)",
+        description = "The ID of an existing agent session (required for 'send', 'status', and 'wait' commands)",
+      },
+      message = {
+        type = "string",
+        description = "A follow-up message to send to an existing agent session (required for 'start' and 'send')",
       },
     },
     required = { "command" },
   },
   summary = function(args)
-    if args.command == "start" then
+    if args.command == "list" then
+      return icons.agents .. " Listing agents"
+    elseif args.command == "start" then
       return string.format(
         icons.agents .. " Starting agent '%s'",
         args.agent or "unknown"
       )
+    elseif args.command == "send" then
+      return string.format(icons.agents .. " Messaging agent '%s'", tostring(args.id))
     elseif args.command == "wait" then
-      return string.format(icons.agents .. " Wating for agent '%s'", tostring(args.id))
+      return string.format(icons.agents .. " Waiting for agent '%s'", tostring(args.id))
+    elseif args.command == "status" then
+      return string.format(icons.agents .. " Checking agent '%s'", tostring(args.id))
     end
   end,
   read_only = true,
   instructions = string.format(
-    [[The task tool launches specialized agents (subprocesses) that
-autonomously handle complex tasks. Each agent type has specific capabilities and tools
-available to it.
+    [[The agent tool manages persistent agent sessions. Each agent type has specific
+capabilities and tools available to it.
 
-Use the `list` command to see what agent types and tools they have access to.
+Commands:
+- `agent(command="start", agent="name", message="...")` starts a new session
+- `agent(command="send", id=1, message="...")` sends a follow-up message to an existing session
+- `agent(command="status", id=1)` checks the current status and preview
+- `agent(command="wait", id=1)` waits for the next unread reply
 
-When using the task tool, you must specify a subagent_type parameter to select which agent type to use.
-
-When NOT to use the task tool:
-- If you want to read a specific file path, use the %s or grep tool instead of the task tool, to find the match more quickly
-- If you are searching for a specific class definition like "class Foo", use the grep tool instead, to find the match more quickly
-- If you are searching for code within a specific file or set of 2-3 files, use the %s tool instead of the task tool, to find the match more quickly
-- Other tasks that are not related to the agent descriptions above
-
-Usage notes:
-- Launch multiple agents concurrently whenever possible, to maximize performance; to do
-  that, use a single message with multiple tool uses
-- When the agent is done, it will return a single message back to you. The result
-  returned by the agent is not visible to the user. To show the user the result, you
-  should send a text message back to the user with a concise summary of the result.
-- Each agent invocation is stateless. You will not be able to send additional messages
-  to the agent, nor will the agent be able to communicate with you outside of its final
-  report. Therefore, your prompt should contain a highly detailed task description for the
-  agent to perform autonomously and you should specify exactly what information the agent
-  should return back to you in its final and only message to you.
-- Agents with "access to current context" can see the full conversation history before
-  the tool call. When using these agents, you can write concise prompts that reference
-  earlier context (e.g., "investigate the error discussed above") instead of repeating
-  information. The agent will receive all prior messages and understand the context.
-- The agent's outputs should generally be trusted
-- Clearly tell the agent whether you expect it to write code or just to do research
-  (search, file reads, web fetches, etc.), since it is not aware of the user's intent
-- If the agent description mentions that it should be used proactively, then you should
-  try your best to use it without the user having to ask for it first. Use your judgement.
-- If the user sends a message while you are waiting on `agent(command="wait")`, the wait
-  may yield early with a status update. Respond to the user first, then call `wait` or
-  `status` again when you are ready.
-- If the user specifies that they want you to run agents "in parallel", you MUST send a
-  single message with multiple tark tool use content blocks. For example, if
-  you need to launch both a code-reviewer agent and a test-runner agent in parallel, send
-  a single message with both tool calls.
-]],
+When NOT to use the agent tool:
+- If you want to read a specific file path, use the %s or grep tool instead
+- If you are searching for a specific class definition like "class Foo", use the grep tool instead
+- If you are searching within a specific file or a very small file set, use the %s tool instead
+- Other tasks that do not match a specialized agent]],
     tool_names.view,
     tool_names.view
   ),
 }, function(args, conversation, callback, opts)
-  local registry = require("sia.agents.registry")
-
+  local registry = require("sia.agent.registry")
   if args.command == "start" then
     if not args.agent then
       callback({
@@ -124,9 +124,9 @@ Usage notes:
       return
     end
 
-    if not args.task then
+    if not args.message then
       callback({
-        content = "Error: 'task' parameter is required for 'start' command",
+        content = "Error: 'message' parameter is required for 'start' command",
         ephemeral = true,
       })
       return
@@ -143,10 +143,10 @@ Usage notes:
     end
 
     local confirm_message =
-      string.format("Launch %s agent with task: %s", args.agent, args.task)
+      string.format("Launch %s agent with message: %s", args.agent, args.message)
     opts.user_input(confirm_message, {
       on_accept = function()
-        local agent = require("sia.agents").spawn(args.agent, args.task, conversation, {
+        local agent = conversation.agent_runtime:spawn(args.agent, args.message, {
           source = "tool",
         })
 
@@ -160,7 +160,87 @@ Usage notes:
 
         callback({
           content = string.format(START_REPLY, agent.id),
-          summary = string.format("%s Started agent '%s'", icons.started, args.agent),
+          summary = string.format("%s Started agent '%s'", icons.agents, args.agent),
+        })
+      end,
+    })
+  elseif args.command == "send" then
+    if not args.id then
+      callback({
+        content = "Error: 'id' parameter is required for 'send' command",
+        summary = icons.error .. " Missing id parameter",
+      })
+      return
+    end
+
+    if not args.message then
+      callback({
+        content = "Error: 'message' parameter is required for 'send' command",
+        summary = icons.error .. " Missing message parameter",
+      })
+      return
+    end
+
+    local agent = conversation.agent_runtime:get(args.id)
+    if not agent then
+      callback({
+        content = string.format(
+          "Error: Agent with ID %d not found in this conversation",
+          args.id
+        ),
+      })
+      return
+    end
+    if agent.status == "failed" then
+      callback({
+        content = string.format(
+          "Agent %d (%s) has failed and cannot accept new messages",
+          agent.id,
+          agent.name
+        ),
+      })
+      return
+    end
+    if agent.status == "pending" then
+      callback({
+        content = string.format(
+          "Agent %d (%s) already has a reply waiting. Call wait before sending more input.",
+          agent.id,
+          agent.name
+        ),
+      })
+      return
+    end
+
+    local was_running = agent.status == "running"
+    local confirm_message = string.format(
+      "Send follow-up to %s agent #%d: %s",
+      agent.name,
+      agent.id,
+      args.message
+    )
+
+    opts.user_input(confirm_message, {
+      on_accept = function()
+        conversation.agent_runtime:submit(args.id, args.message)
+        local content
+        if was_running then
+          content = string.format(
+            "Queued message for running agent %d (%s). Call status to inspect progress or wait for the next reply.",
+            agent.id,
+            agent.name
+          )
+        else
+          content = string.format(
+            "Sent message to agent %d (%s). Call status to inspect progress or wait for the next reply.",
+            agent.id,
+            agent.name
+          )
+        end
+
+        callback({
+          content = content,
+          summary = string.format("%s Updated agent %s", icons.started, agent.name),
         })
       end,
     })
@@ -173,7 +253,7 @@ Usage notes:
       return
     end
 
-    local agent = conversation:get_agent(args.id)
+    local agent = conversation.agent_runtime:get(args.id)
 
     if not agent then
       callback({
@@ -185,7 +265,6 @@ Usage notes:
       return
     end
 
-    --- @cast agent sia.agents.Agent
     callback({ content = agent:get_preview() })
   elseif args.command == "wait" then
     if not args.id then
@@ -193,7 +272,7 @@ Usage notes:
       return
     end
 
-    local agent = conversation:get_agent(args.id)
+    local agent = conversation.agent_runtime:get(args.id)
     if not agent then
       callback({
         content = string.format(
@@ -204,8 +283,38 @@ Usage notes:
       return
     end
 
+    if agent.status == "pending" then
+      return_pending_result(agent, callback)
+      return
+    end
+
+    if agent.status == "failed" then
+      callback({
+        content = string.format(
+          "Agent %d (%s) failed:\nError: %s",
+          args.id,
+          agent.name,
+          agent.error or "Unknown error"
+        ),
+        summary = string.format("%s Agent %d failed", icons.error, args.id),
+      })
+      return
+    end
+
+    if agent.status == "cancelled" then
+      callback({
+        content = string.format(
+          "Agent %d (%s) was cancelled by the user.",
+          args.id,
+          agent.name
+        ),
+        summary = string.format("%s Agent %d cancelled", icons.error, args.id),
+      })
+      return
+    end
+
     local function poll()
-      local current_agent = conversation:get_agent(args.id)
+      local current_agent = conversation.agent_runtime:get(args.id)
       if not current_agent then
         callback({
           content = "Error: Agent instance was removed",
@@ -213,24 +322,12 @@ Usage notes:
         return
       end
 
-      if current_agent.status == "completed" then
-        local content = {
-          string.format("Agent %d (%s) completed:", args.id, current_agent.name),
-          "",
-        }
-        if current_agent.result then
-          for _, line in ipairs(current_agent.result) do
-            table.insert(content, line)
-          end
-        end
-        callback({
-          content = table.concat(content, "\n"),
-          summary = string.format("%s Agent %s completed", icons.success, agent.name),
-        })
+      if current_agent.status == "pending" then
+        return_pending_result(current_agent, callback)
       elseif current_agent.status == "failed" then
         callback({
           content = string.format(
-            "Agent %d (%s) failed:\n% Error: %s",
+            "Agent %d (%s) failed:\nError: %s",
             args.id,
             current_agent.name,
             current_agent.error or "Unknown error"

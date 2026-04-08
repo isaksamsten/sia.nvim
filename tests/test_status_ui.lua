@@ -146,7 +146,7 @@ T["status ui"]["renders completed process output paths and tail lines"] = functi
     kill = function() end,
   }
 
-  local _, err = proc:stop()
+  local _, err = conv.process_runtime:stop(proc.id)
   eq(nil, err)
 
   local model, view = status._build(conv)
@@ -180,7 +180,7 @@ T["status ui"]["applies detail highlights for file paths"] = function()
     kill = function() end,
   }
 
-  local _, err = proc:stop()
+  local _, err = conv.process_runtime:stop(proc.id)
   eq(nil, err)
 
   local model, view = status._build(conv)
@@ -246,6 +246,7 @@ T["status ui"]["runs cancel and stop actions via trigger"] = function()
   -- Cancel agent
   view:trigger(agent_line, "cancel")
   eq(true, agent.cancellable.is_cancelled)
+  eq("cancelled", agent.status)
 
   -- Stop process
   view:trigger(bash_line, "stop")

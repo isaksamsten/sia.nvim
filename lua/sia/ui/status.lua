@@ -11,13 +11,36 @@ local PREVIEW_TAIL_LINES = 20
 local BUSY_INTERVAL = 300
 local IDLE_INTERVAL = 1000
 
+--- @param text string?
+--- @param n integer
+--- @return string[]
+local function tail_lines(text, n)
+  if not text or text == "" then
+    return {}
+  end
+
+  local lines = vim.split(text, "\n", { plain = true })
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+
+  if #lines <= n then
+    return lines
+  end
+
+  local result = {}
+  for i = #lines - n + 1, #lines do
+    table.insert(result, lines[i])
+  end
+  return result
+end
+
 local AGENT_STATUS = {
   running = { hl_group = "SiaStatusActive", icon = icons.started },
-  completed = { hl_group = "SiaStatusDone", icon = icons.success },
-  opened = { hl_group = "SiaStatusActive", icon = "󰁝" },
+  idle = { hl_group = "SiaStatusMuted", icon = "󰁝" },
+  pending = { hl_group = "SiaStatusDone", icon = icons.success },
   failed = { hl_group = "SiaStatusFailed", icon = icons.error },
   cancelled = { hl_group = "SiaStatusMuted", icon = icons.error },
-  attached = { hl_group = "SiaStatusMuted", icon = icons.success },
 }
 
 local BASH_STATUS = {
@@ -67,39 +90,6 @@ local function format_duration(seconds)
   end
 end
 
---- @param text string?
---- @param n integer
---- @return string[]
-local function tail_lines(text, n)
-  if not text or text == "" then
-    return {}
-  end
-
-  local lines = vim.split(text, "\n", { plain = true })
-  while #lines > 0 and lines[#lines] == "" do
-    table.remove(lines)
-  end
-
-  if #lines <= n then
-    return lines
-  end
-
-  local result = {}
-  for i = #lines - n + 1, #lines do
-    table.insert(result, lines[i])
-  end
-  return result
-end
-
---- @param path string?
---- @return string
-local function read_output_file(path)
-  if not path or vim.fn.filereadable(path) ~= 1 then
-    return ""
-  end
-  return table.concat(vim.fn.readfile(path), "\n")
-end
-
 --- @param command string
 --- @return string[]
 local function command_lines(command)
@@ -123,7 +113,7 @@ local function get_bash_preview_output(proc)
     return output.stdout or "", output.stderr or "", nil
   end
 
-  return read_output_file(proc.stdout_file), read_output_file(proc.stderr_file), nil
+  return proc:read_stdout(), proc:read_stderr(), nil
 end
 
 --- Add stdout/stderr tail blocks to a detail builder.
@@ -161,27 +151,30 @@ local function add_output_sections(d, stdout, stderr, empty_message)
 end
 
 --- @param agent sia.agents.Agent
+--- @param runtime sia.agents.Runtime
 --- @return sia.ui.RenderSpec
-local function render_agent(agent)
+local function render_agent(agent, runtime)
   local cfg = AGENT_STATUS[agent.status] or AGENT_STATUS.failed
 
-  local suffix
-  if agent.status == "running" then
-    if agent.progress and #agent.progress > 0 then
-      suffix = "· " .. agent.progress
-    end
-  elseif agent.usage and agent.usage.total and agent.usage.total > 0 then
-    suffix = string.format("(%s tokens)", format_tokens(agent.usage.total))
+  local suffix = ""
+  if agent.status == "running" and agent.progress and #agent.progress > 0 then
+    suffix = "· " .. agent.progress
   end
+
+  suffix = suffix
+    .. string.format(
+      "(%s tokens)",
+      format_tokens(agent.conversation:get_cumulative_usage().total)
+    )
 
   local actions = {}
   if agent.status == "running" then
     actions.cancel = function()
-      return agent:cancel()
+      return runtime:stop(agent.id)
     end
-  elseif agent:can_open() then
+  elseif runtime:can_open(agent.id) then
     actions.open = function()
-      require("sia.agents").open(agent.meta.parent, agent.id)
+      return runtime:open(agent.id)
     end
   end
 
@@ -194,9 +187,8 @@ local function render_agent(agent)
     actions = actions,
     details = function(d)
       d:block("Task:", command_lines(agent.task))
-
       if agent.status == "running" then
-        if agent.open then
+        if agent.view == "pending" then
           d:line("Will open as chat on completion.", "DiagnosticInfo")
         end
         if agent.cancellable and agent.cancellable.is_cancelled then
@@ -204,28 +196,33 @@ local function render_agent(agent)
         elseif not agent.progress or agent.progress == "" then
           d:line("Waiting for progress update.")
         end
-      elseif agent.status == "opened" then
+      elseif agent.status == "idle" and agent.view == "open" then
         d:line("Opened as interactive chat.", "DiagnosticInfo")
-        d:line("Use :SiaAgent complete to send result back.")
-      elseif agent.status == "completed" then
-        if agent.result and #agent.result > 0 then
-          d:block("Output:", agent.result)
-        else
-          d:line("No output returned.")
+      elseif agent.status == "pending" then
+        d:line("Result is ready to attach.", "DiagnosticInfo")
+        local assistant_content = agent.conversation:get_last_assistant_content()
+        if assistant_content then
+          local preview = vim.trim(assistant_content)
+          if #preview > 200 then
+            preview = preview:sub(1, 200) .. "…"
+          end
+          d:detail("Result", preview)
         end
+      elseif agent.status == "idle" then
+        d:line("Idle.", "NonText")
+      elseif agent.status == "cancelled" then
+        d:line("Cancelled.", "DiagnosticWarn")
       else
         d:detail("Error", agent.error, "DiagnosticError")
-        if agent.result and #agent.result > 0 then
-          d:block("Output:", agent.result)
-        end
       end
     end,
   }
 end
 
 --- @param proc sia.process.Process
+--- @param runtime sia.process.Runtime
 --- @return sia.ui.RenderSpec
-local function render_process(proc)
+local function render_process(proc, runtime)
   local status_name = BASH_STATUS[proc.status] and proc.status or "failed"
   local cfg = BASH_STATUS[status_name]
   local label = proc.description or proc.command
@@ -245,7 +242,7 @@ local function render_process(proc)
   local actions = {}
   if proc.status == "running" then
     actions.stop = function()
-      return proc:stop()
+      return runtime:stop(proc.id)
     end
   end
 
@@ -290,17 +287,17 @@ local function render_process(proc)
   }
 end
 
---- @param tag string
---- @param _id any
---- @param obj any
---- @return sia.ui.RenderSpec?
-local function render_entry(tag, _id, obj)
-  if tag == "agent" then
-    return render_agent(obj)
-  elseif tag == "bash" then
-    return render_process(obj)
+--- @param conversation sia.Conversation
+--- @return fun(tag: string, id: any, obj: any): sia.ui.RenderSpec?
+local function make_render_entry(conversation)
+  return function(tag, _id, obj)
+    if tag == "agent" then
+      return render_agent(obj, conversation.agent_runtime)
+    elseif tag == "bash" then
+      return render_process(obj, conversation.process_runtime)
+    end
+    return nil
   end
-  return nil
 end
 
 local sort_newest_first = function(a, b)
@@ -450,14 +447,18 @@ local function ensure_state(conversation)
     sources = {
       {
         tag = "agent",
-        items = conversation.agents,
+        items = function()
+          return conversation.agent_runtime:list()
+        end,
         id = function(o)
           return o.id
         end,
       },
       {
         tag = "bash",
-        items = conversation.bash_processes,
+        items = function()
+          return conversation.process_runtime:list()
+        end,
         id = function(o)
           return o.id
         end,
@@ -470,7 +471,7 @@ local function ensure_state(conversation)
     buf = -1,
     model = model,
     list_view = ListView.new(model, {
-      render = render_entry,
+      render = make_render_entry(conversation),
       empty_message = "No agents or processes",
     }),
   }
@@ -654,7 +655,7 @@ function M._build(conversation, opts)
       {
         tag = "agent",
         items = function()
-          return conversation.agents
+          return conversation.agent_runtime:list()
         end,
         id = function(o)
           return o.id
@@ -662,7 +663,9 @@ function M._build(conversation, opts)
       },
       {
         tag = "bash",
-        items = conversation.bash_processes,
+        items = function()
+          return conversation.process_runtime:list()
+        end,
         id = function(o)
           return o.id
         end,
@@ -673,7 +676,7 @@ function M._build(conversation, opts)
   local view = ListView.new(
     model,
     vim.tbl_extend("force", {
-      render = render_entry,
+      render = make_render_entry(conversation),
       empty_message = "No agents or processes",
     }, opts or {})
   )

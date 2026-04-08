@@ -8,7 +8,8 @@ local M = {}
 --- @class sia.ui.ModelSource
 --- @field tag string
 --- @field items any[]|fun():any[]
---- @field id fun(obj: any): any
+--- @field id fun(obj: any):any
+--- @field refresh (fun(old: any[]):boolean)?
 
 --- @class sia.ui.ListModelOpts
 --- @field sources sia.ui.ModelSource[]
@@ -18,7 +19,7 @@ local M = {}
 --- @field private sources sia.ui.ModelSource[]
 --- @field private sort_fn (fun(a: sia.ui.ModelEntry, b: sia.ui.ModelEntry): boolean)?
 --- @field private entries sia.ui.ModelEntry[]
---- @field private cache table<string, {length: integer, id: string}>
+--- @field private cache table<string, {items: any[], id: string}>
 local ListModel = {}
 ListModel.__index = ListModel
 
@@ -43,7 +44,12 @@ function ListModel:dirty()
   for _, src in ipairs(self.sources) do
     local items = type(src.items) == "table" and src.items or src.items()
     local cache = self.cache[src.tag]
-    if not cache or #items ~= cache.length or tostring(items) ~= cache.id then
+    if
+      not cache
+      or #items ~= #cache.items
+      or tostring(items) ~= cache.id
+      or (src.refresh and src.refresh(cache.items))
+    then
       return true
     end
   end
@@ -55,7 +61,7 @@ function ListModel:rebuild()
   self.entries = {}
   for _, src in ipairs(self.sources) do
     local items = type(src.items) == "table" and src.items or src.items() --[[@as any[]]
-    self.cache[src.tag] = { length = #items, id = tostring(items) }
+    self.cache[src.tag] = { items = items, id = tostring(items) }
     for _, obj in ipairs(items) do
       local id = src.id(obj)
       table.insert(self.entries, { tag = src.tag, id = id, obj = obj })

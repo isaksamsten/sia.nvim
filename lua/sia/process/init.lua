@@ -33,16 +33,16 @@ local function read_output_file(path)
   return table.concat(vim.fn.readfile(path), "\n")
 end
 
---- @param conversation_id integer?
+--- Write content to a persistent temp file.
+--- @param content string?
+--- @param conversation_id integer
 --- @param proc_id integer
 --- @param stream "stdout"|"stderr"
---- @param content string?
---- @return string?
-local function write_bash_output(content, conversation_id, proc_id, stream)
-  if not content or content == "" or not conversation_id then
+--- @return string? path the temp file path, or nil if content is empty
+local function write_output(content, conversation_id, proc_id, stream)
+  if not content or content == "" then
     return nil
   end
-
   local dir = require("sia.utils").dirs.bash(conversation_id)
   vim.fn.mkdir(dir, "p")
   local path = vim.fs.joinpath(dir, string.format("process_%d_%s", proc_id, stream))
@@ -50,6 +50,7 @@ local function write_bash_output(content, conversation_id, proc_id, stream)
   return path
 end
 
+--- Append stdout/stderr tail sections to a content table.
 --- @param content string[]
 --- @param stdout string?
 --- @param stderr string?
@@ -98,6 +99,34 @@ local function append_output_sections(
   end
 end
 
+--- @param proc sia.process.Process
+--- @param conversation_id integer
+--- @param result sia.ShellResult
+local function finalize(proc, conversation_id, result)
+  proc.completed_at = vim.uv.hrtime() / 1e9
+  proc.code = result.code or 0
+  proc.interrupted = result.interrupted
+
+  if result.interrupted then
+    proc.status = "timed_out"
+  elseif result.code == 143 then
+    proc.status = "timed_out"
+  else
+    proc.status = "completed"
+  end
+
+  proc.stdout_file = write_output(result.stdout, conversation_id, proc.id, "stdout")
+  proc.stderr_file = write_output(result.stderr, conversation_id, proc.id, "stderr")
+end
+
+--- @param proc sia.process.Process
+--- @param conversation_id integer
+--- @param captured { stdout: string?, stderr: string? }
+local function persist_stop_output(proc, conversation_id, captured)
+  proc.stdout_file = write_output(captured.stdout, conversation_id, proc.id, "stdout")
+  proc.stderr_file = write_output(captured.stderr, conversation_id, proc.id, "stderr")
+end
+
 --- @class sia.process.Process
 --- @field id integer
 --- @field command string
@@ -111,29 +140,37 @@ end
 --- @field completed_at number?
 --- @field cancellable sia.Cancellable
 --- @field detached_handle sia.DetachedProcess? handle for async/detached processes
---- @field _conversation_id integer?
-local M = {}
-M.__index = M
+local Process = {}
+Process.__index = Process
 
 --- @param id integer
 --- @param command string
 --- @param description string?
-function M.new(id, command, description)
+function Process.new(id, command, description)
   local instance = setmetatable({
     id = id,
     command = command,
     description = description,
     status = "running",
     started_at = vim.uv.hrtime() / 1e9,
-    -- _conversation_id = self.id,
     cancellable = { is_cancelled = false },
-  }, M)
+  }, Process)
   return instance
+end
+
+--- @return string
+function Process:read_stdout()
+  return read_output_file(self.stdout_file)
+end
+
+--- @return string
+function Process:read_stderr()
+  return read_output_file(self.stderr_file)
 end
 
 --- @param opts? { tail_lines?: integer }
 --- @return string
-function M:get_preview(opts)
+function Process:get_preview(opts)
   opts = opts or {}
   local tail_line_count = opts.tail_lines or STATUS_OUTPUT_TAIL_LINES
   local content = {
@@ -153,11 +190,11 @@ function M:get_preview(opts)
       return table.concat(content, "\n")
     end
 
-    local output = self.detached_handle.get_output()
+    local handle_output = self.detached_handle.get_output()
     append_output_sections(
       content,
-      output.stdout,
-      output.stderr,
+      handle_output.stdout,
+      handle_output.stderr,
       tail_line_count,
       "Recent",
       "No output yet."
@@ -178,8 +215,8 @@ function M:get_preview(opts)
 
   append_output_sections(
     content,
-    read_output_file(self.stdout_file),
-    read_output_file(self.stderr_file),
+    self:read_stdout(),
+    self:read_stderr(),
     tail_line_count,
     "Recent",
     "No output captured."
@@ -188,49 +225,141 @@ function M:get_preview(opts)
   return table.concat(content, "\n")
 end
 
---- @return string[]? content
+--- @class sia.process.Runtime
+--- @field shell sia.Shell?
+--- @field items sia.process.Process[]
+--- @field conversation_id integer
+--- @field shell_config { project_root: string, shell_opts: sia.config.Shell? }
+local Runtime = {}
+Runtime.__index = Runtime
+
+--- @private
+--- @return sia.Shell
+function Runtime:_ensure_shell()
+  if not self.shell then
+    self.shell = require("sia.process.shell").new(
+      self.shell_config.project_root,
+      self.shell_config.shell_opts
+    )
+  end
+  return self.shell
+end
+
+--- @param command string
+--- @param description string?
+--- @return sia.process.Process
+function Runtime:create(command, description)
+  local proc_id = #self.items + 1
+  local proc = Process.new(proc_id, command, description)
+  table.insert(self.items, proc)
+  return proc
+end
+
+--- @class sia.process.runtime.ExecOpts
+--- @field description string?
+--- @field timeout number?
+--- @field is_cancelled fun():boolean
+--- @field on_complete fun(proc: sia.process.Process)?
+
+--- @param command string
+--- @param opts sia.process.runtime.ExecOpts
+--- @return sia.process.Process
+function Runtime:exec(command, opts)
+  local shell = self:_ensure_shell()
+  local proc = self:create(command, opts.description)
+
+  shell:exec(command, opts.timeout or 120000, function()
+    return opts.is_cancelled() or (proc and proc.cancellable.is_cancelled)
+  end, function(result)
+    finalize(proc, self.conversation_id, result)
+    if opts.on_complete then
+      opts.on_complete(proc)
+    end
+  end)
+
+  return proc
+end
+
+--- @param command string
+--- @param opts sia.process.runtime.ExecOpts
+--- @return sia.process.Process
+function Runtime:exec_async(command, opts)
+  local shell = self:_ensure_shell()
+  local proc = self:create(command, opts.description)
+
+  local handle = shell:spawn_detached(
+    command,
+    opts.timeout,
+    opts.is_cancelled,
+    function(result)
+      if proc.status ~= "running" then
+        return
+      end
+      proc.detached_handle = nil
+      finalize(proc, self.conversation_id, result)
+      if opts.on_complete then
+        opts.on_complete(proc)
+      end
+    end
+  )
+  proc.detached_handle = handle
+
+  return proc
+end
+
+--- Stop a running process and persist its captured output.
+--- For async/detached processes, kills the process and persists output.
+--- For sync processes, requests cancellation (actual termination happens
+--- when the shell callback fires).
+--- @param id integer
+--- @return string[]? content formatted message
 --- @return string? err
-function M:stop()
-  if self.status ~= "running" then
+function Runtime:stop(id)
+  local proc = self:get(id)
+  if not proc then
+    return nil, string.format("No process with ID %d found", id)
+  end
+
+  if proc.status ~= "running" then
     return nil,
       string.format(
         "Process %d is already %s (exit code: %s)",
-        self.id,
-        self.status,
-        tostring(self.code)
+        proc.id,
+        proc.status,
+        tostring(proc.code)
       )
   end
 
-  self.completed_at = vim.uv.hrtime() / 1e9
-  local stdout, stderr
-  if not self.detached_handle then
-    self.cancellable.is_cancelled = true
-  else
-    local output = self.detached_handle.get_output()
-    stdout = output.stdout
-    stderr = output.stderr
-    self.detached_handle.kill()
-    self.detached_handle = nil
-
-    self.status = "failed"
-    self.code = 143
-    self.interrupted = true
-    self.stdout_file =
-      write_bash_output(output.stdout, self._conversation_id, self.id, "stdout")
-    self.stderr_file =
-      write_bash_output(output.stderr, self._conversation_id, self.id, "stderr")
+  if not proc.detached_handle then
+    proc.cancellable.is_cancelled = true
+    return {
+      string.format("Cancellation requested for process %d.", proc.id),
+      string.format("Command: %s", proc.command),
+      "The process will be terminated when the shell completes the current command.",
+    }
   end
 
+  local handle_output = proc.detached_handle.get_output()
+  proc.detached_handle.kill()
+  proc.detached_handle = nil
+
+  proc.completed_at = vim.uv.hrtime() / 1e9
+  proc.status = "failed"
+  proc.code = 143
+  proc.interrupted = true
+
+  persist_stop_output(proc, self.conversation_id, handle_output)
+
   local content = {
-    string.format("Process %d terminated.", self.id),
-    string.format("Command: %s", self.command),
-    string.format("Ran for: %.1fs", self.completed_at - self.started_at),
+    string.format("Process %d terminated.", proc.id),
+    string.format("Command: %s", proc.command),
+    string.format("Ran for: %.1fs", proc.completed_at - proc.started_at),
   }
 
   append_output_sections(
     content,
-    stdout,
-    stderr,
+    handle_output.stdout,
+    handle_output.stderr,
     STATUS_OUTPUT_TAIL_LINES,
     "Final",
     "No output captured."
@@ -239,4 +368,48 @@ function M:stop()
   return content
 end
 
-return M
+--- @return string
+function Runtime:pwd()
+  local shell = self:_ensure_shell()
+  return shell:pwd()
+end
+
+--- @param id integer
+--- @return sia.process.Process?
+function Runtime:get(id)
+  return self.items[id]
+end
+
+--- @return sia.process.Process[]
+function Runtime:list()
+  return self.items
+end
+
+function Runtime:destroy()
+  for _, proc in ipairs(self.items) do
+    if proc.status == "running" and proc.detached_handle then
+      proc.detached_handle.kill()
+    end
+  end
+
+  if self.shell then
+    self.shell:close()
+    self.shell = nil
+  end
+
+  self.items = {}
+end
+
+return {
+  --- @param conversation_id integer
+  --- @param shell_config { project_root: string, shell_opts: sia.config.Shell? }
+  --- @return sia.process.Runtime
+  new_runtime = function(conversation_id, shell_config)
+    return setmetatable({
+      shell = nil,
+      items = {},
+      conversation_id = conversation_id,
+      shell_config = shell_config,
+    }, Runtime)
+  end,
+}

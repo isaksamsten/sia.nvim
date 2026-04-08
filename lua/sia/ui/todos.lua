@@ -69,6 +69,9 @@ local function ensure_state(conversation)
         id = function(o)
           return o.id
         end,
+        refresh = function()
+          return true
+        end,
       },
     },
   })

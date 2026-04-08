@@ -357,13 +357,12 @@ end
 --- @field ignore_tool_confirm boolean?
 --- @field auto_confirm_tools table<string, integer>
 --- @field usage_history sia.Usage[]
---- @field agents table<integer, sia.agents.Agent>
---- @field bash_processes table<integer, sia.process.Process>
+--- @field process_runtime sia.process.Runtime
+--- @field agent_runtime sia.agents.Runtime
 --- @field logger sia.history.HistoryLogger
 --- @field tracker sia.Tracker
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
---- @field parent { agent_id: integer, conversation: sia.Conversation }?
 --- @field pending_user_messages sia.conversation.PendingUserMessage[]
 local Conversation = {}
 
@@ -398,8 +397,6 @@ function Conversation.new(opts)
     items = {},
   }
   obj.usage_history = {}
-  obj.agents = {}
-  obj.bash_processes = {}
   obj.pending_user_messages = {}
   obj.active_mode = nil
   obj.modes = opts.modes or {}
@@ -415,6 +412,11 @@ function Conversation.new(opts)
       end
     end
   end
+  obj.process_runtime = require("sia.process").new_runtime(obj.id, {
+    project_root = vim.fn.getcwd(),
+    shell_opts = require("sia.config").options.settings.shell,
+  })
+  obj.agent_runtime = require("sia.agent").new_runtime()
 
   return obj
 end
@@ -494,19 +496,17 @@ function Conversation:attach_pending_user_messages(turn_id)
   self.pending_user_messages = {}
 
   --- @type sia.Entry[]
-  local visible = {}
+  local new_entries = {}
   for _, message in ipairs(messages) do
     local entry = self:add_user_message(
       message.content,
       message.region,
       { hide = message.hide, turn_id = turn_id }
     )
-    if not message.hide then
-      table.insert(visible, entry)
-    end
+    table.insert(new_entries, entry)
   end
 
-  return visible
+  return new_entries
 end
 
 --- @param turn_id string
@@ -760,97 +760,32 @@ end
 
 function Conversation:destroy()
   self:untrack_messages()
-  for _, proc in ipairs(self.bash_processes) do
-    if proc.status == "running" and proc.detached_handle then
-      proc.detached_handle.kill()
-    end
-  end
-
-  if self.shell then
-    self.shell:close()
-    self.shell = nil
-  end
-
-  self.bash_processes = {}
-
-  -- If the conversation was opened from an agent
-  if self.parent then
-    local agent = self.parent.conversation:get_agent(self.parent.agent_id)
-    -- We have to make sure that the agent we opened from
-    -- no longer carries a reference to this conversation
-    if agent then
-      agent:close()
-    end
-  end
-
-  -- We also need to ensure that all agents that
-  -- have this conversation as parent are no longer opened.
-  -- Instead we mark them as cancelled
-  for _, agent in ipairs(self.agents) do
-    agent:close()
-  end
-
+  self.process_runtime:destroy()
+  self.agent_runtime:destroy()
   require("sia.ui.confirm").clear(self.id)
   self.logger:destroyed()
 end
 
---- @param name string
---- @param task string
---- @param source "tool"|"user"
---- @return sia.agents.Agent
-function Conversation:new_agent(name, task, source)
-  local task_id = #self.agents + 1
-  local agent = require("sia.agents").new(task_id, name, task, source)
-  table.insert(self.agents, agent)
-  return agent
-end
-
---- @return sia.agents.Agent
---- @param id integer
---- @return sia.agents.Agent?
-function Conversation:get_agent(id)
-  return self.agents[id]
-end
-
 --- @return boolean any_attached True if any agents were attached
 function Conversation:attach_completed_agents()
-  local attached_any = false
-  for _, agent in ipairs(self.agents) do
-    if agent.source == "user" and agent.status == "completed" and agent.result then
-      local content = {
-        string.format(
-          "Background agent '%s' (id: %d) completed with the following result:",
-          agent.name,
-          agent.id
-        ),
-        string.format("Task: %s", agent.task),
-        "",
-      }
-      vim.list_extend(content, agent.result)
-      self:add_user_message(table.concat(content, "\n"), nil, { hide = true })
-      agent.status = "attached"
-      agent.meta = nil
-      attached_any = true
-    end
+  local completed = self.agent_runtime:collect_completed()
+  for _, item in ipairs(completed) do
+    self:add_user_message(item.content, nil, { hide = true })
   end
-  return attached_any
+  return #completed > 0
 end
 
 --- @param command string
 --- @param description string?
 --- @return sia.process.Process
 function Conversation:new_bash_process(command, description)
-  local proc_id = #self.bash_processes + 1
-  local process = require("sia.process").new(proc_id, command, description)
-  process._conversation_id = self.id
-  table.insert(self.bash_processes, process)
-  return process
+  return self.process_runtime:create(command, description)
 end
 
 --- @param id integer
 --- @return sia.process.Process?
 function Conversation:get_bash_process(id)
-  return self.bash_processes[id]
+  return self.process_runtime:get(id)
 end
 
 --- Check if the new interval completely encompasses an existing interval
@@ -915,6 +850,20 @@ end
 --- @return sia.Entry message
 function Conversation:get_last_entry()
   return self.entries[#self.entries]
+end
+
+--- Get the content of the last assistant message (searching backwards).
+--- @return string? content The text content of the last assistant entry, or nil
+function Conversation:get_last_assistant_content()
+  for i = #self.entries, 1, -1 do
+    local entry = self.entries[i]
+    if not entry.dropped and entry.role == "assistant" and entry.content then
+      if type(entry.content) == "string" then
+        return entry.content
+      end
+    end
+  end
+  return nil
 end
 
 --- @param name string
@@ -1072,7 +1021,7 @@ end
 
 --- @param conversation sia.Conversation
 local function new_template_context(conversation)
-  local agents = require("sia.agents.registry").get_agents(false)
+  local agents = require("sia.agent.registry").get_agents(false)
   local agent_list = {}
   for _, agent in pairs(agents) do
     table.insert(agent_list, agent)

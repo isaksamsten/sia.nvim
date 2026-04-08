@@ -209,7 +209,7 @@ end
 
 T["tracked instances"] = MiniTest.new_set()
 
-T["tracked instances"]["agent instances expose preview and cancel methods"] = function()
+T["tracked instances"]["agent instances expose preview and runtime stop support"] = function()
   local conv = require("sia.conversation").new_conversation({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
@@ -224,9 +224,35 @@ T["tracked instances"]["agent instances expose preview and cancel methods"] = fu
   eq(true, string.find(preview, "Task: Inspect the repository") ~= nil)
   eq(true, string.find(preview, "Progress: Analyzing...") ~= nil)
 
-  agent:cancel()
+  conv.agent_runtime:stop(agent.id)
   eq(true, agent.cancellable.is_cancelled)
   eq("Cancellation requested", agent.progress)
+  eq("cancelled", agent.status)
+end
+
+T["tracked instances"]["agent instances accept follow-up messages through the runtime"] = function()
+  local conv = require("sia.conversation").new_conversation({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  local agent = conv:new_agent("code/review", "Inspect the repository")
+  local submitted = nil
+
+  agent.status = "idle"
+  agent.view = "closed"
+  agent.background = {
+    submit = function(message)
+      submitted = message
+    end,
+  }
+
+  local updated_agent, err = conv:submit_agent(agent.id, "Focus on tests")
+
+  eq(nil, err)
+  eq(agent, updated_agent)
+  eq("Focus on tests", submitted)
+  eq("running", agent.status)
+  eq("Focus on tests", agent.latest_message)
 end
 
 T["tracked instances"]["bash process instances expose preview and stop methods"] = function()
@@ -260,7 +286,8 @@ T["tracked instances"]["bash process instances expose preview and stop methods"]
   eq(true, string.find(preview, "beta") ~= nil)
   eq(true, string.find(preview, "warn") ~= nil)
 
-  local content, err = proc:stop()
+  -- Stop through the runtime so output is persisted
+  local content, err = conv.process_runtime:stop(proc.id)
   eq(nil, err)
   eq(true, killed)
   eq("failed", proc.status)
@@ -279,6 +306,44 @@ T["tracked instances"]["bash process instances expose preview and stop methods"]
   eq(true, string.find(completed_preview, "Interrupted: yes") ~= nil)
   eq(true, string.find(completed_preview, "beta") ~= nil)
   eq(true, string.find(completed_preview, "warn") ~= nil)
+end
+
+T["tracked instances"]["interactive agent completion is signaled through agent state"] = function()
+  local conv = require("sia.conversation").new_conversation({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  local child_conv = require("sia.conversation").new_conversation({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  local agent = conv:new_agent("code/review", "Inspect the repository")
+
+  child_conv:add_user_message("Inspect the repository")
+  local turn_id = child_conv:new_turn()
+  child_conv:add_assistant_message(turn_id, "Done")
+
+  -- agent.meta = { current = child_conv }
+  -- agent.status = "idle"
+  -- agent.open = true
+  --
+  -- eq(true, conv.agent_runtime:complete(child_conv))
+  -- eq("pending", agent.status)
+  -- eq(false, agent.open)
+  -- eq(nil, agent.meta)
+  -- eq("Done", table.concat(agent.result or {}, "\n"))
+  --
+  -- eq(true, conv:attach_completed_agents())
+  -- eq("idle", agent.status)
+  -- eq(1, #conv.entries)
+  -- eq(true, conv.entries[1].hide)
+  -- eq(
+  --   true,
+  --   string.find(
+  --     conv.entries[1].content,
+  --     "Background agent 'code/review' %(id: 1%) completed"
+  --   ) ~= nil
+  -- )
 end
 
 T["turn management"] = MiniTest.new_set()

@@ -28,36 +28,6 @@ local function waiting_yield_message(proc)
   )
 end
 
---- Ensure the shell is initialized for the conversation
---- @param conversation sia.Conversation
---- @return sia.Shell
-local function ensure_shell(conversation)
-  if not conversation.shell then
-    local Shell = require("sia.process.shell")
-    local config = require("sia.config")
-    local project_root = vim.fn.getcwd()
-    conversation.shell = Shell.new(project_root, config.options.settings.shell)
-  end
-  return conversation.shell
-end
-
---- Write full output to a persistent temp file in a named directory
---- @param content string
---- @param conversation_id integer
---- @param proc_id integer
---- @param stream string "stdout" or "stderr"
---- @return string? path the temp file path, or nil if content is empty
-local function write_temp_output(content, conversation_id, proc_id, stream)
-  if not content or content == "" then
-    return nil
-  end
-  local dir = require("sia.utils").dirs.bash(conversation_id)
-  vim.fn.mkdir(dir, "p")
-  local path = vim.fs.joinpath(dir, string.format("process_%d_%s", proc_id, stream))
-  vim.fn.writefile(vim.split(content, "\n", { plain = true }), path)
-  return path
-end
-
 --- Build a summary of the bash process result (for returning to the AI)
 --- @param proc sia.process.Process
 --- @param result sia.ShellResult
@@ -167,19 +137,11 @@ end
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 local function return_completed_result(proc, conversation, callback)
-  local shell = ensure_shell(conversation)
-  local cwd = shell:pwd()
+  local cwd = conversation.process_runtime:pwd()
 
   -- Read result from temp files
-  local stdout = ""
-  local stderr = ""
-
-  if proc.stdout_file and vim.fn.filereadable(proc.stdout_file) == 1 then
-    stdout = table.concat(vim.fn.readfile(proc.stdout_file), "\n")
-  end
-  if proc.stderr_file and vim.fn.filereadable(proc.stderr_file) == 1 then
-    stderr = table.concat(vim.fn.readfile(proc.stderr_file), "\n")
-  end
+  local stdout = proc:read_stdout()
+  local stderr = proc:read_stderr()
 
   local result = {
     stdout = stdout,
@@ -259,9 +221,10 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
             wait_timeout / 1000
           ),
         }
-        local preview = current_proc:get_preview()
-        for i = 5, #preview do
-          table.insert(content, preview[i])
+        local preview_lines =
+          vim.split(current_proc:get_preview(), "\n", { plain = true })
+        for i = 5, #preview_lines do
+          table.insert(content, preview_lines[i])
         end
         callback({ content = table.concat(content, "\n") })
         return
@@ -272,30 +235,6 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
   end
 
   poll()
-end
-
---- Handle completion of a shell command, updating the process record
---- @param proc sia.process.Process
---- @param result sia.ShellResult
---- @param conversation sia.Conversation
---- @param on_completed (fun(proc: sia.process.Process))?
-local function handle_completion(proc, result, conversation, on_completed)
-  proc.stdout_file =
-    write_temp_output(result.stdout, conversation.id, proc.id, "stdout")
-  proc.stderr_file =
-    write_temp_output(result.stderr, conversation.id, proc.id, "stderr")
-
-  proc.status = result.interrupted and "timed_out" or "completed"
-  if result.code ~= 0 and not result.interrupted then
-    proc.status = (result.code == 143) and "timed_out" or "completed"
-  end
-  proc.code = result.code or 0
-  proc.interrupted = result.interrupted
-  proc.completed_at = vim.uv.hrtime() / 1e9
-
-  if on_completed then
-    on_completed(proc)
-  end
 end
 
 --- Launch a command via shell and track it as a bash process.
@@ -317,6 +256,8 @@ local function launch_command(args, conversation, opts, on_started, on_completed
   local is_dangerous = utils.detect_dangerous_command_patterns(args.bash_command)
   local prompt = string.format("Execute: %s", args.bash_command)
 
+  local runtime = conversation.process_runtime
+
   opts.user_input(prompt, {
     level = is_dangerous and "warn" or "info",
     preview = function(preview_buf)
@@ -326,25 +267,25 @@ local function launch_command(args, conversation, opts, on_started, on_completed
       return #lines
     end,
     on_accept = function()
-      local shell = ensure_shell(conversation)
-      local proc = conversation:new_bash_process(args.bash_command, args.description)
-
-      if args.async then
-        local handle = shell:spawn_detached(args.bash_command, nil, function()
-          return opts and opts.cancellable.is_cancelled
-        end, function(result)
-          proc.detached_handle = nil
-          handle_completion(proc, result, conversation, on_completed)
-        end)
-        proc.detached_handle = handle
-      else
-        shell:exec(args.bash_command, args.timeout or 120000, function()
-          return opts and opts.cancellable.is_cancelled or proc.cancellable.is_cancelled
-        end, function(result)
-          handle_completion(proc, result, conversation, on_completed)
-        end)
+      local is_cancelled = function()
+        return opts and opts.cancellable.is_cancelled
       end
-
+      local proc
+      if args.async then
+        proc = runtime:exec_async(args.bash_command, {
+          description = args.description,
+          timeout = args.timeout,
+          is_cancelled = is_cancelled,
+          on_complete = on_completed,
+        })
+      else
+        proc = runtime:exec(args.bash_command, {
+          description = args.description,
+          timeout = args.timeout or 120000,
+          is_cancelled = is_cancelled,
+          on_complete = on_completed,
+        })
+      end
       on_started(proc)
     end,
   })
@@ -632,17 +573,7 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
-    local proc = conversation:get_bash_process(args.id)
-    if not proc then
-      callback({
-        content = string.format("Error: No process with ID %d found", args.id),
-        summary = icons.error .. " Failed to execute command",
-        kind = "failed",
-      })
-      return
-    end
-
-    local content, err = proc:stop()
+    local content, err = conversation.process_runtime:stop(args.id)
     if err then
       callback({
         content = err,
@@ -652,13 +583,14 @@ git commit -m "$(cat <<'EOF'
       return
     end
 
+    local proc = conversation:get_bash_process(args.id)
     callback({
       content = content and table.concat(content, "\n") or "Process is not running",
       summary = string.format(
         "%s Killed process %d: %s",
         icons.bash_kill,
         args.id,
-        format_command(proc.command)
+        format_command(proc and proc.command or "unknown")
       ),
     })
   else

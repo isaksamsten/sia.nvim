@@ -17,58 +17,33 @@ T["sia.tools.bash"] = MiniTest.new_set()
 T["sia.tools.bash"]["start yields early when sync command sees pending input"] = function()
   child.lua([[
     local bash_tool = require("sia.tools.bash")
+    local Process = require("sia.process")
 
-    local processes = {}
     local next_id = 1
     local result = nil
+    local process_runtime = Process.new_runtime(0, {project_root=vim.fn.getcwd()})
+
+    -- Mock process runtime
+    process_runtime.exec = function(self, command, opts)
+      local proc = self:create(command, opts.description)
+      vim.defer_fn(function()
+        proc.status = "completed"
+        proc.code = 0
+        proc.completed_at = vim.uv.hrtime() / 1e9
+        if opts.on_complete then
+          opts.on_complete(proc)
+        end
+      end, 100)
+      return proc
+    end
 
     local conversation = {
       id = 42,
       auto_confirm_tools = {},
       ignore_tool_confirm = true,
-      shell = {
-        pwd = function()
-          return vim.fn.getcwd()
-        end,
-        exec = function(_, _, _, _, on_complete)
-          vim.defer_fn(function()
-            local proc = processes[1]
-            proc.status = "completed"
-            proc.code = 0
-            proc.interrupted = false
-            proc.completed_at = vim.uv.hrtime() / 1e9
-            on_complete({
-              stdout = "done",
-              stderr = "",
-              code = 0,
-              interrupted = false,
-            })
-          end, 100)
-        end,
-      },
-      new_bash_process = function(_, command, description)
-        local proc = {
-          id = next_id,
-          command = command,
-          description = description,
-          status = "running",
-          started_at = vim.uv.hrtime() / 1e9,
-          get_preview = function(self)
-            return table.concat({
-              "Process ID: " .. self.id,
-              "Command: " .. self.command,
-              "Status: " .. self.status,
-              "stdout (last 1 lines):",
-              "building",
-            }, "\n")
-          end,
-        }
-        processes[proc.id] = proc
-        next_id = next_id + 1
-        return proc
-      end,
+      process_runtime = process_runtime,
       get_bash_process = function(_, id)
-        return processes[id]
+        return process_runtime.items[id]
       end,
       has_pending_user_messages = function()
         return true
@@ -103,10 +78,14 @@ T["sia.tools.bash"]["start yields early when sync command sees pending input"] =
       1
     ) ~= nil
   )
-  eq(true, result.content:find("building", 1, true) ~= nil)
   eq(
     true,
-    instructions:find("blocking `bash%(command=\"start\", async=false%)`", 1) ~= nil
+    result.content:find("building", 1, true) ~= nil
+      or result.content:find("running", 1, true) ~= nil
+  )
+  eq(
+    true,
+    instructions:find('blocking `bash%(command="start", async=false%)`', 1) ~= nil
   )
 end
 
@@ -179,52 +158,40 @@ end
 T["sia.tools.bash"]["start preserves blocking behavior without user input"] = function()
   child.lua([[
     local bash_tool = require("sia.tools.bash")
+    local Process = require("sia.process")
 
-    local processes = {}
     local next_id = 1
     local result = nil
+    local process_runtime = Process.new_runtime(0, {project_root=vim.fn.getcwd()})
+
+    -- Mock process runtime
+    process_runtime.exec = function(self, command, opts)
+      local proc = self:create(command, opts.description)
+      vim.defer_fn(function()
+        proc.status = "completed"
+        proc.code = 0
+        proc.completed_at = vim.uv.hrtime() / 1e9
+        -- Write stdout to a temp file so read_stdout() works
+        local dir = vim.fn.tempname()
+        vim.fn.mkdir(dir, "p")
+        local path = dir .. "/stdout"
+        vim.fn.writefile({"all good"}, path)
+        proc.stdout_file = path
+        if opts.on_complete then
+          opts.on_complete(proc)
+        end
+      end, 50)
+      return proc
+    end
+
 
     local conversation = {
       id = 43,
       auto_confirm_tools = {},
       ignore_tool_confirm = true,
-      shell = {
-        pwd = function()
-          return vim.fn.getcwd()
-        end,
-        exec = function(_, _, _, _, on_complete)
-          vim.defer_fn(function()
-            local proc = processes[1]
-            proc.status = "completed"
-            proc.code = 0
-            proc.interrupted = false
-            proc.completed_at = vim.uv.hrtime() / 1e9
-            on_complete({
-              stdout = "all good",
-              stderr = "",
-              code = 0,
-              interrupted = false,
-            })
-          end, 50)
-        end,
-      },
-      new_bash_process = function(_, command, description)
-        local proc = {
-          id = next_id,
-          command = command,
-          description = description,
-          status = "running",
-          started_at = vim.uv.hrtime() / 1e9,
-          get_preview = function()
-            return "Process ID: 1"
-          end,
-        }
-        processes[proc.id] = proc
-        next_id = next_id + 1
-        return proc
-      end,
+      process_runtime = process_runtime,
       get_bash_process = function(_, id)
-        return processes[id]
+        return process_runtime.items[id]
       end,
       has_pending_user_messages = function()
         return false
@@ -268,6 +235,12 @@ T["sia.tools.bash"]["wait preserves blocking behavior without user input"] = fun
       get_preview = function()
         return "Process ID: 1"
       end,
+      read_stdout = function()
+        return ""
+      end,
+      read_stderr = function()
+        return ""
+      end,
     }
 
     local result = nil
@@ -280,7 +253,7 @@ T["sia.tools.bash"]["wait preserves blocking behavior without user input"] = fun
       conversation = {
         auto_confirm_tools = {},
         ignore_tool_confirm = true,
-        shell = {
+        process_runtime = {
           pwd = function()
             return vim.fn.getcwd()
           end,

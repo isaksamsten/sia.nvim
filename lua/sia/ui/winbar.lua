@@ -107,7 +107,7 @@ local function agents_section(conversation)
   end
 
   local running = {}
-  for _, agent in ipairs(conversation.agents) do
+  for _, agent in ipairs(conversation.agent_runtime:list()) do
     if agent.status == "running" then
       table.insert(running, agent)
     end
@@ -139,7 +139,7 @@ local function bash_section(conversation)
   end
 
   local running = {}
-  for _, proc in ipairs(conversation.bash_processes) do
+  for _, proc in ipairs(conversation.process_runtime:list()) do
     if proc.status == "running" then
       table.insert(running, proc)
     end
@@ -289,13 +289,6 @@ end
 --- @param conversation sia.Conversation
 --- @return string
 local function id_section(conversation)
-  local parent = conversation.parent
-  if parent then
-    return section(
-      "DiagnosticInfo",
-      "#" .. conversation.id .. "↑" .. parent.conversation.id
-    )
-  end
   return section("NonText", "#" .. conversation.id)
 end
 

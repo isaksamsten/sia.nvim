@@ -183,6 +183,12 @@ end
 --- @class sia.Cancellable
 --- @field is_cancelled boolean
 
+--- @class sia.chat.Hooks
+--- @field on_cancel fun()?
+--- @field on_error fun()?
+--- @field on_finish fun()?
+--- @field on_close fun()?
+
 --- Create a new chat window.
 --- @class sia.ChatStrategy : sia.Strategy
 --- @field buf integer the split view buffer
@@ -193,6 +199,7 @@ end
 --- @field private assistant_extmark integer?
 --- @field private has_generated_name boolean
 --- @field private turn_renderer sia.chat.AssistantTurnRenderer?
+--- @field private hooks sia.chat.Hooks
 local ChatStrategy = setmetatable({}, { __index = Strategy })
 ChatStrategy.__index = ChatStrategy
 
@@ -202,9 +209,14 @@ ChatStrategy._buffers = {}
 --- @type table<integer, integer>
 ChatStrategy._order = {}
 
+--- @class sia.chat.NewChatOpts
+--- @field render_all boolean?
+--- @field destroy boolean?
+--- @field hooks sia.chat.Hooks?
+
 --- @param conversation sia.Conversation
 --- @param options sia.config.Chat
---- @param opts { render_all: boolean? }?
+--- @param opts sia.chat.NewChatOpts?
 --- @return sia.ChatStrategy
 function ChatStrategy.new(conversation, options, opts)
   opts = opts or {}
@@ -225,6 +237,7 @@ function ChatStrategy.new(conversation, options, opts)
   obj.buf = buf
   obj.turn_renderer = nil
   obj.options = options
+  obj.hooks = opts.hooks or {}
 
   --- @cast obj sia.ChatStrategy
   ChatStrategy._buffers[obj.buf] = obj
@@ -252,7 +265,7 @@ function ChatStrategy.new(conversation, options, opts)
     buffer = buf,
     once = true,
     callback = function(args)
-      ChatStrategy.remove(args.buf)
+      ChatStrategy.remove(args.buf, opts.destroy ~= false)
     end,
   })
 
@@ -378,10 +391,10 @@ function ChatStrategy:on_request_end()
     self:redraw()
   end
 
-  local visible = self.conversation:attach_pending_user_messages()
-  if visible and #visible > 1 then
+  local new_entries = self.conversation:attach_pending_user_messages()
+  if new_entries and #new_entries > 1 then
     self.canvas:render_messages(
-      vim.list_slice(visible, 1, #visible - 1),
+      vim.list_slice(new_entries, 1, #new_entries - 1),
       self.conversation.model.name
     )
   end
@@ -418,9 +431,9 @@ end
 
 --- @param turn_id string
 function ChatStrategy:on_round_end(turn_id)
-  local visible = self.conversation:attach_pending_user_messages()
-  if visible then
-    self.canvas:render_messages(visible, self.conversation.model.name)
+  local new_entries = self.conversation:attach_pending_user_messages()
+  if new_entries then
+    self.canvas:render_messages(new_entries, self.conversation.model.name)
     self.canvas:render_assistant_header(self.conversation.model.name)
   end
 end
@@ -457,6 +470,9 @@ function ChatStrategy:on_error(error)
     self.buf,
     { message = error or "Internal error", status = "error" }
   )
+  if self.hooks.on_error then
+    self.hooks.on_error()
+  end
 end
 
 function ChatStrategy:on_stream_start()
@@ -523,6 +539,9 @@ function ChatStrategy:on_cancel()
     message = "Operation cancelled",
     status = "warning",
   })
+  if self.hooks.on_cancel then
+    self.hooks.on_cancel()
+  end
 end
 
 --- @param statuses sia.engine.Status[]
@@ -631,6 +650,10 @@ function ChatStrategy:on_finish(ctx)
       self.has_generated_name = true
     end)
   end
+
+  if self.hooks.on_finish then
+    self.hooks.on_finish()
+  end
 end
 
 --- Get the ChatStrategy associated with buf
@@ -677,14 +700,20 @@ function ChatStrategy.all()
 end
 
 --- @param buf integer the buffer number
-function ChatStrategy.remove(buf)
+--- @param destroy_conversation boolean?
+function ChatStrategy.remove(buf, destroy_conversation)
   local strategy = ChatStrategy._buffers[buf]
   if strategy == nil then
     return
   end
 
   winbar.detach(buf)
-  strategy.conversation:destroy()
+  if destroy_conversation then
+    strategy.conversation:destroy()
+  end
+  if strategy.hooks.on_close then
+    strategy.hooks.on_close()
+  end
   ChatStrategy._buffers[buf] = nil
   for i, b in ipairs(ChatStrategy._order) do
     if b == buf then
