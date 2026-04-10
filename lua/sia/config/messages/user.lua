@@ -7,6 +7,7 @@ local function get_filename(buf, query)
   return vim.fn.fnamemodify(full_path, query or ":t")
 end
 
+--- @return string
 function M.environment()
   local os_name = vim.loop.os_uname().sysname
   local os_version = vim.loop.os_uname().release
@@ -64,6 +65,7 @@ operating through Neovim.]],
   )
 end
 
+--- @return string
 function M.file_tree()
   local command
   if vim.fn.executable("fd") == 1 then
