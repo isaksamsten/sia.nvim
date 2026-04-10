@@ -247,7 +247,7 @@ end
 
 --- @class sia.AssistantEntry : sia.BaseEntry
 --- @field role "assistant"
---- @field content sia.Content?
+--- @field content string?
 --- @field reasoning sia.Reasoning?
 local AssistantEntry = setmetatable({}, { __index = BaseEntry })
 AssistantEntry.__index = AssistantEntry
@@ -450,10 +450,6 @@ end
 --- @param opts {hide: boolean?, turn_id: string?}?
 --- @return sia.UserEntry
 function Conversation:add_user_message(content, region, opts)
-  if region then
-    self:outdate_overlapping_entries(region)
-  end
-
   opts = opts or {}
   local entry = UserEntry.new(content, region and self:track_region(region), opts.hide)
   table.insert(self.entries, entry)
@@ -531,9 +527,6 @@ end
 --- @param opts {summary: sia.ToolSummary?, ephemeral: boolean, region: sia.Region?}?
 function Conversation:add_tool_message(turn_id, tool, content, opts)
   opts = opts or {}
-  if opts.region and not opts.ephemeral then
-    self:outdate_overlapping_entries(opts.region)
-  end
   local tool_msg = ToolEntry.new(content, opts.summary, {
     turn_id = turn_id,
     tool_call = tool,
@@ -775,79 +768,17 @@ function Conversation:attach_completed_agents()
   return #completed > 0
 end
 
---- Check if the new interval completely encompasses an existing interval
---- Returns true if the existing interval should be masked (new is superset of existing)
---- @param new_region sia.Region
---- @param old_region sia.TrackedRegion
---- @return boolean
-local function is_region_overlapping(new_region, old_region)
-  if not old_region.idempotent then
-    return false
-  end
-
-  if new_region.buf ~= old_region.buf then
-    return false
-  end
-
-  if not new_region.pos then
-    return true
-  end
-
-  if not old_region.pos then
-    return false
-  end
-
-  local new_start, new_end = new_region.pos[1], new_region.pos[2]
-  local existing_start, existing_end = old_region.pos[1], old_region.pos[2]
-
-  return new_start <= existing_start and existing_end <= new_end
-end
-
---- @private
---- @param region sia.Region
-function Conversation:outdate_overlapping_entries(region)
-  if not region.idempotent then
-    return
-  end
-
-  local entries_to_remove = {}
-  for i, message in ipairs(self.entries) do
-    local old_region = message.region
-    if old_region and (message.role == "user" or message.role == "tool") then
-      if is_region_overlapping(region, old_region) then
-        entries_to_remove[i] = true
-      end
-    end
-  end
-
-  local is_overlap = false
-  local new_entries = {}
-  for i, entry in ipairs(self.entries) do
-    if entries_to_remove[i] then
-      is_overlap = true
-    else
-      new_entries[#new_entries + 1] = entry
-    end
-  end
-  if is_overlap then
-    self.entries = new_entries
-  end
-end
-
 --- @return sia.Entry message
 function Conversation:get_last_entry()
   return self.entries[#self.entries]
 end
 
---- Get the content of the last assistant message (searching backwards).
---- @return string? content The text content of the last assistant entry, or nil
+--- @return string?
 function Conversation:get_last_assistant_content()
   for i = #self.entries, 1, -1 do
     local entry = self.entries[i]
     if not entry.dropped and entry.role == "assistant" and entry.content then
-      if type(entry.content) == "string" then
-        return entry.content
-      end
+      return entry.content
     end
   end
   return nil
