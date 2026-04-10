@@ -369,6 +369,51 @@ local Conversation = {}
 
 Conversation.__index = Conversation
 Conversation.pending_messages = {}
+--- @param opts sia.NewConversationArgs
+--- @return sia.Conversation
+local function new_conversation(opts)
+  local obj = setmetatable({}, Conversation)
+  obj.workspace = opts.workspace or vim.fn.getcwd()
+  obj.model = opts.model
+  obj.id = new_conversation_id()
+  obj.name = string.format("**%d**", obj.id)
+  obj.uuid = require("sia.utils").new_uuid()
+  obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
+  if obj.model then
+    obj.logger:created(obj.model)
+  end
+  obj.tracker = require("sia.tracker").new()
+
+  obj.entries = {}
+  obj.ignore_tool_confirm = opts.ignore_tool_confirm
+  obj.auto_confirm_tools = {}
+  obj.todos = {
+    items = {},
+  }
+  obj.usage_history = {}
+  obj.pending_user_messages = {}
+  obj.active_mode = nil
+  obj.modes = opts.modes or {}
+  obj.tool_definitions = {}
+  obj.tool_implementation = {}
+  if opts.tools then
+    for _, tool in ipairs(opts.tools) do
+      local is_supported = tool.implementation.is_supported == nil
+        or tool.implementation.is_supported(obj.model)
+      if obj.tool_implementation[tool.definition.name] == nil and is_supported then
+        obj.tool_implementation[tool.definition.name] = tool.implementation
+        table.insert(obj.tool_definitions, tool.definition)
+      end
+    end
+  end
+  obj.process_runtime = require("sia.process").new_runtime(obj.id, {
+    project_root = obj.workspace,
+    shell_opts = require("sia.config").options.settings.shell,
+  })
+  obj.agent_runtime = require("sia.agent").new_runtime()
+
+  return obj
+end
 
 --- @private
 --- @param region sia.Region
@@ -865,7 +910,7 @@ local function fork_conversation(source, turn_id)
     return nil
   end
 
-  local conversation = Conversation.new({
+  local conversation = new_conversation({
     model = source.model,
     ignore_tool_confirm = source.ignore_tool_confirm,
     tools = source.tools, -- TODO: fix me!
@@ -931,7 +976,7 @@ local function from_action(action, invocation, overrides)
   local model = require("sia.model").resolve(
     overrides.model or action.model or config.options.settings.model
   )
-  local conversation = Conversation.new({
+  local conversation = new_conversation({
     model = model,
     tools = action.tools and action.tools(model),
     modes = action.modes,
@@ -981,51 +1026,7 @@ end
 --- @field workspace string?
 
 return {
-  --- @param opts sia.NewConversationArgs
-  --- @return sia.Conversation
-  new = function(opts)
-    local obj = setmetatable({}, Conversation)
-    obj.workspace = opts.workspace or vim.fn.getcwd()
-    obj.model = opts.model
-    obj.id = new_conversation_id()
-    obj.name = string.format("**%d**", obj.id)
-    obj.uuid = require("sia.utils").new_uuid()
-    obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
-    if obj.model then
-      obj.logger:created(obj.model)
-    end
-    obj.tracker = require("sia.tracker").new()
-
-    obj.entries = {}
-    obj.ignore_tool_confirm = opts.ignore_tool_confirm
-    obj.auto_confirm_tools = {}
-    obj.todos = {
-      items = {},
-    }
-    obj.usage_history = {}
-    obj.pending_user_messages = {}
-    obj.active_mode = nil
-    obj.modes = opts.modes or {}
-    obj.tool_definitions = {}
-    obj.tool_implementation = {}
-    if opts.tools then
-      for _, tool in ipairs(opts.tools) do
-        local is_supported = tool.implementation.is_supported == nil
-          or tool.implementation.is_supported(obj.model)
-        if obj.tool_implementation[tool.definition.name] == nil and is_supported then
-          obj.tool_implementation[tool.definition.name] = tool.implementation
-          table.insert(obj.tool_definitions, tool.definition)
-        end
-      end
-    end
-    obj.process_runtime = require("sia.process").new_runtime(obj.id, {
-      project_root = obj.workspace,
-      shell_opts = require("sia.config").options.settings.shell,
-    })
-    obj.agent_runtime = require("sia.agent").new_runtime()
-
-    return obj
-  end,
+  new = new_conversation,
   fork_conversation = fork_conversation,
   from_action = from_action,
 }
