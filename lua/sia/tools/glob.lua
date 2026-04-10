@@ -53,7 +53,7 @@ return tool_utils.new_tool({
     end
     return msg
   end,
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   local prompt
   if args.pattern then
     prompt = "Find files matching pattern: " .. args.pattern
@@ -97,7 +97,7 @@ return tool_utils.new_tool({
         table.insert(cmd, path)
       end
 
-      vim.system(cmd, { text = true, cwd = vim.fn.getcwd() }, function(obj)
+      vim.system(cmd, { text = true, cwd = conversation.workspace }, function(obj)
         if obj.code ~= 0 then
           local msg
           if pattern and path then

@@ -364,6 +364,7 @@ end
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
 --- @field pending_user_messages sia.conversation.PendingUserMessage[]
+--- @field workspace string
 local Conversation = {}
 
 Conversation.__index = Conversation

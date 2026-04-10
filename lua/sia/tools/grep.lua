@@ -263,7 +263,7 @@ Usage:
     end
     return conversation.auto_confirm_tools["grep"]
   end,
-}, function(args, _, callback, opts)
+}, function(args, conversation, callback, opts)
   local output_mode = args.output_mode or "content"
   local command = { "rg", "--no-heading", "--no-follow", "--color=never" }
 
@@ -316,7 +316,7 @@ Usage:
         text = true,
         stderr = false,
         timeout = 5000,
-        cwd = vim.fn.getcwd(),
+        cwd = conversation.workspace,
       }, function(obj)
         local lines = vim.split(obj.stdout, "\n", { trimempty = true })
 
