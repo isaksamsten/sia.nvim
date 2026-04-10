@@ -120,6 +120,8 @@ local function scan_agents_dir(base_dir, error_report)
     return agents
   end
 
+  -- NOTE: We glob both **/*.md and *.md because some systems' ** doesn't match
+  -- root-level files. The `seen` set below deduplicates.
   local files = vim.fn.glob(vim.fs.joinpath(base_dir, "**", "*.md"), false, true)
   for _, f in ipairs(vim.fn.glob(vim.fs.joinpath(base_dir, "*.md"), false, true)) do
     table.insert(files, f)

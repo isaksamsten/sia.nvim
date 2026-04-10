@@ -72,12 +72,22 @@ When the same agent name exists in multiple locations, the first match wins:
 1. The main conversation's AI uses the `agent` tool to list available agents.
 2. When it identifies a matching agent, it launches it with a task description.
 3. The agent runs in the background with its own conversation and tools.
-4. Progress updates appear in the status panel (press `a` in the chat buffer).
-5. Results are returned to the main conversation when the agent completes.
+4. The main assistant can keep the same agent session alive and send follow-up
+   messages after the first reply.
+5. Progress updates appear in the status panel (press `a` in the chat buffer).
+6. Results are returned to the main conversation when the agent completes a
+   round of work.
 
 You can also start agents manually with `:SiaAgent start <name> <task>` from
 any chat buffer. Manually started agents are attached as hidden context on
 your next message, so the assistant sees their results automatically.
+
+When an agent is launched through the `agent` tool, the assistant can keep that
+session alive across multiple rounds:
+
+- `agent(command="status", id=...)` checks progress
+- `agent(command="wait", id=...)` waits for the next unread reply
+- `agent(command="send", id=..., message="...")` sends follow-up instructions
 
 ## Interacting with Agents
 

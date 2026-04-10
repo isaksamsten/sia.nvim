@@ -279,10 +279,10 @@ function Runtime:close(id)
     return
   end
 
-  if agent.view == "open" then
+  if agent.view == "open" and agent.foreground then
     agent.view = "closed"
-    require("sia.strategy").remove_chat(agent.background.buf)
-    agent.background = nil
+    require("sia.strategy").remove_chat(agent.foreground.buf)
+    agent.foreground = nil
   end
 end
 
@@ -336,6 +336,9 @@ end
 
 function Runtime:destroy()
   for _, agent in ipairs(self.items) do
+    if agent.cancellable then
+      agent.cancellable.is_cancelled = true
+    end
     agent.background = nil
     agent.foreground = nil
     agent.conversation = nil

@@ -14,36 +14,22 @@ local eq = MiniTest.expect.equality
 
 T["sia.tools.agent"] = MiniTest.new_set()
 
-T["sia.tools.agent"]["list shows configured agents and their tools"] = function()
+T["sia.tools.agent"]["start errors when agent parameter missing"] = function()
   child.lua([[
-    package.loaded["sia.agent.registry"] = {
-      get_agents = function()
-        return {
-          ["code/review"] = {
-            description = "Review changes",
-            tools = { "grep", "view" },
-            interactive = false,
-          },
-          ["docs/writer"] = {
-            description = "Draft docs",
-            tools = { "view", "write" },
-            interactive = true,
-          },
-        }
-      end,
-    }
-
     local agent_tool = require("sia.tools.agent")
-    local result = nil
 
+    local result = nil
     agent_tool.implementation.execute({
-      command = "list",
+      command = "start",
     }, function(res)
       result = res
     end, {
       conversation = {
         auto_confirm_tools = {},
         ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function() return nil end,
+        },
       },
     })
 
@@ -51,12 +37,78 @@ T["sia.tools.agent"]["list shows configured agents and their tools"] = function(
   ]])
 
   local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Error: 'agent' parameter is required", 1, true) ~= nil)
+end
 
-  eq(true, result.content:find("Available agents:", 1, true) ~= nil)
-  eq(true, result.content:find("- code/review: Review changes", 1, true) ~= nil)
-  eq(true, result.content:find("tools: grep, view", 1, true) ~= nil)
-  eq(true, result.content:find("- docs/writer: Draft docs", 1, true) ~= nil)
-  eq(true, result.content:find("mode: interactive chat", 1, true) ~= nil)
+T["sia.tools.agent"]["status returns agent preview"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local mock_agent = {
+      id = 1,
+      name = "code/review",
+      status = "running",
+      get_preview = function(self)
+        return table.concat({
+          "Agent ID: " .. self.id,
+          "Agent: " .. self.name,
+          "Status: " .. self.status,
+          "Task: Inspect files",
+        }, "\n")
+      end,
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "status",
+      id = 1,
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 1 and mock_agent or nil
+          end,
+        },
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Agent ID: 1", 1, true) ~= nil)
+  eq(true, result.content:find("Agent: code/review", 1, true) ~= nil)
+  eq(true, result.content:find("Status: running", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["status errors on missing id"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "status",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function() return nil end,
+        },
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Error: 'id' parameter is required", 1, true) ~= nil)
 end
 
 T["sia.tools.agent"]["wait yields early when user has pending input"] = function()
@@ -88,9 +140,11 @@ T["sia.tools.agent"]["wait yields early when user has pending input"] = function
       conversation = {
         auto_confirm_tools = {},
         ignore_tool_confirm = true,
-        get_agent = function(_, id)
-          return id == 1 and current_agent or nil
-        end,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 1 and current_agent or nil
+          end,
+        },
         has_pending_user_messages = function()
           return true
         end,
@@ -118,8 +172,7 @@ T["sia.tools.agent"]["wait yields early when user has pending input"] = function
   eq(true, result.content:find("Progress: Analyzing", 1, true) ~= nil)
   eq(
     true,
-    instructions:find("If the user sends a message while you are waiting", 1, true)
-      ~= nil
+    instructions:find('agent%(command="wait", id=1%)', 1) ~= nil
   )
 end
 
@@ -135,7 +188,6 @@ T["sia.tools.agent"]["send forwards follow-up messages to an existing session"] 
       status = "idle",
       view = "closed",
       task = "Inspect files",
-      latest_message = "Inspect files",
     }
 
     agent_tool.implementation.execute({
@@ -151,15 +203,15 @@ T["sia.tools.agent"]["send forwards follow-up messages to an existing session"] 
       conversation = {
         auto_confirm_tools = {},
         ignore_tool_confirm = true,
-        get_agent = function(_, id)
-          return id == 2 and current_agent or nil
-        end,
-        submit_agent = function(_, id, message)
-          submitted = { id = id, message = message }
-          current_agent.status = "running"
-          current_agent.latest_message = message
-          return current_agent
-        end,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 2 and current_agent or nil
+          end,
+          submit = function(_, id, message)
+            submitted = { id = id, message = message }
+            current_agent.status = "running"
+          end,
+        },
       },
     })
 
@@ -190,7 +242,11 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
       id = 1,
       name = "code/review",
       status = "running",
-      result = nil,
+      conversation = {
+        get_last_assistant_content = function()
+          return "Review complete"
+        end,
+      },
       get_preview = function()
         return "Agent ID: 1"
       end,
@@ -206,9 +262,11 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
       conversation = {
         auto_confirm_tools = {},
         ignore_tool_confirm = true,
-        get_agent = function(_, id)
-          return id == 1 and current_agent or nil
-        end,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 1 and current_agent or nil
+          end,
+        },
         has_pending_user_messages = function()
           return false
         end,
@@ -217,7 +275,6 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
 
     vim.defer_fn(function()
       current_agent.status = "pending"
-      current_agent.result = { "Review complete" }
     end, 50)
 
     vim.wait(1500, function()
@@ -233,4 +290,138 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
   eq(true, result.content:find("Review complete", 1, true) ~= nil)
 end
 
+T["sia.tools.agent"]["wait returns failed agent error"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local current_agent = {
+      id = 3,
+      name = "searcher",
+      status = "failed",
+      error = "API timeout",
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+      id = 3,
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 3 and current_agent or nil
+          end,
+        },
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("failed", 1, true) ~= nil)
+  eq(true, result.content:find("API timeout", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["wait returns cancelled agent message"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local current_agent = {
+      id = 4,
+      name = "writer",
+      status = "cancelled",
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+      id = 4,
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 4 and current_agent or nil
+          end,
+        },
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("cancelled", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["send rejects message to failed agent"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local current_agent = {
+      id = 5,
+      name = "broken",
+      status = "failed",
+      error = "crashed",
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "send",
+      id = 5,
+      message = "try again",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id)
+            return id == 5 and current_agent or nil
+          end,
+        },
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("failed", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["unknown command returns error"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "invalid_command",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {},
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Unknown command", 1, true) ~= nil)
+end
+
 return T
+

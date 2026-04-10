@@ -94,7 +94,7 @@ tool that are useful for permission and risk patterns.
 | **webfetch**      | **url**                                         | URL to fetch                                                                  |
 | **view_image**    | **path**                                        | Image file path                                                               |
 | **view_document** | **path**                                        | Document file path                                                            |
-| **agent**         | **agent**, **task**                             | Agent name and task description                                               |
+| **agent**         | **command**, **agent**, **task**, **id**, **message** | Session command plus agent name, task, session ID, and follow-up message |
 
 ### Permission Examples
 
