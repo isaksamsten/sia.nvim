@@ -58,10 +58,8 @@ All paths MUST start with `/memories/`.
     return 1
   end,
 }, function(args, _, callback, opts)
-  local utils = require("sia.utils")
   local matcher = require("sia.matcher")
-  local root = utils.detect_project_root(vim.fn.getcwd())
-  local memory_dir = vim.fs.joinpath(root, ".sia", "memory")
+  local memory_dir = vim.fs.joinpath(vim.fn.getcwd(), ".sia", "memory")
 
   if vim.fn.isdirectory(memory_dir) == 0 then
     vim.fn.mkdir(memory_dir, "p")
