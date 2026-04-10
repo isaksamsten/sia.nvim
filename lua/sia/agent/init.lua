@@ -67,6 +67,7 @@ end
 
 --- @class sia.agents.SpawnOpts
 --- @field source "tool"|"user"? Source of the spawn (default: "user")
+--- @field workspace string?
 --- @field on_complete (fun(agent: sia.agents.Agent))? Called when the agent finishes (success or failure)
 --- @field on_progress (fun(agent: sia.agents.Agent, msg: string))? Called on progress updates
 
@@ -78,8 +79,9 @@ Runtime.__index = Runtime
 --- @private
 --- @param agent_def sia.agents.registry.Agent
 --- @param agent sia.agents.Agent
+--- @param workspace string?
 --- @return sia.Conversation
-local function create_conversation(agent_def, agent)
+local function create_conversation(agent_def, agent, workspace)
   local config = require("sia.config")
   local tools = require("sia.tools")
 
@@ -88,6 +90,7 @@ local function create_conversation(agent_def, agent)
       agent_def.model or config.options.settings.fast_model
     ),
     ignore_tool_confirm = agent_def.require_confirmation == false,
+    workspace = workspace,
     tools = vim
       .iter(agent_def.tools)
       :filter(function(tool)
@@ -100,7 +103,11 @@ local function create_conversation(agent_def, agent)
     temporary = true,
   })
 
-  conversation:add_system_message(table.concat(agent_def.system_prompt, "\n"))
+  local system_prompt = require("sia.template").render(
+    table.concat(agent_def.system_prompt, "\n"),
+    { workspace = workspace }
+  )
+  conversation:add_system_message(system_prompt)
   conversation:add_user_message(agent.task)
   return conversation
 end
@@ -157,7 +164,7 @@ function Runtime:spawn(agent_name, task, opts)
   end
 
   local agent = self:create(agent_name, task, opts.source or "user")
-  agent.conversation = create_conversation(agent_def, agent)
+  agent.conversation = create_conversation(agent_def, agent, opts.workspace)
   agent.view = agent_def.interactive and "pending" or "closed"
 
   agent.background = require("sia.strategy").new_hidden(nil, agent.conversation, {
