@@ -14,6 +14,16 @@ local function strip_ansi(s)
   return s
 end
 
+--- @param path string
+--- @return string
+local function read_temp_output(path)
+  if vim.fn.filereadable(path) ~= 1 then
+    return ""
+  end
+
+  return strip_ansi(table.concat(vim.fn.readfile(path), "\n"))
+end
+
 ---@class sia.Shell
 ---@field private process vim.SystemObj? vim.system process handle
 ---@field private cwd string current working directory
@@ -33,6 +43,11 @@ Shell.__index = Shell
 ---@field callback function callback to call with result
 ---@field is_cancelled (fun():boolean)?
 ---@field cancel_timer uv_timer_t?
+---@field is_active boolean whether the command currently owns the shell temp files
+
+---@class sia.shell.SyncProcess
+---@field get_output fun(): {stdout: string, stderr: string}
+---@field is_active fun(): boolean
 
 ---@class sia.ShellResult
 ---@field stdout string command output (may be truncated for large outputs)
@@ -51,6 +66,7 @@ local TEMP_PREFIX = vim.fn.tempname() .. "-sia-shell-"
 ---@param shell_opts sia.config.Shell? shell configuration
 ---@return sia.Shell
 function M.new(project_root, shell_opts)
+  --- @type sia.Shell
   local self = setmetatable({}, Shell)
 
   self.project_root = vim.fn.resolve(project_root)
@@ -153,17 +169,38 @@ end
 ---@param timeout number? timeout in milliseconds
 ---@param is_cancelled (fun():boolean)?
 ---@param callback function callback to call with result
+---@return sia.shell.SyncProcess
 function Shell:exec(command, timeout, is_cancelled, callback)
   timeout = math.min(timeout or DEFAULT_TIMEOUT, MAX_TIMEOUT)
 
-  table.insert(self.command_queue, {
+  local cmd = {
     command = command,
     timeout = timeout,
     callback = callback,
     is_cancelled = is_cancelled,
-  })
+    is_active = false,
+  }
+
+  table.insert(self.command_queue, cmd)
 
   self:_process_queue()
+
+  --- @type sia.shell.SyncProcess
+  return {
+    get_output = function()
+      if not cmd.is_active then
+        return { stdout = "", stderr = "" }
+      end
+
+      return {
+        stdout = read_temp_output(self.temp_files.stdout),
+        stderr = read_temp_output(self.temp_files.stderr),
+      }
+    end,
+    is_active = function()
+      return cmd.is_active
+    end,
+  }
 end
 
 ---@private
@@ -207,6 +244,7 @@ function Shell:_process_queue()
   end
 
   vim.schedule(function()
+    cmd.is_active = true
     self:_exec_internal(cmd.command, cmd.timeout, function(result)
       self.is_executing = false
 
@@ -228,6 +266,7 @@ function Shell:_process_queue()
       end
 
       cmd.callback(result)
+      cmd.is_active = false
 
       vim.schedule(function()
         self:_process_queue()
@@ -381,21 +420,18 @@ function Shell:_cleanup_temp_files()
   end
 end
 
----@class sia.DetachedProcess
+---@class sia.shell.AsyncProcess
 ---@field process vim.SystemObj
 ---@field kill fun()
----@field is_done fun(): boolean
+---@field is_active fun(): boolean
 ---@field get_output fun(): {stdout: string, stderr: string}
 
----Spawn an independent process that does not block the main shell queue.
----Inherits the current working directory but not shell-specific state (exports, aliases).
----The returned handle can be killed or polled for completion.
----@param command string the command to execute
----@param timeout number? timeout in milliseconds (nil = no timeout, capped at MAX_TIMEOUT if set)
+---@param command string
+---@param timeout number?
 ---@param is_cancelled (fun():boolean)?
----@param callback fun(result: sia.ShellResult) called when the process finishes
----@return sia.DetachedProcess
-function Shell:spawn_detached(command, timeout, is_cancelled, callback)
+---@param is_complete fun(result: sia.ShellResult)
+---@return sia.shell.AsyncProcess
+function Shell:spawn_detached(command, timeout, is_cancelled, is_complete)
   local cwd = self:pwd()
   -- Security: ensure cwd is within project root
   local resolved_cwd = vim.fn.resolve(cwd)
@@ -438,7 +474,7 @@ function Shell:spawn_detached(command, timeout, is_cancelled, callback)
     end
 
     vim.schedule(function()
-      callback({
+      is_complete({
         stdout = stdout,
         stderr = stderr,
         code = timed_out and 143 or (obj.code or 0),
@@ -447,21 +483,19 @@ function Shell:spawn_detached(command, timeout, is_cancelled, callback)
     end)
   end)
 
-  -- Timeout timer (only if timeout is specified)
   local timeout_timer
   if timeout then
     timeout_timer = vim.uv.new_timer()
     timeout_timer:start(timeout, 0, function()
       if not done then
         timed_out = true
-        proc:kill(15) -- SIGTERM
+        proc:kill(15)
       end
       pcall(timeout_timer.stop, timeout_timer)
       pcall(timeout_timer.close, timeout_timer)
     end)
   end
 
-  -- Cancellation polling
   local cancel_timer
   if is_cancelled then
     cancel_timer = vim.uv.new_timer()
@@ -478,6 +512,7 @@ function Shell:spawn_detached(command, timeout, is_cancelled, callback)
     end)
   end
 
+  --- @type sia.shell.AsyncProcess
   return {
     process = proc,
     kill = function()
@@ -486,8 +521,8 @@ function Shell:spawn_detached(command, timeout, is_cancelled, callback)
         proc:kill(15)
       end
     end,
-    is_done = function()
-      return done
+    is_active = function()
+      return not done
     end,
     get_output = function()
       -- Pump pending I/O so libuv delivers any buffered stdout/stderr

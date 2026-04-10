@@ -347,7 +347,7 @@ When NOT to use the agent tool:
         callback({
           content = waiting_yield_message(current_agent),
         })
-      elseif current_agent.status == "opened" then
+      elseif current_agent.view == "open" then
         vim.defer_fn(poll, 1000)
       else
         vim.defer_fn(poll, 500)

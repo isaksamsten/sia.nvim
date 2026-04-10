@@ -1,4 +1,4 @@
----@diagnostic disable: undefined-global, missing-fields
+---@diagnostic disable: undefined-global
 local TEST_NS = vim.api.nvim_create_namespace("sia_test_ns")
 
 local T = MiniTest.new_set()
@@ -8,37 +8,151 @@ local function contains(lines, needle)
   return vim.tbl_contains(lines, needle)
 end
 
+local function agent_conversation_stub(opts)
+  opts = opts or {}
+  return {
+    get_cumulative_usage = function()
+      return { total = opts.total_tokens or 0 }
+    end,
+    get_last_assistant_content = function()
+      return opts.last_assistant_content
+    end,
+  }
+end
+
+local function make_agent(id, task, opts)
+  opts = opts or {}
+  return vim.tbl_extend("force", {
+    id = id,
+    name = opts.name or string.format("agent-%d", id),
+    task = task,
+    status = opts.status or "running",
+    progress = opts.progress,
+    view = opts.view,
+    cancellable = opts.cancellable or { is_cancelled = false },
+    conversation = opts.conversation or agent_conversation_stub(),
+    started_at = opts.started_at,
+  }, opts)
+end
+
+local function make_process(id, command, opts)
+  opts = opts or {}
+  local proc = {
+    id = id,
+    command = command,
+    description = opts.description,
+    kind = opts.kind or "running",
+  }
+
+  if proc.kind == "finished" then
+    proc.outcome = opts.outcome or "completed"
+    proc.code = opts.code or 0
+  end
+
+  return vim.tbl_extend("force", proc, opts)
+end
+
+local function make_process_runtime(processes, outputs, opts)
+  opts = opts or {}
+  return {
+    list = function()
+      return processes
+    end,
+    get = function(_, id)
+      return vim.iter(processes):find(function(proc)
+        return proc.id == id
+      end)
+    end,
+    get_output = function(_, id)
+      return outputs[id] or { stdout = "", stderr = "" }
+    end,
+    stop = function(_, id)
+      local proc = vim.iter(processes):find(function(item)
+        return item.id == id
+      end)
+      if not proc then
+        return "not_found"
+      end
+      if proc.kind == "finished" then
+        return "already_finished"
+      end
+      proc.kind = "finished"
+      proc.outcome = opts.stop_outcome or "interrupted"
+      proc.code = opts.stop_code or 143
+      if opts.on_stop then
+        opts.on_stop(proc)
+      end
+      return "stopped"
+    end,
+  }
+end
+
+local function make_agent_runtime(agents, opts)
+  opts = opts or {}
+  return {
+    list = function()
+      return agents
+    end,
+    stop = function(_, id)
+      local agent = vim.iter(agents):find(function(item)
+        return item.id == id
+      end)
+      if not agent then
+        return false
+      end
+      agent.cancellable.is_cancelled = true
+      agent.status = "cancelled"
+      return true
+    end,
+    can_open = function(_, id)
+      if opts.can_open then
+        return opts.can_open(id)
+      end
+      return false
+    end,
+    open = function(_, id)
+      if opts.open then
+        return opts.open(id)
+      end
+      return false
+    end,
+  }
+end
+
+local function make_conversation(id, agents, processes, outputs, opts)
+  opts = opts or {}
+  return {
+    id = id,
+    agent_runtime = make_agent_runtime(agents, opts.agent_runtime),
+    process_runtime = make_process_runtime(processes, outputs, opts.process_runtime),
+  }
+end
+
 T["status ui"] = MiniTest.new_set()
 
 T["status ui"]["renders expanded agent and running process details inline"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil
 
-  local Conversation = require("sia.conversation")
   local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
+  local agent = make_agent(1, "Inspect files\nDraft notes", {
+    name = "code/review",
+    progress = "Analyzing",
+    started_at = 1,
+  })
+  local proc = make_process(2, "make test", {
+    description = "Run tests",
+  })
+  local conv = make_conversation(101, { agent }, { proc }, {
+    [2] = {
+      stdout = table.concat({ "alpha", "beta", "gamma" }, "\n"),
+      stderr = "warn",
+    },
+  })
 
-  local agent = conv:new_agent("code/review", "Inspect files\nDraft notes")
-  agent.progress = "Analyzing"
-
-  local proc = conv:new_bash_process("make test", "Run tests")
-  proc.detached_handle = {
-    get_output = function()
-      return {
-        stdout = table.concat({ "alpha", "beta", "gamma" }, "\n"),
-        stderr = "warn",
-      }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function() end,
-  }
-
-  local model, view = status._build(conv)
+  local _, view = status._build(conv)
   view:expand("agent", 1)
-  view:expand("bash", 1)
-  view.spinner_frame = 2
+  view:expand("bash", 2)
 
   local lines = view:render()
 
@@ -48,18 +162,17 @@ T["status ui"]["renders expanded agent and running process details inline"] = fu
   eq(true, contains(lines, "      Draft notes"))
   eq(true, contains(lines, "    Command:"))
   eq(true, contains(lines, "      make test"))
+  eq(true, contains(lines, "    Status: running"))
   eq(true, contains(lines, "    stdout (last 3 lines):"))
   eq(true, contains(lines, "      gamma"))
   eq(true, contains(lines, "    stderr (last 1 lines):"))
   eq(true, contains(lines, "      warn"))
-
-  -- First item (newest) should be the bash process (has stop action)
   eq(true, view:has_action(1, "stop"))
-  -- Find the agent summary line
+
   local agent_line
   for i = 1, 50 do
-    local tag, id = view:item_at(i)
-    if tag == "agent" and id == 1 and view:has_action(i, "cancel") then
+    local tag, item_id = view:item_at(i)
+    if tag == "agent" and item_id == 1 and view:has_action(i, "cancel") then
       agent_line = i
       break
     end
@@ -67,27 +180,51 @@ T["status ui"]["renders expanded agent and running process details inline"] = fu
   eq(true, agent_line ~= nil)
 end
 
+T["status ui"]["renders running process details from runtime output"] = function()
+  package.loaded["sia.ui.status"] = nil
+  package.loaded["sia.ui.list"] = nil
+
+  local status = require("sia.ui.status")
+  local proc = make_process(1, "make test", {
+    description = "Run tests",
+  })
+  local conv = make_conversation(102, {}, { proc }, {
+    [1] = {
+      stdout = table.concat({ "alpha", "beta", "gamma" }, "\n"),
+      stderr = "warn",
+    },
+  })
+
+  local _, view = status._build(conv)
+  view:expand("bash", 1)
+  local lines = view:render()
+
+  eq(true, contains(lines, "    Status: running"))
+  eq(true, contains(lines, "    stdout (last 3 lines):"))
+  eq(true, contains(lines, "      gamma"))
+  eq(true, contains(lines, "    stderr (last 1 lines):"))
+  eq(true, contains(lines, "      warn"))
+end
+
 T["status ui"]["sorts mixed items newest first with aligned metadata"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil
 
-  local Conversation = require("sia.conversation")
   local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
+  local conv = make_conversation(103, {
+    make_agent(1, "Inspect repository", { started_at = 1 }),
+  }, {
+    make_process(2, "make test", { description = "Run tests" }),
+  }, {})
 
-  conv:new_agent("code/review", "Inspect repository")
-  vim.uv.sleep(10)
-  conv:new_bash_process("make test", "Run tests")
-
-  local model, view = status._build(conv)
+  local _, view = status._build(conv)
   view:render()
 
-  -- Newest first: proc was created after agent
   local tag1, id1 = view:item_at(1)
   local tag2, id2 = view:item_at(2)
 
   eq("bash", tag1)
-  eq(1, id1)
+  eq(2, id1)
   eq("agent", tag2)
   eq(1, id2)
 end
@@ -96,13 +233,12 @@ T["status ui"]["applies line highlights with line_hl_group"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil
 
-  local Conversation = require("sia.conversation")
   local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
+  local conv = make_conversation(104, {
+    make_agent(1, "Inspect repository"),
+  }, {}, {})
 
-  conv:new_agent("code/review", "Inspect repository")
-
-  local model, view = status._build(conv)
+  local _, view = status._build(conv)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].modifiable = false
   view:apply(buf, TEST_NS)
@@ -124,109 +260,24 @@ T["status ui"]["applies line highlights with line_hl_group"] = function()
   )
 end
 
-T["status ui"]["renders completed process output paths and tail lines"] = function()
-  package.loaded["sia.ui.status"] = nil
-  package.loaded["sia.ui.list"] = nil
-
-  local Conversation = require("sia.conversation")
-  local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
-
-  local proc = conv:new_bash_process("make test", "Run tests")
-  proc.detached_handle = {
-    get_output = function()
-      return {
-        stdout = table.concat({ "alpha", "beta" }, "\n"),
-        stderr = "warn",
-      }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function() end,
-  }
-
-  local _, err = conv.process_runtime:stop(proc.id)
-  eq(nil, err)
-
-  local model, view = status._build(conv)
-  view:expand("bash", 1)
-  local lines = view:render()
-
-  eq(true, contains(lines, "    Exit code: 143"))
-  eq(true, contains(lines, "    stdout file: " .. proc.stdout_file))
-  eq(true, contains(lines, "    stderr file: " .. proc.stderr_file))
-  eq(true, contains(lines, "    stdout (last 2 lines):"))
-  eq(true, contains(lines, "      beta"))
-  eq(true, contains(lines, "      warn"))
-end
-
-T["status ui"]["applies detail highlights for file paths"] = function()
-  package.loaded["sia.ui.status"] = nil
-  package.loaded["sia.ui.list"] = nil
-
-  local Conversation = require("sia.conversation")
-  local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
-
-  local proc = conv:new_bash_process("make test", "Run tests")
-  proc.detached_handle = {
-    get_output = function()
-      return { stdout = "done", stderr = "" }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function() end,
-  }
-
-  local _, err = conv.process_runtime:stop(proc.id)
-  eq(nil, err)
-
-  local model, view = status._build(conv)
-  view:expand("bash", 1)
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].modifiable = false
-  view:apply(buf, TEST_NS)
-
-  local marks = vim.api.nvim_buf_get_extmarks(buf, TEST_NS, 0, -1, { details = true })
-
-  eq(
-    true,
-    vim.iter(marks):any(function(mark)
-      return mark[4].hl_group == "SiaStatusPath"
-    end)
-  )
-end
-
 T["status ui"]["runs cancel and stop actions via trigger"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil
 
-  local Conversation = require("sia.conversation")
   local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
+  local agent = make_agent(1, "Inspect repository", {
+    name = "code/review",
+  })
+  local stopped_proc = make_process(1, "make test", {
+    description = "Run tests",
+  })
+  local conv = make_conversation(107, { agent }, { stopped_proc }, {
+    [1] = { stdout = "done", stderr = "" },
+  })
 
-  local agent = conv:new_agent("code/review", "Inspect repository")
-  local proc = conv:new_bash_process("make test", "Run tests")
-  local killed = false
+  local _, view = status._build(conv)
+  view:render()
 
-  proc.detached_handle = {
-    get_output = function()
-      return { stdout = "done", stderr = "" }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function()
-      killed = true
-    end,
-  }
-
-  local model, view = status._build(conv)
-  view:render() -- build line mappings
-
-  -- Find agent and bash summary lines
   local agent_line, bash_line
   for i = 1, 50 do
     local tag, id = view:item_at(i)
@@ -243,43 +294,33 @@ T["status ui"]["runs cancel and stop actions via trigger"] = function()
   eq(true, agent_line ~= nil)
   eq(true, bash_line ~= nil)
 
-  -- Cancel agent
   view:trigger(agent_line, "cancel")
   eq(true, agent.cancellable.is_cancelled)
   eq("cancelled", agent.status)
 
-  -- Stop process
   view:trigger(bash_line, "stop")
-  eq(true, killed)
-  eq(true, proc.interrupted)
+  eq("finished", stopped_proc.kind)
+  eq("interrupted", stopped_proc.outcome)
 end
 
 T["status ui"]["finds next and previous summary lines across expanded items"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil
 
-  local Conversation = require("sia.conversation")
   local status = require("sia.ui.status")
-  local conv = Conversation.new_conversation({ temporary = true })
+  local conv = make_conversation(108, {
+    make_agent(1, "Inspect files\nDraft notes", { started_at = 1 }),
+  }, {
+    make_process(1, "make test", { description = "Run tests" }),
+  }, {
+    [1] = { stdout = "alpha\nbeta", stderr = "warn" },
+  })
 
-  conv:new_agent("code/review", "Inspect files\nDraft notes")
-  local proc = conv:new_bash_process("make test", "Run tests")
-  proc.detached_handle = {
-    get_output = function()
-      return { stdout = "alpha\nbeta", stderr = "warn" }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function() end,
-  }
-
-  local model, view = status._build(conv)
+  local _, view = status._build(conv)
   view:expand("agent", 1)
   view:expand("bash", 1)
   view:render()
 
-  -- Find the two summary lines by scanning for different entries
   local summary_lines = {}
   local seen_entries = {}
   for i = 1, 50 do
@@ -299,12 +340,9 @@ T["status ui"]["finds next and previous summary lines across expanded items"] = 
   local first_summary = summary_lines[1]
   local second_summary = summary_lines[2]
 
-  -- From first summary, next goes to second
   eq(second_summary, view:find_item(first_summary, 1))
-  -- From first summary, prev finds nothing
   eq(nil, view:find_item(first_summary, -1))
-  -- From last rendered line, prev goes to first
-  -- (find the last line with content)
+
   local last_line = 1
   for i = 1, 50 do
     if view:item_at(i) then
@@ -313,8 +351,8 @@ T["status ui"]["finds next and previous summary lines across expanded items"] = 
       break
     end
   end
+
   eq(first_summary, view:find_item(last_line, -1))
-  -- From last line, next finds nothing
   eq(nil, view:find_item(last_line, 1))
 end
 

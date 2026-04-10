@@ -775,19 +775,6 @@ function Conversation:attach_completed_agents()
   return #completed > 0
 end
 
---- @param command string
---- @param description string?
---- @return sia.process.Process
-function Conversation:new_bash_process(command, description)
-  return self.process_runtime:create(command, description)
-end
-
---- @param id integer
---- @return sia.process.Process?
-function Conversation:get_bash_process(id)
-  return self.process_runtime:get(id)
-end
-
 --- Check if the new interval completely encompasses an existing interval
 --- Returns true if the existing interval should be masked (new is superset of existing)
 --- @param new_region sia.Region

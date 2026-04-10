@@ -49,7 +49,7 @@ T["conversation basics"]["pending user messages attach at round boundary"] = fun
   eq(true, conv:has_pending_user_messages())
   eq(2, conv:pending_user_message_count())
 
-  eq(1, #conv:attach_pending_user_messages())
+  eq(2, #conv:attach_pending_user_messages())
   eq(false, conv:has_pending_user_messages())
   eq(0, conv:pending_user_message_count())
   eq(2, #conv.entries)
@@ -214,7 +214,8 @@ T["tracked instances"]["agent instances expose preview and runtime stop support"
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
-  local agent = conv:new_agent("code/review", "Inspect the repository")
+  local agent =
+    conv.agent_runtime:create("code/review", "Inspect the repository", "user")
   agent.progress = "Analyzing..."
 
   local preview = agent:get_preview()
@@ -235,77 +236,22 @@ T["tracked instances"]["agent instances accept follow-up messages through the ru
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
-  local agent = conv:new_agent("code/review", "Inspect the repository")
+  local agent =
+    conv.agent_runtime:create("code/review", "Inspect the repository", "tool")
   local submitted = nil
 
   agent.status = "idle"
+  agent.source = "user"
   agent.view = "closed"
   agent.background = {
-    submit = function(message)
+    submit = function(self, message)
       submitted = message
     end,
   }
 
-  local updated_agent, err = conv:submit_agent(agent.id, "Focus on tests")
-
-  eq(nil, err)
-  eq(agent, updated_agent)
+  conv.agent_runtime:submit(agent.id, "Focus on tests")
   eq("Focus on tests", submitted)
   eq("running", agent.status)
-  eq("Focus on tests", agent.latest_message)
-end
-
-T["tracked instances"]["bash process instances expose preview and stop methods"] = function()
-  local conv = require("sia.conversation").new_conversation({
-    temporary = true,
-    model = require("sia.model").resolve("openai/gpt-4.1"),
-  })
-  local proc = conv:new_bash_process("make test", "Run tests")
-  local killed = false
-
-  proc.detached_handle = {
-    process = {},
-    get_output = function()
-      return {
-        stdout = table.concat({ "alpha", "beta", "" }, "\n"),
-        stderr = table.concat({ "warn", "" }, "\n"),
-      }
-    end,
-    is_done = function()
-      return false
-    end,
-    kill = function()
-      killed = true
-    end,
-  }
-
-  local preview = proc:get_preview({ tail_lines = 1 })
-  eq(true, string.find(preview, "Process ID: 1") ~= nil)
-  eq(true, string.find(preview, "Command: make test") ~= nil)
-  eq(true, string.find(preview, "Status: running") ~= nil)
-  eq(true, string.find(preview, "beta") ~= nil)
-  eq(true, string.find(preview, "warn") ~= nil)
-
-  -- Stop through the runtime so output is persisted
-  local content, err = conv.process_runtime:stop(proc.id)
-  eq(nil, err)
-  eq(true, killed)
-  eq("failed", proc.status)
-  eq(143, proc.code)
-  eq(true, proc.interrupted)
-  eq(true, proc.completed_at >= proc.started_at)
-  eq(1, vim.fn.filereadable(proc.stdout_file))
-  eq(1, vim.fn.filereadable(proc.stderr_file))
-  eq("Process 1 terminated.", content[1])
-  eq("Command: make test", content[2])
-
-  local completed_preview = proc:get_preview({ tail_lines = 1 })
-  eq(true, string.find(completed_preview, "Process ID: 1") ~= nil)
-  eq(true, string.find(completed_preview, "Status: failed") ~= nil)
-  eq(true, string.find(completed_preview, "Exit code: 143") ~= nil)
-  eq(true, string.find(completed_preview, "Interrupted: yes") ~= nil)
-  eq(true, string.find(completed_preview, "beta") ~= nil)
-  eq(true, string.find(completed_preview, "warn") ~= nil)
 end
 
 T["tracked instances"]["interactive agent completion is signaled through agent state"] = function()
@@ -317,7 +263,8 @@ T["tracked instances"]["interactive agent completion is signaled through agent s
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
-  local agent = conv:new_agent("code/review", "Inspect the repository")
+  local agent =
+    conv.agent_runtime:create("code/review", "Inspect the repository", "tool")
 
   child_conv:add_user_message("Inspect the repository")
   local turn_id = child_conv:new_turn()

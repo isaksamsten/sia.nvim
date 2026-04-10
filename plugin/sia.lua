@@ -470,7 +470,7 @@ end, {
     local completions = {}
     local seen = {}
     for _, msg in ipairs(chat.conversation.entries) do
-      if msg.turn_id and not seen[msg.turn_id] and msg.status ~= "dropped" then
+      if msg.turn_id and not seen[msg.turn_id] and not msg.dropped then
         seen[msg.turn_id] = true
         if vim.startswith(msg.turn_id, arg_lead) then
           table.insert(completions, msg.turn_id)
@@ -650,24 +650,17 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
       return
     end
 
-    local proc = chat.conversation:get_bash_process(id)
+    local proc = chat.conversation.process_runtime:get(id)
     if not proc then
       vim.notify(string.format("sia: no process with ID %d", id), vim.log.levels.ERROR)
       return
     end
 
-    if proc.status ~= "running" then
+    if proc.kind ~= "running" then
       return
     end
 
-    if proc.detached_handle then
-      proc.detached_handle.kill()
-    else
-      vim.notify(
-        string.format("sia: process %d is synchronous and cannot be stopped", id),
-        vim.log.levels.WARN
-      )
-    end
+    chat.conversation.process_runtime:stop(id)
   elseif subcommand == "list" or subcommand == nil then
     local procs = chat.conversation.process_runtime:list()
     if #procs == 0 then
@@ -681,26 +674,16 @@ vim.api.nvim_create_user_command("SiaShell", function(args)
         completed = "✓",
         failed = "✗",
         timed_out = "⏱",
-      })[proc.status] or "?"
+      })[proc.outcome] or "?"
 
-      local elapsed
-      if proc.completed_at then
-        elapsed = string.format("%.1fs", proc.completed_at - proc.started_at)
-      else
-        elapsed =
-          string.format("%.1fs (running)", (vim.uv.hrtime() / 1e9) - proc.started_at)
+      local elapsed = ""
+      if proc.kind == "finished" then
+        elapsed = string.format(" (%.1fs)", proc.duration)
       end
 
       table.insert(
         lines,
-        string.format(
-          "  %s [%d] %s (%s) %s",
-          status_icon,
-          proc.id,
-          proc.command,
-          elapsed,
-          proc.status
-        )
+        string.format("  %s [%d] %s%s", status_icon, proc.id, proc.command, elapsed)
       )
     end
 
@@ -748,7 +731,7 @@ end, {
       if chat and chat.conversation then
         local ids = {}
         for _, proc in ipairs(chat.conversation.process_runtime:list()) do
-          if proc.status == "running" then
+          if proc.kind == "running" then
             local id_str = tostring(proc.id)
             if vim.startswith(id_str, arg_lead) then
               table.insert(ids, id_str)

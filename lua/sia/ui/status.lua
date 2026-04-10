@@ -101,19 +101,26 @@ local function command_lines(command)
 end
 
 --- @param proc sia.process.Process
+--- @param runtime sia.process.Runtime
 --- @return string stdout
 --- @return string stderr
---- @return string? note
-local function get_bash_preview_output(proc)
-  if proc.status == "running" then
-    if not proc.detached_handle then
-      return "", "", "Live output is unavailable for synchronous processes."
-    end
-    local output = proc.detached_handle.get_output()
-    return output.stdout or "", output.stderr or "", nil
+local function get_bash_preview_output(proc, runtime)
+  local output = runtime:get_output(proc.id) or {}
+  return output.stdout or "", output.stderr or ""
+end
+
+--- @param proc sia.process.Process
+--- @return string
+local function process_status_name(proc)
+  if proc.kind == "running" then
+    return "running"
   end
 
-  return proc:read_stdout(), proc:read_stderr(), nil
+  if proc.outcome == "interrupted" then
+    return "stopped"
+  end
+
+  return proc.outcome
 end
 
 --- Add stdout/stderr tail blocks to a detail builder.
@@ -223,24 +230,17 @@ end
 --- @param runtime sia.process.Runtime
 --- @return sia.ui.RenderSpec
 local function render_process(proc, runtime)
-  local status_name = BASH_STATUS[proc.status] and proc.status or "failed"
+  local status_name = process_status_name(proc)
   local cfg = BASH_STATUS[status_name]
   local label = proc.description or proc.command
 
   local suffix
-  if proc.status == "running" then
-    suffix =
-      string.format("(%s)", format_duration(vim.uv.hrtime() / 1e9 - proc.started_at))
-  elseif proc.completed_at and proc.started_at then
-    suffix = format_duration(proc.completed_at - proc.started_at)
-  end
-
-  if proc.code and proc.code ~= 0 then
+  if proc.kind == "finished" and proc.code ~= 0 then
     suffix = (suffix or "") .. string.format(" [exit %d]", proc.code)
   end
 
   local actions = {}
-  if proc.status == "running" then
+  if proc.kind == "running" then
     actions.stop = function()
       return runtime:stop(proc.id)
     end
@@ -251,37 +251,24 @@ local function render_process(proc, runtime)
     label = string.format("[bash] #%d %s", proc.id, label),
     suffix = suffix,
     hl = cfg.hl_group,
-    running = proc.status == "running",
+    running = proc.kind == "running",
     actions = actions,
     details = function(d)
       d:block("Command:", command_lines(proc.command))
 
-      if proc.status == "running" then
-        d:detail(
-          "Running for",
-          format_duration(vim.uv.hrtime() / 1e9 - proc.started_at)
-        )
+      if proc.kind == "running" then
+        d:detail("Status", status_name, cfg.hl_group)
       else
         d:detail("Status", status_name, cfg.hl_group)
+        d:detail("Duration", format_duration(proc.duration), cfg.hl_group)
         d:detail(
           "Exit code",
-          tostring(proc.code or -1),
+          tostring(proc.code),
           proc.code == 0 and "SiaStatusValue" or "SiaStatusFailed"
         )
-        if proc.stdout_file then
-          d:detail("stdout file", proc.stdout_file, "SiaStatusPath")
-        end
-        if proc.stderr_file then
-          d:detail("stderr file", proc.stderr_file, "SiaStatusPath")
-        end
       end
 
-      local stdout, stderr, note = get_bash_preview_output(proc)
-      if note then
-        d:line(note)
-        return
-      end
-
+      local stdout, stderr = get_bash_preview_output(proc, runtime)
       add_output_sections(d, stdout, stderr, "No output captured.")
     end,
   }
@@ -290,19 +277,20 @@ end
 --- @param conversation sia.Conversation
 --- @return fun(tag: string, id: any, obj: any): sia.ui.RenderSpec?
 local function make_render_entry(conversation)
-  return function(tag, _id, obj)
+  return function(tag, id, obj)
     if tag == "agent" then
       return render_agent(obj, conversation.agent_runtime)
     elseif tag == "bash" then
-      return render_process(obj, conversation.process_runtime)
+      return render_process(obj, conversation.process_runtime, conversation.id)
     end
+    local _ = id
     return nil
   end
 end
 
 local sort_newest_first = function(a, b)
-  local a_start = a.obj.started_at or 0
-  local b_start = b.obj.started_at or 0
+  local a_start = a.obj.started_at or a.id or 0
+  local b_start = b.obj.started_at or b.id or 0
   if a_start ~= b_start then
     return a_start > b_start
   end

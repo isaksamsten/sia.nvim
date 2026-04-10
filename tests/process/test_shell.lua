@@ -282,16 +282,16 @@ T["sia.process.shell"]["spawn_detached kill stops the process"] = function()
 
     vim.wait(5000, function() return completed end, 10)
     _G.completed = completed
-    _G.is_done = handle.is_done()
+    _G.is_active = handle.is_active()
     shell:close()
   ]])
 
   local completed = T.child.lua_get("_G.completed")
   local result = T.child.lua_get("_G.result")
-  local is_done = T.child.lua_get("_G.is_done")
+  local is_active = T.child.lua_get("_G.is_active")
 
   eq(true, completed)
-  eq(true, is_done)
+  eq(false, is_active)
   eq(true, result.interrupted)
 end
 
@@ -371,7 +371,7 @@ T["sia.process.shell"]["spawn_detached get_output returns partial output while r
     -- Get partial output while still running
     local partial = handle.get_output()
     _G.partial_stdout = partial.stdout
-    _G.is_running = not handle.is_done()
+    _G.is_running = handle.is_active()
 
     -- Now wait for completion
     vim.wait(5000, function() return completed end, 10)
@@ -386,6 +386,47 @@ T["sia.process.shell"]["spawn_detached get_output returns partial output while r
 
   eq(true, is_running)
   -- Should have captured some output while running
+  eq(true, partial_stdout:find("line1") ~= nil)
+  eq(true, completed)
+  eq(true, final_result.stdout:find("line3") ~= nil)
+end
+
+T["sia.process.shell"]["exec handle get_output returns partial output while running"] = function()
+  T.child.lua([[
+    local Shell = require("sia.process.shell")
+    local shell = Shell.new(vim.fn.getcwd())
+    local completed = false
+
+    local handle = shell:exec(
+      'for i in 1 2 3; do echo "line$i"; sleep 0.1; done; sleep 2',
+      10000,
+      nil,
+      function(result)
+        _G.final_result = result
+        completed = true
+      end
+    )
+
+    vim.wait(1000, function()
+      local out = handle.get_output()
+      return out.stdout:find("line1") ~= nil
+    end, 50)
+
+    local partial = handle.get_output()
+    _G.partial_stdout = partial.stdout
+    _G.is_active = handle.is_active()
+
+    vim.wait(5000, function() return completed end, 10)
+    _G.completed = completed
+    shell:close()
+  ]])
+
+  local is_active = T.child.lua_get("_G.is_active")
+  local partial_stdout = T.child.lua_get("_G.partial_stdout")
+  local completed = T.child.lua_get("_G.completed")
+  local final_result = T.child.lua_get("_G.final_result")
+
+  eq(true, is_active)
   eq(true, partial_stdout:find("line1") ~= nil)
   eq(true, completed)
   eq(true, final_result.stdout:find("line3") ~= nil)
