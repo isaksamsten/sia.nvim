@@ -371,6 +371,7 @@ M._raw_options = {
           messages.user.file_tree,
           messages.user.agents_md,
           messages.user.visible_buffers,
+          messages.user.selection(),
         },
         tools = function(model)
           local tools = require("sia.tools")
