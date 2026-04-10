@@ -630,7 +630,7 @@ function ChatStrategy:on_finish(ctx)
   if not self.has_generated_name then
     local fast_model =
       require("sia.model").resolve(require("sia.config").options.settings.fast_model)
-    local name_conv = require("sia.conversation").new_conversation({
+    local name_conv = require("sia.conversation").new({
       model = fast_model,
       temporary = true,
     })

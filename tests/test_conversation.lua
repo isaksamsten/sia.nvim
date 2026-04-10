@@ -14,7 +14,7 @@ end
 T["conversation basics"] = MiniTest.new_set()
 
 T["conversation basics"]["add_system_message adds system entry"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -26,7 +26,7 @@ T["conversation basics"]["add_system_message adds system entry"] = function()
 end
 
 T["conversation basics"]["add_user_message adds user entry"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -38,7 +38,7 @@ T["conversation basics"]["add_user_message adds user entry"] = function()
 end
 
 T["conversation basics"]["pending user messages attach at round boundary"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -60,7 +60,7 @@ T["conversation basics"]["pending user messages attach at round boundary"] = fun
 end
 
 T["conversation basics"]["add_assistant_message adds assistant entry"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -74,7 +74,7 @@ T["conversation basics"]["add_assistant_message adds assistant entry"] = functio
 end
 
 T["conversation basics"]["add_tool_message adds tool entry"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -95,7 +95,7 @@ T["conversation basics"]["add_tool_message adds tool entry"] = function()
 end
 
 T["conversation basics"]["add_tool_message retains structured summaries"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -118,7 +118,7 @@ end
 T["serialization"] = MiniTest.new_set()
 
 T["serialization"]["serialize produces correct messages"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -139,7 +139,7 @@ T["serialization"]["serialize produces correct messages"] = function()
 end
 
 T["serialization"]["serialize splits tool entries into assistant+tool messages"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -164,7 +164,7 @@ T["serialization"]["serialize splits tool entries into assistant+tool messages"]
 end
 
 T["serialization"]["serialize drops ephemeral entries after first serialization"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -186,7 +186,7 @@ T["serialization"]["serialize drops ephemeral entries after first serialization"
 end
 
 T["serialization"]["serialize omits dropped entries"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -210,7 +210,7 @@ end
 T["tracked instances"] = MiniTest.new_set()
 
 T["tracked instances"]["agent instances expose preview and runtime stop support"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -232,7 +232,7 @@ T["tracked instances"]["agent instances expose preview and runtime stop support"
 end
 
 T["tracked instances"]["agent instances accept follow-up messages through the runtime"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -255,11 +255,11 @@ T["tracked instances"]["agent instances accept follow-up messages through the ru
 end
 
 T["tracked instances"]["interactive agent completion is signaled through agent state"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
-  local child_conv = require("sia.conversation").new_conversation({
+  local child_conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -296,7 +296,7 @@ end
 T["turn management"] = MiniTest.new_set()
 
 T["turn management"]["new_turn returns a turn_id"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -308,7 +308,7 @@ T["turn management"]["new_turn returns a turn_id"] = function()
 end
 
 T["turn management"]["last_turn_id returns latest"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -319,7 +319,7 @@ T["turn management"]["last_turn_id returns latest"] = function()
 end
 
 T["turn management"]["rollback_to drops messages at and after turn"] = function()
-  local conv = require("sia.conversation").new_conversation({
+  local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })

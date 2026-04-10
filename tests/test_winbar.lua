@@ -12,7 +12,7 @@ T["winbar"] = MiniTest.new_set({
 T["winbar"]["clear_status preserves newer statuses"] = function()
   local winbar = require("sia.ui.winbar")
   local Conversation = require("sia.conversation")
-  local conversation = Conversation.new_conversation({ temporary = true })
+  local conversation = Conversation.new({ temporary = true })
   local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_get_current_win()
 
@@ -39,7 +39,7 @@ end
 T["winbar"]["default_left shows pending user message count from conversation"] = function()
   local winbar = require("sia.ui.winbar")
   local Conversation = require("sia.conversation")
-  local conversation = Conversation.new_conversation({ temporary = true })
+  local conversation = Conversation.new({ temporary = true })
 
   conversation:add_pending_user_message("Queued follow-up")
   conversation:add_pending_user_message("Another queued follow-up")

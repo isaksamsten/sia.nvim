@@ -69,7 +69,7 @@ local compact_conversation = function(conversation, opts)
   opts = opts or {}
   local model =
     require("sia.model").resolve(require("sia.config").options.settings.fast_model)
-  local new_conversation = require("sia.conversation").new_conversation({
+  local new_conversation = require("sia.conversation").new({
     model = model,
     temporary = true,
   })

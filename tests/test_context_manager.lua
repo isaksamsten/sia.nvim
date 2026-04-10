@@ -287,8 +287,8 @@ local function mock_compaction(summary_response)
 
   -- Mock new_conversation to return a lightweight object that captures entries
   local real_conv = require("sia.conversation")
-  tracker._real_new = real_conv.new_conversation
-  real_conv.new_conversation = function(_, _)
+  tracker._real_new = real_conv.new
+  real_conv.new = function(_, _)
     return {
       add_system_message = function(_, content)
         table.insert(tracker.captured_entries, {
@@ -339,7 +339,7 @@ local function mock_compaction(summary_response)
   )
 
   tracker.restore = function()
-    real_conv.new_conversation = tracker._real_new
+    real_conv.new = tracker._real_new
     assistant.fetch_response = tracker._real_fetch
     config.options.settings.context = tracker._old_context
   end

@@ -369,58 +369,6 @@ local Conversation = {}
 Conversation.__index = Conversation
 Conversation.pending_messages = {}
 
---- @class sia.NewConversationArgs
---- @field model sia.Model
---- @field ignore_tool_confirm boolean?
---- @field temporary boolean?
---- @field tools sia.Tool[]?
---- @field modes table<string, sia.config.Mode>?
-
---- @param opts sia.NewConversationArgs
---- @return sia.Conversation
-function Conversation.new(opts)
-  local obj = setmetatable({}, Conversation)
-  obj.model = opts.model
-  obj.id = new_conversation_id()
-  obj.name = string.format("**%d**", obj.id)
-  obj.uuid = require("sia.utils").new_uuid()
-  obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
-  if obj.model then
-    obj.logger:created(obj.model)
-  end
-  obj.tracker = require("sia.tracker").new()
-
-  obj.entries = {}
-  obj.ignore_tool_confirm = opts.ignore_tool_confirm
-  obj.auto_confirm_tools = {}
-  obj.todos = {
-    items = {},
-  }
-  obj.usage_history = {}
-  obj.pending_user_messages = {}
-  obj.active_mode = nil
-  obj.modes = opts.modes or {}
-  obj.tool_definitions = {}
-  obj.tool_implementation = {}
-  if opts.tools then
-    for _, tool in ipairs(opts.tools) do
-      local is_supported = tool.implementation.is_supported == nil
-        or tool.implementation.is_supported(obj.model)
-      if obj.tool_implementation[tool.definition.name] == nil and is_supported then
-        obj.tool_implementation[tool.definition.name] = tool.implementation
-        table.insert(obj.tool_definitions, tool.definition)
-      end
-    end
-  end
-  obj.process_runtime = require("sia.process").new_runtime(obj.id, {
-    project_root = vim.fn.getcwd(),
-    shell_opts = require("sia.config").options.settings.shell,
-  })
-  obj.agent_runtime = require("sia.agent").new_runtime()
-
-  return obj
-end
-
 --- @private
 --- @param region sia.Region
 --- @return sia.TrackedRegion
@@ -1023,8 +971,60 @@ local function from_action(action, invocation, overrides)
   return conversation
 end
 
+--- @class sia.NewConversationArgs
+--- @field model sia.Model
+--- @field ignore_tool_confirm boolean?
+--- @field temporary boolean?
+--- @field tools sia.Tool[]?
+--- @field modes table<string, sia.config.Mode>?
+--- @field workspace string?
+
 return {
-  new_conversation = Conversation.new,
+  --- @param opts sia.NewConversationArgs
+  --- @return sia.Conversation
+  new = function(opts)
+    local obj = setmetatable({}, Conversation)
+    obj.workspace = opts.workspace or vim.fn.getcwd()
+    obj.model = opts.model
+    obj.id = new_conversation_id()
+    obj.name = string.format("**%d**", obj.id)
+    obj.uuid = require("sia.utils").new_uuid()
+    obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
+    if obj.model then
+      obj.logger:created(obj.model)
+    end
+    obj.tracker = require("sia.tracker").new()
+
+    obj.entries = {}
+    obj.ignore_tool_confirm = opts.ignore_tool_confirm
+    obj.auto_confirm_tools = {}
+    obj.todos = {
+      items = {},
+    }
+    obj.usage_history = {}
+    obj.pending_user_messages = {}
+    obj.active_mode = nil
+    obj.modes = opts.modes or {}
+    obj.tool_definitions = {}
+    obj.tool_implementation = {}
+    if opts.tools then
+      for _, tool in ipairs(opts.tools) do
+        local is_supported = tool.implementation.is_supported == nil
+          or tool.implementation.is_supported(obj.model)
+        if obj.tool_implementation[tool.definition.name] == nil and is_supported then
+          obj.tool_implementation[tool.definition.name] = tool.implementation
+          table.insert(obj.tool_definitions, tool.definition)
+        end
+      end
+    end
+    obj.process_runtime = require("sia.process").new_runtime(obj.id, {
+      project_root = obj.workspace,
+      shell_opts = require("sia.config").options.settings.shell,
+    })
+    obj.agent_runtime = require("sia.agent").new_runtime()
+
+    return obj
+  end,
   fork_conversation = fork_conversation,
   from_action = from_action,
 }

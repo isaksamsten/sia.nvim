@@ -83,7 +83,7 @@ local function create_conversation(agent_def, agent)
   local config = require("sia.config")
   local tools = require("sia.tools")
 
-  local conversation = require("sia.conversation").new_conversation({
+  local conversation = require("sia.conversation").new({
     model = require("sia.model").resolve(
       agent_def.model or config.options.settings.fast_model
     ),

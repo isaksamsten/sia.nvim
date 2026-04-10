@@ -8,7 +8,7 @@ local eq = MiniTest.expect.equality
 
 --- Create a minimal real conversation for streaming tests
 local function make_conversation()
-  return Conversation.new_conversation({
+  return Conversation.new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
