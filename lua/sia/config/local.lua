@@ -700,7 +700,7 @@ end
 function M.get_local_config_path()
   local root = get_local_config_root()
   if not root then
-    root = require("sia.utils").detect_project_root(vim.fn.getcwd())
+    root = vim.fn.getcwd()
   end
   return local_config_path(root)
 end
@@ -709,7 +709,7 @@ end
 function M.get_auto_config_path()
   local root = get_local_config_root()
   if not root then
-    root = require("sia.utils").detect_project_root(vim.fn.getcwd())
+    root = vim.fn.getcwd()
   end
   return auto_config_path(root)
 end
