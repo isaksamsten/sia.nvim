@@ -52,6 +52,125 @@ local function return_pending_result(agent, callback)
   })
 end
 
+--- @param agent sia.agents.Agent
+local function is_settled(agent)
+  return agent.status == "pending"
+    or agent.status == "failed"
+    or agent.status == "cancelled"
+end
+
+--- @param agent sia.agents.Agent
+local function is_running(agent)
+  return agent.source == "tool" and agent.status == "running"
+end
+
+--- @param agent sia.agents.Agent
+--- @param callback fun(result:sia.ToolResult)
+local function return_settled(agent, callback)
+  if agent.status == "pending" then
+    return_pending_result(agent, callback)
+  elseif agent.status == "failed" then
+    callback({
+      content = string.format(
+        "Agent %d (%s) failed:\nError: %s",
+        agent.id,
+        agent.name,
+        agent.error or "Unknown error"
+      ),
+      summary = string.format("%s Agent %d failed", icons.error, agent.id),
+    })
+  elseif agent.status == "cancelled" then
+    callback({
+      content = string.format(
+        "Agent %d (%s) was cancelled by the user.",
+        agent.id,
+        agent.name
+      ),
+      summary = string.format("%s Agent %d cancelled", icons.error, agent.id),
+    })
+  end
+end
+
+--- @param id integer
+--- @param conversation sia.Conversation
+--- @param callback fun(result:sia.ToolResult)
+local function wait_for_agent(id, conversation, callback)
+  local agent = conversation.agent_runtime:get(id)
+  if not agent then
+    callback({
+      content = string.format(
+        "Error: Agent with ID %d not found in this conversation",
+        id
+      ),
+    })
+    return
+  end
+
+  if is_settled(agent) then
+    return_settled(agent, callback)
+    return
+  end
+
+  local function poll()
+    local current = conversation.agent_runtime:get(id)
+    if not current then
+      callback({ content = "Error: Agent instance was removed" })
+      return
+    end
+
+    if is_settled(current) then
+      return_settled(current, callback)
+    elseif conversation:has_pending_user_messages() then
+      callback({ content = waiting_yield_message(current) })
+    elseif current.view == "open" then
+      vim.defer_fn(poll, 1000)
+    else
+      vim.defer_fn(poll, 500)
+    end
+  end
+
+  poll()
+end
+
+--- @param conversation sia.Conversation
+--- @param callback fun(result:sia.ToolResult)
+local function wait_for_any(conversation, callback)
+  local runtime = conversation.agent_runtime
+
+  if not runtime:any(is_running) then
+    local settled = runtime:find(is_settled)
+    if settled then
+      return_settled(settled, callback)
+    else
+      callback({
+        content = "No agents are running or have pending results.",
+        ephemeral = true,
+      })
+    end
+    return
+  end
+
+  local function poll()
+    local settled = runtime:find(is_settled)
+    if settled then
+      return_settled(settled, callback)
+    elseif conversation:has_pending_user_messages() then
+      callback({
+        content = "Agents are still running. Yielding to process user input.",
+      })
+    elseif runtime:any(is_running) then
+      vim.defer_fn(poll, 500)
+    else
+      callback({
+        content = "All agents finished but none produced results.",
+        ephemeral = true,
+      })
+    end
+  end
+
+  poll()
+end
+
 return tool_utils.new_tool({
   definition = {
     type = "function",
@@ -69,7 +188,7 @@ return tool_utils.new_tool({
       },
       id = {
         type = "integer",
-        description = "The ID of an existing agent session (required for 'send', 'status', and 'wait' commands)",
+        description = "The ID of an existing agent session (required for 'send' and 'status'). Optional for 'wait': when omitted, waits for the first agent to finish.",
       },
       message = {
         type = "string",
@@ -93,7 +212,14 @@ return tool_utils.new_tool({
     elseif args.command == "send" then
       return string.format(icons.agents .. " Messaging agent '%s'", tostring(args.id))
     elseif args.command == "wait" then
-      return string.format(icons.agents .. " Waiting for agent '%s'", tostring(args.id))
+      if args.id then
+        return string.format(
+          icons.agents .. " Waiting for agent '%s'",
+          tostring(args.id)
+        )
+      else
+        return icons.agents .. " Waiting for agents"
+      end
     elseif args.command == "status" then
       return string.format(icons.agents .. " Checking agent '%s'", tostring(args.id))
     end
@@ -107,7 +233,8 @@ Commands:
 - `agent(command="start", agent="name", message="...")` starts a new session
 - `agent(command="send", id=1, message="...")` sends a follow-up message to an existing session
 - `agent(command="status", id=1)` checks the current status and preview
-- `agent(command="wait", id=1)` waits for the next unread reply
+- `agent(command="wait", id=1)` waits for a specific agent's next unread reply
+- `agent(command="wait")` waits for the first agent to finish (any agent)
 
 When NOT to use the agent tool:
 - If you want to read a specific file path, use the %s or grep tool instead
@@ -272,94 +399,11 @@ When NOT to use the agent tool:
 
     callback({ content = agent:get_preview() })
   elseif args.command == "wait" then
-    if not args.id then
-      callback({ content = "Error: 'id' parameter is required for 'wait' command" })
-      return
+    if args.id then
+      wait_for_agent(args.id, conversation, callback)
+    else
+      wait_for_any(conversation, callback)
     end
-
-    local agent = conversation.agent_runtime:get(args.id)
-    if not agent then
-      callback({
-        content = string.format(
-          "Error: Agent with ID %d not found in this conversation",
-          args.id
-        ),
-      })
-      return
-    end
-
-    if agent.status == "pending" then
-      return_pending_result(agent, callback)
-      return
-    end
-
-    if agent.status == "failed" then
-      callback({
-        content = string.format(
-          "Agent %d (%s) failed:\nError: %s",
-          args.id,
-          agent.name,
-          agent.error or "Unknown error"
-        ),
-        summary = string.format("%s Agent %d failed", icons.error, args.id),
-      })
-      return
-    end
-
-    if agent.status == "cancelled" then
-      callback({
-        content = string.format(
-          "Agent %d (%s) was cancelled by the user.",
-          args.id,
-          agent.name
-        ),
-        summary = string.format("%s Agent %d cancelled", icons.error, args.id),
-      })
-      return
-    end
-
-    local function poll()
-      local current_agent = conversation.agent_runtime:get(args.id)
-      if not current_agent then
-        callback({
-          content = "Error: Agent instance was removed",
-        })
-        return
-      end
-
-      if current_agent.status == "pending" then
-        return_pending_result(current_agent, callback)
-      elseif current_agent.status == "failed" then
-        callback({
-          content = string.format(
-            "Agent %d (%s) failed:\nError: %s",
-            args.id,
-            current_agent.name,
-            current_agent.error or "Unknown error"
-          ),
-          summary = string.format("%s Agent %d failed", icons.error, args.id),
-        })
-      elseif current_agent.status == "cancelled" then
-        callback({
-          content = string.format(
-            "Agent %d (%s) was cancelled by the user.",
-            args.id,
-            current_agent.name
-          ),
-          summary = string.format("%s Agent %d cancelled", icons.error, args.id),
-        })
-      elseif conversation:has_pending_user_messages() then
-        callback({
-          content = waiting_yield_message(current_agent),
-        })
-      elseif current_agent.view == "open" then
-        vim.defer_fn(poll, 1000)
-      else
-        vim.defer_fn(poll, 500)
-      end
-    end
-
-    poll()
   else
     callback({
       content = string.format("Error: Unknown command '%s'", args.command),

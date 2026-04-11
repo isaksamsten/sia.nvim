@@ -253,6 +253,18 @@ function Runtime:list()
   return self.items
 end
 
+--- @param f fun(agent: sia.agents.Agent):boolean
+--- @return sia.agents.Agent?
+function Runtime:find(f)
+  return vim.iter(self.items):find(f)
+end
+
+--- @param f fun(agent: sia.agents.Agent):boolean
+--- @return boolean
+function Runtime:any(f)
+  return vim.iter(self.items):any(f)
+end
+
 --- @param id integer
 --- @return boolean
 function Runtime:can_open(id)

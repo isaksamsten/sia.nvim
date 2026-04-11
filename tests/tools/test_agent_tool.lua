@@ -423,5 +423,260 @@ T["sia.tools.agent"]["unknown command returns error"] = function()
   eq(true, result.content:find("Unknown command", 1, true) ~= nil)
 end
 
+T["sia.tools.agent"]["wait without id returns first pending agent"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local agents = {
+      {
+        id = 1,
+        name = "searcher",
+        source = "tool",
+        status = "running",
+      },
+      {
+        id = 2,
+        name = "writer",
+        source = "tool",
+        status = "pending",
+        conversation = {
+          get_last_assistant_content = function()
+            return "Done writing"
+          end,
+        },
+      },
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id) return agents[id] end,
+          find = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return a end
+            end
+            return nil
+          end,
+          any = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return true end
+            end
+            return false
+          end,
+        },
+        has_pending_user_messages = function() return false end,
+      },
+    })
+
+    vim.wait(1000, function() return result ~= nil end)
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Agent 2 %(writer%) replied:", 1) ~= nil)
+  eq(true, result.content:find("Done writing", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["wait without id returns first failed agent"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local agents = {
+      {
+        id = 1,
+        name = "broken",
+        source = "tool",
+        status = "failed",
+        error = "Timeout",
+      },
+      {
+        id = 2,
+        name = "runner",
+        source = "tool",
+        status = "running",
+      },
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id) return agents[id] end,
+          find = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return a end
+            end
+            return nil
+          end,
+          any = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return true end
+            end
+            return false
+          end,
+        },
+        has_pending_user_messages = function() return false end,
+      },
+    })
+
+    vim.wait(1000, function() return result ~= nil end)
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("failed", 1, true) ~= nil)
+  eq(true, result.content:find("Timeout", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["wait without id polls until agent settles"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local agents = {
+      {
+        id = 1,
+        name = "worker",
+        source = "tool",
+        status = "running",
+        conversation = {
+          get_last_assistant_content = function()
+            return "Task complete"
+          end,
+        },
+      },
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id) return agents[id] end,
+          find = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return a end
+            end
+            return nil
+          end,
+          any = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return true end
+            end
+            return false
+          end,
+        },
+        has_pending_user_messages = function() return false end,
+      },
+    })
+
+    -- Agent finishes after a short delay
+    vim.defer_fn(function()
+      agents[1].status = "pending"
+    end, 100)
+
+    vim.wait(2000, function() return result ~= nil end)
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Agent 1 %(worker%) replied:", 1) ~= nil)
+  eq(true, result.content:find("Task complete", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["wait without id returns error when no agents exist"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          find = function() return nil end,
+          any = function() return false end,
+        },
+        has_pending_user_messages = function() return false end,
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("No agents are running", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["wait without id yields on pending user input"] = function()
+  child.lua([[
+    local agent_tool = require("sia.tools.agent")
+
+    local agents = {
+      {
+        id = 1,
+        name = "worker",
+        source = "tool",
+        status = "running",
+      },
+    }
+
+    local result = nil
+    agent_tool.implementation.execute({
+      command = "wait",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        auto_confirm_tools = {},
+        ignore_tool_confirm = true,
+        agent_runtime = {
+          get = function(_, id) return agents[id] end,
+          find = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return a end
+            end
+            return nil
+          end,
+          any = function(_, predicate)
+            for _, a in ipairs(agents) do
+              if predicate(a) then return true end
+            end
+            return false
+          end,
+        },
+        has_pending_user_messages = function() return true end,
+      },
+    })
+
+    vim.wait(1000, function() return result ~= nil end)
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("Yielding to process user input", 1, true) ~= nil)
+end
+
 return T
 
