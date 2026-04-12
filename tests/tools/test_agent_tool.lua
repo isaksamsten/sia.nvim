@@ -25,8 +25,8 @@ T["sia.tools.agent"]["start errors when agent parameter missing"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function() return nil end,
         },
@@ -66,8 +66,8 @@ T["sia.tools.agent"]["status returns agent preview"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 1 and mock_agent or nil
@@ -96,8 +96,8 @@ T["sia.tools.agent"]["status errors on missing id"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function() return nil end,
         },
@@ -138,8 +138,8 @@ T["sia.tools.agent"]["wait yields early when user has pending input"] = function
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 1 and current_agent or nil
@@ -201,8 +201,8 @@ T["sia.tools.agent"]["send forwards follow-up messages to an existing session"] 
         confirm_opts.on_accept()
       end,
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 2 and current_agent or nil
@@ -260,8 +260,8 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 1 and current_agent or nil
@@ -309,8 +309,8 @@ T["sia.tools.agent"]["wait returns failed agent error"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 3 and current_agent or nil
@@ -345,8 +345,8 @@ T["sia.tools.agent"]["wait returns cancelled agent message"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 4 and current_agent or nil
@@ -382,8 +382,8 @@ T["sia.tools.agent"]["send rejects message to failed agent"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id)
             return id == 5 and current_agent or nil
@@ -410,8 +410,8 @@ T["sia.tools.agent"]["unknown command returns error"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {},
       },
     })
@@ -454,8 +454,8 @@ T["sia.tools.agent"]["wait without id returns first pending agent"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id) return agents[id] end,
           find = function(_, predicate)
@@ -511,8 +511,8 @@ T["sia.tools.agent"]["wait without id returns first failed agent"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id) return agents[id] end,
           find = function(_, predicate)
@@ -566,8 +566,8 @@ T["sia.tools.agent"]["wait without id polls until agent settles"] = function()
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id) return agents[id] end,
           find = function(_, predicate)
@@ -612,8 +612,8 @@ T["sia.tools.agent"]["wait without id returns error when no agents exist"] = fun
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           find = function() return nil end,
           any = function() return false end,
@@ -649,8 +649,8 @@ T["sia.tools.agent"]["wait without id yields on pending user input"] = function(
       result = res
     end, {
       conversation = {
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         agent_runtime = {
           get = function(_, id) return agents[id] end,
           find = function(_, predicate)

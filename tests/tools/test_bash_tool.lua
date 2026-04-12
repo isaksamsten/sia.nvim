@@ -54,8 +54,8 @@ T["sia.tools.bash"]["start yields early when sync command sees pending input"] =
 
     local conversation = {
       id = 42,
-      auto_confirm_tools = {},
-      ignore_tool_confirm = true,
+      approved_tools = setmetatable({}, {__index = function() return true end}),
+      
       process_runtime = process_runtime,
       has_pending_user_messages = function()
         return true
@@ -120,8 +120,8 @@ T["sia.tools.bash"]["wait yields early when user has pending input"] = function(
     end, {
       conversation = {
         id = 42,
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         process_runtime = {
           get = function(_, id)
             return id == 1 and current_proc or nil
@@ -204,8 +204,8 @@ T["sia.tools.bash"]["start preserves blocking behavior without user input"] = fu
 
     local conversation = {
       id = 43,
-      auto_confirm_tools = {},
-      ignore_tool_confirm = true,
+      approved_tools = setmetatable({}, {__index = function() return true end}),
+      
       process_runtime = process_runtime,
       has_pending_user_messages = function()
         return false
@@ -257,8 +257,8 @@ T["sia.tools.bash"]["wait preserves blocking behavior without user input"] = fun
     end, {
       conversation = {
         id = 42,
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         process_runtime = {
           get = function(_, id)
             return id == 1 and current_proc or nil
@@ -313,8 +313,8 @@ T["sia.tools.bash"]["status builds preview from runtime output"] = function()
     end, {
       conversation = {
         id = 99,
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         process_runtime = {
           get = function(_, id)
             if id ~= 1 then
@@ -363,8 +363,8 @@ T["sia.tools.bash"]["view paginates full process output"] = function()
     end, {
       conversation = {
         id = 99,
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         process_runtime = {
           get = function(_, id)
             if id ~= 1 then
@@ -419,8 +419,8 @@ T["sia.tools.bash"]["view requires process id"] = function()
     end, {
       conversation = {
         id = 99,
-        auto_confirm_tools = {},
-        ignore_tool_confirm = true,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        
         process_runtime = {},
       },
     })

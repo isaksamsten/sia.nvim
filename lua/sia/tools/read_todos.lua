@@ -15,8 +15,8 @@ return tool_utils.new_tool({
   instructions = [[Read the current list of todos for this conversation.
 Returns all todos with their ID, description, and status. Use the IDs when updating
 todos with the write_todos tool.]],
-  auto_apply = function(_, _)
-    return 1
+  is_approved = function(_, _)
+    return true
   end,
 }, function(args, conversation, callback, _)
   if not conversation.todos then

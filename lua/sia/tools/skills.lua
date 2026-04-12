@@ -41,8 +41,8 @@ return tool_utils.new_tool({
     end
     return "Reading skill..."
   end,
-  auto_apply = function()
-    return 1
+  is_approved = function()
+    return true
   end,
 }, function(args, _, callback)
   if not args.name or args.name == "" then

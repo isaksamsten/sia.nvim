@@ -1,6 +1,6 @@
 local M = {}
 
---- @alias sia.PermissionOpts { auto_allow: integer}|{deny: boolean, reason: string[]?}|{ask: boolean}
+--- @alias sia.PermissionOpts { auto_allow: boolean}|{deny: boolean, reason: string[]?}|{ask: boolean}
 --- @alias sia.PermissionAllowRule { arguments: table<string, string[]>, choice: integer? }
 --- @alias sia.PermissionAllowCandidate { label: string, rule: sia.PermissionAllowRule }
 
@@ -217,11 +217,11 @@ function M.resolve_mode_permission(mode, tool_name, args)
     local rule = compiled[tool_name]
 
     if rule == true then
-      return { auto_allow = 1 }
+      return { auto_allow = true }
     end
 
     if rule and mode_allow_matches(rule, args) then
-      return { auto_allow = 1 }
+      return { auto_allow = true }
     end
 
     return {
@@ -287,7 +287,7 @@ function M.resolve_permissions(name, args)
 
   for _, allowed in ipairs(iter_rules(permission.allow and permission.allow[name])) do
     if rule_matches_all(allowed, args) then
-      return { auto_allow = allowed.choice or 1 }
+      return { auto_allow = true }
     end
   end
 

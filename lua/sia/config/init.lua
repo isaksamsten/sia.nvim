@@ -174,8 +174,7 @@ local settings_proxy = setmetatable({}, {
 --- @class sia.config.DefaultAction
 --- @field system sia.config.SystemMessage[]
 --- @field user sia.config.UserMessage[]
---- @field tools (fun(model: sia.Model):sia.Tool[])?
---- @field ignore_tool_confirm boolean?
+--- @field tools (fun(model: sia.Model):sia.Tool[],true|table<string, true>?)?
 --- @field model (string|{name: string})?
 --- @field input sia.config.ActionInput?
 --- @field enabled ((fun():boolean)|boolean)?

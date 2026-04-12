@@ -42,7 +42,7 @@ T["sia.tools.write"]["creates new file with parent directory"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -96,7 +96,7 @@ T["sia.tools.write"]["creates new file without nested directories"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -140,7 +140,7 @@ T["sia.tools.write"]["overwrites existing file"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -176,7 +176,7 @@ T["sia.tools.write"]["handles missing path parameter"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -206,7 +206,7 @@ T["sia.tools.write"]["handles missing content parameter"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -240,7 +240,7 @@ T["sia.tools.write"]["handles multiline content correctly"] = function()
         summary = res.summary,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)
@@ -302,7 +302,7 @@ T["sia.tools.write"]["creates deeply nested directory structure"] = function()
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, {
-      conversation = { auto_confirm_tools = { write = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } },
+      conversation = { approved_tools = { write = true }, tracker = { suppress = function(_, _, fn) fn() end } },
     })
 
     vim.wait(2000, function() return result ~= nil end)

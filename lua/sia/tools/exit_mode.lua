@@ -24,8 +24,8 @@ return tool_utils.new_tool({
 
 Call this tool when the mode's objective is complete, or when you need access to tools
 that are restricted in the current mode. Provide a brief summary of what was accomplished.]],
-  auto_apply = function(_, _)
-    return 1
+  is_approved = function(_, _)
+    return true
   end,
 }, function(args, conversation, callback, _)
   if not conversation.active_mode then

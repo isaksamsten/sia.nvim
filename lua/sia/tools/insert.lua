@@ -68,9 +68,6 @@ Use cases:
   persist_allow = function(args)
     return tool_utils.path_allow_rules("target_file", args.target_file)
   end,
-  auto_apply = function(args, conversation)
-    return conversation.auto_confirm_tools["insert"]
-  end,
 }, function(args, conversation, callback, opts)
   if not args.target_file then
     callback({

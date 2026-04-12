@@ -54,8 +54,8 @@ All paths MUST start with `/memories/`.
   summary = function(args)
     return string.format("Executing memory command: %s", args.command)
   end,
-  auto_apply = function(args, _)
-    return 1
+  is_approved = function(args, _)
+    return true
   end,
 }, function(args, _, callback, opts)
   local matcher = require("sia.matcher")

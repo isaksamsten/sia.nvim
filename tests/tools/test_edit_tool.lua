@@ -58,8 +58,8 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
     }
 
     local conversation = {
-      auto_confirm_tools = { edit = 1 },
-      ignore_tool_confirm = true,
+      approved_tools = { edit = true },
+      
       tracker = { suppress = function(_, _, fn) fn() end },
     }
 
@@ -120,8 +120,8 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, { conversation = {
-      auto_confirm_tools = { edit = 1 },
-      ignore_tool_confirm = true,
+      approved_tools = { edit = true },
+      
       tracker = { suppress = function(_, _, fn) fn() end },
     } })
 
@@ -169,8 +169,8 @@ T["sia.tools.edit"]["successful inline edit"] = function()
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, { conversation = {
-      auto_confirm_tools = { edit = 1 },
-      ignore_tool_confirm = true,
+      approved_tools = { edit = true },
+      
       tracker = { suppress = function(_, _, fn) fn() end },
     } })
 
@@ -216,7 +216,7 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -260,7 +260,7 @@ T["sia.tools.edit"]["create new file"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -292,7 +292,7 @@ T["sia.tools.edit"]["missing target_file parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -320,7 +320,7 @@ T["sia.tools.edit"]["missing old_string parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -348,7 +348,7 @@ T["sia.tools.edit"]["missing new_string parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -381,7 +381,7 @@ T["sia.tools.edit"]["file cannot be loaded"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -419,7 +419,7 @@ T["sia.tools.edit"]["no matches found"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -457,7 +457,7 @@ T["sia.tools.edit"]["multiple matches found"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -485,7 +485,7 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
     utils.ensure_file_is_loaded = function(_) return buf end
 
     local results = {}
-    local conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } }
+    local conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } }
 
     local args = {
       target_file = "test.txt",
@@ -560,7 +560,7 @@ T["sia.tools.edit"]["replace_all with inline matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -621,7 +621,7 @@ T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -676,7 +676,7 @@ T["sia.tools.edit"]["replace_all error when no matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -758,7 +758,7 @@ T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { auto_confirm_tools = { edit = 1 }, ignore_tool_confirm = true, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 

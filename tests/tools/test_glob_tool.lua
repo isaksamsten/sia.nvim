@@ -67,7 +67,7 @@ T["sia.tools.glob"]["find all lua files"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -95,7 +95,7 @@ T["sia.tools.glob"]["find all lua files recursively"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -134,7 +134,7 @@ T["sia.tools.glob"]["find files in specific directory"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -165,7 +165,7 @@ T["sia.tools.glob"]["find files in nested directory"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -195,7 +195,7 @@ T["sia.tools.glob"]["list all files in directory without pattern"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -226,7 +226,7 @@ T["sia.tools.glob"]["find hidden files with flag"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -258,7 +258,7 @@ T["sia.tools.glob"]["find files in hidden directory"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -289,7 +289,7 @@ T["sia.tools.glob"]["no matches returns appropriate message"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -320,7 +320,7 @@ T["sia.tools.glob"]["no matches in specific directory"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -350,7 +350,7 @@ T["sia.tools.glob"]["multiple file extensions"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -391,7 +391,7 @@ T["sia.tools.glob"]["search in non-existent path"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -422,7 +422,7 @@ T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -453,7 +453,7 @@ T["sia.tools.glob"]["pattern with path separator finds files"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -484,7 +484,7 @@ T["sia.tools.glob"]["pattern with path separator and path arg"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()
@@ -514,7 +514,7 @@ T["sia.tools.glob"]["pattern starting with **/ and path separator"] = function()
     }
 
     glob_tool.implementation.execute(args, callback, {
-      conversation = { auto_confirm_tools = {}, ignore_tool_confirm = true },
+      conversation = { approved_tools = setmetatable({}, {__index = function() return true end}) },
     })
 
     vim.wait(1000, function()

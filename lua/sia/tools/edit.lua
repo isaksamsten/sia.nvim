@@ -213,9 +213,6 @@ Usage:
   persist_allow = function(args)
     return tool_utils.path_allow_rules("target_file", args.target_file)
   end,
-  auto_apply = function(args, conversation)
-    return conversation.auto_confirm_tools["edit"]
-  end,
 }, function(args, conversation, callback, opts)
   local validation_message = validate_args(args)
   if validation_message then

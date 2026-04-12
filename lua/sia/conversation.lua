@@ -354,8 +354,7 @@ end
 --- @field name string
 --- @field model sia.Model
 --- @field todos  {items: sia.conversation.Todo[]}
---- @field ignore_tool_confirm boolean?
---- @field auto_confirm_tools table<string, integer>
+--- @field approved_tools table<string, true>
 --- @field usage_history sia.Usage[]
 --- @field process_runtime sia.process.Runtime
 --- @field agent_runtime sia.agents.Runtime
@@ -385,8 +384,22 @@ local function new_conversation(opts)
   obj.tracker = require("sia.tracker").new()
 
   obj.entries = {}
-  obj.ignore_tool_confirm = opts.ignore_tool_confirm
-  obj.auto_confirm_tools = {}
+  if opts.approved_tools == true then
+    obj.approved_tools = setmetatable({}, {
+      __index = function()
+        return true
+      end,
+    })
+  else
+    obj.approved_tools = {}
+    for name, enabled in
+      pairs(opts.approved_tools or {}--[[@as table<string, true>]])
+    do
+      if enabled then
+        obj.approved_tools[name] = true
+      end
+    end
+  end
   obj.todos = {
     items = {},
   }
@@ -912,7 +925,7 @@ local function fork_conversation(source, turn_id)
 
   local conversation = new_conversation({
     model = source.model,
-    ignore_tool_confirm = source.ignore_tool_confirm,
+    approved_tools = source.approved_tools,
     tools = source.tools, -- TODO: fix me!
     modes = source.modes,
   })
@@ -976,9 +989,14 @@ local function from_action(action, invocation, overrides)
   local model = require("sia.model").resolve(
     overrides.model or action.model or config.options.settings.model
   )
+  local tools, approved
+  if action.tools then
+    tools, approved = action.tools(model)
+  end
   local conversation = new_conversation({
     model = model,
-    tools = action.tools and action.tools(model),
+    tools = tools,
+    approved_tools = approved,
     modes = action.modes,
   })
 
@@ -1019,7 +1037,7 @@ end
 
 --- @class sia.NewConversationArgs
 --- @field model sia.Model
---- @field ignore_tool_confirm boolean?
+--- @field approved_tools true|table<string, true>|nil
 --- @field temporary boolean?
 --- @field tools sia.Tool[]?
 --- @field modes table<string, sia.config.Mode>?

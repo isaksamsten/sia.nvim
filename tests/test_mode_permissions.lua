@@ -62,7 +62,7 @@ T["mode permissions"]["blanket allow auto-approves"] = function()
   local mode = make_mode({ name = "plan", allow = { view = true, grep = true } })
 
   local result = permissions.resolve_mode_permission(mode, "view", {})
-  eq(1, result.auto_allow)
+  eq(true, result.auto_allow)
 end
 
 T["mode permissions"]["blanket allow does not affect unlisted tool"] = function()
@@ -82,7 +82,7 @@ T["mode permissions"]["conditional allow approves matching args"] = function()
 
   local result =
     permissions.resolve_mode_permission(mode, "write", { path = "plan_config.md" })
-  eq(1, result.auto_allow)
+  eq(true, result.auto_allow)
 end
 
 T["mode permissions"]["conditional allow denies non-matching args"] = function()
@@ -109,11 +109,11 @@ T["mode permissions"]["conditional allow with multiple patterns matches any"] = 
 
   local r1 =
     permissions.resolve_mode_permission(mode, "write", { path = "plan_foo.md" })
-  eq(1, r1.auto_allow)
+  eq(true, r1.auto_allow)
 
   local r2 =
     permissions.resolve_mode_permission(mode, "write", { path = ".sia/plans/v1.md" })
-  eq(1, r2.auto_allow)
+  eq(true, r2.auto_allow)
 
   local r3 =
     permissions.resolve_mode_permission(mode, "write", { path = "src/main.lua" })
@@ -139,7 +139,7 @@ T["mode permissions"]["conditional allow with multiple argument keys requires al
     "edit",
     { target_file = "plan_config.md", old_string = "something" }
   )
-  eq(1, r1.auto_allow)
+  eq(true, r1.auto_allow)
 
   -- File matches but old_string is empty → "." requires at least 1 char → deny
   local r2 = permissions.resolve_mode_permission(
@@ -243,7 +243,7 @@ T["mode tool integration"]["mode deny blocks tool execution"] = function()
   local result
   tool.implementation.execute({}, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
+  end, { conversation = { approved_tools = {}, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION BLOCKED BY CURRENT MODE (plan)", result.content[1])
@@ -261,7 +261,7 @@ T["mode tool integration"]["mode allow auto-approves tool execution"] = function
   local result
   tool.implementation.execute({}, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
+  end, { conversation = { approved_tools = {}, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -284,7 +284,7 @@ T["mode tool integration"]["mode conditional allow blocks non-matching args"] = 
   local result
   tool.implementation.execute({ path = "main.lua" }, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
+  end, { conversation = { approved_tools = {}, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION RESTRICTED BY CURRENT MODE (plan)", result.content[1])
@@ -307,7 +307,7 @@ T["mode tool integration"]["mode conditional allow approves matching args"] = fu
   local result
   tool.implementation.execute({ path = "plan_config.md" }, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = {}, active_mode = mode } })
+  end, { conversation = { approved_tools = {}, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -325,7 +325,7 @@ T["mode tool integration"]["unlisted tool falls through to default behavior"] = 
   local result
   tool.implementation.execute({}, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = { dummy = 1 }, active_mode = mode } })
+  end, { conversation = { approved_tools = { dummy = true }, active_mode = mode } })
 
   eq(true, executed)
   eq("ok", result.kind)
@@ -343,7 +343,7 @@ T["mode tool integration"]["mode deny blocks even when auto_confirm is set for t
   local result
   tool.implementation.execute({}, function(res)
     result = res
-  end, { conversation = { auto_confirm_tools = { dummy = 1 }, active_mode = mode } })
+  end, { conversation = { approved_tools = { dummy = true }, active_mode = mode } })
 
   eq(false, executed)
   eq("OPERATION BLOCKED BY CURRENT MODE (plan)", result.content[1])

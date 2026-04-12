@@ -257,11 +257,11 @@ Usage:
   summary = function(args)
     return string.format("Searching for %s...", args.pattern)
   end,
-  auto_apply = function(args, conversation)
+  is_approved = function(args, conversation)
     if args.path and require("sia.utils").dirs.is_safe(args.path) then
-      return 1
+      return true
     end
-    return conversation.auto_confirm_tools["grep"]
+    return conversation.approved_tools["grep"]
   end,
 }, function(args, conversation, callback, opts)
   local output_mode = args.output_mode or "content"

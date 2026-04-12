@@ -20,8 +20,8 @@ end
 local function create_execution_context()
   return {
     conversation = {
-      auto_confirm_tools = {},
-      ignore_tool_confirm = true,
+      approved_tools = setmetatable({}, {__index = function() return true end}),
+      
     },
   }
 end

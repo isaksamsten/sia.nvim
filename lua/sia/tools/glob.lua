@@ -38,9 +38,6 @@ return tool_utils.new_tool({
   summary = function()
     return "Searching for files..."
   end,
-  auto_apply = function(args, conversation)
-    return conversation.auto_confirm_tools["glob"]
-  end,
   confirm = function(args)
     local msg = ""
     if args.pattern then

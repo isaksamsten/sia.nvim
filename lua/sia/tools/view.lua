@@ -63,13 +63,13 @@ will be truncated.]],
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
-  auto_apply = function(args, _)
+  is_approved = function(args, _)
     if args.path then
       if require("sia.utils").dirs.is_safe(args.path) then
-        return 1
+        return true
       end
     end
-    return nil
+    return false
   end,
 }, function(args, conversation, callback, opts)
   if not args.path then

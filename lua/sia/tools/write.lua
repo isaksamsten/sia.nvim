@@ -42,9 +42,6 @@ For small, targeted changes, prefer the edit tool instead.]],
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
-  auto_apply = function(args, conversation)
-    return conversation.auto_confirm_tools["write"]
-  end,
 }, function(args, conversation, callback, opts)
   if not args.path then
     callback({

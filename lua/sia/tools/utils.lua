@@ -173,7 +173,7 @@ end
 --- @field definition sia.tool.Definition
 --- @field read_only boolean?
 --- @field is_supported (fun(model: sia.Model):boolean)?
---- @field auto_apply (fun(args: any, conversation:sia.Conversation):integer?)?
+--- @field is_approved (fun(args: any, conversation:sia.Conversation):boolean)|boolean|nil
 --- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
 --- @field summary (fun(args:table):sia.ToolSummary?)?
 --- @field instructions string?
@@ -312,13 +312,13 @@ local function persist_always_approval(
   on_done
 )
   if not persist_allow then
-    conversation.auto_confirm_tools[tool_name] = 1
+    conversation.approved_tools[tool_name] = true
     on_done()
     return
   end
   local candidates = persist_allow(args, conversation)
   if not candidates or #candidates == 0 then
-    conversation.auto_confirm_tools[tool_name] = 1
+    conversation.approved_tools[tool_name] = true
     on_done()
     return
   end
@@ -339,7 +339,7 @@ local function persist_always_approval(
     --- @param choice sia.PermissionAllowCandidate?
   }, function(choice)
     if not choice or choice.rule == nil then
-      conversation.auto_confirm_tools[tool_name] = 1
+      conversation.approved_tools[tool_name] = true
     else
       permissions.persist_allow_rule(tool_name, choice.rule)
     end
@@ -363,8 +363,8 @@ local function create_user_input_handler(
   persist_allow
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
-  local ignore_confirm = conversation.ignore_tool_confirm
-    or (permission and permission.auto_allow)
+  local ignore_confirm = (permission and permission.auto_allow)
+    or (not (permission and permission.ask) and conversation.approved_tools[tool_name])
 
   return function(prompt, input_args)
     local default_level = input_args.level or "info"
@@ -457,30 +457,13 @@ end
 --- @param args table
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
---- @param permission sia.PermissionOpts?
 --- @return sia.NewToolExecuteUserChoice
-local function create_user_choice_handler(
-  tool_name,
-  args,
-  conversation,
-  callback,
-  permission
-)
+local function create_user_choice_handler(tool_name, args, conversation, callback)
   return function(prompt, choice_args)
+    local confirm_conf = require("sia.config").options.settings.ui.confirm
     local default_level = choice_args.level or "info"
     local risk = require("sia.risk")
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
-
-    if
-      permission
-      and permission.auto_allow
-      and risk.allows_auto_confirm(resolved_level)
-    then
-      choice_args.on_accept(permission.auto_allow)
-      return
-    end
-
-    local confirm_conf = require("sia.config").options.settings.ui.confirm
 
     local function prompt_user()
       local select_fn = select
@@ -546,11 +529,11 @@ M.new_tool = function(opts, execute)
     if permission then
       return permission
     elseif not permission then
-      if conversation.auto_confirm_tools[opts.definition.name] then
-        return { auto_allow = conversation.auto_confirm_tools[opts.definition.name] }
+      if conversation.approved_tools[opts.definition.name] then
+        return { auto_allow = true }
       else
-        local choice = (opts.auto_apply and opts.auto_apply(args, conversation)) or nil
-        return choice and { auto_allow = choice } or nil
+        local approved = opts.is_approved and opts.is_approved(args, conversation)
+        return approved and { auto_allow = true } or nil
       end
     end
   end
@@ -564,12 +547,7 @@ M.new_tool = function(opts, execute)
       allow_parallel = function(args, conversation)
         if
           opts.read_only
-          and (
-            (
-              conversation.auto_confirm_tools
-              and conversation.auto_confirm_tools[opts.definition.name]
-            ) or conversation.ignore_tool_confirm
-          )
+          and conversation.approved_tools[opts.definition.name]
         then
           return true
         end
@@ -620,8 +598,7 @@ M.new_tool = function(opts, execute)
           opts.definition.name,
           args,
           exeution_context.conversation,
-          callback,
-          permission
+          callback
         )
 
         execute(args, exeution_context.conversation, callback, {

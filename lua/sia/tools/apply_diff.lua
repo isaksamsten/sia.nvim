@@ -132,9 +132,6 @@ Rules:
 - Multiple files can be patched in a single patch block.
 
 IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
-  auto_apply = function(args, conversation)
-    return conversation.auto_confirm_tools["apply_diff"]
-  end,
 }, function(raw_input, conversation, callback, opts)
   if not raw_input or raw_input == "" then
     callback({

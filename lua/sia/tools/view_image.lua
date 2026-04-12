@@ -53,11 +53,11 @@ as base64-encoded data that you can directly interpret.]],
   persist_allow = function(args)
     return tool_utils.path_allow_rules("path", args.path)
   end,
-  auto_apply = function(args, _)
+  is_approved = function(args, _)
     if args.path and require("sia.utils").dirs.is_safe(args.path) then
-      return 1
+      return true
     end
-    return nil
+    return false
   end,
 }, function(args, _, callback, opts)
   if not args.path then
