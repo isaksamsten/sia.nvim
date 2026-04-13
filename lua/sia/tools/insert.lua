@@ -95,7 +95,9 @@ Use cases:
     })
     return
   end
-  local buf = utils.ensure_file_is_loaded(args.target_file, { listed = true })
+  local resolved_path =
+    tool_utils.resolve_workspace_path(args.target_file, conversation.workspace)
+  local buf = utils.ensure_file_is_loaded(resolved_path, { listed = true })
   if not buf then
     callback({
       content = "Error: Cannot load " .. args.target_file,

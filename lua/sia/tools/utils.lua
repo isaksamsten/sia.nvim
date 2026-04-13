@@ -279,6 +279,17 @@ function M.path_allow_candidates(path)
   return candidates
 end
 
+--- @param path string
+--- @param workspace string
+--- @return string
+function M.resolve_workspace_path(path, workspace)
+  -- TODO: drop not workspace once tests are migrated
+  if not workspace or vim.fn.isabsolutepath(path) == 1 then
+    return path
+  end
+  return vim.fs.joinpath(workspace, path)
+end
+
 --- Build a list of allow-rule candidates for a path-based argument.
 --- @param arg_name string
 --- @param path string?
@@ -545,10 +556,7 @@ M.new_tool = function(opts, execute)
       is_supported = opts.is_supported,
       summary = opts.summary,
       allow_parallel = function(args, conversation)
-        if
-          opts.read_only
-          and conversation.approved_tools[opts.definition.name]
-        then
+        if opts.read_only and conversation.approved_tools[opts.definition.name] then
           return true
         end
 

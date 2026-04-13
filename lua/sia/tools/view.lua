@@ -81,7 +81,10 @@ will be truncated.]],
     return
   end
 
-  if vim.fn.filereadable(args.path) == 0 then
+  local resolved_path =
+    tool_utils.resolve_workspace_path(args.path, conversation.workspace)
+
+  if vim.fn.filereadable(resolved_path) == 0 then
     callback({
       content = "Error: File cannot be found",
       summary = icons.error .. " Failed to view",
@@ -107,7 +110,7 @@ will be truncated.]],
 
   opts.user_input(confirm_message, {
     on_accept = function()
-      local buf = utils.ensure_file_is_loaded(args.path, {
+      local buf = utils.ensure_file_is_loaded(resolved_path, {
         read_only = true,
         listed = false,
       })

@@ -3,7 +3,6 @@ local icons = require("sia.ui").icons
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-
 local clear_tool_input = tool_utils.gen_clear_outdated_tool_input({ "content" })
 
 return tool_utils.new_tool({
@@ -60,14 +59,16 @@ For small, targeted changes, prefer the edit tool instead.]],
     })
     return
   end
-  local file_exists = vim.fn.filereadable(args.path) == 1
+  local resolved_path =
+    tool_utils.resolve_workspace_path(args.path, conversation.workspace)
+  local file_exists = vim.fn.filereadable(resolved_path) == 1
   local prompt = file_exists
       and string.format("Overwrite existing file %s with new content", args.path)
     or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
     preview = function(preview_buf)
       if file_exists then
-        local existing_content = vim.fn.readfile(args.path)
+        local existing_content = vim.fn.readfile(resolved_path)
         local old_text = table.concat(existing_content, "\n")
         local new_text = args.content
 
@@ -99,12 +100,12 @@ For small, targeted changes, prefer the edit tool instead.]],
     end,
     on_accept = function()
       -- Ensure parent directory exists
-      local parent_dir = vim.fn.fnamemodify(args.path, ":h")
+      local parent_dir = vim.fn.fnamemodify(resolved_path, ":h")
       if parent_dir ~= "" and parent_dir ~= "." then
         vim.fn.mkdir(parent_dir, "p")
       end
 
-      local buf = utils.ensure_file_is_loaded(args.path, { listed = true })
+      local buf = utils.ensure_file_is_loaded(resolved_path, { listed = true })
       if not buf then
         callback({
           content = "Error: Cannot create buffer for " .. args.path,

@@ -142,11 +142,15 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
     return
   end
 
+  local function resolve(path)
+    return tool_utils.resolve_workspace_path(path, conversation.workspace)
+  end
+
   local paths = patch_mod.identify_files_needed(raw_input)
   local orig = {}
   local bufs = {}
   for _, path in ipairs(paths) do
-    local buf = utils.ensure_file_is_loaded(path, { listed = true })
+    local buf = utils.ensure_file_is_loaded(resolve(path), { listed = true })
     if buf then
       bufs[path] = buf
       orig[path] = read_buf(buf)
@@ -226,28 +230,30 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
     on_accept = function()
       for path, change in pairs(commit) do
         if change.type == "delete" then
-          remove_file(path)
+          remove_file(resolve(path))
         elseif change.type == "add" then
-          local parent = vim.fn.fnamemodify(path, ":h")
+          local resolved = resolve(path)
+          local parent = vim.fn.fnamemodify(resolved, ":h")
           if parent ~= "" and parent ~= "." then
             vim.fn.mkdir(parent, "p")
           end
-          local buf = utils.ensure_file_is_loaded(path, { listed = true })
+          local buf = utils.ensure_file_is_loaded(resolved, { listed = true })
           if buf then
             write_buf(buf, change.new_content, conversation, opts.turn_id)
           end
         elseif change.type == "update" then
           if change.move_path then
-            local parent = vim.fn.fnamemodify(change.move_path, ":h")
+            local resolved_move = resolve(change.move_path)
+            local parent = vim.fn.fnamemodify(resolved_move, ":h")
             if parent ~= "" and parent ~= "." then
               vim.fn.mkdir(parent, "p")
             end
             local move_buf =
-              utils.ensure_file_is_loaded(change.move_path, { listed = true })
+              utils.ensure_file_is_loaded(resolved_move, { listed = true })
             if move_buf then
               write_buf(move_buf, change.new_content, conversation, opts.turn_id)
             end
-            remove_file(path)
+            remove_file(resolve(path))
           else
             local buf = bufs[path]
             if buf then
