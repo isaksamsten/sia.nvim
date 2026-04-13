@@ -184,6 +184,7 @@ local settings_proxy = setmetatable({}, {
 --- @class sia.config.ChatAction : sia.config.DefaultAction
 --- @field mode "chat"
 --- @field chat sia.config.Chat?
+--- @field agents table<string, true>?
 --- @field modes table<string, sia.config.Mode>?
 
 --- @class sia.config.DiffAction : sia.config.DefaultAction

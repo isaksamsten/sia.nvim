@@ -944,13 +944,19 @@ local function fork_conversation(source, turn_id)
   return conversation
 end
 
---- @param conversation sia.Conversation
-local function new_template_context(conversation)
-  local agents = require("sia.agent.registry").get_agents(false)
-  local agent_list = {}
-  for _, agent in pairs(agents) do
-    table.insert(agent_list, agent)
+--- @return table<string, true>
+local function configured_agents()
+  local agents = {}
+  for _, name in ipairs(require("sia.config").options.settings.agents or {}) do
+    agents[name] = true
   end
+  return agents
+end
+
+--- @param conversation sia.Conversation
+--- @param agents table<string, true>
+local function new_template_context(conversation, agents)
+  require("sia.agent.registry").scan()
 
   local has_tool = function(name)
     return conversation.tool_implementation[name] ~= nil
@@ -969,7 +975,9 @@ local function new_template_context(conversation)
   return {
     today = os.date("%Y-%m-%d"),
     tools = conversation.tool_definitions,
-    agents = agent_list,
+    agents = require("sia.agent.registry").filter(function(agent)
+      return agents[agent.name]
+    end),
     has_tools = #conversation.tool_definitions > 0,
     tool_count = #conversation.tool_definitions,
     model = conversation.model,
@@ -1001,7 +1009,8 @@ local function from_action(action, invocation, overrides)
   })
 
   local template = require("sia.template")
-  local template_context = new_template_context(conversation)
+  local template_context =
+    new_template_context(conversation, action.agents or configured_agents())
   for _, system in ipairs(action.system or {}) do
     local content = type(system) == "function" and system()
       or template.render(system --[[@as string]], template_context)

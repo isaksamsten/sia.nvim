@@ -388,10 +388,12 @@ end
 
 -- ─── utils.parse_yaml_frontmatter ─────────────────────────────────────────────
 
-T["sia.agent.registry"]["utils.parse_yaml_frontmatter handles boolean values"] = function()
+T["sia.markdown"] = MiniTest.new_set()
+
+T["sia.markdown"]["parse_yaml_frontmatter handles boolean values"] = function()
   child.lua([[
-    local utils = require("sia.utils")
-    local result = utils.parse_yaml_frontmatter({
+    local markdown = require("sia.markdown")
+    local result = markdown.parse_yaml_frontmatter({
       "description: my-agent",
       "require_confirmation: false",
       "active: true",

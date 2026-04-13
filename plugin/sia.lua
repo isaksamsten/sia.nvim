@@ -851,13 +851,17 @@ end, {
     end
 
     if prefix:match("SiaAgent%s+start%s+[%w/%-_]*$") then
-      local registry = require("sia.agent.registry")
-      local agents = registry.get_agents(false)
-      local names = vim.tbl_keys(agents)
-      table.sort(names)
-      return vim.tbl_filter(function(name)
-        return vim.startswith(name, arg_lead)
-      end, names)
+        print(
+      local agents = vim
+        .iter(require("sia.agent.registry").filter(function(agent)
+          print(agent.name)
+          return vim.startswith(agent.name, arg_lead)
+        end))
+        :map(function(agent)
+          return agent.name
+        end)
+        :totable()
+      return agents
     end
 
     if prefix:match("SiaAgent%s+open%s") then
