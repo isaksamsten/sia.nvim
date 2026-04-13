@@ -1,10 +1,5 @@
 local M = {}
-
-local State = {
-  BEFORE_FRONTMATTER = 1,
-  IN_FRONTMATTER = 2,
-  IN_BODY = 3,
-}
+local markdown = require("sia.markdown")
 
 --- @class sia.skills.registry.SkillDef
 --- @field name string
@@ -20,35 +15,14 @@ local State = {
 --- @return sia.skills.registry.SkillDef? skill
 --- @return string|nil error
 local function parse_skill_file(filepath, name)
-  local utils = require("sia.utils")
-  local file = vim.fn.readfile(filepath)
-  --- @type string[]
-  local frontmatter = {}
-  --- @type string[]
-  local body = {}
-  local state = State.BEFORE_FRONTMATTER
-
-  for _, line in ipairs(file) do
-    if line == "---" and state == State.BEFORE_FRONTMATTER then
-      state = State.IN_FRONTMATTER
-    elseif line == "---" and state == State.IN_FRONTMATTER then
-      state = State.IN_BODY
-    elseif state == State.IN_FRONTMATTER then
-      table.insert(frontmatter, line)
-    elseif state == State.IN_BODY then
-      table.insert(body, line)
-    end
+  local document, err =
+    markdown.read_frontmatter_file(filepath, { empty_body_error = "Missing skill content body" })
+  if not document then
+    return nil, err
   end
 
-  if #frontmatter == 0 then
-    return nil, "Invalid format: missing frontmatter"
-  end
-
-  if #body == 0 then
-    return nil, "Missing skill content body"
-  end
-
-  local metadata = utils.parse_yaml_frontmatter(frontmatter)
+  local metadata = document.metadata
+  local body = document.body
 
   if not metadata.name then
     return nil, "Missing required field: name"
