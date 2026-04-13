@@ -51,7 +51,7 @@ end
 
 --- Split markdown content into frontmatter and body, then parse metadata.
 --- @param lines string[]
---- @return sia.markdown.Document?
+--- @return sia.markdown.Document
 function M.parse_frontmatter_document(lines)
   --- @type string[]
   local frontmatter = {}
@@ -86,7 +86,7 @@ function M.parse_frontmatter_document(lines)
 end
 
 --- @param filepath string
---- @return sia.markdown.Document?
+--- @return sia.markdown.Document
 function M.read_frontmatter_file(filepath)
   return M.parse_frontmatter_document(vim.fn.readfile(filepath))
 end

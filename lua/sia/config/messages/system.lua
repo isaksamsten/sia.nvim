@@ -19,7 +19,7 @@ prefix as metadata and do NOT treat it as part of the actual code.
 - Default expectation: deliver working code, not just a plan. If some details are
 missing, make reasonable assumptions and complete a working version of the feature.
 
-{% if has_skills %}
+{% if #skills > 0 %}
 # Skills
 These are techniques you know for combining your tools effectively.
 Apply them when the situation matches. Use the skills tool to read the skill.
@@ -234,7 +234,7 @@ You are an expert coding assistant operating inside Neovim in Sia, a coding agen
 harness. You help users by reading files, executing commands, editing code, and writing
 new files.
 
-{% if has_skills %}
+{% if #skills > 0 %}
 These are techniques you know for combining your tools effectively.
 Apply them when the situation matches. Use the skills tool to read the skill.
 {% for skill in skills %}
@@ -435,7 +435,7 @@ The agent has access to the following tools: {{ join(agent.tools, ", ") }}
 </agents>
 {% end %}
 
-{% if has_skills %}
+{% if #skills > 0 %}
 <skills>
 These are techniques you know for combining your tools effectively.
 Apply them when the situation matches. Use the skills tool to read the skill.
@@ -564,7 +564,7 @@ The agent has access to the following tools: {{ join(agent.tools, ", ") }}
 </agents>
 {% end %}
 
-{% if has_skills %}
+{% if #skills > 0 %}
 <skills>
 These are techniques you know for combining your tools effectively.
 Apply them when the situation matches.

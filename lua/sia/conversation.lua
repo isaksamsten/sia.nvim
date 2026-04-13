@@ -953,25 +953,26 @@ local function configured_agents()
   return agents
 end
 
+--- @return table<string, true>
+local function configured_skills()
+  local skills = {}
+  for _, name in ipairs(require("sia.config").options.settings.skills or {}) do
+    skills[name] = true
+  end
+  return skills
+end
+
 --- @param conversation sia.Conversation
 --- @param agents table<string, true>
-local function new_template_context(conversation, agents)
+--- @param skills table<string, true>
+local function new_template_context(conversation, agents, skills)
   require("sia.agent.registry").scan()
+  require("sia.skills.registry").scan()
 
   local has_tool = function(name)
     return conversation.tool_implementation[name] ~= nil
   end
-  local skills = require("sia.skills.registry").get_skills(has_tool, false)
-  local skill_list = {}
-  for _, skill in ipairs(skills) do
-    table.insert(skill_list, {
-      name = skill.name,
-      description = skill.description,
-      content = table.concat(skill.content, "\n"),
-      filepath = skill.filepath,
-      dir = skill.dir,
-    })
-  end
+
   return {
     today = os.date("%Y-%m-%d"),
     tools = conversation.tool_definitions,
@@ -981,8 +982,12 @@ local function new_template_context(conversation, agents)
     has_tools = #conversation.tool_definitions > 0,
     tool_count = #conversation.tool_definitions,
     model = conversation.model,
-    skills = skill_list,
-    has_skills = #skill_list > 0,
+    skills = require("sia.skills.registry").filter(function(skill)
+      if not skills[skill.name] then
+        return false
+      end
+      return vim.iter(skill.tools):all(has_tool)
+    end),
     has_tool = has_tool,
   }
 end
@@ -1009,8 +1014,11 @@ local function from_action(action, invocation, overrides)
   })
 
   local template = require("sia.template")
-  local template_context =
-    new_template_context(conversation, action.agents or configured_agents())
+  local template_context = new_template_context(
+    conversation,
+    action.agents or configured_agents(),
+    action.skills or configured_skills()
+  )
   for _, system in ipairs(action.system or {}) do
     local content = type(system) == "function" and system()
       or template.render(system --[[@as string]], template_context)

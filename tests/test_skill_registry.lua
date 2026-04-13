@@ -216,6 +216,53 @@ T["sia.skills.registry"]["list_skill_names includes skills outside enabled proje
   eq(true, vim.tbl_contains(names, "beta-skill"))
 end
 
+T["sia.skills.registry"]["scan exposes valid skills and parse errors"] = function()
+  child.lua([[
+    local tmpdir = vim.fn.tempname()
+    local skills_dir = tmpdir .. "/skills"
+    vim.fn.mkdir(skills_dir .. "/good-skill", "p")
+    vim.fn.mkdir(skills_dir .. "/bad-skill", "p")
+
+    vim.fn.writefile({
+      "---",
+      "name: good-skill",
+      "description: Good skill",
+      "---",
+      "Use the good skill",
+    }, skills_dir .. "/good-skill/SKILL.md")
+
+    vim.fn.writefile({
+      "---",
+      "name: bad-skill",
+      "---",
+      "broken skill",
+    }, skills_dir .. "/bad-skill/SKILL.md")
+
+    local config = require("sia.config")
+    local old_local_config = config.get_local_config
+    config.get_local_config = function()
+      return {
+        skills = {},
+        skills_extras = { skills_dir },
+      }
+    end
+
+    local registry = require("sia.skills.registry")
+    registry.scan()
+    local skill = registry.get("good-skill")
+    local errors = registry.errors()
+
+    _G.good_skill_name = skill and skill.name or nil
+    _G.bad_skill_error = errors["bad-skill"] and errors["bad-skill"].message or nil
+
+    config.get_local_config = old_local_config
+    vim.fn.delete(tmpdir, "rf")
+  ]])
+
+  eq("good-skill", child.lua_get("_G.good_skill_name"))
+  eq("Missing required field: description", child.lua_get("_G.bad_skill_error"))
+end
+
 T["sia.skills.registry"]["get_skill reports parse errors from highest-priority match"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()

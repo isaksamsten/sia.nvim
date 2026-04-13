@@ -213,7 +213,7 @@ end, {
 
     local flag_completions = SIA_PARSER:complete_flag(parsed, prefix, {
       m = require("sia.provider").list(),
-      s = require("sia.skills.registry").list_skill_names(false),
+      s = require("sia.skills.registry").list_skill_names(),
     })
     if flag_completions then
       return flag_completions
@@ -851,7 +851,6 @@ end, {
     end
 
     if prefix:match("SiaAgent%s+start%s+[%w/%-_]*$") then
-        print(
       local agents = vim
         .iter(require("sia.agent.registry").filter(function(agent)
           print(agent.name)

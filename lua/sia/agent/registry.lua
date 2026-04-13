@@ -1,7 +1,11 @@
 local M = {}
 local markdown = require("sia.markdown")
 
---- @type table<string, {definition: sia.agents.registry.Agent?, error: string?}>
+--- @class sia.agents.registry.Entry
+--- @field definition sia.agents.registry.Agent?
+--- @field error {path: string, message: string}?
+
+--- @type table<string, sia.agents.registry.Entry>
 local agents = {}
 
 --- @class sia.agents.registry.Agent
@@ -28,7 +32,7 @@ end
 --- @return sia.agents.registry.Agent?
 local function parse_agent_file(filepath, name)
   local ok, document = pcall(markdown.read_frontmatter_file, filepath)
-  if not document then
+  if not ok then
     return nil
   end
 
@@ -75,7 +79,6 @@ local function get_default_agents_dir()
   return vim.fs.joinpath(config_dir, "sia", "agents")
 end
 
---- Get the project-local agents directory (.sia/agents/) when available.
 --- @return string?
 local function get_project_agents_dir()
   local project_root = vim.fn.getcwd()
@@ -105,7 +108,12 @@ local function scan_dir(base_dir)
       if ok then
         agents[name] = { definition = agent }
       else
-        agent[name] = { error = agent }
+        agents[name] = {
+          error = {
+            path = filepath,
+            message = agent --[[@as string]],
+          },
+        }
       end
     end
   end
@@ -140,7 +148,19 @@ end
 --- @param name string
 --- @return sia.agents.registry.Agent?
 function M.get(name)
-  return agents[name]
+  return agents[name] and agents[name].definition or nil
+end
+
+--- @return table<string, {path: string, message: string}>
+function M.errors()
+  local errors = {}
+  for name, entry in pairs(agents) do
+    if entry.error then
+      errors[name] = entry.error
+    end
+  end
+
+  return errors
 end
 
 M._parse_agent_file = parse_agent_file
