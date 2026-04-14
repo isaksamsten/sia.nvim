@@ -425,6 +425,11 @@ local function new_conversation(opts)
   })
   obj.agent_runtime = require("sia.agent").new_runtime()
 
+  require("sia.utils").trigger("ConversationCreated", {
+    conversation_id = obj.id,
+    workspace = obj.workspace,
+  })
+
   return obj
 end
 
@@ -764,6 +769,10 @@ function Conversation:destroy()
   self.agent_runtime:destroy()
   require("sia.ui.confirm").clear(self.id)
   self.logger:destroyed()
+  require("sia.utils").trigger("ConversationDestroyed", {
+    conversation_id = self.id,
+    workspace = self.workspace,
+  })
 end
 
 --- @return boolean any_attached True if any agents were attached

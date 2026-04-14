@@ -15,6 +15,7 @@ M.tool_names = {
   insert = "insert",
   write = "write",
   bash = "bash",
+  git_worktree = "git_worktree",
   agent = "agent",
   diagnostics = "diagnostics",
   webfetch = "webfetch",

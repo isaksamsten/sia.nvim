@@ -101,6 +101,9 @@ local BASH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "bash")
 --- @type string
 local FETCH_OUTPUT_DIR = vim.fs.joinpath(SIA_OUTPUT_DIR, "web")
 
+--- @type string
+local WORKTREE_ROOT_DIR = vim.fs.joinpath(vim.fn.stdpath("cache"), "sia", "worktrees")
+
 --- @param conversation_id integer
 --- @return string
 local function get_bash_output_dir(conversation_id)
@@ -111,6 +114,12 @@ end
 --- @return string
 local function get_fetch_output_dir(conversation_id)
   return vim.fs.joinpath(FETCH_OUTPUT_DIR, tostring(conversation_id))
+end
+
+--- @param conversation_id integer
+--- @return string
+local function get_worktree_dir(conversation_id)
+  return vim.fs.joinpath(WORKTREE_ROOT_DIR, tostring(conversation_id))
 end
 
 --- Check if a file path is under any sia tool output directory.
@@ -126,6 +135,7 @@ end
 M.dirs = {
   bash = get_bash_output_dir,
   fetch = get_fetch_output_dir,
+  worktrees = get_worktree_dir,
   is_safe = is_tool_output_path,
 }
 
@@ -695,6 +705,16 @@ function M.create_unified_diff(old_text, new_text, opts)
   )
 
   return unified_diff
+end
+
+--- Fire a `User` autocommand with pattern `Sia{event_name}`.
+--- @param event_name string  e.g. "ConversationCreated"
+--- @param data table?        arbitrary data passed to listeners via `args.data`
+function M.trigger(event_name, data)
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "Sia" .. event_name,
+    data = data,
+  })
 end
 
 M.CommandParser = CommandParser
