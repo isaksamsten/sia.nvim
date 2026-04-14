@@ -89,7 +89,7 @@ local function create_conversation(agent_def, agent, workspace)
     model = require("sia.model").resolve(
       agent_def.model or config.options.settings.fast_model
     ),
-    approved_tools = agent_def.require_confirmation == false and true or nil,
+    approved_tools = agent_def.auto_approve,
     workspace = workspace,
     tools = vim
       .iter(agent_def.tools)

@@ -11,9 +11,9 @@ local agents = {}
 --- @class sia.agents.registry.Agent
 --- @field name string
 --- @field description string
---- @field require_confirmation boolean
 --- @field interactive boolean
 --- @field tools string[]
+--- @field auto_approve table<string, true>
 --- @field model string?
 --- @field system_prompt string[]
 --- @field filepath string
@@ -47,16 +47,22 @@ local function parse_agent_file(filepath, name)
     error("Missing or invalid required field: tools (must be a list)")
   end
 
-  if
-    metadata.require_confirmation ~= nil
-    and type(metadata.require_confirmation) ~= "boolean"
-  then
-    error("Invalid optional field: require_confirmation (must be boolean)")
-  end
-
-  local require_confirmation = metadata.require_confirmation
-  if require_confirmation == nil then
-    require_confirmation = true
+  --- Parse tool entries: "name!" means auto-approved, "name" means not.
+  local tool_names = {}
+  local auto_approve = {}
+  for _, entry in
+    ipairs(metadata.tools --[[@as table]] or {})
+  do
+    if type(entry) ~= "string" then
+      error("Invalid tool entry: each tool must be a string")
+    end
+    if entry:sub(-1) == "!" then
+      local tool_name = entry:sub(1, -2)
+      table.insert(tool_names, tool_name)
+      auto_approve[tool_name] = true
+    else
+      table.insert(tool_names, entry)
+    end
   end
 
   local model = type(metadata.model) == "string" and metadata.model or nil
@@ -64,8 +70,8 @@ local function parse_agent_file(filepath, name)
   return {
     name = name,
     description = metadata.description --[[@as string]],
-    require_confirmation = require_confirmation --[[@as boolean]],
-    tools = metadata.tools --[[@as string[] ]],
+    tools = tool_names,
+    auto_approve = auto_approve,
     model = model --[[@as string]],
     system_prompt = system_prompt,
     filepath = filepath,

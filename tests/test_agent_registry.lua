@@ -40,10 +40,9 @@ T["sia.agent.registry"]["parse_agent_file parses valid agent markdown"] = functi
       "---",
       "description: A coding agent",
       "tools:",
-      "  - bash",
+      "  - bash!",
       "  - view",
       "model: openai/gpt-4.1",
-      "require_confirmation: false",
       "---",
       "",
       "You are a helpful coding agent.",
@@ -65,8 +64,8 @@ T["sia.agent.registry"]["parse_agent_file parses valid agent markdown"] = functi
   eq("coder", agent.name)
   eq("A coding agent", agent.description)
   eq({ "bash", "view" }, agent.tools)
+  eq({ bash = true }, agent.auto_approve)
   eq("openai/gpt-4.1", agent.model)
-  eq(false, agent.require_confirmation)
   eq(3, #agent.system_prompt)
   eq("", agent.system_prompt[1])
   eq("You are a helpful coding agent.", agent.system_prompt[2])
@@ -101,7 +100,7 @@ T["sia.agent.registry"]["parse_agent_file uses name from parameter"] = function(
   eq("code/review", agent.name)
 end
 
-T["sia.agent.registry"]["parse_agent_file defaults require_confirmation to true"] = function()
+T["sia.agent.registry"]["parse_agent_file defaults auto_approve to empty"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -129,9 +128,76 @@ T["sia.agent.registry"]["parse_agent_file defaults require_confirmation to true"
   local model_is_nil = child.lua_get("_G.agent_model_is_nil")
 
   eq(vim.NIL, err)
-  eq(true, agent.require_confirmation)
+  eq({}, agent.auto_approve)
   eq(true, model_is_nil)
 end
+
+T["sia.agent.registry"]["parse_agent_file auto-approves all tools with ! suffix"] = function()
+  child.lua([[
+    local tmpdir = vim.fn.tempname()
+    vim.fn.mkdir(tmpdir, "p")
+    local filepath = tmpdir .. "/fast.md"
+    vim.fn.writefile({
+      "---",
+      "description: Fast agent",
+      "tools:",
+      "  - grep!",
+      "  - view!",
+      "  - bash!",
+      "---",
+      "System prompt here.",
+    }, filepath)
+
+    local registry = require("sia.agent.registry")
+    local agent, err = registry._parse_agent_file(filepath, "fast")
+    _G.agent = agent
+    _G.err = err
+
+    vim.fn.delete(tmpdir, "rf")
+  ]])
+
+  local agent = child.lua_get("_G.agent")
+  local err = child.lua_get("_G.err")
+
+  eq(vim.NIL, err)
+  eq({ "grep", "view", "bash" }, agent.tools)
+  eq({ grep = true, view = true, bash = true }, agent.auto_approve)
+end
+
+T["sia.agent.registry"]["parse_agent_file mixes approved and unapproved tools"] = function()
+  child.lua([[
+    local tmpdir = vim.fn.tempname()
+    vim.fn.mkdir(tmpdir, "p")
+    local filepath = tmpdir .. "/mixed.md"
+    vim.fn.writefile({
+      "---",
+      "description: Mixed agent",
+      "tools:",
+      "  - grep!",
+      "  - view!",
+      "  - bash",
+      "  - edit",
+      "---",
+      "System prompt here.",
+    }, filepath)
+
+    local registry = require("sia.agent.registry")
+    local agent, err = registry._parse_agent_file(filepath, "mixed")
+    _G.agent = agent
+    _G.err = err
+
+    vim.fn.delete(tmpdir, "rf")
+  ]])
+
+  local agent = child.lua_get("_G.agent")
+  local err = child.lua_get("_G.err")
+
+  eq(vim.NIL, err)
+  eq({ "grep", "view", "bash", "edit" }, agent.tools)
+  eq({ grep = true, view = true }, agent.auto_approve)
+end
+
+
 
 T["sia.agent.registry"]["parse_agent_file fails on missing frontmatter"] = function()
   child.lua([[
@@ -395,7 +461,7 @@ T["sia.markdown"]["parse_yaml_frontmatter handles boolean values"] = function()
     local markdown = require("sia.markdown")
     local result = markdown.parse_yaml_frontmatter({
       "description: my-agent",
-      "require_confirmation: false",
+      "interactive: false",
       "active: true",
       "tools:",
       "  - bash",
@@ -405,7 +471,7 @@ T["sia.markdown"]["parse_yaml_frontmatter handles boolean values"] = function()
 
   local result = child.lua_get("_G.result")
   eq("my-agent", result.description)
-  eq(false, result.require_confirmation)
+  eq(false, result.interactive)
   eq(true, result.active)
   eq({ "bash" }, result.tools)
 end

@@ -65,11 +65,10 @@ tools:
   - edit
   - write
   - insert
-  - grep
-  - glob
+  - grep!
+  - glob!
   - bash
   - diagnostics
-require_confirmation: false
 ---
 
 You are an implementation agent working inside an isolated git worktree.
@@ -108,10 +107,9 @@ description: >
   Explore a codebase to map entry points, call paths, and data flow. Reports a
   compact map that helps another agent implement the change.
 tools:
-  - glob
-  - grep
-  - view
-require_confirmation: false
+  - glob!
+  - grep!
+  - view!
 ---
 
 You are an exploration-only agent. Find the relevant code paths quickly and
@@ -148,10 +146,9 @@ description: >
   Review code changes for correctness, security, performance, and style.
   Reports issues with clear severity and file references.
 tools:
-  - glob
-  - grep
-  - view
-require_confirmation: false
+  - glob!
+  - grep!
+  - view!
 ---
 
 You are a code reviewer. Read the provided changes and report concrete issues.

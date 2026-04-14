@@ -19,11 +19,10 @@ Agent files are markdown with YAML frontmatter:
 ---
 description: Searches through code to find patterns, functions, or implementations
 tools:
-  - glob
-  - grep
-  - view
+  - glob!
+  - grep!
+  - view!
 model: openai/gpt-4.1
-require_confirmation: false
 interactive: false
 ---
 
@@ -32,15 +31,18 @@ tools to find relevant code patterns, function definitions, and implementations.
 Report your findings clearly with file paths and line numbers.
 ```
 
+A `!` suffix on a tool name marks it as **auto-approved** — the tool runs
+without asking the user for confirmation. Tools without the suffix require
+approval before each use.
+
 ### Frontmatter Fields
 
-| Field                    | Required | Default      | Description                                                        |
-| ------------------------ | -------- | ------------ | ------------------------------------------------------------------ |
-| **description**          | yes      | —            | Shown to the AI when listing available agents                      |
-| **tools**                | yes      | —            | Array of tool names the agent can use                              |
-| **model**                | no       | `fast_model` | Override the model for this agent                                  |
-| **require_confirmation** | no       | `true`       | Whether tool operations need user approval                         |
-| **interactive**          | no       | `false`      | Open the agent as an interactive chat automatically when it starts |
+| Field           | Required | Default      | Description                                                        |
+| --------------- | -------- | ------------ | ------------------------------------------------------------------ |
+| **description** | yes      | —            | Shown to the AI when listing available agents                      |
+| **tools**       | yes      | —            | Array of tool names; append `!` to auto-approve                    |
+| **model**       | no       | `fast_model` | Override the model for this agent                                  |
+| **interactive** | no       | `false`      | Open the agent as an interactive chat automatically when it starts |
 
 ### Naming
 
@@ -182,7 +184,7 @@ Tab-completion is available for subcommands, agent names, and agent IDs.
 
 ## Tips
 
-- Set `require_confirmation: false` for read-only agents to avoid interruptions.
+- Mark read-only tools with `!` (e.g. `grep!`, `view!`) to avoid interruptions.
 - Set `interactive: true` for agents that need user review or follow-up questions
   before their result goes back to the parent conversation.
 - Keep system prompts focused and specific to the agent's purpose.
