@@ -1,5 +1,23 @@
 local tool_utils = require("sia.tools.utils")
 
+local function build_preview_lines(prompt, options, default_idx)
+  local preview_lines = vim.split(prompt, "\n", { plain = true, trimempty = false })
+  table.insert(preview_lines, "")
+  table.insert(preview_lines, "Options:")
+
+  for i, option in ipairs(options) do
+    local suffix = (i == default_idx) and " (default)" or ""
+    table.insert(preview_lines, string.format("%d. %s%s", i, option, suffix))
+  end
+
+  table.insert(
+    preview_lines,
+    string.format("%d. Do something else (type your answer)", #options + 1)
+  )
+
+  return preview_lines
+end
+
 return tool_utils.new_tool({
   definition = {
     type = "function",
@@ -27,7 +45,7 @@ return tool_utils.new_tool({
     return "Asking user for input..."
   end,
   instructions = [[Ask the USER to choose from a list of options using an interactive selection interface. ]],
-}, function(args, conversation, callback, opts)
+}, function(args, _, callback, opts)
   local prompt = args.prompt
   local options = args.options
   local default_idx = args.default
@@ -87,6 +105,8 @@ Please ask the USER how they would like to proceed.]],
 
   opts.user_choice(prompt, {
     choices = display_options,
+    preview = build_preview_lines(prompt, options, default_idx),
+    wrap = true,
     on_cancel = function()
       use_choice(default_idx)
     end,

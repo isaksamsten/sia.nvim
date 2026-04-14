@@ -184,6 +184,8 @@ end
 --- @field on_accept fun(choice:integer):nil
 --- @field on_cancel fun(reason: string?)?
 --- @field level sia.RiskLevel?
+--- @field preview (string[]|fun(buf:integer):integer?)?
+--- @field wrap boolean?
 
 --- @class sia.NewToolExecuteUserInputOpts
 --- @field on_accept fun()
@@ -479,11 +481,22 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
 
     local function prompt_user()
       local select_fn = select
+      local clear_preview
       if confirm_conf.use_vim_ui then
         select_fn = vim.ui.select
+        local show_preview = confirm_conf.show_preview
+        if show_preview and choice_args.preview then
+          clear_preview = require("sia.preview").show(choice_args.preview, {
+            wrap = choice_args.wrap,
+          })
+          vim.cmd.redraw()
+        end
       end
 
       select_fn(choice_args.choices, { prompt = prompt }, function(_, idx)
+        if clear_preview then
+          clear_preview()
+        end
         if idx then
           choice_args.on_accept(idx)
         else
@@ -510,6 +523,14 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
           })
         end,
         on_prompt = prompt_user,
+        on_preview = choice_args.preview and function()
+          local clear = require("sia.preview").show(choice_args.preview, {
+            wrap = choice_args.wrap,
+            focusable = true,
+          })
+          vim.cmd.redraw()
+          return clear
+        end or nil,
       })
     else
       prompt_user()
