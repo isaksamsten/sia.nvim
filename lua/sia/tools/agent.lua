@@ -194,7 +194,7 @@ return tool_utils.new_tool({
         type = "string",
         description = "A follow-up message to send to an existing agent session (required for 'start' and 'send')",
       },
-      cwd = {
+      workspace = {
         type = "string",
         description = "Optional working directory for the agent (only for 'start'). Omit unless the agent needs to operate in a different directory than the current session's workspace.",
       },
@@ -278,7 +278,7 @@ When NOT to use the agent tool:
     opts.user_input(confirm_message, {
       on_accept = function()
         local agent = conversation.agent_runtime:spawn(args.agent, args.message, {
-          workspace = args.cwd,
+          workspace = args.workspace,
           source = "tool",
         })
 
