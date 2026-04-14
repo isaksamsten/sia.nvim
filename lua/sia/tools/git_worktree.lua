@@ -100,7 +100,7 @@ end
 
 --- @param repo_root string
 --- @param branch string
---- @return boolean, string?
+--- @return boolean
 local function validate_branch(repo_root, branch)
   local result = git(repo_root, { "check-ref-format", "--branch", branch })
   if result.code ~= 0 then
@@ -111,8 +111,41 @@ local function validate_branch(repo_root, branch)
 end
 
 --- @param repo_root string
+--- @param branch string
+--- @return boolean
+local function branch_exists(repo_root, branch)
+  local result = git(repo_root, { "rev-parse", "--verify", "refs/heads/" .. branch })
+  return result.code == 0
+end
+
+--- Check if a branch is already checked out in any worktree.
+--- @param repo_root string
+--- @param branch string
+--- @return string? worktree_path  path to the worktree if checked out, nil otherwise
+local function branch_checked_out_in_worktree(repo_root, branch)
+  local result = git(repo_root, { "worktree", "list", "--porcelain" })
+  if result.code ~= 0 then
+    return nil
+  end
+
+  local target_ref = "refs/heads/" .. branch
+  local current_path = nil
+  for _, line in ipairs(vim.split(result.stdout, "\n", { plain = true })) do
+    if vim.startswith(line, "worktree ") then
+      current_path = line:sub(#"worktree " + 1)
+    elseif line == "branch " .. target_ref then
+      return current_path
+    elseif line == "" then
+      current_path = nil
+    end
+  end
+
+  return nil
+end
+
+--- @param repo_root string
 --- @param base string
---- @return string?, string?
+--- @return string?
 local function resolve_base_ref(repo_root, base)
   local result = git(repo_root, { "rev-parse", base })
   if result.code ~= 0 then
@@ -130,6 +163,30 @@ local function workspace_exists(record)
   end
 
   return false
+end
+
+--- Check if a path is a valid git worktree for a specific branch.
+--- @param path string
+--- @param branch string
+--- @return boolean
+local function is_valid_worktree_for(path, branch)
+  if vim.fn.isdirectory(path) ~= 1 then
+    return false
+  end
+
+  -- Check that it's a git directory at all
+  local toplevel = git(path, { "rev-parse", "--show-toplevel" })
+  if toplevel.code ~= 0 then
+    return false
+  end
+
+  -- Check the branch that's checked out
+  local head_ref = git(path, { "symbolic-ref", "--short", "HEAD" })
+  if head_ref.code ~= 0 then
+    return false
+  end
+
+  return trim(head_ref.stdout) == branch
 end
 
 --- @param lines string[]
@@ -157,7 +214,8 @@ vim.api.nvim_create_autocmd("User", {
   callback = function(args)
     local data = args.data or {}
     if type(data.conversation_id) == "number" then
-      local records = worktrees[conversation_id]
+      local cid = data.conversation_id
+      local records = worktrees[cid]
       if not records then
         return
       end
@@ -166,7 +224,7 @@ vim.api.nvim_create_autocmd("User", {
         pcall(git, record.repo_root, { "worktree", "remove", "--force", record.path })
       end
 
-      worktrees[conversation_id] = nil
+      worktrees[cid] = nil
     end
   end,
 })
@@ -231,28 +289,107 @@ local function create_worktree(args, conversation, callback)
     return
   end
 
-  local base = args.base or "HEAD"
-  local base_ref = resolve_base_ref(repo_root, base)
-  if not base_ref then
+  local target_path = vim.fs.joinpath(utils.dirs.worktrees(conversation.id), branch)
+
+  -- Re-adopt: if the target path already exists and is a valid worktree for
+  -- this branch (e.g., left over from a crashed session), adopt it into
+  -- tracking instead of failing.
+  if is_valid_worktree_for(target_path, branch) then
+    local base_ref = resolve_base_ref(target_path, "HEAD")
+    if not base_ref then
+      callback({
+        content = string.format(
+          "Error: Found existing worktree at %s but failed to resolve HEAD",
+          display_path(target_path)
+        ),
+      })
+      return
+    end
+
+    local record = {
+      path = target_path,
+      branch = branch,
+      base_ref = base_ref,
+      repo_root = repo_root,
+      created_at = os.time(),
+    }
+    records[branch] = record
+
     callback({
-      content = string.format("Base ref not found: %s", base),
+      content = table.concat({
+        "Worktree created.",
+        "Path: " .. target_path,
+        "Branch: " .. branch,
+        string.format("Re-adopted orphaned worktree (tip: %s)", short_ref(base_ref)),
+        "Repo: " .. repo_root,
+        "",
+        "Pass this path as `workspace` when starting agents to work in this worktree.",
+      }, "\n"),
+      summary = string.format("%s Re-adopted git worktree %s", icons.started, branch),
     })
     return
   end
 
-  local target_path = vim.fs.joinpath(utils.dirs.worktrees(conversation.id), branch)
   local parent_dir = vim.fn.fnamemodify(target_path, ":h")
   if parent_dir ~= "" and parent_dir ~= "." then
     vim.fn.mkdir(parent_dir, "p")
   end
 
-  local result = git(repo_root, { "worktree", "add", "-b", branch, target_path, base })
+  local existing_branch = branch_exists(repo_root, branch)
+
+  -- If the branch is already checked out in another worktree, we can't use it
+  if existing_branch then
+    local checked_out_at = branch_checked_out_in_worktree(repo_root, branch)
+    if checked_out_at then
+      callback({
+        content = string.format(
+          "Error: Branch '%s' is already checked out in worktree at %s. "
+            .. "Choose a different branch name or remove that worktree first.",
+          branch,
+          display_path(checked_out_at)
+        ),
+      })
+      return
+    end
+  end
+
+  local base = args.base or "HEAD"
+  local result
+  if existing_branch then
+    -- Branch exists: check it out in a new worktree (ignore base param)
+    result = git(repo_root, { "worktree", "add", target_path, branch })
+  else
+    -- New branch: create it from the base ref
+    result = git(repo_root, { "worktree", "add", "-b", branch, target_path, base })
+  end
+
   if result.code ~= 0 then
     callback({
       content = string.format(
         "Error: Failed to create worktree for branch '%s': %s",
         branch,
         git_error(result, "git worktree add failed")
+      ),
+    })
+    return
+  end
+
+  -- Resolve the base_ref after worktree creation:
+  -- - For new branches, it's the resolved base commit
+  -- - For existing branches, it's the branch tip at attachment time (so diff
+  --   shows only changes made in this session)
+  local base_ref
+  if existing_branch then
+    base_ref = resolve_base_ref(target_path, "HEAD")
+  else
+    base_ref = resolve_base_ref(repo_root, base)
+  end
+
+  if not base_ref then
+    callback({
+      content = string.format(
+        "Worktree created but failed to resolve base ref for '%s'",
+        base
       ),
     })
     return
@@ -267,16 +404,32 @@ local function create_worktree(args, conversation, callback)
   }
   records[branch] = record
 
+  local message_lines = {
+    "Worktree created.",
+    "Path: " .. target_path,
+    "Branch: " .. branch,
+  }
+
+  if existing_branch then
+    table.insert(
+      message_lines,
+      string.format("Attached to existing branch (tip: %s)", short_ref(base_ref))
+    )
+  else
+    table.insert(
+      message_lines,
+      string.format("Base: %s (%s)", short_ref(base_ref), base)
+    )
+  end
+
+  vim.list_extend(message_lines, {
+    "Repo: " .. repo_root,
+    "",
+    "Pass this path as `workspace` when starting agents to work in this worktree.",
+  })
+
   callback({
-    content = table.concat({
-      "Worktree created.",
-      "Path: " .. target_path,
-      "Branch: " .. branch,
-      string.format("Base: %s (%s)", short_ref(base_ref), base),
-      "Repo: " .. repo_root,
-      "",
-      "Pass this path as `workspace` when starting agents to work in this worktree.",
-    }, "\n"),
+    content = table.concat(message_lines, "\n"),
     summary = string.format("%s Created git worktree %s", icons.started, branch),
   })
 end
@@ -285,7 +438,7 @@ end
 --- @param callback fun(result:sia.ToolResult)
 local function list_worktrees(conversation, callback)
   local records = worktrees[conversation_id(conversation)] or {}
-  if #records == 0 then
+  if vim.tbl_isempty(records) then
     callback({
       content = "No tracked git worktrees for this conversation.",
       summary = string.format("%s No git worktrees", icons.directory),
@@ -302,7 +455,9 @@ local function list_worktrees(conversation, callback)
     "",
   }
 
+  local count = 0
   for _, record in pairs(records) do
+    count = count + 1
     table.insert(lines, string.format("- Branch: %s", record.branch))
     table.insert(lines, string.format("  Path: %s", display_path(record.path)))
     table.insert(lines, string.format("  Base: %s", short_ref(record.base_ref)))
@@ -311,7 +466,7 @@ local function list_worktrees(conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("%s Listed %d git worktree(s)", icons.directory, #records),
+    summary = string.format("%s Listed %d git worktree(s)", icons.directory, count),
   })
 end
 
@@ -614,7 +769,7 @@ return tool_utils.new_tool({
   summary = summary,
   instructions = [[Manage tracked git worktrees for the current conversation.
 
-- Use `create` to make an isolated worktree on a new branch for delegated work
+- Use `create` to make an isolated worktree for delegated work. If the branch already exists, it will be checked out in the new worktree. If the branch is new, it will be created from the `base` ref (default: HEAD).
 - Use `list` to see which worktrees this conversation already owns
 - Use `status` to inspect status, diff stats, and recent commits for one tracked branch
 - Use `diff` to inspect the full patch relative to the base commit used at creation time
@@ -644,7 +799,7 @@ return tool_utils.new_tool({
     opts.user_input(
       string.format("Remove git worktree branch '%s' and delete the branch", branch),
       {
-        level = "warn",
+        -- level = "warn",
         on_accept = function()
           remove_worktree(args, conversation, callback)
         end,
