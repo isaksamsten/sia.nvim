@@ -58,6 +58,10 @@ require("sia").setup({
       -- args can also be a function returning string[]
     },
 
+    -- Globally enabled agents and skills
+    agents = { "code/review", "code/explore" },
+    skills = { "update-docs" },
+
     -- Context retention
     context = {
       tools = {
@@ -99,6 +103,11 @@ require("sia").setup({
   models = {},
 })
 ```
+
+Use `settings.agents` to make agent definitions available across all projects.
+Store the agent files themselves in `~/.config/sia/agents/` when you want that
+global behavior. A project can still override the enabled list in
+`.sia/config.json`.
 
 ## Context Management
 

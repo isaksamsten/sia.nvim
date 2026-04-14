@@ -31,6 +31,7 @@ are included in the default chat action.
 | Tool            | Default | Description                                                       |
 | --------------- | ------- | ----------------------------------------------------------------- |
 | **bash**        | ★       | Execute shell commands with persistent sessions and async support |
+| **git_worktree**| ★       | Create, inspect, and clean up tracked git worktrees              |
 | **diagnostics** | ★       | Retrieve LSP diagnostics for a file                               |
 | **websearch**   | ★       | Search the web using Google                                       |
 | **webfetch**    | ★       | Fetch and convert web content to markdown                         |
@@ -89,12 +90,19 @@ tool that are useful for permission and risk patterns.
 | **grep**          | **pattern**, **path**, **glob**                 | Search pattern, directory, and file glob                                      |
 | **glob**          | **pattern**, **path**                           | File glob and directory to search                                             |
 | **bash**          | **bash_command**, **command**, **async**        | Shell command, subcommand (`start`/`status`/`wait`/`kill`), and whether async |
+| **git_worktree**  | **command**, **branch**, **base**               | Worktree action plus branch identity and optional base ref                    |
 | **diagnostics**   | **file**                                        | File path to get diagnostics for                                              |
 | **websearch**     | **query**                                       | Search query string                                                           |
 | **webfetch**      | **url**                                         | URL to fetch                                                                  |
 | **view_image**    | **path**                                        | Image file path                                                               |
 | **view_document** | **path**                                        | Document file path                                                            |
-| **agent**         | **command**, **agent**, **task**, **id**, **message** | Session command plus agent name, task, session ID, and follow-up message |
+| **agent**         | **command**, **agent**, **id**, **message**, **workspace** | Session command plus agent name, session ID, follow-up message, and optional worktree path |
+
+`git_worktree` keeps per-conversation records for worktrees it creates. Closing a
+conversation automatically detaches those worktree directories while preserving the
+branches, so the work remains available to merge or inspect later. By contrast,
+`git_worktree(command="remove", branch="...")` removes the tracked worktree and
+deletes that branch.
 
 ### Permission Examples
 

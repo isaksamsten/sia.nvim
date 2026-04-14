@@ -84,6 +84,15 @@ Table of Contents                                      *sia-table-of-contents*
   - Adding Tools to Actions                |sia-tools-adding-tools-to-actions|
 16. Reference                                                  |sia-reference|
   - Highlight Groups                          |sia-reference-highlight-groups|
+17. Orchestrator Pattern                            |sia-orchestrator-pattern|
+  - How It Works                       |sia-orchestrator-pattern-how-it-works|
+  - Agent Definitions             |sia-orchestrator-pattern-agent-definitions|
+  - Action Configuration       |sia-orchestrator-pattern-action-configuration|
+  - Prompt Guidance                 |sia-orchestrator-pattern-prompt-guidance|
+  - Project Configuration     |sia-orchestrator-pattern-project-configuration|
+  - Usage                                     |sia-orchestrator-pattern-usage|
+  - Example Session                 |sia-orchestrator-pattern-example-session|
+  - Parallel Work                     |sia-orchestrator-pattern-parallel-work|
 
 ==============================================================================
 1. sia.nvim                                                     *sia-sia.nvim*
@@ -227,10 +236,10 @@ Open any file and try these:
 >vim
     " Open a chat conversation
     :Sia explain this codebase
-    
+
     " Generate code at your cursor
     :Sia! write a fibonacci function
-    
+
     " Refactor selected code (visual select first, then run)
     :'<,'>Sia! simplify this function
 <
@@ -710,24 +719,24 @@ SUGGESTED GLOBAL KEYBINDINGS    *sia-keybindings-suggested-global-keybindings*
     keys = {
       -- Append selection or operator-pending text to the visible chat
       { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
-    
+
       -- Execute the buffer's default prompt (vim.b.sia) with the selection
       { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
-    
+
       -- Toggle the last chat window
       { "<Leader>at", function() require("sia").chat.toggle() end, desc = "Toggle Sia chat" },
-    
+
       -- Open compose window for a new conversation
       { "<Leader>ap", function() require("sia").chat.compose() end, desc = "Compose new chat" },
-    
+
       -- Accept or reject all changes in the buffer
       { "<Leader>aa", function() require("sia").edit.accept_all() end, desc = "Accept all changes" },
       { "<Leader>ar", function() require("sia").edit.reject_all() end, desc = "Reject all changes" },
-    
+
       -- Show changes in diff view and quickfix
       { "<Leader>ad", function() require("sia").edit.show() end, desc = "Show diff" },
       { "<Leader>aq", function() require("sia").edit.open_qf() end, desc = "Show changes in quickfix" },
-    
+
       -- Navigate between changes (falls back to native [c/]c in diff mode)
       {
         "[c", function()
@@ -743,7 +752,7 @@ SUGGESTED GLOBAL KEYBINDINGS    *sia-keybindings-suggested-global-keybindings*
         end,
         desc = "Next change",
       },
-    
+
       -- Accept or reject the change under the cursor
       { "ga", function() require("sia").edit.accept() end, desc = "Accept change" },
       { "gx", function() require("sia").edit.reject() end, desc = "Reject change" },
@@ -775,16 +784,16 @@ Inside a chat window (`ft=sia`), you can bind these navigation mappings:
     keys = {
       -- Open a reply buffer to continue the conversation
       { "<CR>", require("sia").chat.reply, ft = "sia" },
-    
+
       -- Browse conversation messages
       { "p", require("sia").ui.messages, ft = "sia" },
-    
+
       -- Toggle todo panel
       { "t", require("sia").ui.todos, ft = "sia" },
-    
+
       -- Toggle agent/process status panel
       { "a", require("sia").ui.status, ft = "sia" },
-    
+
       -- Show referenced files in quickfix
       { "c", require("sia").ui.contexts, ft = "sia" },
     }
@@ -835,10 +844,10 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
         model = "openai/gpt-5.2",                              -- Main conversational model
         fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
         plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
-    
+
         -- Icon set: "emoji" or a custom table
         icons = "emoji",
-    
+
         -- UI settings
         ui = {
           diff = {
@@ -855,21 +864,25 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
             },
           },
         },
-    
+
         -- File operations
         file_ops = {
           trash = true,                     -- Move deleted files to trash instead of removing
           create_dirs_on_rename = true,     -- Auto-create directories when renaming files
           restrict_to_project_root = true,  -- Restrict file operations to the project root
         },
-    
+
         -- Shell configuration for the bash tool
         shell = {
           command = "/bin/bash",
           args = { "-s" },
           -- args can also be a function returning string[]
         },
-    
+
+        -- Globally enabled agents and skills
+        agents = { "code/review", "code/explore" },
+        skills = { "update-docs" },
+
         -- Context retention
         context = {
           tools = {
@@ -888,7 +901,7 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
             },
           },
         },
-    
+
         -- Chat window defaults
         chat = {
           cmd = "botright vnew",
@@ -900,17 +913,22 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
           },
         },
       },
-    
+
       -- Custom actions (see Actions documentation)
       actions = {},
-    
+
       -- Custom provider overrides (see Models documentation)
       providers = {},
-    
+
       -- Model option overrides by provider (see Models documentation)
       models = {},
     })
 <
+
+Use `settings.agents` to make agent definitions available across all projects.
+Store the agent files themselves in `~/.config/sia/agents/` when you want that
+global behavior. A project can still override the enabled list in
+`.sia/config.json`.
 
 
 CONTEXT MANAGEMENT                           *sia-settings-context-management*
@@ -1035,10 +1053,10 @@ Use the `:SiaModel` command to browse available models:
 >vim
     " List all models
     :SiaModel list
-    
+
     " List models from a specific provider
     :SiaModel list openai
-    
+
     " Show details for a model (context window, support, pricing)
     :SiaModel show openai/gpt-5.2
 <
@@ -1372,7 +1390,8 @@ MODEL OVERRIDES ~
     an object (`{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }`).
 - **fast_model** / **plan_model** — same format as **model**.
 - **models** — override parameters for specific models, organized by provider:
-    >json
+
+>json
         {
           "models": {
             "openai": {
@@ -1380,9 +1399,10 @@ MODEL OVERRIDES ~
             }
           }
         }
-    <
+<
 - **aliases** — create shorthand names for models with custom parameters:
-    >json
+
+>json
         {
           "aliases": {
             "codex-high": {
@@ -1391,7 +1411,7 @@ MODEL OVERRIDES ~
             }
           }
         }
-    <
+<
     Use with `:Sia -m codex-high your prompt here`.
 
 
@@ -1419,7 +1439,9 @@ such as `context.tools.preserve`.
 AGENTS AND SKILLS ~
 
 - **agents** — array of agent names to enable from `~/.config/sia/agents/`
-    or `.sia/agents/`. See |sia-agents|.
+    or `.sia/agents/`. Use this for project-local overrides. For
+    action-specific workflows, a chat action can also declare its own `agents`
+    set directly. See |sia-agents|.
 - **skills** — array of skill names to enable from `~/.config/sia/skills/`,
     `.sia/skills/`, or extra paths. See |sia-skills|.
 - **skills_extras** — additional directory paths to search for skill
@@ -1832,16 +1854,18 @@ Sia includes these built-in actions:
 
 - **/commit** — generates a commit message from the staged diff. Available only
     in `gitcommit` buffers.
-    >vim
+
+>vim
         :Sia /commit
-    <
+<
 - **/doc** — generates documentation for the function or class under the
     cursor. Automatically captures the surrounding function or class using
     treesitter.
-    >vim
+
+>vim
         :Sia /doc
         :Sia /doc numpydoc
-    <
+<
 
 
 CUSTOM ACTIONS                                    *sia-actions-custom-actions*
@@ -1850,7 +1874,7 @@ Define custom actions in `setup()`:
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     require("sia").setup({
       actions = {
         yoda = {
@@ -1933,6 +1957,12 @@ MODE-SPECIFIC OPTIONS ~
 
   chat.wo    Window options table
 
+  agents     Agent names exposed to this action, without relying on project
+             config
+
+  skills     Skill names exposed to this action, without relying on project
+             config
+
   modes      Table of conversation modes (see Conversation Modes)
   -------------------------------------------------------------------------
 **Hidden mode** (`mode = "hidden"`):
@@ -1963,7 +1993,7 @@ You can also use these as functions from
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     system = {
       messages.system.adaptive,
     },
@@ -1988,7 +2018,7 @@ optional region (for tracking file changes):
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     user = {
       messages.user.current_context({ show_line_numbers = true }),
       messages.user.current_buffer({ show_line_numbers = true }),
@@ -2014,7 +2044,7 @@ Options for `current_context()` and `current_buffer()`:
 
 >lua
     local user = require("sia.config.messages").user
-    
+
     user.current_context({ show_line_numbers = true })
     user.current_buffer({ show_line_numbers = true, include_cursor = true })
 <
@@ -2028,6 +2058,34 @@ To hide a user message from the UI (useful for context that clutters the chat):
       end },
     },
 <
+
+
+ACTION SCOPED AGENTS AND SKILLS ~
+
+Chat actions can expose a specific set of agents or skills directly:
+
+>lua
+    require("sia").setup({
+      actions = {
+        orchestrate = {
+          mode = "chat",
+          agents = {
+            ["code/implement"] = true,
+            ["code/explore"] = true,
+            ["code/review"] = true,
+          },
+          skills = {
+            ["update-docs"] = true,
+          },
+          -- ...
+        },
+      },
+    })
+<
+
+Use this when an action should always see a known set of agents or skills,
+without requiring the user to enable them in global settings or
+`.sia/config.json`.
 
 
 CONVERSATION MODES                            *sia-actions-conversation-modes*
@@ -2096,7 +2154,7 @@ EXAMPLE: CUSTOM REVIEW MODE ~
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     require("sia").setup({
       actions = {
         chat = {
@@ -2153,7 +2211,7 @@ Generate a code summary formatted as a comment block:
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     actions = {
       summarize = {
         mode = "insert",
@@ -2188,7 +2246,7 @@ DIFF MODE FOR REFACTORING ~
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     actions = {
       refactor = {
         mode = "diff",
@@ -2228,10 +2286,10 @@ running in the background while the main conversation continues.
 
 CREATING AGENTS                                   *sia-agents-creating-agents*
 
-1. Create an agent definition file in `.sia/agents/` (project-level) or
-`~/.config/sia/agents/` (global).
-2. List the agent name in your |sia-project-config|
-under the `agents` key.
+1. Create an agent definition file in `~/.config/sia/agents/` for global reuse,
+or in `.sia/agents/` if it only belongs to one project.
+2. Expose the agent either from a chat action with `agents = { ["name"] = true }`,
+or by enabling it in `settings.agents` or |sia-project-config|.
 
 
 AGENT FILE FORMAT ~
@@ -2249,7 +2307,7 @@ Agent files are markdown with YAML frontmatter:
     require_confirmation: false
     interactive: false
     ---
-    
+
     You are a code search specialist. When given a search task, use the available
     tools to find relevant code patterns, function definitions, and implementations.
     Report your findings clearly with file paths and line numbers.
@@ -2285,13 +2343,37 @@ The agent name is derived from the file path relative to the agents directory:
 
 ENABLING AGENTS ~
 
-Agents must be listed in your project’s `.sia/config.json` to be available:
+Agents must be exposed before they are shown to the assistant.
+
+For action-specific workflows, declare them directly on the chat action:
+
+>lua
+    require("sia").setup({
+      actions = {
+        orchestrate = {
+          mode = "chat",
+          agents = {
+            ["code/review"] = true,
+            ["code/explore"] = true,
+            ["searcher"] = true,
+          },
+        },
+      },
+    })
+<
+
+If you only want them in one project, you can instead enable them in that
+project’s `.sia/config.json`:
 
 >json
     {
       "agents": ["code/review", "code/explore", "searcher"]
     }
 <
+
+Action-level `agents` is the most self-contained option for custom workflows.
+Global or project config is useful when you want the same agents available
+across many actions.
 
 
 RESOLUTION ORDER ~
@@ -2447,11 +2529,11 @@ SKILL FILE FORMAT ~
       - grep
       - view
     ---
-    
+
     # Monitor Logs
-    
+
     When asked to monitor or analyze logs, follow these steps:
-    
+
     1. Use `bash` to tail the log file or check recent entries.
     2. Use `grep` to search for error patterns.
     3. ...
@@ -2592,20 +2674,22 @@ CODE SEARCH ~
 
 DEVELOPMENT ENVIRONMENT ~
 
-  -----------------------------------------------------------------------------
-  Tool          Default   Description
-  ------------- --------- -----------------------------------------------------
-  bash          ★         Execute shell commands with persistent sessions and
-                          async support
+  ------------------------------------------------------------------------------
+  Tool           Default   Description
+  -------------- --------- -----------------------------------------------------
+  bash           ★         Execute shell commands with persistent sessions and
+                           async support
 
-  diagnostics   ★         Retrieve LSP diagnostics for a file
+  git_worktree   ★         Create, inspect, and clean up tracked git worktrees
 
-  websearch     ★         Search the web using Google
+  diagnostics    ★         Retrieve LSP diagnostics for a file
 
-  webfetch      ★         Fetch and convert web content to markdown
+  websearch      ★         Search the web using Google
 
-  memory        ★         Manage persistent memory in .sia/memory/
-  -----------------------------------------------------------------------------
+  webfetch       ★         Fetch and convert web content to markdown
+
+  memory         ★         Manage persistent memory in .sia/memory/
+  ------------------------------------------------------------------------------
 
 TASK MANAGEMENT ~
 
@@ -2687,6 +2771,9 @@ CORE TOOLS ~
                   async                   (start/status/wait/kill), and whether
                                           async
 
+  git_worktree    command, branch, base   Worktree action plus branch identity
+                                          and optional base ref
+
   diagnostics     file                    File path to get diagnostics for
 
   websearch       query                   Search query string
@@ -2697,9 +2784,16 @@ CORE TOOLS ~
 
   view_document   path                    Document file path
 
-  agent           command, agent, task,   Session command plus agent name, task,
-                  id, message             session ID, and follow-up message
+  agent           command, agent, id,     Session command plus agent name,
+                  message, workspace      session ID, follow-up message, and
+                                          optional worktree path
   ------------------------------------------------------------------------------
+`git_worktree` keeps per-conversation records for worktrees it creates. Closing
+a conversation automatically detaches those worktree directories while
+preserving the branches, so the work remains available to merge or inspect
+later. By contrast, `git_worktree(command="remove", branch="...")` removes the
+tracked worktree and deletes that branch.
+
 
 PERMISSION EXAMPLES ~
 
@@ -2889,6 +2983,416 @@ OTHER ~
   Group     Default Link     Description
   --------- ---------------- ----------------
   SiaMode   DiagnosticInfo   Mode indicator
+
+==============================================================================
+17. Orchestrator Pattern                            *sia-orchestrator-pattern*
+
+Use the orchestrator pattern when a task is large, risky, or easy to split into
+parallel tracks. The main chat stays focused on planning and review, while
+agents do implementation work in isolated git worktrees.
+
+This recipe keeps orchestration guidance in the action configuration itself.
+The rules for branch naming, worktree handoff, review flow, and final reporting
+are specific to this workflow, so they belong in your custom action prompt
+rather than in the plugin’s built-in prompts.
+
+
+HOW IT WORKS                           *sia-orchestrator-pattern-how-it-works*
+
+>text
+    +---------------------------------------------+
+    | Orchestrator                                |
+    |                                             |
+    | 1. Understand the task                      |
+    | 2. Create one or more worktrees             |
+    | 3. Start focused agents in those worktrees  |
+    | 4. Review status and diffs                  |
+    | 5. Send follow-ups or report results        |
+    +-------------------+-------------------------+
+                 |                    |
+                 v                    v
+        +----------------+   +----------------+
+        | Agent A        |   | Agent B        |
+        | worktree A     |   | worktree B     |
+        +----------------+   +----------------+
+<
+
+A typical run looks like this:
+
+1. The orchestrator creates a tracked worktree with
+`git_worktree(command="create")`.
+2. It starts an agent and passes the returned worktree path as `workspace`.
+3. It monitors progress with `agent(command="status", id=...)` or waits with
+`agent(command="wait", id=...)`.
+4. When an agent finishes, it checks `git_worktree(command="status")` or
+`git_worktree(command="diff")` before reporting back.
+5. If needed, it sends another message to the same agent session with
+`agent(command="send", id=..., message="...")`.
+
+If several agents are running at the same time, `agent(command="wait")` without
+an ID waits for whichever one finishes first.
+
+
+AGENT DEFINITIONS                 *sia-orchestrator-pattern-agent-definitions*
+
+Create these files in `~/.config/sia/agents/` if you want the recipe available
+across projects. Use `.sia/agents/` only when the agents are project-specific.
+For this recipe, the global location is the better default.
+
+
+CODE/IMPLEMENT.MD ~
+
+This agent makes code changes inside a dedicated worktree.
+
+>markdown
+    ---
+    description: >
+      Implement code changes in an isolated git worktree. Receives a task
+      description and a workspace path from the orchestrator. Verifies the result
+      and commits focused changes.
+    tools:
+      - view
+      - edit
+      - write
+      - insert
+      - grep
+      - glob
+      - bash
+      - diagnostics
+    require_confirmation: false
+    ---
+
+    You are an implementation agent working inside an isolated git worktree.
+    Complete the requested change cleanly, verify it, and commit only task-related
+    work.
+
+    ## Process
+
+    1. Read the task carefully.
+    2. Explore the workspace before editing.
+    3. Implement the change with focused edits.
+    4. Run relevant tests or checks.
+    5. Commit the result when the task is complete.
+
+    ```console
+    $ git add -A
+    $ git commit -m "<type>(<scope>): <concise description>"
+    ```
+
+    ## Guidelines
+
+    - Keep the change focused on the assigned task.
+    - Do not refactor unrelated code unless the task requires it.
+    - Explain blockers clearly if you cannot finish.
+    - Prefer one clean commit for the completed task unless the orchestrator asks
+      for a different structure.
+<
+
+
+CODE/EXPLORE.MD ~
+
+This agent maps the codebase and reports back without editing files.
+
+>markdown
+    ---
+    description: >
+      Explore a codebase to map entry points, call paths, and data flow. Reports a
+      compact map that helps another agent implement the change.
+    tools:
+      - glob
+      - grep
+      - view
+    require_confirmation: false
+    ---
+
+    You are an exploration-only agent. Find the relevant code paths quickly and
+    report only the context needed for implementation.
+
+    ## Constraints
+
+    - Do not edit files.
+    - Do not dump large code excerpts.
+    - Prefer symbols, paths, and concise call flow summaries.
+
+    ## Process
+
+    1. Restate the exploration goal in one sentence.
+    2. Use `glob`, `grep`, and `view` to trace the relevant flow.
+    3. Stop when you can explain where the change should land.
+
+    ## Output Format
+
+    - Goal
+    - Key entry points
+    - Call or data flow
+    - Where to hook the change
+    - Relevant risks
+<
+
+
+CODE/REVIEW.MD ~
+
+This agent reviews worktree changes before the orchestrator reports back.
+
+>markdown
+    ---
+    description: >
+      Review code changes for correctness, security, performance, and style.
+      Reports issues with clear severity and file references.
+    tools:
+      - glob
+      - grep
+      - view
+    require_confirmation: false
+    ---
+
+    You are a code reviewer. Read the provided changes and report concrete issues.
+
+    ## Review Areas
+
+    - Correctness
+    - Security
+    - Performance
+    - Style
+
+    ## Output Format
+
+    1. Brief assessment
+    2. Issues grouped by severity, with file paths and suggested fixes
+    3. Remaining risks or recommendations
+<
+
+
+ACTION CONFIGURATION           *sia-orchestrator-pattern-action-configuration*
+
+Define an `orchestrate` action in your own config. Keep the default adaptive
+prompt, then add one action-specific system message that tells the model how to
+behave as an orchestrator.
+
+>lua
+    local messages = require("sia.config.messages")
+
+    require("sia").setup({
+      actions = {
+        orchestrate = {
+          mode = "chat",
+          chat = { cmd = "split" },
+          agents = {
+            ["code/implement"] = true,
+            ["code/explore"] = true,
+            ["code/review"] = true,
+          },
+          system = {
+            messages.system.adaptive,
+            [[
+    You are running an orchestrator workflow. Stay in the coordinator role.
+
+    Your job is to understand the task, break it into focused units of work,
+    create isolated git worktrees, delegate implementation to agents, inspect the
+    results, and report clear outcomes back to the user.
+
+    Default procedure:
+    - Prefer implementation through agents in isolated git worktrees instead of editing directly in the main conversation.
+    - Use one focused branch or worktree per task so diffs stay reviewable.
+    - After creating a worktree, pass the returned path as `workspace` when starting the agent that should work there.
+    - Use an explorer agent first when the code path or hook point is unclear.
+    - Track the plan with todos.
+    - When an agent finishes, inspect the result with `git_worktree(command="status")` and `git_worktree(command="diff")` before reporting back.
+    - Reuse the same agent session with `agent(command="send", ...)` when follow-up work is needed.
+    - If multiple agents are running, `agent(command="wait")` without an ID waits for whichever one finishes first.
+    - Do not merge into the main branch unless the user explicitly asks for it or approves it.
+    - When the user asks for a merge, use `bash` for the merge step and treat tool confirmation as the final approval gate.
+    - Report branch names, verification steps, and remaining risks in the final handoff.
+            ]],
+          },
+          user = {
+            messages.user.environment,
+            messages.user.file_tree,
+            messages.user.agents_md,
+            messages.user.visible_buffers,
+            messages.user.selection(),
+          },
+          tools = function()
+            local tools = require("sia.tools")
+            return {
+              tools.ask_user,
+              tools.git_worktree,
+              tools.agent,
+              tools.view,
+              tools.grep,
+              tools.glob,
+              tools.bash,
+              tools.write_todos,
+              tools.read_todos,
+              tools.memory,
+            }
+          end,
+        },
+      },
+    })
+<
+
+The orchestrator action deliberately excludes `edit`, `write`, and `insert`.
+The main chat coordinates the work, and agents modify files in their own
+worktrees.
+
+
+PROMPT GUIDANCE                     *sia-orchestrator-pattern-prompt-guidance*
+
+The extra system message is part of this recipe, not part of the plugin.
+Customize it to match how much autonomy you want the orchestrator to have.
+
+A good orchestrator prompt usually covers these points:
+
+- stay in the coordinator role
+- create focused worktrees and pass their paths as `workspace`
+- inspect `git_worktree(command="status")` and
+    `git_worktree(command="diff")` before reporting results
+- reuse agent sessions with `agent(command="send", ...)` when follow-up work is
+    needed
+- require explicit approval before merging a feature branch into the main branch
+- report branch names, verification status, and open risks in the final handoff
+
+If you prefer, you can move the string into a local Lua variable or helper in
+your own config. The important part is to keep the workflow-specific guidance
+close to the action that uses it.
+
+
+PROJECT CONFIGURATION         *sia-orchestrator-pattern-project-configuration*
+
+Expose the recipe agents directly on the action so the user does not need to
+enable them separately in `settings.agents` or `.sia/config.json`:
+
+>lua
+    require("sia").setup({
+      actions = {
+        orchestrate = {
+          mode = "chat",
+          agents = {
+            ["code/implement"] = true,
+            ["code/explore"] = true,
+            ["code/review"] = true,
+          },
+          -- ...
+        },
+      },
+    })
+<
+
+You can still enable agents globally in `settings.agents` or per project in
+`.sia/config.json`, but this recipe does not require it when the action already
+declares the agent set.
+
+
+USAGE                                         *sia-orchestrator-pattern-usage*
+
+Start the orchestrator with an initial task:
+
+>vim
+    :Sia /orchestrate refactor the authentication module to use JWT tokens
+<
+
+Or open the orchestrator first and plan interactively:
+
+>vim
+    :Sia /orchestrate
+<
+
+
+EXAMPLE SESSION                     *sia-orchestrator-pattern-example-session*
+
+This is a typical orchestration flow.
+
+1. Explore the current implementation when the relevant code path is not yet
+clear.
+
+>text
+    agent(command="start", agent="code/explore",
+          message="Map the authentication module: entry points, middleware chain, and session handling")
+<
+
+
+2. Create a todo list and a focused worktree.
+
+>text
+    write_todos(replace=[
+      { description = "Replace session auth with JWT in middleware", status = "pending" },
+      { description = "Add JWT token generation endpoint", status = "pending" },
+      { description = "Update tests for the JWT flow", status = "pending" }
+    ])
+
+    git_worktree(command="create", branch="sia/jwt-refactor")
+<
+
+
+3. Start the implementer in the returned worktree path.
+
+>text
+    agent(command="start", agent="code/implement",
+          message="Replace session-based auth with JWT tokens. Use the exploration notes and keep the diff focused.",
+          workspace="/path/to/worktree/sia/jwt-refactor")
+<
+
+
+4. Review the worktree before reporting back.
+
+>text
+    git_worktree(command="status", branch="sia/jwt-refactor")
+    git_worktree(command="diff", branch="sia/jwt-refactor")
+
+    agent(command="start", agent="code/review",
+          message="Review the JWT refactor for correctness and security issues.",
+          workspace="/path/to/worktree/sia/jwt-refactor")
+<
+
+
+5. Send follow-up instructions if the review finds a problem.
+
+>text
+    agent(command="send", id=1,
+          message="Fix the token expiry issue the reviewer found, then rerun the relevant tests.")
+<
+
+
+6. Hand the result back to the user with the branch name and verification status.
+
+>text
+    Changes are ready on branch `sia/jwt-refactor`.
+    Verified with: <tests or checks>
+    Remaining risks: <if any>
+<
+
+
+7. Merge only when the user asks for it. The merge runs through `bash`, so the
+usual confirmation prompt becomes the approval step.
+
+>text
+    bash(command="start",
+         description="Merge JWT refactor branch",
+         bash_command="git merge --no-ff sia/jwt-refactor")
+<
+
+
+
+
+PARALLEL WORK                         *sia-orchestrator-pattern-parallel-work*
+
+You can split a larger task across multiple worktrees.
+
+>text
+    git_worktree(command="create", branch="sia/feature-a")
+    git_worktree(command="create", branch="sia/feature-b")
+
+    agent(command="start", agent="code/implement",
+          message="Implement feature A.",
+          workspace="/path/to/worktree/sia/feature-a")
+
+    agent(command="start", agent="code/implement",
+          message="Implement feature B.",
+          workspace="/path/to/worktree/sia/feature-b")
+
+    agent(command="wait")
+<
 
 Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
 

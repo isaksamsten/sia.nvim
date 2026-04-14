@@ -88,6 +88,8 @@ Use it with `:Sia /yoda` on a visual selection.
 | ---------- | --------------------------------------------------------------------------- |
 | `chat.cmd` | Command to open chat window (e.g., `"vsplit"`)                              |
 | `chat.wo`  | Window options table                                                        |
+| `agents`   | Agent names exposed to this action, without relying on project config       |
+| `skills`   | Skill names exposed to this action, without relying on project config       |
 | `modes`    | Table of conversation modes (see [Conversation Modes](#conversation-modes)) |
 
 **Hidden mode** (`mode = "hidden"`):
@@ -171,6 +173,33 @@ user = {
   end },
 },
 ```
+
+### Action Scoped Agents And Skills
+
+Chat actions can expose a specific set of agents or skills directly:
+
+```lua
+require("sia").setup({
+  actions = {
+    orchestrate = {
+      mode = "chat",
+      agents = {
+        ["code/implement"] = true,
+        ["code/explore"] = true,
+        ["code/review"] = true,
+      },
+      skills = {
+        ["update-docs"] = true,
+      },
+      -- ...
+    },
+  },
+})
+```
+
+Use this when an action should always see a known set of agents or skills,
+without requiring the user to enable them in global settings or
+`.sia/config.json`.
 
 ## Conversation Modes
 

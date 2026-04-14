@@ -6,10 +6,10 @@ running in the background while the main conversation continues.
 
 ## Creating Agents
 
-1. Create an agent definition file in `.sia/agents/` (project-level) or
-   `~/.config/sia/agents/` (global).
-2. List the agent name in your [project config](../3-configuration/3-project.md)
-   under the `agents` key.
+1. Create an agent definition file in `~/.config/sia/agents/` for global reuse,
+   or in `.sia/agents/` if it only belongs to one project.
+2. Expose the agent either from a chat action with `agents = { ["name"] = true }`,
+   or by enabling it in `settings.agents` or [project config](../3-configuration/3-project.md).
 
 ### Agent File Format
 
@@ -52,13 +52,37 @@ The agent name is derived from the file path relative to the agents directory:
 
 ### Enabling Agents
 
-Agents must be listed in your project's `.sia/config.json` to be available:
+Agents must be exposed before they are shown to the assistant.
+
+For action-specific workflows, declare them directly on the chat action:
+
+```lua
+require("sia").setup({
+  actions = {
+    orchestrate = {
+      mode = "chat",
+      agents = {
+        ["code/review"] = true,
+        ["code/explore"] = true,
+        ["searcher"] = true,
+      },
+    },
+  },
+})
+```
+
+If you only want them in one project, you can instead enable them in that
+project's `.sia/config.json`:
 
 ```json
 {
   "agents": ["code/review", "code/explore", "searcher"]
 }
 ```
+
+Action-level `agents` is the most self-contained option for custom workflows.
+Global or project config is useful when you want the same agents available
+across many actions.
 
 ### Resolution Order
 

@@ -45,7 +45,8 @@ HEADER
     "$DOCS_DIR/5-features/2-agents.md" \
     "$DOCS_DIR/5-features/3-skills.md" \
     "$DOCS_DIR/5-features/4-tools.md" \
-    "$DOCS_DIR/6-reference.md"; do
+    "$DOCS_DIR/6-reference.md" \
+    "$DOCS_DIR/7-recipes/1-orchestrator.md"; do
 
     if [[ -f "$doc" ]]; then
       echo ""

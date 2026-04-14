@@ -96,7 +96,9 @@ as `context.tools.preserve`.
 ### Agents and Skills
 
 - **agents** — array of agent names to enable from `~/.config/sia/agents/`
-  or `.sia/agents/`. See [Agents](../5-features/2-agents.md).
+  or `.sia/agents/`. Use this for project-local overrides. For
+  action-specific workflows, a chat action can also declare its own `agents`
+  set directly. See [Agents](../5-features/2-agents.md).
 - **skills** — array of skill names to enable from `~/.config/sia/skills/`,
   `.sia/skills/`, or extra paths. See [Skills](../5-features/3-skills.md).
 - **skills_extras** — additional directory paths to search for skill
