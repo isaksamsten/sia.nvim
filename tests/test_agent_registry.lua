@@ -197,8 +197,6 @@ T["sia.agent.registry"]["parse_agent_file mixes approved and unapproved tools"] 
   eq({ grep = true, view = true }, agent.auto_approve)
 end
 
-
-
 T["sia.agent.registry"]["parse_agent_file fails on missing frontmatter"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
@@ -305,7 +303,7 @@ T["sia.agent.registry"]["get_agents returns empty when no agents configured"] = 
     config.get_local_config = function() return nil end
 
     local registry = require("sia.agent.registry")
-    _G.result = registry.get_agents()
+    _G.result = registry.get()
 
     config.get_local_config = orig
   ]])
@@ -313,7 +311,7 @@ T["sia.agent.registry"]["get_agents returns empty when no agents configured"] = 
   eq({}, child.lua_get("_G.result"))
 end
 
-T["sia.agent.registry"]["get_agents loads global agents by name"] = function()
+T["sia.agent.registry"]["get loads global agents by name"] = function()
   child.lua([[
     local config = require("sia.config")
     local registry = require("sia.agent.registry")
@@ -348,7 +346,7 @@ T["sia.agent.registry"]["get_agents loads global agents by name"] = function()
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return nil end
 
-    _G.result = registry.get_agents()
+    _G.result = registry.get()
 
     vim.fs.root = orig_root
     config.get_local_config = orig
@@ -361,7 +359,7 @@ T["sia.agent.registry"]["get_agents loads global agents by name"] = function()
   eq("Research agent", result.researcher.description)
 end
 
-T["sia.agent.registry"]["get_agents supports subdirectory names"] = function()
+T["sia.agent.registry"]["get supports subdirectory names"] = function()
   child.lua([[
     local config = require("sia.config")
     local registry = require("sia.agent.registry")
@@ -387,7 +385,7 @@ T["sia.agent.registry"]["get_agents supports subdirectory names"] = function()
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return nil end
 
-    _G.result = registry.get_agents()
+    _G.result = registry.get()
 
     vim.fs.root = orig_root
     config.get_local_config = orig
@@ -399,7 +397,7 @@ T["sia.agent.registry"]["get_agents supports subdirectory names"] = function()
   eq("Code review agent", result["code/review"].description)
 end
 
-T["sia.agent.registry"]["get_agents local overrides global"] = function()
+T["sia.agent.registry"]["get local overrides global"] = function()
   child.lua([[
     local config = require("sia.config")
     local registry = require("sia.agent.registry")
@@ -438,7 +436,7 @@ T["sia.agent.registry"]["get_agents local overrides global"] = function()
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return project_root end
 
-    _G.result = registry.get_agents()
+    _G.result = registry.get()
 
     vim.fs.root = orig_root
     config.get_local_config = orig

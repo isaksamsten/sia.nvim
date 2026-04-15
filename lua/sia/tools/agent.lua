@@ -263,7 +263,7 @@ When NOT to use the agent tool:
       return
     end
 
-    local agent_def = registry.get_agent(args.agent)
+    local agent_def = registry.get(args.agent)
 
     if not agent_def then
       callback({

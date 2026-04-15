@@ -158,7 +158,7 @@ end
 function Runtime:spawn(agent_name, task, opts)
   opts = opts or {}
 
-  local agent_def = require("sia.agent.registry").get_agent(agent_name)
+  local agent_def = require("sia.agent.registry").get(agent_name)
   if not agent_def then
     return nil
   end
