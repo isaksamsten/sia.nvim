@@ -17,6 +17,9 @@ local function agent_conversation_stub(opts)
     get_last_assistant_content = function()
       return opts.last_assistant_content
     end,
+    get_last_user_content = function()
+      return opts.last_user_content
+    end,
   }
 end
 
@@ -139,6 +142,10 @@ T["status ui"]["renders expanded agent and running process details inline"] = fu
     name = "code/review",
     progress = "Analyzing",
     started_at = 1,
+    conversation = agent_conversation_stub({
+      last_user_content = "Inspect files\nDraft notes",
+      last_assistant_content = "I found 3 issues in the code.",
+    }),
   })
   local proc = make_process(2, "make test", {
     description = "Run tests",
@@ -157,9 +164,8 @@ T["status ui"]["renders expanded agent and running process details inline"] = fu
   local lines = view:render()
 
   eq(true, view.has_running)
-  eq(true, contains(lines, "    Task:"))
-  eq(true, contains(lines, "      Inspect files"))
-  eq(true, contains(lines, "      Draft notes"))
+  eq(true, contains(lines, "    Last prompt: Inspect files Draft notes"))
+  eq(true, contains(lines, "    Last response: I found 3 issues in the code."))
   eq(true, contains(lines, "    Command:"))
   eq(true, contains(lines, "      make test"))
   eq(true, contains(lines, "    Status: running"))

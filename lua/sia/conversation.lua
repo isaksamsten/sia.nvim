@@ -800,6 +800,28 @@ function Conversation:get_last_assistant_content()
   return nil
 end
 
+--- @return string?
+function Conversation:get_last_user_content()
+  for i = #self.entries, 1, -1 do
+    local entry = self.entries[i]
+    if not entry.dropped and entry.role == "user" and entry.content then
+      if type(entry.content) == "string" then
+        return entry.content
+      end
+      local parts = {}
+      for _, part in ipairs(entry.content) do
+        if part.type == "text" then
+          table.insert(parts, part.text)
+        end
+      end
+      if #parts > 0 then
+        return table.concat(parts, "\n")
+      end
+    end
+  end
+  return nil
+end
+
 --- @param name string
 --- @param arguments table
 --- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string? }

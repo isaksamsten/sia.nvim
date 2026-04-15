@@ -157,6 +157,20 @@ local function add_output_sections(d, stdout, stderr, empty_message)
   end
 end
 
+--- @param text string?
+--- @param max_len integer
+--- @return string?
+local function truncate_preview(text, max_len)
+  if not text or text == "" then
+    return nil
+  end
+  local preview = vim.trim(text):gsub("\n", " ")
+  if #preview > max_len then
+    preview = preview:sub(1, max_len) .. "…"
+  end
+  return preview
+end
+
 --- @param agent sia.agents.Agent
 --- @param runtime sia.agents.Runtime
 --- @return sia.ui.RenderSpec
@@ -193,7 +207,18 @@ local function render_agent(agent, runtime)
     running = agent.status == "running",
     actions = actions,
     details = function(d)
-      d:block("Task:", command_lines(agent.task))
+      local user_preview =
+        truncate_preview(agent.conversation:get_last_user_content(), 200)
+      if user_preview then
+        d:detail("Last prompt", user_preview)
+      end
+
+      local assistant_preview =
+        truncate_preview(agent.conversation:get_last_assistant_content(), 200)
+      if assistant_preview then
+        d:detail("Last response", assistant_preview)
+      end
+
       if agent.status == "running" then
         if agent.view == "pending" then
           d:line("Will open as chat on completion.", "DiagnosticInfo")
@@ -207,14 +232,6 @@ local function render_agent(agent, runtime)
         d:line("Opened as interactive chat.", "DiagnosticInfo")
       elseif agent.status == "pending" then
         d:line("Result is ready to attach.", "DiagnosticInfo")
-        local assistant_content = agent.conversation:get_last_assistant_content()
-        if assistant_content then
-          local preview = vim.trim(assistant_content)
-          if #preview > 200 then
-            preview = preview:sub(1, 200) .. "…"
-          end
-          d:detail("Result", preview)
-        end
       elseif agent.status == "idle" then
         d:line("Idle.", "NonText")
       elseif agent.status == "cancelled" then
