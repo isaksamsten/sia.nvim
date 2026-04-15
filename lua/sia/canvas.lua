@@ -440,7 +440,9 @@ function Canvas:render_messages(messages, model)
         inserted_turn_header = true
       end
 
-      local tool_lines = format_tool_summary_lines("done", message.summary)
+      local tool_lines = message.summary and format_tool_summary_lines("done", message.summary)
+        or nil
+      local next_message = next_renderable_message(messages, index)
       if tool_lines then
         local start_line
         if inserted_turn_header then
@@ -457,7 +459,6 @@ function Canvas:render_messages(messages, model)
         end
         self:highlight_tool(start_line, start_line + #tool_lines)
 
-        local next_message = next_renderable_message(messages, index)
         if
           next_message
           and next_message.role == "assistant"
@@ -468,6 +469,16 @@ function Canvas:render_messages(messages, model)
           -- reuse it, matching the streaming layout for tool-only rounds.
           vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
         end
+      elseif
+        inserted_turn_header
+        and next_message
+        and next_message.role == "assistant"
+        and next_message.turn_id == message.turn_id
+      then
+        local line_count = vim.api.nvim_buf_line_count(self.buf)
+        -- Preserve the placeholder line that streaming leaves behind when a
+        -- tool-only round finishes without a final summary.
+        vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
       end
       goto continue
     end
@@ -569,24 +580,32 @@ end
 --- @param previous_line_count integer
 --- @param tool_renders table<string, sia.engine.Status>
 --- @param tool_order string[]
+--- @param opts { preserve_placeholder?: boolean }?
 --- @return integer
 function Canvas:update_tool_block(
   position,
   previous_line_count,
   tool_renders,
-  tool_order
+  tool_order,
+  opts
 )
   if not position or #position == 0 then
     return previous_line_count
   end
 
+  opts = opts or {}
+
   local line = position[1]
   local lines, highlights = build_tool_block(tool_renders, tool_order)
+  local previous_end = line + previous_line_count
   if #lines == 0 then
-    return previous_line_count
+    local replacement = opts.preserve_placeholder and { "" } or {}
+    vim.bo[self.buf].modifiable = true
+    vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, replacement)
+    self:clear_tool_highlights(line, previous_end)
+    return #replacement
   end
 
-  local previous_end = line + previous_line_count
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, lines)
   self:clear_tool_highlights(line, math.max(previous_end, line + #lines))

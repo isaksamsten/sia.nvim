@@ -21,6 +21,30 @@ local function cleanup_chat_test_state()
   end
 end
 
+local function tool_result_ranges(buf)
+  local namespace = vim.api.nvim_get_namespaces()["sia_chat_tool_result"]
+  if not namespace then
+    return {}
+  end
+
+  local marks = vim.api.nvim_buf_get_extmarks(buf, namespace, 0, -1, { details = true })
+  local ranges = {}
+  for _, mark in ipairs(marks) do
+    local details = mark[4]
+    table.insert(ranges, {
+      start = mark[2],
+      finish = details.end_line or details.end_row,
+      hl_group = details.hl_group,
+    })
+  end
+
+  table.sort(ranges, function(left, right)
+    return left.start < right.start
+  end)
+
+  return ranges
+end
+
 config.get_local_config = function()
   return nil
 end
@@ -507,6 +531,13 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
 
   strategy:redraw()
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({
+    {
+      start = 3,
+      finish = 7,
+      hl_group = "SiaToolResult",
+    },
+  }, tool_result_ranges(strategy.buf))
 
   local win = strategy:get_win()
   vim.api.nvim_set_current_win(win)
@@ -514,12 +545,19 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
 
   strategy:redraw()
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({
+    {
+      start = 3,
+      finish = 7,
+      hl_group = "SiaToolResult",
+    },
+  }, tool_result_ranges(strategy.buf))
   eq(5, vim.fn.foldclosed(5))
 
   ChatStrategy.remove(strategy.buf)
 end
 
-T["strategy.chat"]["tool summaries render inline while running"] = function()
+T["strategy.chat"]["tool summaries render inline while running and hide when completed without summary"] = function()
   local source_buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_win_set_buf(0, source_buf)
 
@@ -551,16 +589,20 @@ T["strategy.chat"]["tool summaries render inline while running"] = function()
     "Running bash: make test",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({
+    {
+      start = 4,
+      finish = 5,
+      hl_group = "SiaToolResult",
+    },
+  }, tool_result_ranges(strategy.buf))
 
   strategy:on_tool_results({
     {
       key = "tool-1",
       index = 1,
       name = "bash",
-      summary = {
-        header = "Ran make test",
-        details = "Last lines:\n- 120 passed",
-      },
+      summary = nil,
       status = "done",
       actions = {},
     },
@@ -571,11 +613,60 @@ T["strategy.chat"]["tool summaries render inline while running"] = function()
     "",
     ">| Plan the check",
     "",
-    "Ran make test",
-    ">! Last lines:",
-    ">! - 120 passed",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({}, tool_result_ranges(strategy.buf))
+
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["redraw skips persisted tool entries without summary"] = function()
+  local source_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(0, source_buf)
+
+  local conversation = Conversation.new({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conversation:add_system_message("Ok")
+  local turn_id = conversation:new_turn()
+  conversation:add_assistant_message(turn_id, nil, { text = "Plan the check" })
+  conversation:add_tool_message(
+    turn_id,
+    {
+      key = "tool-1",
+      id = "call_1",
+      call_id = "call_1",
+      type = "function",
+      name = "bash",
+      arguments = '{"bash_command":"make test"}',
+    },
+    "test output",
+    {
+      summary = nil,
+    }
+  )
+  conversation:add_assistant_message(turn_id, "All good")
+
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+
+  strategy:redraw()
+  eq({
+    "/sia",
+    "",
+    ">| Plan the check",
+    "All good",
+  }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({}, tool_result_ranges(strategy.buf))
+
+  strategy:redraw()
+  eq({
+    "/sia",
+    "",
+    ">| Plan the check",
+    "All good",
+  }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  eq({}, tool_result_ranges(strategy.buf))
 
   ChatStrategy.remove(strategy.buf)
 end
@@ -677,7 +768,6 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
     "",
     ">| Let me check",
     "",
-    "test_tool",
     ">| Now I know",
     "",
     "The answer",
@@ -768,7 +858,6 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
     ">| First thought",
     "",
     "First content",
-    "test_tool",
     ">| Second thought",
     "",
     "Second content",
@@ -855,7 +944,6 @@ T["strategy.chat"]["multi-turn reasoning"]["tool-only round gets /sia header mat
   local expected = {
     "/sia",
     "",
-    "test_tool",
     "The answer",
   }
   eq(expected, lines)

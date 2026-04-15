@@ -138,9 +138,7 @@ function M.execute_tools(tool_calls, conversation, opts)
   --- @param parsed sia.engine.ToolCall
   --- @param result sia.ToolResult
   local function on_tool_finished(parsed, result)
-    if result.summary == nil then
-      result.summary = parsed.summary
-    end
+    all_statuses[parsed.index].summary = result.summary
     completed_count = completed_count + 1
     update_status(parsed.index, "done")
     tool_results[parsed.index] = { tool = parsed, result = result }

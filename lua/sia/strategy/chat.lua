@@ -18,6 +18,8 @@ spaces. Only output the name, nothing else.]]
 --- @field tool_order string[]
 --- @field tool_block_extmark integer?
 --- @field tool_block_line_count integer
+--- @field tool_block_reuses_placeholder boolean
+
 --- @field has_tool_blocks boolean
 local AssistantTurnRenderer = {}
 AssistantTurnRenderer.__index = AssistantTurnRenderer
@@ -47,6 +49,7 @@ function AssistantTurnRenderer.new(opts)
     tool_order = {},
     tool_block_extmark = nil,
     tool_block_line_count = 0,
+    tool_block_reuses_placeholder = false,
     has_tool_blocks = false,
   }
   return setmetatable(obj, AssistantTurnRenderer)
@@ -153,6 +156,7 @@ function AssistantTurnRenderer:update_tool_blocks(statuses)
         right_gravity = false,
       })
     self.tool_block_line_count = reuses_placeholder and 1 or 0
+    self.tool_block_reuses_placeholder = reuses_placeholder
     self.has_tool_blocks = true
   end
 
@@ -166,7 +170,8 @@ function AssistantTurnRenderer:update_tool_blocks(statuses)
     position,
     self.tool_block_line_count,
     keyed_statuses,
-    self.tool_order
+    self.tool_order,
+    { preserve_placeholder = self.tool_block_reuses_placeholder }
   )
 end
 
