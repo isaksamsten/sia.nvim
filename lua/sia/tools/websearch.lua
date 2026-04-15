@@ -132,7 +132,7 @@ Usage notes:
                 and string.format("%s %s", icons.search, args.description)
               or string.format("%s Search results for: %s", icons.search, args.query)
             callback({
-              content = content,
+              content = table.concat(content, "\n"),
               summary = summary,
             })
           else
