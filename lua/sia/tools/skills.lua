@@ -55,7 +55,7 @@ return tool_utils.new_tool({
   end
 
   local registry = require("sia.skills.registry")
-  local skill, err = registry.get_skill(args.name, false)
+  local skill, err = registry.get(args.name)
   if not skill then
     callback({
       content = string.format(

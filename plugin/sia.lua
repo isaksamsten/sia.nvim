@@ -23,7 +23,7 @@ local function resolve_invoked_skill_message(conversation, skill_name)
   end
 
   local registry = require("sia.skills.registry")
-  local skill, err = registry.get_skill(skill_name)
+  local skill, err = registry.get(skill_name)
   if not skill then
     vim.notify(
       string.format(
