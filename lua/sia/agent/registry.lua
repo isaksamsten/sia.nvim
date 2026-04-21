@@ -144,7 +144,7 @@ function M.filter(f)
   end
   local filter = {}
   for _, agent in pairs(agents) do
-    if not agent.error and (f == nil or f(agent.definition)) then
+    if not agent.error and agent.definition and (f == nil or f(agent.definition)) then
       table.insert(filter, agent.definition)
     end
   end
