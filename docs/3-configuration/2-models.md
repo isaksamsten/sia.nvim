@@ -6,7 +6,7 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, copilot, codex, anthropic,
+and configuration. Built-in providers (openai, deepseek, copilot, codex, anthropic,
 openrouter, gemini, zai) register automatically at startup. Each provider ships
 with a set of seed models that are available immediately.
 
@@ -271,6 +271,25 @@ Example (in project configuration):
 Used by: `openrouter`
 
 Same parameters as the OpenAI Completion API.
+
+### DeepSeek
+
+Used by: `deepseek` (via OpenAI-compatible endpoint)
+
+Same parameters as the OpenAI Completion API. DeepSeek models support reasoning
+via the `thinking` parameter:
+
+| Parameter       | Type   | Description                                       |
+| --------------- | ------ | ------------------------------------------------- |
+| **thinking**    | object | `{ type: "enabled" }` enables reasoning mode      |
+| **reasoning_effort** | string | `"low"`, `"medium"`, `"high"`                     |
+
+Seed models: `deepseek-v4-flash` and `deepseek-v4-pro`, each with a 384K context
+window and reasoning support.
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
 
 ### Gemini
 

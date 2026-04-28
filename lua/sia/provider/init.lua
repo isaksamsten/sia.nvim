@@ -1,5 +1,16 @@
 local M = {}
 
+local PROVIDERS = {
+  "openai",
+  "copilot",
+  "codex",
+  "anthropic",
+  "openrouter",
+  "gemini",
+  "zai",
+  "deepseek",
+}
+
 --- @class sia.Provider
 --- @field base_url string
 --- @field chat_endpoint string
@@ -319,17 +330,7 @@ function M.bootstrap(models_config, providers_config)
   providers = {}
   setup_overrides = {}
 
-  local builtins = {
-    "openai",
-    "copilot",
-    "codex",
-    "anthropic",
-    "openrouter",
-    "gemini",
-    "zai",
-  }
-
-  for _, mod_name in ipairs(builtins) do
+  for _, mod_name in ipairs(PROVIDERS) do
     local ok, mod = pcall(require, "sia.provider." .. mod_name)
     if ok and mod and mod.spec then
       M.register(mod_name, mod.spec)

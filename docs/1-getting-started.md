@@ -6,7 +6,7 @@
 - curl
 - [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) for code search
 - [fd](https://github.com/sharkdp/fd) for file finding and directory listing
-- Access to at least one LLM provider (OpenAI, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
+- Access to at least one LLM provider (OpenAI, DeepSeek, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
 
 ## Installation
 
@@ -72,6 +72,12 @@ across sessions.
 Sia uses the official GitHub Copilot App, which gives access to all available
 Copilot models (Claude, GPT, Gemini, etc.). Requires a GitHub Copilot
 subscription.
+
+### DeepSeek
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
 
 ### Anthropic
 
