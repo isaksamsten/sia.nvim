@@ -11,6 +11,7 @@ local CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 local ISSUER = "https://auth.openai.com"
 local CODEX_API_BASE = "https://chatgpt.com/backend-api/codex/"
 local CODEX_CHAT_ENDPOINT = "responses"
+local CODEX_CLIENT_VERSION = "1.0.0"
 local OAUTH_PORT = 1455
 local OAUTH_TIMEOUT_MS = 5 * 60 * 1000 -- 5 minutes
 
@@ -608,6 +609,175 @@ local function codex_api_key()
   return token
 end
 
+--- @return string
+local function codex_models_url()
+  return CODEX_API_BASE
+    .. "models?client_version="
+    .. vim.uri_encode(CODEX_CLIENT_VERSION)
+end
+
+--- @param model table
+--- @return sia.config.Support?
+local function map_model_support(model)
+  local support = {}
+  local has_any = false
+
+  if vim.tbl_contains(model.input_modalities or {}, "image") then
+    support.image = true
+    has_any = true
+  end
+
+  if model.supported_reasoning_levels and #model.supported_reasoning_levels > 0 then
+    support.reasoning = true
+    has_any = true
+  end
+
+  if model.supports_parallel_tool_calls then
+    support.tool_calls = true
+    has_any = true
+  end
+
+  -- Codex models are coding-agent oriented and support repository/file inputs.
+  support.document = true
+  has_any = true
+
+  return has_any and support or nil
+end
+
+--- @param model table
+--- @return integer?
+local function get_model_context_window(model)
+  if type(model.max_context_window) == "number" then
+    return model.max_context_window
+  end
+  if type(model.context_window) == "number" then
+    return model.context_window
+  end
+  return nil
+end
+
+--- @param model table
+--- @return table<string, any>?
+local function map_model_options(model)
+  local options = {}
+  local has_any = false
+
+  if
+    type(model.default_reasoning_level) == "string"
+    and model.default_reasoning_level ~= ""
+  then
+    options.reasoning = {}
+    options.reasoning.effort = model.default_reasoning_level
+    has_any = true
+  end
+
+  if
+    type(model.default_reasoning_summary) == "string"
+    and model.default_reasoning_summary ~= ""
+    and model.default_reasoning_summary ~= "none"
+    and options.reasoning
+  then
+    options.reasoning.summary = model.default_reasoning_summary
+    has_any = true
+  end
+
+  if type(model.default_verbosity) == "string" and model.default_verbosity ~= "" then
+    options.text = {}
+    options.text.verbosity = model.default_verbosity
+    has_any = true
+  end
+
+  return has_any and options or nil
+end
+
+--- @param callback fun(entries: table<string, sia.provider.ModelSpec>?, err: string?)
+local function discover(callback)
+  local api_key = codex_api_key()
+  if not api_key then
+    callback(nil, "Codex is not authorized")
+    return
+  end
+
+  local headers = {
+    "--header",
+    "Authorization: Bearer " .. api_key,
+    "--header",
+    "originator: sia",
+    "--header",
+    string.format(
+      "User-Agent: sia.nvim (%s %s; %s)",
+      vim.uv.os_uname().sysname,
+      vim.uv.os_uname().release,
+      vim.uv.os_uname().machine
+    ),
+  }
+
+  local account_id = get_account_id()
+  if account_id then
+    table.insert(headers, "--header")
+    table.insert(headers, string.format("ChatGPT-Account-Id: %s", account_id))
+  end
+
+  local cmd = { "curl", "--silent" }
+  vim.list_extend(cmd, headers)
+  table.insert(cmd, codex_models_url())
+
+  vim.system(
+    cmd,
+    { text = true },
+    vim.schedule_wrap(function(response)
+      if response.code ~= 0 then
+        callback(nil, "curl failed with code " .. response.code)
+        return
+      end
+
+      local ok, json = pcall(vim.json.decode, response.stdout)
+      if not ok or type(json) ~= "table" then
+        callback(nil, "JSON decode failed")
+        return
+      end
+
+      if json.error then
+        callback(nil, json.error.message or vim.inspect(json.error))
+        return
+      end
+
+      if not vim.islist(json.models) then
+        callback(nil, "unexpected response format")
+        return
+      end
+
+      local entries = {}
+      for _, model in ipairs(json.models) do
+        print(vim.inspect(model))
+        if type(model) == "table" and type(model.slug) == "string" then
+          local entry = {}
+
+          local context_window = get_model_context_window(model)
+          if context_window then
+            entry.context_window = context_window
+          end
+
+          local support = map_model_support(model)
+          if support then
+            entry.support = support
+          end
+
+          local options = map_model_options(model)
+          if options then
+            entry.options = options
+          end
+
+          entries[model.slug] = entry
+        end
+      end
+
+      print(vim.inspect(entries))
+      callback(entries)
+    end)
+  )
+end
+
 --- Build the Codex responses provider using OpenAI responses as base
 local codex = openai.responses_compatible(CODEX_API_BASE, CODEX_CHAT_ENDPOINT, {
   api_key = codex_api_key,
@@ -642,25 +812,9 @@ M.spec = {
   implementations = {
     default = codex,
   },
-  seed = {
-    ["gpt-5.3-codex"] = {
-      context_window = 400000,
-      support = { document = true, reasoning = true },
-    },
-    ["gpt-5.2-codex"] = {
-      context_window = 400000,
-      support = { document = true, reasoning = true },
-    },
-    ["gpt-5.2"] = {
-      context_window = 400000,
-      support = { image = true, document = true },
-    },
-    ["gpt-5.4"] = {
-      context_window = 400000,
-      support = { image = true, document = true },
-    },
-  },
+  seed = {},
   authorize = browser_authorize,
+  discover = discover,
 }
 
 return M

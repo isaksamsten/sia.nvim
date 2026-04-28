@@ -212,11 +212,42 @@ function OpenAIResponsesStream:process_stream_chunk(json)
   then
     self.strategy:on_tools()
     self.tool_call_detected = true
+  elseif json.type == "response.output_item.done" and json.item then
+    local item = json.item
+    if item.type == "function_call" and item.status == "completed" then
+      table.insert(self.pending_tool_calls, {
+        id = item.id,
+        call_id = item.call_id,
+        type = "function",
+        name = item.name,
+        arguments = item.arguments or "",
+      })
+    elseif item.type == "custom_tool_call" then
+      table.insert(self.pending_tool_calls, {
+        id = item.id,
+        call_id = item.call_id,
+        type = "custom",
+        name = item.name,
+        input = item.input or "",
+      })
+    elseif item.type == "reasoning" then
+      self.encrypted_reasoning =
+        { id = item.id, encrypted_content = item.encrypted_content }
+      for _, subitem in ipairs(item.summary) do
+        if subitem.type == "summary_text" then
+          self.reasoning_summary = (self.reasoning_summary or "")
+            .. subitem.text
+            .. "\n"
+        end
+      end
+    end
   elseif
     json.type == "response.completed"
     and json.response
     and json.response.output
   then
+    --- TODO: we should remove this to not duplicate tools.
+    ---       Or at least guard it
     for _, item in ipairs(json.response.output) do
       if item.type == "function_call" and item.status == "completed" then
         table.insert(self.pending_tool_calls, {

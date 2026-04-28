@@ -994,6 +994,8 @@ vim.api.nvim_create_user_command("SiaModel", function(args)
       for provider_name, result in pairs(results) do
         if result.ok then
           table.insert(refreshed, provider_name)
+        else
+          vim.notify(vim.inspect(result))
         end
       end
       if #refreshed > 0 then
