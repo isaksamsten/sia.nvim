@@ -44,16 +44,16 @@ end
 T["sia.markdown"]["parse_frontmatter_document reports missing frontmatter"] = function()
   child.lua([[
     local markdown = require("sia.markdown")
-    local doc, err = markdown.parse_frontmatter_document({ "No frontmatter" })
+    local ok, doc = pcall(markdown.parse_frontmatter_document, { "No frontmatter" })
+    _G.ok = ok
     _G.doc = doc
-    _G.err = err
   ]])
 
-  eq(vim.NIL, child.lua_get("_G.doc"))
-  eq("Invalid format: missing frontmatter", child.lua_get("_G.err"))
+  eq(false, child.lua_get("_G.ok"))
+  eq(true, child.lua_get("_G.doc"):find("Invalid format: missing frontmatter", 1, true) ~= nil)
 end
 
-T["sia.markdown"]["read_frontmatter_file uses custom empty body error"] = function()
+T["sia.markdown"]["read_frontmatter_file reports empty body"] = function()
   child.lua([[
     local tmpdir = vim.fn.tempname()
     vim.fn.mkdir(tmpdir, "p")
@@ -65,17 +65,15 @@ T["sia.markdown"]["read_frontmatter_file uses custom empty body error"] = functi
     }, filepath)
 
     local markdown = require("sia.markdown")
-    local doc, err = markdown.read_frontmatter_file(filepath, {
-      empty_body_error = "Missing custom body",
-    })
+    local ok, doc = pcall(markdown.read_frontmatter_file, filepath)
+    _G.ok = ok
     _G.doc = doc
-    _G.err = err
 
     vim.fn.delete(tmpdir, "rf")
   ]])
 
-  eq(vim.NIL, child.lua_get("_G.doc"))
-  eq("Missing custom body", child.lua_get("_G.err"))
+  eq(false, child.lua_get("_G.ok"))
+  eq(true, child.lua_get("_G.doc"):find("Missing markdown body", 1, true) ~= nil)
 end
 
 return T

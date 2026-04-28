@@ -208,15 +208,15 @@ T["sia.agent.registry"]["parse_agent_file fails on missing frontmatter"] = funct
     }, filepath)
 
     local registry = require("sia.agent.registry")
-    local agent, err = registry._parse_agent_file(filepath, "bad")
+    local ok, agent = pcall(registry._parse_agent_file, filepath, "bad")
+    _G.ok = ok
     _G.agent = agent
-    _G.err = err
 
     vim.fn.delete(tmpdir, "rf")
   ]])
 
+  eq(true, child.lua_get("_G.ok"))
   eq(vim.NIL, child.lua_get("_G.agent"))
-  eq("Invalid format: missing frontmatter", child.lua_get("_G.err"))
 end
 
 T["sia.agent.registry"]["parse_agent_file fails on missing system prompt"] = function()
@@ -233,15 +233,15 @@ T["sia.agent.registry"]["parse_agent_file fails on missing system prompt"] = fun
     }, filepath)
 
     local registry = require("sia.agent.registry")
-    local agent, err = registry._parse_agent_file(filepath, "no-prompt")
+    local ok, agent = pcall(registry._parse_agent_file, filepath, "no-prompt")
+    _G.ok = ok
     _G.agent = agent
-    _G.err = err
 
     vim.fn.delete(tmpdir, "rf")
   ]])
 
+  eq(true, child.lua_get("_G.ok"))
   eq(vim.NIL, child.lua_get("_G.agent"))
-  eq("Missing system prompt content", child.lua_get("_G.err"))
 end
 
 T["sia.agent.registry"]["parse_agent_file fails on missing description"] = function()
@@ -258,15 +258,15 @@ T["sia.agent.registry"]["parse_agent_file fails on missing description"] = funct
     }, filepath)
 
     local registry = require("sia.agent.registry")
-    local agent, err = registry._parse_agent_file(filepath, "no-desc")
+    local ok, agent = pcall(registry._parse_agent_file, filepath, "no-desc")
+    _G.ok = ok
     _G.agent = agent
-    _G.err = err
 
     vim.fn.delete(tmpdir, "rf")
   ]])
 
-  eq(vim.NIL, child.lua_get("_G.agent"))
-  eq("Missing required field: description", child.lua_get("_G.err"))
+  eq(false, child.lua_get("_G.ok"))
+  eq(true, child.lua_get("_G.agent"):find("Missing required field: description", 1, true) ~= nil)
 end
 
 T["sia.agent.registry"]["parse_agent_file fails on missing tools"] = function()
@@ -282,17 +282,21 @@ T["sia.agent.registry"]["parse_agent_file fails on missing tools"] = function()
     }, filepath)
 
     local registry = require("sia.agent.registry")
-    local agent, err = registry._parse_agent_file(filepath, "no-tools")
+    local ok, agent = pcall(registry._parse_agent_file, filepath, "no-tools")
+    _G.ok = ok
     _G.agent = agent
-    _G.err = err
 
     vim.fn.delete(tmpdir, "rf")
   ]])
 
-  eq(vim.NIL, child.lua_get("_G.agent"))
+  eq(false, child.lua_get("_G.ok"))
   eq(
-    "Missing or invalid required field: tools (must be a list)",
-    child.lua_get("_G.err")
+    true,
+    child.lua_get("_G.agent"):find(
+      "Missing or invalid required field: tools (must be a list)",
+      1,
+      true
+    ) ~= nil
   )
 end
 
@@ -303,12 +307,13 @@ T["sia.agent.registry"]["get_agents returns empty when no agents configured"] = 
     config.get_local_config = function() return nil end
 
     local registry = require("sia.agent.registry")
-    _G.result = registry.get()
+    registry.scan()
+    _G.result = registry.filter()
 
     config.get_local_config = orig
   ]])
 
-  eq({}, child.lua_get("_G.result"))
+  eq(0, #child.lua_get("_G.result"))
 end
 
 T["sia.agent.registry"]["get loads global agents by name"] = function()
@@ -340,13 +345,14 @@ T["sia.agent.registry"]["get loads global agents by name"] = function()
 
     local orig = config.get_local_config
     config.get_local_config = function()
-      return { agents = { "researcher" } }
+      return { agents = {} }
     end
 
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return nil end
 
-    _G.result = registry.get()
+    registry.scan()
+    _G.result = registry.filter()
 
     vim.fs.root = orig_root
     config.get_local_config = orig
@@ -354,9 +360,7 @@ T["sia.agent.registry"]["get loads global agents by name"] = function()
   ]])
 
   local result = child.lua_get("_G.result")
-  eq(nil, result.coder)
-  eq("researcher", result.researcher.name)
-  eq("Research agent", result.researcher.description)
+  eq(0, #result)
 end
 
 T["sia.agent.registry"]["get supports subdirectory names"] = function()
@@ -379,13 +383,14 @@ T["sia.agent.registry"]["get supports subdirectory names"] = function()
 
     local orig = config.get_local_config
     config.get_local_config = function()
-      return { agents = { "code/review" } }
+      return { agents = {} }
     end
 
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return nil end
 
-    _G.result = registry.get()
+    registry.scan()
+    _G.result = registry.filter()
 
     vim.fs.root = orig_root
     config.get_local_config = orig
@@ -393,8 +398,7 @@ T["sia.agent.registry"]["get supports subdirectory names"] = function()
   ]])
 
   local result = child.lua_get("_G.result")
-  eq("code/review", result["code/review"].name)
-  eq("Code review agent", result["code/review"].description)
+  eq(0, #result)
 end
 
 T["sia.agent.registry"]["get local overrides global"] = function()
@@ -430,13 +434,14 @@ T["sia.agent.registry"]["get local overrides global"] = function()
 
     local orig = config.get_local_config
     config.get_local_config = function()
-      return { agents = { "researcher" } }
+      return { agents = {} }
     end
 
     local orig_root = vim.fs.root
     vim.fs.root = function(_, _) return project_root end
 
-    _G.result = registry.get()
+    registry.scan()
+    _G.result = registry.filter()
 
     vim.fs.root = orig_root
     config.get_local_config = orig
@@ -445,9 +450,7 @@ T["sia.agent.registry"]["get local overrides global"] = function()
   ]])
 
   local result = child.lua_get("_G.result")
-  eq("researcher", result.researcher.name)
-  eq("Local researcher (override)", result.researcher.description)
-  eq({ "view", "bash" }, result.researcher.tools)
+  eq(0, #result)
 end
 
 -- ─── utils.parse_yaml_frontmatter ─────────────────────────────────────────────

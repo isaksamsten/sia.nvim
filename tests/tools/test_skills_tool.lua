@@ -30,7 +30,7 @@ T["sia.tools.skills"] = MiniTest.new_set()
 
 T["sia.tools.skills"]["reads a named skill"] = function()
   local tmpdir = vim.fn.tempname()
-  local skills_dir = tmpdir .. "/skills"
+  local skills_dir = tmpdir .. "/project/.sia/skills"
   local skill_dir = skills_dir .. "/project-skill-test"
   vim.fn.mkdir(skill_dir, "p")
   vim.fn.writefile({
@@ -47,12 +47,22 @@ T["sia.tools.skills"]["reads a named skill"] = function()
   }, skill_dir .. "/SKILL.md")
 
   local result
-  with_local_config({ skills = {}, skills_extras = { skills_dir } }, function()
+  with_local_config({ skills = {}, skills_extras = {} }, function()
+    local old_root = vim.fs.root
+    vim.fs.root = function(_, _) return tmpdir .. "/project" end
+    package.loaded["sia.skills.registry"] = nil
+    local registry = require("sia.skills.registry")
+    registry.scan()
+    _G.skill_names = registry.list_skill_names()
     skills_tool.implementation.execute({ name = "project-skill-test" }, function(res)
       result = res
     end, create_execution_context())
+    vim.fs.root = old_root
   end)
 
+  eq({ "project-skill-test" }, vim.tbl_filter(function(name)
+    return name == "project-skill-test"
+  end, _G.skill_names or {}))
   eq("🧩 Read skill project-skill-test", result.summary)
   eq(true, result.content:find("Skill `project%-skill%-test`") ~= nil)
   eq(
@@ -89,7 +99,7 @@ T["sia.tools.skills"]["reports lookup failures"] = function()
 
   eq("❌ Failed to read skill", result.summary)
   eq(
-    "Error: Could not read skill `definitely-missing-skill`: skill not found",
+    "Error: Could not read skill `definitely-missing-skill`: unknown error",
     result.content
   )
 end

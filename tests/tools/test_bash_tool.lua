@@ -63,8 +63,8 @@ T["sia.tools.bash"]["start yields early when sync command sees pending input"] =
     }
 
     bash_tool.implementation.execute({
-      command = "start",
-      bash_command = "make test",
+      action = "start",
+      command = "make test",
       description = "Run tests",
     }, function(res)
       result = res
@@ -97,7 +97,7 @@ T["sia.tools.bash"]["start yields early when sync command sees pending input"] =
   )
   eq(
     true,
-    instructions:find('blocking `bash%(command="start", async=false%)`', 1) ~= nil
+    instructions:find('blocking `bash(action="start", async=false, command="...")`', 1, true) ~= nil
   )
 end
 
@@ -113,7 +113,7 @@ T["sia.tools.bash"]["wait yields early when user has pending input"] = function(
 
     local result = nil
     bash_tool.implementation.execute({
-      command = "wait",
+      action = "wait",
       id = 1,
     }, function(res)
       result = res
@@ -213,8 +213,8 @@ T["sia.tools.bash"]["start preserves blocking behavior without user input"] = fu
     }
 
     bash_tool.implementation.execute({
-      command = "start",
-      bash_command = "make test",
+      action = "start",
+      command = "make test",
       description = "Run tests",
     }, function(res)
       result = res
@@ -250,7 +250,7 @@ T["sia.tools.bash"]["wait preserves blocking behavior without user input"] = fun
 
     local result = nil
     bash_tool.implementation.execute({
-      command = "wait",
+      action = "wait",
       id = 1,
     }, function(res)
       result = res
@@ -306,7 +306,7 @@ T["sia.tools.bash"]["status builds preview from runtime output"] = function()
     local result = nil
 
     bash_tool.implementation.execute({
-      command = "status",
+      action = "status",
       id = 1,
     }, function(res)
       result = res
@@ -353,7 +353,7 @@ T["sia.tools.bash"]["view paginates full process output"] = function()
     local result = nil
 
     bash_tool.implementation.execute({
-      command = "view",
+      action = "view",
       id = 1,
       offset = 2,
       limit = 2,
@@ -413,7 +413,7 @@ T["sia.tools.bash"]["view requires process id"] = function()
     local result = nil
 
     bash_tool.implementation.execute({
-      command = "view",
+      action = "view",
     }, function(res)
       result = res
     end, {
@@ -431,6 +431,60 @@ T["sia.tools.bash"]["view requires process id"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: 'id' parameter is required for 'view'", result.content)
+end
+
+T["sia.tools.bash"]["legacy aliases remain supported"] = function()
+  child.lua([[
+    local bash_tool = require("sia.tools.bash")
+    local result = nil
+    local current_proc = nil
+    local outputs = {}
+    local process_runtime = {
+      exec = function(_, command, opts)
+        outputs[1] = { stdout = "legacy ok", stderr = "" }
+        current_proc = {
+          id = 1,
+          kind = "finished",
+          outcome = "completed",
+          command = command,
+          description = opts.description,
+          code = 0,
+        }
+        return current_proc
+      end,
+      get = function(_, id)
+        return id == 1 and current_proc or nil
+      end,
+      get_output = function(_, id)
+        return outputs[id] or { stdout = "", stderr = "" }
+      end,
+      pwd = function()
+        return vim.fn.getcwd()
+      end,
+    }
+
+    bash_tool.implementation.execute({
+      command = "start",
+      bash_command = "make test",
+      description = "Run tests",
+    }, function(res)
+      result = res
+    end, {
+      conversation = {
+        id = 44,
+        approved_tools = setmetatable({}, {__index = function() return true end}),
+        process_runtime = process_runtime,
+        has_pending_user_messages = function()
+          return false
+        end,
+      },
+    })
+
+    _G.result = result
+  ]])
+
+  local result = child.lua_get("_G.result")
+  eq(true, result.content:find("legacy ok", 1, true) ~= nil)
 end
 
 return T
