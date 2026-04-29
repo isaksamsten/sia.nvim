@@ -6,16 +6,23 @@ local tool_names = tool_utils.tool_names
 local INLINE_OUTPUT_LIMIT = 8000
 local PREVIEW_TAIL_LINES = 20
 local VIEW_OUTPUT_LIMIT = 2000
+local ACTIONS = {
+  start = true,
+  status = true,
+  wait = true,
+  view = true,
+  kill = true,
+}
 
 local ASYNC_START_REPLY = [[
 Async bash process launched successfully.
 processId: %d (This is an internal ID for your use, do not mention it to the user.)
 The command is currently running in the background. If you have other tasks you should
-continue working on them now. Wait to call bash(command="wait") until either:
-- You want to check on the process status - call bash(command="status") to get an
+continue working on them now. Wait to call bash(action="wait") until either:
+- You want to check on the process status - call bash(action="status") to get an
   immediate status update
 - You run out of things to do and the process is still running - call
-  bash(command="wait") to idle and wait for the result (do not use
+  bash(action="wait") to idle and wait for the result (do not use
   "wait" unless you completely run out of things to do as it will waste time).
 If the user sends a message while you are waiting, the wait may yield early with a
 status update. You will then see the user's message in the conversation and should
@@ -137,11 +144,31 @@ local function append_preview_output(lines, output)
   end
 end
 
+--- @param value any
+--- @return boolean
+local function is_action(value)
+  return type(value) == "string" and ACTIONS[value] == true
+end
+
+--- @param args table
+--- @return table
+local function normalize_args(args)
+  local normalized = vim.deepcopy(args or {})
+  local action = normalized.action
+  if not is_action(action) then
+    action = "start"
+  end
+
+  normalized.action = action
+  normalized.command = normalized.command
+  return normalized
+end
+
 --- @param proc_id integer
 --- @return string
 local function bash_view_hint(proc_id)
   return string.format(
-    'Use bash(command="view", id=%d) to inspect the full output',
+    'Use bash(action="view", id=%d) to inspect the full output',
     proc_id
   )
 end
@@ -529,15 +556,15 @@ end
 --- @param opts sia.NewToolExecuteOpts
 --- @param on_started fun(proc: sia.process.Process?, err: string?) called immediately after launch
 local function launch_command(args, conversation, opts, on_started)
-  local is_dangerous = is_suspicious(args.bash_command)
-  local prompt = string.format("Execute: %s", args.bash_command)
+  local is_dangerous = is_suspicious(args.command)
+  local prompt = string.format("Execute: %s", args.command)
 
   local runtime = conversation.process_runtime
 
   opts.user_input(prompt, {
     level = is_dangerous and "warn" or "info",
     preview = function(preview_buf)
-      local lines = vim.split(args.bash_command, "\n")
+      local lines = vim.split(args.command, "\n")
       vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
       vim.bo[preview_buf].ft = "sh"
       return #lines
@@ -548,13 +575,13 @@ local function launch_command(args, conversation, opts, on_started)
       end
       local proc
       if args.async then
-        proc = runtime:exec_async(args.bash_command, {
+        proc = runtime:exec_async(args.command, {
           description = args.description,
           timeout = args.timeout,
           is_cancelled = is_cancelled,
         })
       else
-        proc = runtime:exec(args.bash_command, {
+        proc = runtime:exec(args.command, {
           description = args.description,
           timeout = args.timeout or 120000,
           is_cancelled = is_cancelled,
@@ -571,14 +598,14 @@ return tool_utils.new_tool({
     name = "bash",
     description = "Execute bash commands safely within the project directory",
     parameters = {
-      command = {
+      action = {
         type = "string",
         enum = { "start", "status", "wait", "view", "kill" },
-        description = "The command to execute: start (launch new process), status (check process status + partial output if async), wait (wait for process completion), view (read stdout/stderr with offset and limit), kill (terminate a running process)",
+        description = "The action to execute: start (launch new process), status (check process status + partial output if async), wait (wait for process completion), view (read stdout/stderr with offset and limit), kill (terminate a running process). Defaults to 'start'.",
       },
-      bash_command = {
+      command = {
         type = "string",
-        description = "The bash command to execute (required for 'start')",
+        description = "The shell command to execute (required for 'start')",
       },
       description = {
         type = "string",
@@ -614,20 +641,21 @@ return tool_utils.new_tool({
         description = "The output stream (only for 'view')",
       },
     },
-    required = { "command" },
+    required = {},
   },
   summary = function(args)
-    if args.command == "start" then
-      if args.description then
+    local normalized = normalize_args(args)
+    if normalized.action == "start" then
+      if normalized.description then
         return string.format("Starting: %s...", args.description)
       end
       return "Starting command..."
-    elseif args.command == "status" then
-      return string.format("Checking process %d...", args.id or 0)
-    elseif args.command == "wait" then
-      return string.format("Waiting for process %d...", args.id or 0)
-    elseif args.command == "view" then
-      return string.format("Viewing process %d output...", args.id or 0)
+    elseif normalized.action == "status" then
+      return string.format("Checking process %d...", normalized.id or 0)
+    elseif normalized.action == "wait" then
+      return string.format("Waiting for process %d...", normalized.id or 0)
+    elseif normalized.action == "view" then
+      return string.format("Viewing process %d output...", normalized.id or 0)
     end
     return "Running command..."
   end,
@@ -651,11 +679,11 @@ ensuring proper handling and security measures.
 
 ## Default Workflow (synchronous)
 
-For most commands, simply use `start` — it runs the command and returns the result
-in a single call:
+	For most commands, simply call `bash` with a shell `command` — it defaults to
+	`action="start"` and returns the result in a single call:
 
 <good-example>
-bash(command="start", bash_command="pytest /foo/bar/tests", description="Run tests")
+	bash(command="pytest /foo/bar/tests", description="Run tests")
 // Result is returned immediately — no need for a separate wait call
 </good-example>
 
@@ -670,42 +698,42 @@ use `async=true`:
 4. Use `wait` when you need the result and have nothing else to do.
 5. Use `wait` with `wait_timeout` to peek at partial output without blocking forever.
 6. Use `kill` to terminate a running process that is no longer needed.
-7. If the user sends a message while you are waiting on `bash(command="wait")` or a
-   blocking `bash(command="start", async=false)`, the call may yield early with a
+	7. If the user sends a message while you are waiting on `bash(action="wait")` or a
+	   blocking `bash(action="start", async=false, command="...")`, the call may yield early with a
    status update. Respond to the user first, then call `wait` or `status` again when
    you are ready.
 
 <good-example>
 // Launch two independent commands concurrently:
-bash(command="start", bash_command="make lint", description="Run linter", async=true)
-bash(command="start", bash_command="make test", description="Run tests", async=true)
+	bash(action="start", command="make lint", description="Run linter", async=true)
+	bash(action="start", command="make test", description="Run tests", async=true)
 // Do other work...
-bash(command="wait", id=1)
-bash(command="wait", id=2)
+	bash(action="wait", id=1)
+	bash(action="wait", id=2)
 </good-example>
 
 <good-example>
 // For very long-running tasks, use wait_timeout to check progress periodically:
-bash(command="start", bash_command="make integration-test", description="Run integration tests", async=true)
+	bash(action="start", command="make integration-test", description="Run integration tests", async=true)
 // Do other work...
-bash(command="wait", id=1, wait_timeout=10000)
+	bash(action="wait", id=1, wait_timeout=10000)
 // If still running, you get partial output and can continue working
-bash(command="status", id=1)
+	bash(action="status", id=1)
 // When ready, wait for the final result:
-bash(command="wait", id=1)
+	bash(action="wait", id=1)
 </good-example>
 
 <good-example>
 // Kill a long-running process that is no longer needed:
-bash(command="start", bash_command="tail -f /var/log/app.log", description="Watch logs", async=true)
+	bash(action="start", command="tail -f /var/log/app.log", description="Watch logs", async=true)
 // After getting enough information:
-bash(command="kill", id=1)
+	bash(action="kill", id=1)
 </good-example>
 
 ## Large Output
 
 When output exceeds the inline limit, the result includes truncated output. Use
-`bash(command="view", id=<process_id>)` to inspect the full stdout/stderr, and add
+	`bash(action="view", id=<process_id>)` to inspect the full stdout/stderr, and add
 `offset`/`limit` to page through it. Output files are still stored at predictable
 paths like `<tmpdir>/sia/bash/<id>/process_<n>_stdout` when you need the raw files.
 
@@ -719,7 +747,8 @@ Before executing a command, follow these steps:
 
 ## Usage Notes
 
-- The `bash_command` and `description` parameters are required for `start`.
+	- The `command` and `description` parameters are required for `start`.
+	- `action` defaults to `start`.
 - You can specify an optional timeout in milliseconds.
   If not specified, commands will timeout after 120 seconds.
 - VERY IMPORTANT: You MUST avoid using search commands like `find` and
@@ -767,19 +796,11 @@ git commit -m "$(cat <<'EOF'
     tool_names.view
   ),
 }, function(args, conversation, callback, opts)
-  if not args.command then
-    callback({
-      content = "Error: 'command' parameter is required",
-      summary = icons.error .. " Failed to execute command",
-      kind = "failed",
-    })
-    return
-  end
-
-  if args.command == "start" then
-    if not args.bash_command or args.bash_command:match("^%s*$") then
+  args = normalize_args(args)
+  if args.action == "start" then
+    if not args.command or args.command:match("^%s*$") then
       callback({
-        content = "Error: 'bash_command' parameter is required for 'start'",
+        content = "Error: 'command' parameter is required for 'start'",
         summary = icons.error .. " Failed to execute command",
         kind = "failed",
       })
@@ -801,7 +822,7 @@ git commit -m "$(cat <<'EOF'
           summary = string.format(
             "%s Started %s (process %d)",
             icons.started,
-            format_command(args.description or args.bash_command),
+            format_command(args.description or args.command),
             proc.id
           ),
         })
@@ -819,7 +840,7 @@ git commit -m "$(cat <<'EOF'
         wait_for_process(proc.id, conversation, callback, nil)
       end)
     end
-  elseif args.command == "status" then
+  elseif args.action == "status" then
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'status'",
@@ -842,7 +863,7 @@ git commit -m "$(cat <<'EOF'
     callback({
       content = build_process_preview(proc, conversation.process_runtime),
     })
-  elseif args.command == "wait" then
+  elseif args.action == "wait" then
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'wait'",
@@ -851,7 +872,7 @@ git commit -m "$(cat <<'EOF'
     end
 
     wait_for_process(args.id, conversation, callback, args.wait_timeout)
-  elseif args.command == "view" then
+  elseif args.action == "view" then
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'view'",
@@ -884,7 +905,7 @@ git commit -m "$(cat <<'EOF'
       ),
       summary = string.format("%s Viewed process %d output", icons.view_bash, args.id),
     })
-  elseif args.command == "kill" then
+  elseif args.action == "kill" then
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'kill'",
@@ -941,7 +962,7 @@ git commit -m "$(cat <<'EOF'
     })
   else
     callback({
-      content = string.format("Error: Unknown command '%s'", args.command),
+      content = string.format("Error: Unknown action '%s'", tostring(args.action)),
     })
   end
 end)

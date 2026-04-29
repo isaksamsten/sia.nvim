@@ -1,5 +1,5 @@
 *sia.txt*
-                              For Neovim >= 0.11    Last change: 2026 April 22
+                              For Neovim >= 0.11    Last change: 2026 April 28
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -114,7 +114,7 @@ REQUIREMENTS                                *sia-getting-started-requirements*
 - curl
 - ripgrep <https://github.com/BurntSushi/ripgrep> (`rg`) for code search
 - fd <https://github.com/sharkdp/fd> for file finding and directory listing
-- Access to at least one LLM provider (OpenAI, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
+- Access to at least one LLM provider (OpenAI, DeepSeek, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
 
 
 INSTALLATION                                *sia-getting-started-installation*
@@ -185,6 +185,13 @@ across sessions.
 Sia uses the official GitHub Copilot App, which gives access to all available
 Copilot models (Claude, GPT, Gemini, etc.). Requires a GitHub Copilot
 subscription.
+
+
+DEEPSEEK ~
+
+>bash
+    export DEEPSEEK_API_KEY="sk-..."
+<
 
 
 ANTHROPIC ~
@@ -1032,9 +1039,9 @@ Sia supports multiple LLM providers. Each model is identified by a
 PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, copilot, codex, anthropic,
-openrouter, gemini, zai) register automatically at startup. Each provider ships
-with a set of seed models that are available immediately.
+and configuration. Built-in providers (openai, deepseek, copilot, codex,
+anthropic, openrouter, gemini, zai) register automatically at startup. Each
+provider ships with a set of seed models that are available immediately.
 
 
 DYNAMIC MODEL DISCOVERY ~
@@ -1327,6 +1334,28 @@ OPENROUTER ~
 Used by: `openrouter`
 
 Same parameters as the OpenAI Completion API.
+
+
+DEEPSEEK ~
+
+Used by: `deepseek` (via OpenAI-compatible endpoint)
+
+Same parameters as the OpenAI Completion API. DeepSeek models support reasoning
+via the `thinking` parameter:
+
+  -----------------------------------------------------------------------------
+  Parameter          Type     Description
+  ------------------ -------- -------------------------------------------------
+  thinking           object   { type: "enabled" } enables reasoning mode
+
+  reasoning_effort   string   "low", "medium", "high"
+  -----------------------------------------------------------------------------
+Seed models: `deepseek-v4-flash` and `deepseek-v4-pro`, each with a 384K
+context window and reasoning support.
+
+>bash
+    export DEEPSEEK_API_KEY="sk-..."
+<
 
 
 GEMINI ~
@@ -1685,7 +1714,7 @@ Auto-approve safe git commands:
         "allow": {
           "bash": {
             "arguments": {
-              "bash_command": ["^git status$", "^git diff", "^git log"]
+              "command": ["^git status$", "^git diff", "^git log"]
             }
           }
         }
@@ -1708,7 +1737,7 @@ Restrict file edits to source code:
         "deny": {
           "bash": {
             "arguments": {
-              "bash_command": [".*\\.(config|env)"]
+              "command": [".*\\.(config|env)"]
             }
           }
         }
@@ -1747,14 +1776,14 @@ Block dangerous commands while allowing safe ones:
         "allow": {
           "bash": {
             "arguments": {
-              "bash_command": ["^git status$", "^git diff", "^ls"]
+              "command": ["^git status$", "^git diff", "^ls"]
             }
           }
         },
         "deny": {
           "bash": {
             "arguments": {
-              "bash_command": ["rm -rf", "sudo"]
+              "command": ["rm -rf", "sudo"]
             }
           }
         }
@@ -1812,7 +1841,7 @@ Mark safe shell commands:
       "risk": {
         "bash": {
           "arguments": {
-            "bash_command": [
+            "command": [
               { "pattern": "^ls", "level": "safe" },
               { "pattern": "^cat", "level": "safe" },
               { "pattern": "^echo", "level": "safe" },
@@ -1832,7 +1861,7 @@ Highlight dangerous operations:
       "risk": {
         "bash": {
           "arguments": {
-            "bash_command": [{ "pattern": "\\brm\\b", "level": "warn" }]
+              "command": [{ "pattern": "\\brm\\b", "level": "warn" }]
           }
         }
       }
@@ -2766,8 +2795,8 @@ CORE TOOLS ~
 
   glob            pattern, path           File glob and directory to search
 
-  bash            bash_command, command,  Shell command, subcommand
-                  async                   (start/status/wait/kill), and whether
+  bash            command, action, async  Shell command, lifecycle action
+                                          (start/status/wait/kill), and whether
                                           async
 
   git_worktree    command, branch, base   Worktree action plus branch identity
@@ -2828,16 +2857,16 @@ Allow safe shell commands, warn on destructive ones:
     {
       "permission": {
         "allow": {
-          "bash": { "arguments": { "bash_command": ["^git (status|diff|log)"] } }
+          "bash": { "arguments": { "command": ["^git (status|diff|log)"] } }
         },
         "deny": {
-          "bash": { "arguments": { "bash_command": ["\\brm\\b", "\\bsudo\\b"] } }
+          "bash": { "arguments": { "command": ["\\brm\\b", "\\bsudo\\b"] } }
         }
       },
       "risk": {
         "bash": {
           "arguments": {
-            "bash_command": [
+            "command": [
               { "pattern": "^(ls|cat|echo|git status|git diff)", "level": "safe" },
               { "pattern": "\\brm\\b", "level": "warn" }
             ]

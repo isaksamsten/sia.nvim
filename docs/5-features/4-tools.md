@@ -89,7 +89,7 @@ tool that are useful for permission and risk patterns.
 | **insert**        | **target_file**, **text**                       | File to modify and the text to insert                                         |
 | **grep**          | **pattern**, **path**, **glob**                 | Search pattern, directory, and file glob                                      |
 | **glob**          | **pattern**, **path**                           | File glob and directory to search                                             |
-| **bash**          | **bash_command**, **command**, **async**        | Shell command, subcommand (`start`/`status`/`wait`/`kill`), and whether async |
+| **bash**          | **command**, **action**, **async**              | Shell command, lifecycle action (`start`/`status`/`wait`/`kill`), and whether async |
 | **git_worktree**  | **command**, **branch**, **base**               | Worktree action plus branch identity and optional base ref                    |
 | **diagnostics**   | **file**                                        | File path to get diagnostics for                                              |
 | **websearch**     | **query**                                       | Search query string                                                           |
@@ -138,16 +138,16 @@ Allow safe shell commands, warn on destructive ones:
 {
   "permission": {
     "allow": {
-      "bash": { "arguments": { "bash_command": ["^git (status|diff|log)"] } }
+      "bash": { "arguments": { "command": ["^git (status|diff|log)"] } }
     },
     "deny": {
-      "bash": { "arguments": { "bash_command": ["\\brm\\b", "\\bsudo\\b"] } }
+      "bash": { "arguments": { "command": ["\\brm\\b", "\\bsudo\\b"] } }
     }
   },
   "risk": {
     "bash": {
       "arguments": {
-        "bash_command": [
+        "command": [
           { "pattern": "^(ls|cat|echo|git status|git diff)", "level": "safe" },
           { "pattern": "\\brm\\b", "level": "warn" }
         ]

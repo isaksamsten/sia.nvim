@@ -505,7 +505,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
       call_id = "call_1",
       type = "function",
       name = "bash",
-      arguments = '{"bash_command":"make test"}',
+      arguments = '{"command":"make test"}',
     },
     "test output",
     {
@@ -639,7 +639,7 @@ T["strategy.chat"]["redraw skips persisted tool entries without summary"] = func
       call_id = "call_1",
       type = "function",
       name = "bash",
-      arguments = '{"bash_command":"make test"}',
+      arguments = '{"command":"make test"}',
     },
     "test output",
     {
@@ -977,7 +977,7 @@ T["strategy.chat"]["tool-only round renders /sia header on redraw"] = function()
       call_id = "call_1",
       type = "function",
       name = "bash",
-      arguments = '{"bash_command":"ls"}',
+      arguments = '{"command":"ls"}',
     },
     "file1.txt\nfile2.txt",
     {
@@ -1020,7 +1020,7 @@ T["strategy.chat"]["tool-only round with multiple tools renders single /sia head
     call_id = "call_1",
     type = "function",
     name = "bash",
-    arguments = '{"bash_command":"ls"}',
+    arguments = '{"command":"ls"}',
   }, "file1.txt", { summary = "Ran ls" })
   conversation:add_tool_message(turn_id, {
     key = "tool-2",
