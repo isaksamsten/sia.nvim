@@ -6,8 +6,8 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, copilot, codex, anthropic,
-openrouter, gemini, zai) register automatically at startup. Each provider ships
+and configuration. Built-in providers (openai, deepseek, copilot, codex, claudecode,
+anthropic, openrouter, gemini, zai) register automatically at startup. Each provider ships
 with a set of seed models that are available immediately.
 
 ### Dynamic Model Discovery
@@ -230,6 +230,18 @@ Manual thinking with a fixed budget:
 }
 ```
 
+### Claude Code
+
+Used by: `claudecode`
+
+Same request shape as the Anthropic Messages API, but authenticated through
+Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
+
+- Adds Claude Code OAuth headers and beta flags automatically
+- Prefixes tool names with `mcp_` on outgoing requests and strips them on streamed responses
+- Prepends the Claude Code identity system prompt
+- Reports zero cost because access comes from a subscription session, not API credits
+
 ### Copilot
 
 The Copilot provider routes to different API formats depending on the model:
@@ -279,10 +291,10 @@ Used by: `deepseek` (via OpenAI-compatible endpoint)
 Same parameters as the OpenAI Completion API. DeepSeek models support reasoning
 via the `thinking` parameter:
 
-| Parameter       | Type   | Description                                       |
-| --------------- | ------ | ------------------------------------------------- |
-| **thinking**    | object | `{ type: "enabled" }` enables reasoning mode      |
-| **reasoning_effort** | string | `"low"`, `"medium"`, `"high"`                     |
+| Parameter            | Type   | Description                                  |
+| -------------------- | ------ | -------------------------------------------- |
+| **thinking**         | object | `{ type: "enabled" }` enables reasoning mode |
+| **reasoning_effort** | string | `"low"`, `"medium"`, `"high"`                |
 
 Seed models: `deepseek-v4-flash` and `deepseek-v4-pro`, each with a 384K context
 window and reasoning support.

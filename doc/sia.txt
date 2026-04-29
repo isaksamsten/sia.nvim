@@ -1,5 +1,5 @@
 *sia.txt*
-                              For Neovim >= 0.11    Last change: 2026 April 28
+                              For Neovim >= 0.11    Last change: 2026 April 29
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -194,11 +194,24 @@ DEEPSEEK ~
 <
 
 
-ANTHROPIC ~
+ANTHROPIC API ~
 
 >bash
     export ANTHROPIC_API_KEY="sk-ant-..."
 <
+
+
+CLAUDE CODE ~
+
+Authenticate with your Claude Code subscription through the browser OAuth flow:
+
+>vim
+    :SiaAuth claudecode
+<
+
+This caches OAuth state in Neovim’s `stdpath("cache")`/`stdpath("state")`
+directories and routes Anthropic requests through Claude Code-compatible OAuth
+headers instead of an API key.
 
 
 GEMINI ~
@@ -633,13 +646,15 @@ Results are cached across sessions. See |sia-models-and-providers| for details.
 
 AUTHENTICATION                                   *sia-commands-authentication*
 
-  -----------------------------------------------------------------------
-  Command            Description
-  ------------------ ----------------------------------------------------
-  :SiaAuth codex     Authenticate with OpenAI Codex (browser-based OAuth)
+  --------------------------------------------------------------------------
+  Command               Description
+  --------------------- ----------------------------------------------------
+  :SiaAuth claudecode   Authenticate with Claude Code browser OAuth
 
-  :SiaAuth copilot   Authenticate with GitHub Copilot (device flow)
-  -----------------------------------------------------------------------
+  :SiaAuth codex        Authenticate with OpenAI Codex (browser-based OAuth)
+
+  :SiaAuth copilot      Authenticate with GitHub Copilot (device flow)
+  --------------------------------------------------------------------------
 
 ==============================================================================
 5. Reviewing Changes                                   *sia-reviewing-changes*
@@ -1040,8 +1055,9 @@ PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
 Sia uses a central provider registry that manages model discovery, resolution,
 and configuration. Built-in providers (openai, deepseek, copilot, codex,
-anthropic, openrouter, gemini, zai) register automatically at startup. Each
-provider ships with a set of seed models that are available immediately.
+claudecode, anthropic, openrouter, gemini, zai) register automatically at
+startup. Each provider ships with a set of seed models that are available
+immediately.
 
 
 DYNAMIC MODEL DISCOVERY ~
@@ -1285,6 +1301,19 @@ Manual thinking with a fixed budget:
       }
     }
 <
+
+
+CLAUDE CODE ~
+
+Used by: `claudecode`
+
+Same request shape as the Anthropic Messages API, but authenticated through
+Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
+
+- Adds Claude Code OAuth headers and beta flags automatically
+- Prefixes tool names with `mcp_` on outgoing requests and strips them on streamed responses
+- Prepends the Claude Code identity system prompt
+- Reports zero cost because access comes from a subscription session, not API credits
 
 
 COPILOT ~

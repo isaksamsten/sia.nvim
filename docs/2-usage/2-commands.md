@@ -2,17 +2,17 @@
 
 ## Main Commands
 
-| Command                        | Description                                       |
-| ------------------------------ | ------------------------------------------------- |
-| `:Sia [query]`                 | Start or continue a chat conversation             |
-| `:Sia /action [query]`         | Run a named action with optional extra text       |
-| `:Sia @mode [query]`           | Start a chat in a conversation mode               |
-| `:Sia /action @mode [query]`   | Run an action in a conversation mode              |
-| `:Sia! [query]`                | Insert generated text at cursor (insert mode)     |
-| `:'<,'>Sia [query]`            | Send selection to chat                            |
-| `:'<,'>Sia! [query]`           | Show suggested changes as inline diff (diff mode) |
-| `:Sia -m model [query]`        | Override the model for this conversation          |
-| `:Sia -s skill [query]`        | Inject a skill for this turn or conversation      |
+| Command                      | Description                                       |
+| ---------------------------- | ------------------------------------------------- |
+| `:Sia [query]`               | Start or continue a chat conversation             |
+| `:Sia /action [query]`       | Run a named action with optional extra text       |
+| `:Sia @mode [query]`         | Start a chat in a conversation mode               |
+| `:Sia /action @mode [query]` | Run an action in a conversation mode              |
+| `:Sia! [query]`              | Insert generated text at cursor (insert mode)     |
+| `:'<,'>Sia [query]`          | Send selection to chat                            |
+| `:'<,'>Sia! [query]`         | Show suggested changes as inline diff (diff mode) |
+| `:Sia -m model [query]`      | Override the model for this conversation          |
+| `:Sia -s skill [query]`      | Inject a skill for this turn or conversation      |
 
 Any Vim range works. For example, `:%Sia explain this file` sends the entire
 buffer to chat.
@@ -105,11 +105,11 @@ workflow.
 
 ## Model Management
 
-| Command                       | Description                                      |
-| ----------------------------- | ------------------------------------------------ |
-| `:SiaModel list [provider]`   | List all available models, optionally by provider |
-| `:SiaModel show <model>`      | Show details for a model (context, support, pricing) |
-| `:SiaModel refresh`           | Refresh model lists from all providers            |
+| Command                     | Description                                          |
+| --------------------------- | ---------------------------------------------------- |
+| `:SiaModel list [provider]` | List all available models, optionally by provider    |
+| `:SiaModel show <model>`    | Show details for a model (context, support, pricing) |
+| `:SiaModel refresh`         | Refresh model lists from all providers               |
 
 `:SiaModel refresh` queries each provider's API to discover available models.
 Results are cached across sessions. See
@@ -117,7 +117,8 @@ Results are cached across sessions. See
 
 ## Authentication
 
-| Command            | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| `:SiaAuth codex`   | Authenticate with OpenAI Codex (browser-based OAuth) |
-| `:SiaAuth copilot` | Authenticate with GitHub Copilot (device flow)       |
+| Command               | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `:SiaAuth claudecode` | Authenticate with Claude Code browser OAuth          |
+| `:SiaAuth codex`      | Authenticate with OpenAI Codex (browser-based OAuth) |
+| `:SiaAuth copilot`    | Authenticate with GitHub Copilot (device flow)       |

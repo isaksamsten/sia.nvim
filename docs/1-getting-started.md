@@ -79,11 +79,23 @@ subscription.
 export DEEPSEEK_API_KEY="sk-..."
 ```
 
-### Anthropic
+### Anthropic API
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
+
+### Claude Code
+
+Authenticate with your Claude Code subscription through the browser OAuth flow:
+
+```vim
+:SiaAuth claudecode
+```
+
+This caches OAuth state in Neovim's `stdpath("cache")`/`stdpath("state")`
+directories and routes Anthropic requests through Claude Code-compatible OAuth
+headers instead of an API key.
 
 ### Gemini
 
