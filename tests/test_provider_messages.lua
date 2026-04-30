@@ -267,4 +267,219 @@ T["provider.prepare_messages"]["anthropic merges adjacent assistant turns after 
   eq("view", data.messages[1].content[2].name)
 end
 
+T["provider.prepare_messages"]["anthropic round-trips thinking blocks before tool_use"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  --- @type sia.Message[]
+  local messages = {
+    { role = "user", content = "hi" },
+    {
+      role = "assistant",
+      reasoning = {
+        text = "let me think",
+        opaque = {
+          blocks = {
+            {
+              type = "thinking",
+              thinking = "let me think",
+              signature = "sig-abc",
+            },
+            { type = "redacted_thinking", data = "encrypted-blob" },
+          },
+        },
+      },
+      tool_call = {
+        id = "toolu_1",
+        type = "function",
+        name = "view",
+        arguments = '{"path":"foo.lua"}',
+      },
+    },
+  }
+
+  local data = {}
+  --- @diagnostic disable-next-line:param-type-mismatch
+  anthropic.prepare_messages(data, {}, messages)
+
+  eq(2, #data.messages)
+  local assistant = data.messages[2]
+  eq("assistant", assistant.role)
+  eq(3, #assistant.content)
+  eq("thinking", assistant.content[1].type)
+  eq("let me think", assistant.content[1].thinking)
+  eq("sig-abc", assistant.content[1].signature)
+  eq("redacted_thinking", assistant.content[2].type)
+  eq("encrypted-blob", assistant.content[2].data)
+  eq("tool_use", assistant.content[3].type)
+  eq("view", assistant.content[3].name)
+end
+
+T["provider.prepare_messages"]["anthropic round-trips thinking blocks for content-only assistant"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  --- @type sia.Message[]
+  local messages = {
+    { role = "user", content = "hi" },
+    {
+      role = "assistant",
+      content = "final answer",
+      reasoning = {
+        text = "thinking text",
+        opaque = {
+          blocks = {
+            {
+              type = "thinking",
+              thinking = "thinking text",
+              signature = "sig-1",
+            },
+          },
+        },
+      },
+    },
+  }
+
+  local data = {}
+  --- @diagnostic disable-next-line:param-type-mismatch
+  anthropic.prepare_messages(data, {}, messages)
+
+  eq(2, #data.messages)
+  local assistant = data.messages[2]
+  eq("assistant", assistant.role)
+  eq(2, #assistant.content)
+  eq("thinking", assistant.content[1].type)
+  eq("sig-1", assistant.content[1].signature)
+  eq("text", assistant.content[2].type)
+  eq("final answer", assistant.content[2].text)
+end
+
+T["provider.prepare_messages"]["anthropic enables thinking when model supports reasoning"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  local data = {}
+  anthropic.prepare_parameters(data, {
+    options = {},
+    support = { reasoning = true },
+  })
+
+  eq("enabled", data.thinking.type)
+  eq(4096, data.thinking.budget_tokens)
+  eq(true, data.max_tokens > data.thinking.budget_tokens)
+end
+
+T["provider.prepare_messages"]["anthropic respects explicit thinking option"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  local data = {}
+  anthropic.prepare_parameters(data, {
+    options = {
+      thinking = { type = "adaptive" },
+      max_tokens = 16000,
+    },
+  })
+
+  eq("adaptive", data.thinking.type)
+  eq(16000, data.max_tokens)
+end
+
+T["provider.prepare_messages"]["anthropic thinking_budget folds into thinking"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  local data = {}
+  anthropic.prepare_parameters(data, {
+    options = { thinking_budget = 8000, max_tokens = 16000 },
+  })
+
+  eq("enabled", data.thinking.type)
+  eq(8000, data.thinking.budget_tokens)
+  eq(nil, data.thinking_budget)
+end
+
+T["provider.prepare_messages"]["anthropic disables thinking when type is disabled"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  local data = {}
+  anthropic.prepare_parameters(data, {
+    options = { thinking = { type = "disabled" } },
+    support = { reasoning = true },
+  })
+
+  eq(nil, data.thinking)
+end
+
+T["sia.provider.anthropic stream"] = MiniTest.new_set()
+
+T["sia.provider.anthropic stream"]["captures thinking and signature"] = function()
+  local anthropic = require("sia.provider.anthropic")
+  local reasoning_chunks = {}
+  local strategy = {
+    on_tools = function()
+      return true
+    end,
+    on_stream = function(_, delta)
+      if delta.reasoning then
+        table.insert(reasoning_chunks, delta.reasoning.content)
+      end
+      return true
+    end,
+  }
+
+  local stream = anthropic.messages.new_stream(strategy)
+  stream:process_stream_chunk({
+    type = "content_block_start",
+    index = 0,
+    content_block = { type = "thinking", thinking = "" },
+  })
+  stream:process_stream_chunk({
+    type = "content_block_delta",
+    index = 0,
+    delta = { type = "thinking_delta", thinking = "let me " },
+  })
+  stream:process_stream_chunk({
+    type = "content_block_delta",
+    index = 0,
+    delta = { type = "thinking_delta", thinking = "think" },
+  })
+  stream:process_stream_chunk({
+    type = "content_block_delta",
+    index = 0,
+    delta = { type = "signature_delta", signature = "abc" },
+  })
+  stream:process_stream_chunk({ type = "content_block_stop", index = 0 })
+  stream:process_stream_chunk({
+    type = "content_block_start",
+    index = 1,
+    content_block = { type = "text" },
+  })
+  stream:process_stream_chunk({
+    type = "content_block_delta",
+    index = 1,
+    delta = { type = "text_delta", text = "answer" },
+  })
+
+  local result = stream:finalize()
+  eq("answer", result.content)
+  eq("let me think", result.reasoning.text)
+  eq("let me think", result.reasoning.opaque.blocks[1].thinking)
+  eq("abc", result.reasoning.opaque.blocks[1].signature)
+  eq({ "let me ", "think" }, reasoning_chunks)
+end
+
+T["sia.provider.anthropic stream"]["captures redacted thinking"] = function()
+  local anthropic = require("sia.provider.anthropic")
+  local strategy = {
+    on_tools = function()
+      return true
+    end,
+    on_stream = function()
+      return true
+    end,
+  }
+
+  local stream = anthropic.messages.new_stream(strategy)
+  stream:process_stream_chunk({
+    type = "content_block_start",
+    index = 0,
+    content_block = { type = "redacted_thinking", data = "OPAQUE" },
+  })
+  stream:process_stream_chunk({ type = "content_block_stop", index = 0 })
+
+  local result = stream:finalize()
+  eq("redacted_thinking", result.reasoning.opaque.blocks[1].type)
+  eq("OPAQUE", result.reasoning.opaque.blocks[1].data)
+end
+
 return T

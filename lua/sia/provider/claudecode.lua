@@ -614,6 +614,16 @@ messages.prepare_messages = function(data, model_id, messages_in)
       })
     elseif message.role == "assistant" and message.tool_call then
       local content = {}
+
+      -- Preserve thinking blocks (with signatures) before tool_use so the
+      -- API accepts the round-trip when extended thinking is enabled.
+      local reasoning_blocks = anthropic.reasoning_to_blocks(message.reasoning)
+      if reasoning_blocks then
+        for _, blk in ipairs(reasoning_blocks) do
+          table.insert(content, blk)
+        end
+      end
+
       if message.content and message.content ~= "" then
         table.insert(content, { type = "text", text = message.content })
       end
@@ -637,6 +647,36 @@ messages.prepare_messages = function(data, model_id, messages_in)
         role = "assistant",
         content = content,
       })
+    elseif message.role == "assistant" then
+      local content = {}
+      local reasoning_blocks = anthropic.reasoning_to_blocks(message.reasoning)
+      if reasoning_blocks then
+        for _, blk in ipairs(reasoning_blocks) do
+          table.insert(content, blk)
+        end
+      end
+
+      if type(message.content) == "table" then
+        for _, part in ipairs(message.content) do
+          table.insert(content, part)
+        end
+      elseif message.content and message.content ~= "" then
+        table.insert(content, { type = "text", text = message.content })
+      end
+
+      if #content == 0 then
+        -- empty assistant turn — skip
+      elseif #content == 1 and not reasoning_blocks then
+        table.insert(conversation_messages, {
+          role = "assistant",
+          content = content[1].type == "text" and content[1].text or content,
+        })
+      else
+        table.insert(conversation_messages, {
+          role = "assistant",
+          content = content,
+        })
+      end
     else
       table.insert(conversation_messages, {
         role = message.role,
@@ -794,16 +834,7 @@ M.spec = {
   implementations = {
     default = messages,
   },
-  seed = {
-    ["claude-sonnet-4.5"] = {
-      api_name = "claude-4.5-sonnet",
-      context_window = 200000,
-    },
-    ["claude-haiku-4.5"] = {
-      api_name = "claude-4.5-haiku",
-      context_window = 200000,
-    },
-  },
+  seed = {},
   authorize = authorize,
   discover = discover,
 }

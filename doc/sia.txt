@@ -1,5 +1,5 @@
 *sia.txt*
-                              For Neovim >= 0.11    Last change: 2026 April 29
+                              For Neovim >= 0.11    Last change: 2026 April 30
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -483,9 +483,9 @@ You can customize the default behavior for each mode using |sia-actions| and
 
 MAIN COMMANDS                                     *sia-commands-main-commands*
 
-  -------------------------------------------------------------------------
+  --------------------------------------------------------------------------
   Command                      Description
-  ---------------------------- --------------------------------------------
+  ---------------------------- ---------------------------------------------
   :Sia [query]                 Start or continue a chat conversation
 
   :Sia /action [query]         Run a named action with optional extra text
@@ -494,8 +494,7 @@ MAIN COMMANDS                                     *sia-commands-main-commands*
 
   :Sia /action @mode [query]   Run an action in a conversation mode
 
-  :Sia! [query]                Insert generated text at cursor (insert
-                               mode)
+  :Sia! [query]                Insert generated text at cursor (insert mode)
 
   :'<,'>Sia [query]            Send selection to chat
 
@@ -505,7 +504,7 @@ MAIN COMMANDS                                     *sia-commands-main-commands*
   :Sia -m model [query]        Override the model for this conversation
 
   :Sia -s skill [query]        Inject a skill for this turn or conversation
-  -------------------------------------------------------------------------
+  --------------------------------------------------------------------------
 Any Vim range works. For example, `:%Sia explain this file` sends the entire
 buffer to chat.
 
@@ -629,9 +628,9 @@ See |sia-agents| for the full agent interaction workflow.
 
 MODEL MANAGEMENT                               *sia-commands-model-management*
 
-  ------------------------------------------------------------------------
+  --------------------------------------------------------------------------
   Command                     Description
-  --------------------------- --------------------------------------------
+  --------------------------- ----------------------------------------------
   :SiaModel list [provider]   List all available models, optionally by
                               provider
 
@@ -639,22 +638,23 @@ MODEL MANAGEMENT                               *sia-commands-model-management*
                               pricing)
 
   :SiaModel refresh           Refresh model lists from all providers
-  ------------------------------------------------------------------------
+  --------------------------------------------------------------------------
 `:SiaModel refresh` queries each provider’s API to discover available models.
 Results are cached across sessions. See |sia-models-and-providers| for details.
 
 
 AUTHENTICATION                                   *sia-commands-authentication*
 
-  --------------------------------------------------------------------------
+  ------------------------------------------------------------------------
   Command               Description
-  --------------------- ----------------------------------------------------
+  --------------------- --------------------------------------------------
   :SiaAuth claudecode   Authenticate with Claude Code browser OAuth
 
-  :SiaAuth codex        Authenticate with OpenAI Codex (browser-based OAuth)
+  :SiaAuth codex        Authenticate with OpenAI Codex (browser-based
+                        OAuth)
 
   :SiaAuth copilot      Authenticate with GitHub Copilot (device flow)
-  --------------------------------------------------------------------------
+  ------------------------------------------------------------------------
 
 ==============================================================================
 5. Reviewing Changes                                   *sia-reviewing-changes*
@@ -1315,6 +1315,46 @@ Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
 - Prepends the Claude Code identity system prompt
 - Reports zero cost because access comes from a subscription session, not API credits
 
+Local model overrides in `.sia/config.json` are passed through to Claude Code,
+so you can set the same extended-thinking fields there that Anthropic documents
+for the Messages API:
+
+  -----------------------------------------------------------------------------------------------------------------------------
+  Parameter                          Type           Description
+  ---------------------------------- -------------- ---------------------------------------------------------------------------
+  max_tokens                         integer        Required when thinking is enabled or adaptive
+
+  thinking                           object         Extended thinking config:
+                                                    { type: "adaptive" \| "enabled" \| "disabled", budget_tokens?, display? }
+
+  output_config                      object         Adaptive thinking depth, typically
+                                                    { "effort": "low" \| "medium" \| "high" \| "max" }
+  -----------------------------------------------------------------------------------------------------------------------------
+Notes:
+
+- Use `thinking.type = "adaptive"` on Claude Opus 4.6 / 4.7+ and Claude Sonnet 4.6.
+- `thinking.type = "enabled"` requires `thinking.budget_tokens`, is deprecated on
+    Opus 4.6 / Sonnet 4.6, and is rejected by Opus 4.7+.
+- `thinking.type = "disabled"` turns extended thinking off.
+- `thinking.display` follows Anthropic’s API values such as `"summarized"` and
+    `"omitted"` when the target model supports them.
+
+Example local config for a Claude Code model:
+
+>json
+    {
+      "models": {
+        "claudecode": {
+          "claude-sonnet-4-6": {
+            "max_tokens": 16000,
+            "thinking": { "type": "adaptive", "display": "summarized" },
+            "output_config": { "effort": "high" }
+          }
+        }
+      }
+    }
+<
+
 
 COPILOT ~
 
@@ -1372,13 +1412,13 @@ Used by: `deepseek` (via OpenAI-compatible endpoint)
 Same parameters as the OpenAI Completion API. DeepSeek models support reasoning
 via the `thinking` parameter:
 
-  -----------------------------------------------------------------------------
-  Parameter          Type     Description
-  ------------------ -------- -------------------------------------------------
-  thinking           object   { type: "enabled" } enables reasoning mode
+  --------------------------------------------------------------------------
+  Parameter            Type     Description
+  -------------------- -------- --------------------------------------------
+  thinking             object   { type: "enabled" } enables reasoning mode
 
-  reasoning_effort   string   "low", "medium", "high"
-  -----------------------------------------------------------------------------
+  reasoning_effort     string   "low", "medium", "high"
+  --------------------------------------------------------------------------
 Seed models: `deepseek-v4-flash` and `deepseek-v4-pro`, each with a 384K
 context window and reasoning support.
 
@@ -1457,6 +1497,24 @@ MODEL OVERRIDES ~
           }
         }
 <
+    Claude Code model overrides use the underlying Anthropic request fields. For
+    example:
+
+>json
+        {
+          "models": {
+            "claudecode": {
+              "claude-sonnet-4-6": {
+                "max_tokens": 16000,
+                "thinking": { "type": "adaptive", "display": "summarized" },
+                "output_config": { "effort": "high" }
+              }
+            }
+          }
+        }
+<
+    For `thinking`, Sia passes through Anthropic’s supported fields such as
+    `type`, `budget_tokens`, and `display`.
 - **aliases** — create shorthand names for models with custom parameters:
 
 >json

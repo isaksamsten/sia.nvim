@@ -20,9 +20,48 @@ local PRICING = {
   ["claude-sonnet-3.7"] = { input = 3.00, output = 15.00 },
 }
 
+--- @class sia.anthropic.ReasoningBlock
+--- @field type "thinking"|"redacted_thinking"
+--- @field thinking string?
+--- @field signature string?
+--- @field data string?
+
+--- Convert a stored sia.Reasoning into the list of Anthropic content blocks
+--- that must precede any text/tool_use content when round-tripping a turn.
+--- Returns nil when there is nothing to emit.
+--- @param reasoning sia.Reasoning?
+--- @return table[]?
+function M.reasoning_to_blocks(reasoning)
+  if not reasoning then
+    return nil
+  end
+  local opaque = reasoning.opaque
+  local blocks = {}
+  if type(opaque) == "table" and type(opaque.blocks) == "table" then
+    for _, blk in ipairs(opaque.blocks) do
+      if blk.type == "thinking" then
+        local item = { type = "thinking", thinking = blk.thinking or "" }
+        if blk.signature then
+          item.signature = blk.signature
+        end
+        table.insert(blocks, item)
+      elseif blk.type == "redacted_thinking" and blk.data then
+        table.insert(blocks, { type = "redacted_thinking", data = blk.data })
+      end
+    end
+  end
+  if #blocks == 0 then
+    return nil
+  end
+  return blocks
+end
+
 --- @class sia.AnthropicStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
 --- @field content string
+--- @field reasoning_blocks sia.anthropic.ReasoningBlock[]
+--- @field reasoning_text string
+--- @field current_block_kind "thinking"|"redacted_thinking"|"text"|"tool_use"|nil
 local AnthropicStream = {}
 AnthropicStream.__index = AnthropicStream
 setmetatable(AnthropicStream, { __index = common.ProviderStream })
@@ -33,6 +72,9 @@ function AnthropicStream.new(strategy)
   --- @cast self sia.AnthropicStream
   self.pending_tool_calls = {}
   self.content = ""
+  self.reasoning_blocks = {}
+  self.reasoning_text = ""
+  self.current_block_kind = nil
   return self
 end
 
@@ -49,6 +91,22 @@ function AnthropicStream:process_stream_chunk(obj)
         name = block.name,
         arguments = "",
       })
+      self.current_block_kind = "tool_use"
+    elseif block.type == "thinking" then
+      table.insert(self.reasoning_blocks, {
+        type = "thinking",
+        thinking = block.thinking or "",
+        signature = block.signature,
+      })
+      self.current_block_kind = "thinking"
+    elseif block.type == "redacted_thinking" then
+      table.insert(self.reasoning_blocks, {
+        type = "redacted_thinking",
+        data = block.data,
+      })
+      self.current_block_kind = "redacted_thinking"
+    elseif block.type == "text" then
+      self.current_block_kind = "text"
     end
   elseif obj.type == "content_block_delta" then
     local delta = obj.delta
@@ -62,7 +120,26 @@ function AnthropicStream:process_stream_chunk(obj)
         local last_tool = self.pending_tool_calls[#self.pending_tool_calls]
         last_tool.arguments = last_tool.arguments .. delta.partial_json
       end
+    elseif delta.type == "thinking_delta" then
+      local text = delta.thinking or ""
+      if text ~= "" then
+        if not self.strategy:on_stream({ reasoning = { content = text } }) then
+          return true
+        end
+        self.reasoning_text = self.reasoning_text .. text
+        local last = self.reasoning_blocks[#self.reasoning_blocks]
+        if last and last.type == "thinking" then
+          last.thinking = (last.thinking or "") .. text
+        end
+      end
+    elseif delta.type == "signature_delta" then
+      local last = self.reasoning_blocks[#self.reasoning_blocks]
+      if last and last.type == "thinking" then
+        last.signature = (last.signature or "") .. (delta.signature or "")
+      end
     end
+  elseif obj.type == "content_block_stop" then
+    self.current_block_kind = nil
   end
 end
 
@@ -73,10 +150,19 @@ function AnthropicStream:finalize()
     content = self.content
   end
 
+  --- @type sia.Reasoning?
+  local reasoning
+  if #self.reasoning_blocks > 0 then
+    reasoning = {
+      text = self.reasoning_text,
+      opaque = { blocks = self.reasoning_blocks },
+    }
+  end
+
   --- @type sia.RoundResult
   return {
     content = content,
-    reasoning = nil,
+    reasoning = reasoning,
     tool_calls = self.pending_tool_calls,
   }
 end
@@ -126,6 +212,27 @@ M.messages = {
     if not data.max_tokens then
       data.max_tokens = 4096
     end
+
+    if model and model.support and model.support.reasoning and not data.thinking then
+      data.thinking = { type = "enabled", budget_tokens = 4096 }
+    end
+
+    if type(data.thinking) == "table" then
+      if data.thinking.type == "disabled" then
+        data.thinking = nil
+      elseif data.thinking.type == "enabled" and not data.thinking.budget_tokens then
+        data.thinking.budget_tokens = 4096
+      end
+    end
+
+    if
+      type(data.thinking) == "table"
+      and data.thinking.budget_tokens
+      and data.max_tokens
+      and data.max_tokens <= data.thinking.budget_tokens
+    then
+      data.max_tokens = data.thinking.budget_tokens + 4096
+    end
   end,
   --- @param data table
   --- @param tools sia.tool.Definition[]
@@ -173,6 +280,16 @@ M.messages = {
         })
       elseif m.role == "assistant" and m.tool_call then
         local content = {}
+
+        -- Preserve thinking blocks (with signatures) before tool_use so the
+        -- API accepts the round-trip when extended thinking is enabled.
+        local reasoning_blocks = M.reasoning_to_blocks(m.reasoning)
+        if reasoning_blocks then
+          for _, blk in ipairs(reasoning_blocks) do
+            table.insert(content, blk)
+          end
+        end
+
         if m.content and m.content ~= "" then
           table.insert(content, {
             type = "text",
@@ -198,6 +315,38 @@ M.messages = {
           role = "assistant",
           content = content,
         })
+      elseif m.role == "assistant" then
+        local content = {}
+
+        local reasoning_blocks = M.reasoning_to_blocks(m.reasoning)
+        if reasoning_blocks then
+          for _, blk in ipairs(reasoning_blocks) do
+            table.insert(content, blk)
+          end
+        end
+
+        if type(m.content) == "table" then
+          for _, part in ipairs(m.content) do
+            table.insert(content, part)
+          end
+        elseif m.content and m.content ~= "" then
+          table.insert(content, { type = "text", text = m.content })
+        end
+
+        if #content == 0 then
+          -- No reasoning, no text — skip emitting an empty assistant turn.
+        elseif #content == 1 and not reasoning_blocks then
+          -- Single text part, keep the simpler string form for compatibility.
+          table.insert(conversation_messages, {
+            role = "assistant",
+            content = content[1].type == "text" and content[1].text or content,
+          })
+        else
+          table.insert(conversation_messages, {
+            role = "assistant",
+            content = content,
+          })
+        end
       else
         table.insert(conversation_messages, {
           role = m.role,

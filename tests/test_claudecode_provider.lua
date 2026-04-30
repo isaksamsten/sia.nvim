@@ -92,4 +92,44 @@ T["sia.provider.claudecode"]["rewrite text matches Claude renaming"] = function(
   )
 end
 
+T["sia.provider.claudecode"]["round-trips thinking blocks before tool_use"] = function()
+  local provider = reload_provider()
+  local data = {}
+  local messages = {
+    { role = "user", content = "first" },
+    {
+      role = "assistant",
+      reasoning = {
+        text = "thinking",
+        opaque = {
+          blocks = {
+            { type = "thinking", thinking = "thinking", signature = "sig" },
+          },
+        },
+      },
+      tool_call = {
+        id = "toolu_1",
+        type = "function",
+        name = "view",
+        arguments = '{"path":"foo.lua"}',
+      },
+    },
+  }
+
+  --- @diagnostic disable-next-line:param-type-mismatch
+  provider.spec.implementations.default.prepare_messages(
+    data,
+    "claude-4.5-sonnet",
+    messages
+  )
+
+  -- last message should be the assistant turn with thinking before tool_use.
+  local assistant = data.messages[#data.messages]
+  eq("assistant", assistant.role)
+  eq("thinking", assistant.content[1].type)
+  eq("sig", assistant.content[1].signature)
+  eq("tool_use", assistant.content[2].type)
+  eq("mcp_View", assistant.content[2].name)
+end
+
 return T

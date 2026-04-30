@@ -242,6 +242,41 @@ Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
 - Prepends the Claude Code identity system prompt
 - Reports zero cost because access comes from a subscription session, not API credits
 
+Local model overrides in `.sia/config.json` are passed through to Claude Code, so
+you can set the same extended-thinking fields there that Anthropic documents for
+the Messages API:
+
+| Parameter         | Type    | Description |
+| ----------------- | ------- | ----------- |
+| **max_tokens**    | integer | Required when `thinking` is enabled or adaptive |
+| **thinking**      | object  | Extended thinking config: `{ type: "adaptive" \| "enabled" \| "disabled", budget_tokens?, display? }` |
+| **output_config** | object  | Adaptive thinking depth, typically `{ "effort": "low" \| "medium" \| "high" \| "max" }` |
+
+Notes:
+
+- Use `thinking.type = "adaptive"` on Claude Opus 4.6 / 4.7+ and Claude Sonnet 4.6.
+- `thinking.type = "enabled"` requires `thinking.budget_tokens`, is deprecated on
+  Opus 4.6 / Sonnet 4.6, and is rejected by Opus 4.7+.
+- `thinking.type = "disabled"` turns extended thinking off.
+- `thinking.display` follows Anthropic's API values such as `"summarized"` and
+  `"omitted"` when the target model supports them.
+
+Example local config for a Claude Code model:
+
+```json
+{
+  "models": {
+    "claudecode": {
+      "claude-sonnet-4-6": {
+        "max_tokens": 16000,
+        "thinking": { "type": "adaptive", "display": "summarized" },
+        "output_config": { "effort": "high" }
+      }
+    }
+  }
+}
+```
+
 ### Copilot
 
 The Copilot provider routes to different API formats depending on the model:

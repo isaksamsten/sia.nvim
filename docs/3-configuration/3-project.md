@@ -58,6 +58,26 @@ the project root. Local settings override global ones.
   }
   ```
 
+  Claude Code model overrides use the underlying Anthropic request fields. For
+  example:
+
+  ```json
+  {
+    "models": {
+      "claudecode": {
+        "claude-sonnet-4-6": {
+          "max_tokens": 16000,
+          "thinking": { "type": "adaptive", "display": "summarized" },
+          "output_config": { "effort": "high" }
+        }
+      }
+    }
+  }
+  ```
+
+  For `thinking`, Sia passes through Anthropic's supported fields such as
+  `type`, `budget_tokens`, and `display`.
+
 - **aliases** — create shorthand names for models with custom parameters:
 
   ```json
