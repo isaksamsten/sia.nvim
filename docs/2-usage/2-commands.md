@@ -117,8 +117,8 @@ Results are cached across sessions. See
 
 ## Authentication
 
-| Command               | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `:SiaAuth claudecode` | Authenticate with Claude Code browser OAuth          |
-| `:SiaAuth codex`      | Authenticate with OpenAI Codex (browser-based OAuth) |
-| `:SiaAuth copilot`    | Authenticate with GitHub Copilot (device flow)       |
+| Command            | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| `:SiaAuth claude`  | Authenticate with Claude Code browser OAuth          |
+| `:SiaAuth codex`   | Authenticate with OpenAI Codex (browser-based OAuth) |
+| `:SiaAuth copilot` | Authenticate with GitHub Copilot (device flow)       |

@@ -4,7 +4,7 @@ local PROVIDERS = {
   "openai",
   "copilot",
   "codex",
-  "claudecode",
+  "claude",
   "anthropic",
   "openrouter",
   "gemini",

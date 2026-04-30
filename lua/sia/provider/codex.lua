@@ -749,7 +749,6 @@ local function discover(callback)
 
       local entries = {}
       for _, model in ipairs(json.models) do
-        print(vim.inspect(model))
         if type(model) == "table" and type(model.slug) == "string" then
           local entry = {}
 
@@ -772,7 +771,6 @@ local function discover(callback)
         end
       end
 
-      print(vim.inspect(entries))
       callback(entries)
     end)
   )

@@ -64,8 +64,8 @@ the project root. Local settings override global ones.
   ```json
   {
     "models": {
-      "claudecode": {
-        "claude-sonnet-4-6": {
+      "claude": {
+        "sonnet-4-6": {
           "max_tokens": 16000,
           "thinking": { "type": "adaptive", "display": "summarized" },
           "output_config": { "effort": "high" }

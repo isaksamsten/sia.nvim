@@ -853,7 +853,6 @@ end, {
     if prefix:match("SiaAgent%s+start%s+[%w/%-_]*$") then
       local agents = vim
         .iter(require("sia.agent.registry").filter(function(agent)
-          print(agent.name)
           return vim.startswith(agent.name, arg_lead)
         end))
         :map(function(agent)

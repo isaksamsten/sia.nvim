@@ -148,6 +148,59 @@ local function get_model_override(model_id)
   return nil
 end
 
+---@param model_id string
+---@return string
+local function short_name_from_id(model_id)
+  return model_id:gsub("^claude%-", "")
+end
+
+---@param capability table?
+---@return boolean
+local function capability_supported(capability)
+  return type(capability) == "table" and capability.supported == true
+end
+
+---@param model table
+---@return integer?
+local function get_model_context_window(model)
+  if type(model.max_input_tokens) == "number" then
+    return model.max_input_tokens
+  end
+  return nil
+end
+
+---@param model table
+---@return sia.config.Support?
+local function map_model_support(model)
+  local capabilities = type(model.capabilities) == "table" and model.capabilities or nil
+  if not capabilities then
+    return nil
+  end
+
+  local support = {}
+  local has_any = false
+
+  if capability_supported(capabilities.image_input) then
+    support.image = true
+    has_any = true
+  end
+
+  if capability_supported(capabilities.pdf_input) then
+    support.document = true
+    has_any = true
+  end
+
+  if capability_supported(capabilities.thinking) then
+    support.reasoning = true
+    has_any = true
+    if capability_supported(capabilities.thinking.types and capabilities.thinking.types.adaptive) then
+      support.adaptive_thinking = true
+    end
+  end
+
+  return has_any and support or nil
+end
+
 ---@param expires integer
 ---@return boolean
 local function is_fresh(expires)
@@ -377,7 +430,7 @@ local function get_access_token(force)
   if creds then
     return creds.access
   end
-  return nil, err or "run :SiaAuth claudecode to authorize"
+  return nil, err or "run :SiaAuth claude to authorize"
 end
 
 ---@param name string
@@ -561,7 +614,7 @@ messages.api_key = function()
   force_refresh = false
   if not token then
     vim.notify(
-      "sia: Claude Code auth unavailable: " .. (err or "run :SiaAuth claudecode"),
+      "sia: Claude Code auth unavailable: " .. (err or "run :SiaAuth claude"),
       vim.log.levels.WARN
     )
     return nil
@@ -739,7 +792,7 @@ local function discover(callback)
   if not token then
     callback(
       nil,
-      "Claude Code not authorized (" .. (err or "run :SiaAuth claudecode") .. ")"
+      "Claude Code not authorized (" .. (err or "run :SiaAuth claude") .. ")"
     )
     return
   end
@@ -777,7 +830,22 @@ local function discover(callback)
       local entries = {}
       for _, model in ipairs(json.data) do
         if type(model.id) == "string" then
-          entries[model.id] = { api_name = model.id }
+          --- @type sia.provider.ModelSpec
+          local entry = {
+            api_name = model.id,
+          }
+
+          local context_window = get_model_context_window(model)
+          if context_window then
+            entry.context_window = context_window
+          end
+
+          local support = map_model_support(model)
+          if support then
+            entry.support = support
+          end
+
+          entries[short_name_from_id(model.id)] = entry
         end
       end
       callback(entries)

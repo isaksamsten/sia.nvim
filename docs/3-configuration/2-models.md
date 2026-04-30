@@ -6,7 +6,7 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, copilot, codex, claudecode,
+and configuration. Built-in providers (openai, deepseek, copilot, codex, claude,
 anthropic, openrouter, gemini, zai) register automatically at startup. Each provider ships
 with a set of seed models that are available immediately.
 
@@ -232,7 +232,7 @@ Manual thinking with a fixed budget:
 
 ### Claude Code
 
-Used by: `claudecode`
+Used by: `claude`
 
 Same request shape as the Anthropic Messages API, but authenticated through
 Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
@@ -246,11 +246,11 @@ Local model overrides in `.sia/config.json` are passed through to Claude Code, s
 you can set the same extended-thinking fields there that Anthropic documents for
 the Messages API:
 
-| Parameter         | Type    | Description |
-| ----------------- | ------- | ----------- |
-| **max_tokens**    | integer | Required when `thinking` is enabled or adaptive |
+| Parameter         | Type    | Description                                                                                           |
+| ----------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| **max_tokens**    | integer | Required when `thinking` is enabled or adaptive                                                       |
 | **thinking**      | object  | Extended thinking config: `{ type: "adaptive" \| "enabled" \| "disabled", budget_tokens?, display? }` |
-| **output_config** | object  | Adaptive thinking depth, typically `{ "effort": "low" \| "medium" \| "high" \| "max" }` |
+| **output_config** | object  | Adaptive thinking depth, typically `{ "effort": "low" \| "medium" \| "high" \| "max" }`               |
 
 Notes:
 
@@ -266,8 +266,8 @@ Example local config for a Claude Code model:
 ```json
 {
   "models": {
-    "claudecode": {
-      "claude-sonnet-4-6": {
+    "claude": {
+      "sonnet-4-6": {
         "max_tokens": 16000,
         "thinking": { "type": "adaptive", "display": "summarized" },
         "output_config": { "effort": "high" }

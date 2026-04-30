@@ -90,7 +90,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 Authenticate with your Claude Code subscription through the browser OAuth flow:
 
 ```vim
-:SiaAuth claudecode
+:SiaAuth claude
 ```
 
 This caches OAuth state in Neovim's `stdpath("cache")`/`stdpath("state")`
