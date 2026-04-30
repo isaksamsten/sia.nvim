@@ -127,14 +127,6 @@ T["sia.provider.claude"]["tool names use Claude Code casing"] = function()
   eq("bash", provider._test.unprefix_tool_name("mcp_Bash"))
 end
 
-T["sia.provider.claude"]["rewrite text matches Claude renaming"] = function()
-  local provider = reload_provider()
-  eq(
-    "Claude Code and Claude should help Claude Code users.",
-    provider._test.rewrite_text("OpenCode and opencode should help Sia users.")
-  )
-end
-
 T["sia.provider.claude"]["round-trips thinking blocks before tool_use"] = function()
   local provider = reload_provider()
   local data = {}
@@ -175,66 +167,65 @@ T["sia.provider.claude"]["round-trips thinking blocks before tool_use"] = functi
   eq("mcp_View", assistant.content[2].name)
 end
 
-T["sia.provider.claude"]["parses discovered models with short names and capabilities"] =
-  function()
-    with_stubbed_oauth(function(set_system)
-      set_system(function(cmd, opts, on_exit)
-        eq(opts.text, true)
-        eq(cmd[1], "curl")
-        eq(cmd[2], "--silent")
-        eq(cmd[#cmd], "https://api.anthropic.com/v1/models")
+T["sia.provider.claude"]["parses discovered models with short names and capabilities"] = function()
+  with_stubbed_oauth(function(set_system)
+    set_system(function(cmd, opts, on_exit)
+      eq(opts.text, true)
+      eq(cmd[1], "curl")
+      eq(cmd[2], "--silent")
+      eq(cmd[#cmd], "https://api.anthropic.com/v1/models")
 
-        local joined = table.concat(cmd, "\n")
-        eq(joined:match("authorization: Bearer access%-token") ~= nil, true)
+      local joined = table.concat(cmd, "\n")
+      eq(joined:match("authorization: Bearer access%-token") ~= nil, true)
 
-        on_exit({
-          code = 0,
-          stdout = vim.json.encode({
-            data = {
-              {
-                id = "claude-opus-4-7",
-                max_input_tokens = 1000000,
-                capabilities = {
-                  image_input = { supported = true },
-                  pdf_input = { supported = true },
-                  thinking = {
-                    supported = true,
-                    types = {
-                      adaptive = { supported = true },
-                    },
-                  },
-                },
-              },
-              {
-                id = "claude-haiku-4-5-20251001",
-                capabilities = {
-                  thinking = {
-                    supported = true,
-                    types = {
-                      adaptive = { supported = false },
-                    },
+      on_exit({
+        code = 0,
+        stdout = vim.json.encode({
+          data = {
+            {
+              id = "claude-opus-4-7",
+              max_input_tokens = 1000000,
+              capabilities = {
+                image_input = { supported = true },
+                pdf_input = { supported = true },
+                thinking = {
+                  supported = true,
+                  types = {
+                    adaptive = { supported = true },
                   },
                 },
               },
             },
-          }),
-        })
-      end)
-
-      local provider = reload_provider()
-      provider.spec.discover(function(entries, err)
-        eq(err, nil)
-        eq(entries["opus-4-7"].api_name, "claude-opus-4-7")
-        eq(entries["opus-4-7"].context_window, 1000000)
-        eq(entries["opus-4-7"].support.image, true)
-        eq(entries["opus-4-7"].support.document, true)
-        eq(entries["opus-4-7"].support.reasoning, true)
-        eq(entries["opus-4-7"].support.adaptive_thinking, true)
-        eq(entries["haiku-4-5-20251001"].support.reasoning, true)
-        eq(entries["haiku-4-5-20251001"].support.adaptive_thinking, nil)
-        eq(entries["claude-opus-4-7"], nil)
-      end)
+            {
+              id = "claude-haiku-4-5-20251001",
+              capabilities = {
+                thinking = {
+                  supported = true,
+                  types = {
+                    adaptive = { supported = false },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      })
     end)
-  end
+
+    local provider = reload_provider()
+    provider.spec.discover(function(entries, err)
+      eq(err, nil)
+      eq(entries["opus-4-7"].api_name, "claude-opus-4-7")
+      eq(entries["opus-4-7"].context_window, 1000000)
+      eq(entries["opus-4-7"].support.image, true)
+      eq(entries["opus-4-7"].support.document, true)
+      eq(entries["opus-4-7"].support.reasoning, true)
+      eq(entries["opus-4-7"].support.adaptive_thinking, true)
+      eq(entries["haiku-4-5-20251001"].support.reasoning, true)
+      eq(entries["haiku-4-5-20251001"].support.adaptive_thinking, nil)
+      eq(entries["claude-opus-4-7"], nil)
+    end)
+  end)
+end
 
 return T

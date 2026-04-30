@@ -193,7 +193,11 @@ local function map_model_support(model)
   if capability_supported(capabilities.thinking) then
     support.reasoning = true
     has_any = true
-    if capability_supported(capabilities.thinking.types and capabilities.thinking.types.adaptive) then
+    if
+      capability_supported(
+        capabilities.thinking.types and capabilities.thinking.types.adaptive
+      )
+    then
       support.adaptive_thinking = true
     end
   end
@@ -449,18 +453,6 @@ local function unprefix_tool_name(name)
   return stripped:sub(1, 1):lower() .. stripped:sub(2)
 end
 
----@param input string
----@return string
-local function rewrite_text(input)
-  return (
-    input
-      :gsub("OpenCode", "Claude Code")
-      :gsub("opencode", "Claude")
-      :gsub("Sia", "Claude Code")
-      :gsub("sia", "Claude")
-  )
-end
-
 ---@param text string
 ---@return string
 local function compute_cch(text)
@@ -511,21 +503,6 @@ local function build_billing_header(messages)
     get_entrypoint(),
     compute_cch(first_user_text)
   )
-end
-
----@param messages table[]
----@param prefix string
-local function prepend_system_to_first_user(messages, prefix)
-  for _, message in ipairs(messages) do
-    if message.role == "user" then
-      if type(message.content) == "string" then
-        message.content = prefix .. "\n\n" .. message.content
-      elseif type(message.content) == "table" then
-        table.insert(message.content, 1, { type = "text", text = prefix })
-      end
-      return
-    end
-  end
 end
 
 ---@param data table
@@ -652,7 +629,7 @@ messages.prepare_messages = function(data, model_id, messages_in)
   for _, message in ipairs(messages_in) do
     if message.role == "system" then
       if type(message.content) == "string" then
-        table.insert(moved_system, rewrite_text(message.content))
+        table.insert(moved_system, message.content)
       end
     elseif message.role == "tool" then
       table.insert(conversation_messages, {
@@ -742,13 +719,14 @@ messages.prepare_messages = function(data, model_id, messages_in)
     text_part_type = "text",
   })
 
-  if #moved_system > 0 then
-    prepend_system_to_first_user(data.messages, table.concat(moved_system, "\n\n"))
-  end
-
   data.system = {
     { type = "text", text = build_billing_header(data.messages) },
-    { type = "text", text = SYSTEM_PREFIX, cache_control = { type = "ephemeral" } },
+    { type = "text", text = SYSTEM_PREFIX },
+    {
+      type = "text",
+      text = table.concat(moved_system, "\n"),
+      cache_control = { type = "ephemeral" },
+    },
   }
 
   apply_model_workarounds(data, type(model_id) == "string" and model_id or "")
@@ -915,7 +893,6 @@ M._test = {
   parse_auth_code = parse_auth_code,
   exchange_auth_code = exchange_auth_code,
   prefix_tool_name = prefix_tool_name,
-  rewrite_text = rewrite_text,
   unprefix_tool_name = unprefix_tool_name,
 }
 
