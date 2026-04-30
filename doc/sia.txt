@@ -206,7 +206,7 @@ CLAUDE CODE ~
 Authenticate with your Claude Code subscription through the browser OAuth flow:
 
 >vim
-    :SiaAuth claudecode
+    :SiaAuth claude
 <
 
 This caches OAuth state in Neovim’s `stdpath("cache")`/`stdpath("state")`
@@ -645,16 +645,15 @@ Results are cached across sessions. See |sia-models-and-providers| for details.
 
 AUTHENTICATION                                   *sia-commands-authentication*
 
-  ------------------------------------------------------------------------
-  Command               Description
-  --------------------- --------------------------------------------------
-  :SiaAuth claudecode   Authenticate with Claude Code browser OAuth
+  -----------------------------------------------------------------------
+  Command            Description
+  ------------------ ----------------------------------------------------
+  :SiaAuth claude    Authenticate with Claude Code browser OAuth
 
-  :SiaAuth codex        Authenticate with OpenAI Codex (browser-based
-                        OAuth)
+  :SiaAuth codex     Authenticate with OpenAI Codex (browser-based OAuth)
 
-  :SiaAuth copilot      Authenticate with GitHub Copilot (device flow)
-  ------------------------------------------------------------------------
+  :SiaAuth copilot   Authenticate with GitHub Copilot (device flow)
+  -----------------------------------------------------------------------
 
 ==============================================================================
 5. Reviewing Changes                                   *sia-reviewing-changes*
@@ -1055,9 +1054,8 @@ PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
 Sia uses a central provider registry that manages model discovery, resolution,
 and configuration. Built-in providers (openai, deepseek, copilot, codex,
-claudecode, anthropic, openrouter, gemini, zai) register automatically at
-startup. Each provider ships with a set of seed models that are available
-immediately.
+claude, anthropic, openrouter, gemini, zai) register automatically at startup.
+Each provider ships with a set of seed models that are available immediately.
 
 
 DYNAMIC MODEL DISCOVERY ~
@@ -1305,7 +1303,7 @@ Manual thinking with a fixed budget:
 
 CLAUDE CODE ~
 
-Used by: `claudecode`
+Used by: `claude`
 
 Same request shape as the Anthropic Messages API, but authenticated through
 Claude Code browser OAuth instead of `ANTHROPIC_API_KEY`.
@@ -1319,17 +1317,17 @@ Local model overrides in `.sia/config.json` are passed through to Claude Code,
 so you can set the same extended-thinking fields there that Anthropic documents
 for the Messages API:
 
-  -----------------------------------------------------------------------------------------------------------------------------
-  Parameter                          Type           Description
-  ---------------------------------- -------------- ---------------------------------------------------------------------------
-  max_tokens                         integer        Required when thinking is enabled or adaptive
+  -----------------------------------------------------------------------------------------------------
+  Parameter       Type      Description
+  --------------- --------- ---------------------------------------------------------------------------
+  max_tokens      integer   Required when thinking is enabled or adaptive
 
-  thinking                           object         Extended thinking config:
-                                                    { type: "adaptive" \| "enabled" \| "disabled", budget_tokens?, display? }
+  thinking        object    Extended thinking config:
+                            { type: "adaptive" \| "enabled" \| "disabled", budget_tokens?, display? }
 
-  output_config                      object         Adaptive thinking depth, typically
-                                                    { "effort": "low" \| "medium" \| "high" \| "max" }
-  -----------------------------------------------------------------------------------------------------------------------------
+  output_config   object    Adaptive thinking depth, typically
+                            { "effort": "low" \| "medium" \| "high" \| "max" }
+  -----------------------------------------------------------------------------------------------------
 Notes:
 
 - Use `thinking.type = "adaptive"` on Claude Opus 4.6 / 4.7+ and Claude Sonnet 4.6.
@@ -1344,8 +1342,8 @@ Example local config for a Claude Code model:
 >json
     {
       "models": {
-        "claudecode": {
-          "claude-sonnet-4-6": {
+        "claude": {
+          "sonnet-4-6": {
             "max_tokens": 16000,
             "thinking": { "type": "adaptive", "display": "summarized" },
             "output_config": { "effort": "high" }
@@ -1503,8 +1501,8 @@ MODEL OVERRIDES ~
 >json
         {
           "models": {
-            "claudecode": {
-              "claude-sonnet-4-6": {
+            "claude": {
+              "sonnet-4-6": {
                 "max_tokens": 16000,
                 "thinking": { "type": "adaptive", "display": "summarized" },
                 "output_config": { "effort": "high" }
