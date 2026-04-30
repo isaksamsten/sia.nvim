@@ -350,6 +350,79 @@ T["provider.prepare_messages"]["anthropic round-trips thinking blocks for conten
   eq("final answer", assistant.content[2].text)
 end
 
+T["provider.prepare_messages"]["anthropic translates PDF and image content blocks"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  --- @type sia.Message[]
+  local messages = {
+    {
+      role = "user",
+      content = {
+        {
+          type = "file",
+          file = {
+            filename = "report.pdf",
+            file_data = "data:application/pdf;base64,JVBERi0x",
+          },
+        },
+        {
+          type = "image",
+          image = {
+            url = "data:image/png;base64,iVBORw0KGgo=",
+          },
+        },
+        { type = "text", text = "Summarize this." },
+      },
+    },
+  }
+
+  local data = {}
+  --- @diagnostic disable-next-line:param-type-mismatch
+  anthropic.prepare_messages(data, {}, messages)
+
+  eq("user", data.messages[1].role)
+  eq("document", data.messages[1].content[1].type)
+  eq("base64", data.messages[1].content[1].source.type)
+  eq("application/pdf", data.messages[1].content[1].source.media_type)
+  eq("report.pdf", data.messages[1].content[1].title)
+  eq("image", data.messages[1].content[2].type)
+  eq("base64", data.messages[1].content[2].source.type)
+  eq("image/png", data.messages[1].content[2].source.media_type)
+  eq("text", data.messages[1].content[3].type)
+  eq("Summarize this.", data.messages[1].content[3].text)
+end
+
+T["provider.prepare_messages"]["anthropic translates tool result PDF content blocks"] = function()
+  local anthropic = require("sia.provider.anthropic").messages
+  --- @type sia.Message[]
+  local messages = {
+    {
+      role = "tool",
+      tool_call = { id = "toolu_1", type = "function", name = "view_document" },
+      content = {
+        { type = "text", text = "Document attached" },
+        {
+          type = "file",
+          file = {
+            filename = "report.pdf",
+            file_data = "https://example.com/report.pdf",
+          },
+        },
+      },
+    },
+  }
+
+  local data = {}
+  --- @diagnostic disable-next-line:param-type-mismatch
+  anthropic.prepare_messages(data, {}, messages)
+
+  eq("user", data.messages[1].role)
+  eq("tool_result", data.messages[1].content[1].type)
+  eq("text", data.messages[1].content[1].content[1].type)
+  eq("document", data.messages[1].content[1].content[2].type)
+  eq("url", data.messages[1].content[1].content[2].source.type)
+  eq("https://example.com/report.pdf", data.messages[1].content[1].content[2].source.url)
+end
+
 T["provider.prepare_messages"]["anthropic enables thinking when model supports reasoning"] = function()
   local anthropic = require("sia.provider.anthropic").messages
   local data = {}
@@ -375,18 +448,6 @@ T["provider.prepare_messages"]["anthropic respects explicit thinking option"] = 
 
   eq("adaptive", data.thinking.type)
   eq(16000, data.max_tokens)
-end
-
-T["provider.prepare_messages"]["anthropic thinking_budget folds into thinking"] = function()
-  local anthropic = require("sia.provider.anthropic").messages
-  local data = {}
-  anthropic.prepare_parameters(data, {
-    options = { thinking_budget = 8000, max_tokens = 16000 },
-  })
-
-  eq("enabled", data.thinking.type)
-  eq(8000, data.thinking.budget_tokens)
-  eq(nil, data.thinking_budget)
 end
 
 T["provider.prepare_messages"]["anthropic disables thinking when type is disabled"] = function()

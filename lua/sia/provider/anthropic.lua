@@ -56,6 +56,104 @@ function M.reasoning_to_blocks(reasoning)
   return blocks
 end
 
+---@param value string
+---@return { media_type: string, data: string }?
+local function parse_data_url(value)
+  local media_type, data = value:match("^data:([^;,]+);base64,(.+)$")
+  if not media_type or not data then
+    return nil
+  end
+  return { media_type = media_type, data = data }
+end
+
+---@param part sia.MultiPart
+---@return table
+function M.content_part_to_block(part)
+  if part.type == "text" then
+    return {
+      type = "text",
+      text = part.text,
+      cache_control = part.cache_control,
+    }
+  end
+
+  if part.type == "image" then
+    local image = part.image or {}
+    local source
+    local parsed = type(image.url) == "string" and parse_data_url(image.url) or nil
+    if parsed then
+      source = {
+        type = "base64",
+        media_type = parsed.media_type,
+        data = parsed.data,
+      }
+    elseif type(image.url) == "string" then
+      source = {
+        type = "url",
+        url = image.url,
+      }
+    else
+      error("anthropic image content must include a url")
+    end
+
+    return {
+      type = "image",
+      source = source,
+      cache_control = part.cache_control,
+    }
+  end
+
+  if part.type == "file" then
+    local file = part.file or {}
+    if type(file.file_data) ~= "string" then
+      error("anthropic document content must include file_data")
+    end
+
+    local parsed = parse_data_url(file.file_data)
+    local source
+    if parsed then
+      if parsed.media_type ~= "application/pdf" then
+        error("anthropic only supports PDF documents")
+      end
+      source = {
+        type = "base64",
+        media_type = parsed.media_type,
+        data = parsed.data,
+      }
+    elseif file.file_data:match("^https?://") then
+      source = {
+        type = "url",
+        url = file.file_data,
+      }
+    else
+      error("anthropic document content must be a PDF data URL or URL")
+    end
+
+    return {
+      type = "document",
+      source = source,
+      title = file.filename,
+      cache_control = part.cache_control,
+    }
+  end
+
+  error("unknown content part")
+end
+
+---@param content sia.Content
+---@return string|table[]
+function M.translate_content(content)
+  if type(content) ~= "table" then
+    return content
+  end
+
+  local blocks = {}
+  for _, part in ipairs(content) do
+    table.insert(blocks, M.content_part_to_block(part))
+  end
+  return blocks
+end
+
 --- @class sia.AnthropicStream : sia.ProviderStream
 --- @field pending_tool_calls sia.ToolCall[]
 --- @field content string
@@ -274,7 +372,7 @@ M.messages = {
             {
               type = "tool_result",
               tool_use_id = m.tool_call.id,
-              content = m.content,
+              content = M.translate_content(m.content),
             },
           },
         })
@@ -327,7 +425,7 @@ M.messages = {
 
         if type(m.content) == "table" then
           for _, part in ipairs(m.content) do
-            table.insert(content, part)
+            table.insert(content, M.content_part_to_block(part))
           end
         elseif m.content and m.content ~= "" then
           table.insert(content, { type = "text", text = m.content })
@@ -350,7 +448,7 @@ M.messages = {
       else
         table.insert(conversation_messages, {
           role = m.role,
-          content = m.content,
+          content = M.translate_content(m.content),
         })
       end
     end

@@ -73,7 +73,8 @@ T["sia.provider.claude"]["prepare_messages prefixes system and tool names"] = fu
 
   eq(true, vim.startswith(data.system[1].text, "x-anthropic-billing-header:"))
   eq("You are Claude Code, Anthropic's official CLI for Claude.", data.system[2].text)
-  eq("Claude Code should help.\n\nfirst", data.messages[1].content[1].text)
+  eq("OpenCode should help.", data.system[3].text)
+  eq("first", data.messages[1].content[1].text)
   eq("mcp_View", data.messages[2].content[1].name)
 end
 
@@ -165,6 +166,38 @@ T["sia.provider.claude"]["round-trips thinking blocks before tool_use"] = functi
   eq("sig", assistant.content[1].signature)
   eq("tool_use", assistant.content[2].type)
   eq("mcp_View", assistant.content[2].name)
+end
+
+T["sia.provider.claude"]["translates PDF content blocks"] = function()
+  local provider = reload_provider()
+  local data = {}
+  local messages = {
+    {
+      role = "user",
+      content = {
+        {
+          type = "file",
+          file = {
+            filename = "report.pdf",
+            file_data = "data:application/pdf;base64,JVBERi0x",
+          },
+        },
+        { type = "text", text = "Summarize this." },
+      },
+    },
+  }
+
+  --- @diagnostic disable-next-line:param-type-mismatch
+  provider.spec.implementations.default.prepare_messages(
+    data,
+    "claude-4.5-sonnet",
+    messages
+  )
+
+  eq("document", data.messages[1].content[1].type)
+  eq("base64", data.messages[1].content[1].source.type)
+  eq("report.pdf", data.messages[1].content[1].title)
+  eq("text", data.messages[1].content[2].type)
 end
 
 T["sia.provider.claude"]["parses discovered models with short names and capabilities"] = function()

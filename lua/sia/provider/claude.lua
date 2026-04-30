@@ -638,7 +638,7 @@ messages.prepare_messages = function(data, model_id, messages_in)
           {
             type = "tool_result",
             tool_use_id = message.tool_call.id,
-            content = message.content,
+            content = anthropic.translate_content(message.content),
           },
         },
       })
@@ -688,7 +688,7 @@ messages.prepare_messages = function(data, model_id, messages_in)
 
       if type(message.content) == "table" then
         for _, part in ipairs(message.content) do
-          table.insert(content, part)
+          table.insert(content, anthropic.content_part_to_block(part))
         end
       elseif message.content and message.content ~= "" then
         table.insert(content, { type = "text", text = message.content })
@@ -710,7 +710,7 @@ messages.prepare_messages = function(data, model_id, messages_in)
     else
       table.insert(conversation_messages, {
         role = message.role,
-        content = message.content,
+        content = anthropic.translate_content(message.content),
       })
     end
   end
