@@ -218,6 +218,7 @@ local settings_proxy = setmetatable({}, {
 --- @class sia.config.ContextTokens
 --- @field prune sia.config.ContextTokensPrune?
 --- @field compact sia.config.ContextTokensCompact?
+--- @field media { max_bytes: integer?, keep_last: integer? }?
 
 --- @class sia.config.Context
 --- @field tools sia.config.ContextTools?
@@ -280,6 +281,10 @@ M._raw_options = {
         },
         compact = {
           oldest_fraction = 0.5,
+        },
+        media = {
+          max_bytes = 8 * 1024 * 1024,
+          keep_last = 1,
         },
       },
     },

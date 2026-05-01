@@ -30,7 +30,11 @@ the project root. Local settings override global ones.
         "at_fraction": 0.9,
         "to_fraction": 0.75
       },
-      "compact": { "oldest_fraction": 0.4 }
+      "compact": { "oldest_fraction": 0.4 },
+      "media": {
+        "max_bytes": 8388608,
+        "keep_last": 1
+      }
     }
   },
   "skills": ["monitor-logs", "tmux-interactive"],
@@ -108,7 +112,7 @@ the project root. Local settings override global ones.
 - **context** — project-specific context retention settings. Same structure as
   the global `context` option:
   - **tools** — tool call pruning (`max_calls`, `preserve`, `strip_inputs`, `keep_last`)
-  - **tokens** — token-budget control (`prune.at_fraction`, `prune.to_fraction`, `compact.oldest_fraction`)
+  - **tokens** — token-budget control (`prune.at_fraction`, `prune.to_fraction`, `compact.oldest_fraction`, `media.max_bytes`, `media.keep_last`)
 
 Local `context` values override the global value directly, including arrays such
 as `context.tools.preserve`.

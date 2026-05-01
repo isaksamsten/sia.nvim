@@ -53,6 +53,29 @@ local function make_tool(name, args_size, result_size, opts)
   }
 end
 
+--- Helper to create a user entry with image content.
+--- @param label string
+--- @param data_size integer
+--- @return sia.UserEntry
+local function make_image_user(label, data_size)
+  return {
+    role = "user",
+    id = tostring(math.random(1e9)),
+    content = {
+      {
+        type = "text",
+        text = label,
+      },
+      {
+        type = "image",
+        image = {
+          url = "data:image/png;base64," .. string.rep("i", data_size),
+        },
+      },
+    },
+  }
+end
+
 --- Helper to create a mock conversation with entries.
 --- @param context_window integer
 --- @param entries table[]
@@ -90,6 +113,96 @@ T["context_manager"]["estimate_tokens returns reasonable estimates"] = function(
   local tokens = cm.estimate_tokens(conversation)
   -- 1200 bytes of content + 2*40 role overhead = 1280 bytes / 4 = 320 tokens
   expect.equality(tokens, math.floor(1280 / 4))
+end
+
+T["context_manager"]["estimate_tokens excludes image and document payloads"] = function()
+  local cm = require("sia.context_manager")
+
+  local conversation = make_conversation(128000, {
+    {
+      role = "user",
+      id = "media",
+      content = {
+        { type = "text", text = "media" },
+        {
+          type = "image",
+          image = { url = "data:image/png;base64," .. string.rep("i", 100) },
+        },
+        {
+          type = "file",
+          file = {
+            filename = "doc.pdf",
+            file_data = "data:application/pdf;base64," .. string.rep("d", 200),
+          },
+        },
+      },
+    },
+  })
+
+  local tokens = cm.estimate_tokens(conversation)
+  local bytes = 40 + #"media"
+  expect.equality(tokens, math.floor(bytes / 4))
+end
+
+T["context_manager"]["prune_oldest_media replaces oldest media and keeps latest"] = function()
+  local cm = require("sia.context_manager")
+
+  local first = make_image_user("first", 1000)
+  local second = make_image_user("second", 1000)
+  local conversation = make_conversation(128000, {
+    make_system("system"),
+    first,
+    second,
+  })
+
+  local pruned = cm.prune_oldest_media(conversation, 1100, 1)
+
+  expect.equality(pruned, 1)
+  expect.equality(first.content[2].type, "text")
+  expect.equality(first.content[2].text:find("Pruned older image content") ~= nil, true)
+  expect.equality(second.content[2].type, "image")
+end
+
+T["context_manager"]["ensure_token_budget prunes media before threshold check"] = function()
+  local cm = require("sia.context_manager")
+  local config = require("sia.config")
+  local old_context = vim.deepcopy(config._raw_options.settings.context)
+
+  config.options.settings.context = vim.tbl_deep_extend("force", {}, old_context, {
+    tokens = {
+      media = {
+        max_bytes = 1100,
+        keep_last = 1,
+      },
+      prune = {
+        at_fraction = 1,
+        to_fraction = 0.70,
+      },
+    },
+  })
+
+  local first = make_image_user("first", 1000)
+  local second = make_image_user("second", 1000)
+  local conversation = make_conversation(100000, {
+    make_system("system"),
+    first,
+    second,
+  })
+
+  local completed = false
+  cm.ensure_token_budget(conversation, {
+    on_complete = function(pruned, compacted)
+      completed = true
+      expect.equality(pruned, true)
+      expect.equality(compacted, false)
+    end,
+  })
+
+  expect.equality(completed, true)
+  expect.equality(first.content[2].type, "text")
+  expect.equality(second.content[2].type, "image")
+
+  config.options.settings.context = old_context
 end
 
 T["context_manager"]["get_budget returns nil when no context_window"] = function()

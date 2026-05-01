@@ -78,6 +78,10 @@ require("sia").setup({
         compact = {
           oldest_fraction = 0.5, -- Fraction of the oldest history to summarize as a last resort
         },
+        media = {
+          max_bytes = 8 * 1024 * 1024, -- Keep image/document payloads under this many bytes
+          keep_last = 1,               -- Always keep this many newest media payloads
+        },
       },
     },
 
@@ -148,6 +152,12 @@ Sia applies increasingly aggressive strategies:
 `prune.to_fraction` controls how far Sia tries to shrink the conversation
 before it stops. `compact.oldest_fraction` controls how much of the oldest
 history is summarized when simple tool pruning is not enough.
+
+Large image and document tool results are also managed under `context.tokens.media`.
+Sia counts their base64 payloads in token estimates and replaces the oldest media
+payloads with short text placeholders once the total media bytes exceed
+`media.max_bytes`. `media.keep_last` keeps the newest media payloads available
+for follow-up questions.
 
 The chat winbar displays a context budget indicator when the model has a
 `context_window` defined:

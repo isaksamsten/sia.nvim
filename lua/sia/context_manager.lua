@@ -62,6 +62,18 @@ local function add_summary_message(conversation, msg)
   end
 end
 
+--- @param part sia.MultiPart
+--- @return integer bytes
+local function media_part_bytes(part)
+  if part.type == "image" and part.image and type(part.image.url) == "string" then
+    return #part.image.url
+  end
+  if part.type == "file" and part.file and type(part.file.file_data) == "string" then
+    return #part.file.file_data
+  end
+  return 0
+end
+
 --- Compact a conversation by summarizing previous entries
 --- @param conversation sia.Conversation The conversation object to compact
 --- @param opts { oldest_fraction: number?, on_complete: fun(content: string?)? }
@@ -222,6 +234,73 @@ local function entry_bytes(entry)
   return bytes
 end
 
+--- @param conversation sia.Conversation
+--- @return { entry: sia.Entry, part_index: integer, kind: "image"|"document", bytes: integer }[], integer
+local function collect_media_parts(conversation)
+  local parts = {}
+  local total_bytes = 0
+
+  for _, entry in ipairs(conversation.entries) do
+    if not entry.dropped and type(entry.content) == "table" then
+      for part_index, part in ipairs(entry.content) do
+        local bytes = media_part_bytes(part)
+        if bytes > 0 then
+          total_bytes = total_bytes + bytes
+          table.insert(parts, {
+            entry = entry,
+            part_index = part_index,
+            kind = part.type == "file" and "document" or "image",
+            bytes = bytes,
+          })
+        end
+      end
+    end
+  end
+
+  return parts, total_bytes
+end
+
+--- Replace old base64-heavy image/document parts with small text placeholders.
+--- @param conversation sia.Conversation
+--- @param max_bytes integer
+--- @param keep_last integer
+--- @return integer pruned_count
+function M.prune_oldest_media(conversation, max_bytes, keep_last)
+  if max_bytes <= 0 then
+    return 0
+  end
+  keep_last = math.max(0, keep_last or 0)
+
+  local media_parts, total_bytes = collect_media_parts(conversation)
+  local prunable_count = math.max(0, #media_parts - keep_last)
+  if total_bytes <= max_bytes or prunable_count == 0 then
+    return 0
+  end
+
+  local pruned = 0
+  for i = 1, prunable_count do
+    if total_bytes <= max_bytes then
+      break
+    end
+
+    local item = media_parts[i]
+    local content = item.entry.content
+    if type(content) == "table" then
+      content[item.part_index] = {
+        type = "text",
+        text = string.format(
+          "[Pruned older %s content from context to reduce request size.]",
+          item.kind
+        ),
+      }
+      total_bytes = total_bytes - item.bytes
+      pruned = pruned + 1
+    end
+  end
+
+  return pruned
+end
+
 --- Estimate the number of bytes in tool definitions.
 --- Cached on the conversation since tools don't change during its lifetime.
 --- @param conversation sia.Conversation
@@ -368,11 +447,20 @@ function M.ensure_token_budget(conversation, opts)
   local prune_config = config.prune or {}
   local prune_threshold = prune_config.at_fraction or 0.85
   local target_after_prune = prune_config.to_fraction or 0.70
+  local media_config = config.media or {}
+  local media_pruned = 0
+  if media_config.max_bytes then
+    media_pruned = M.prune_oldest_media(
+      conversation,
+      media_config.max_bytes,
+      media_config.keep_last or 1
+    )
+  end
 
   -- Not over threshold yet
   if budget.percent < prune_threshold then
     if opts.on_complete then
-      opts.on_complete(false, false)
+      opts.on_complete(media_pruned > 0, false)
     end
     return
   end
