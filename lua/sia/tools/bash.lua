@@ -374,9 +374,13 @@ end
 --- @param runtime sia.process.Runtime
 --- @param offset integer
 --- @param limit integer
---- @param stream string
+--- @param stream string?
 --- @return string
 local function build_process_output_view(proc, runtime, offset, limit, stream)
+  if stream ~= "stdout" and stream ~= "stderr" and stream ~= "both" then
+    stream = "both"
+  end
+
   local output = normalize_output(runtime:get_output(proc.id))
   local content = {
     string.format("Process ID: %d", proc.id),
@@ -393,30 +397,18 @@ local function build_process_output_view(proc, runtime, offset, limit, stream)
   end
 
   table.insert(content, "")
-  if proc.kind == "finished" then
-    if stream == "stdout" or stream == "both" then
-      append_output_view(
-        content,
-        "stdout",
-        output.stdout,
-        offset,
-        limit,
-        proc.file.stdout
-      )
-    end
-    if stream == "both" then
-      table.insert(content, "")
-    end
-    if stream == "stderr" or stream == "both" then
-      append_output_view(
-        content,
-        "stderr",
-        output.stderr,
-        offset,
-        limit,
-        proc.file.stderr
-      )
-    end
+
+  local stdout_path = proc.kind == "finished" and proc.file.stdout or nil
+  local stderr_path = proc.kind == "finished" and proc.file.stderr or nil
+
+  if stream == "stdout" or stream == "both" then
+    append_output_view(content, "stdout", output.stdout, offset, limit, stdout_path)
+  end
+  if stream == "both" then
+    table.insert(content, "")
+  end
+  if stream == "stderr" or stream == "both" then
+    append_output_view(content, "stderr", output.stderr, offset, limit, stderr_path)
   end
 
   return table.concat(content, "\n")
