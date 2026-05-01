@@ -59,13 +59,15 @@ local function ensure_state(conversation)
     return state
   end
 
+  local function items()
+    return conversation.todos and conversation.todos.items or {}
+  end
+
   local model = ListModel.new({
     sources = {
       {
         tag = "todo",
-        items = function()
-          return conversation.todos and conversation.todos.items or {}
-        end,
+        items = items,
         id = function(o)
           return o.id
         end,
@@ -95,6 +97,7 @@ local function render_state_buffer(state)
   if not (state.buf and state.buf > 0 and vim.api.nvim_buf_is_valid(state.buf)) then
     return
   end
+  state.model:rebuild()
   state.list_view:apply(state.buf, TODOS_NS)
 end
 
@@ -151,6 +154,8 @@ local function get_or_create_buf(conversation)
   return buf
 end
 
+M._get_or_create_buf = get_or_create_buf
+
 --- Open the todos panel for a conversation, creating the buffer if needed.
 --- Called by the write_todos tool after mutating data.
 --- @param conversation sia.Conversation
@@ -175,6 +180,7 @@ function M.close(conversation)
   if not chat or chat.conversation.id ~= conversation.id then
     return
   end
+  M.render(conversation)
   panel:close(chat.buf)
 end
 
@@ -183,7 +189,6 @@ end
 function M.render(conversation)
   local state = states[conversation.id]
   if state then
-    state.model:rebuild()
     render_state_buffer(state)
   end
 end
@@ -199,11 +204,13 @@ function M.toggle(action)
   end
 
   if action == "close" then
+    M.render(chat.conversation)
     panel:close(chat.buf)
     return
   end
 
   if action == "toggle" and panel:is_open(chat.buf) then
+    M.render(chat.conversation)
     panel:close(chat.buf)
     return
   end
