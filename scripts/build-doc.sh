@@ -24,7 +24,7 @@ mkdir -p "$PROJECT_DIR/doc"
 An LLM assistant for Neovim.
 
 Supports: OpenAI, Copilot and OpenRouter (both OpenAI Chat Completions and
-Responses), Anthropic (native API), Gemini and ZAI.
+Responses), Anthropic (native API), Cerebras, Gemini and ZAI.
 
 For the latest version, see: https://github.com/isaksamsten/sia.nvim
 

@@ -9,6 +9,7 @@ local PROVIDERS = {
   "openrouter",
   "gemini",
   "zai",
+  "cerebras",
   "deepseek",
 }
 

@@ -6,9 +6,10 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, copilot, codex, claude,
-anthropic, openrouter, gemini, zai) register automatically at startup. Each provider ships
-with a set of seed models that are available immediately.
+and configuration. Built-in providers (openai, deepseek, cerebras, copilot,
+codex, claude, anthropic, openrouter, gemini, zai) register automatically at
+startup. Each provider ships with a set of seed models that are available
+immediately.
 
 ### Dynamic Model Discovery
 
@@ -336,6 +337,21 @@ window and reasoning support.
 
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
+```
+
+### Cerebras
+
+Used by: `cerebras` (via OpenAI-compatible Chat Completions endpoint)
+
+Same parameters as the OpenAI Completion API, plus Cerebras-specific options
+such as `reasoning_effort`, `reasoning_format`, `clear_thinking`, and
+`service_tier`.
+
+Seed models: `gpt-oss-120b`, `zai-glm-4.7`,
+`qwen-3-235b-a22b-instruct-2507`, and `llama3.1-8b`.
+
+```bash
+export CEREBRAS_API_KEY="csk-..."
 ```
 
 ### Gemini
