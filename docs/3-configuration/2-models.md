@@ -6,8 +6,8 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, cerebras, copilot,
-codex, claude, anthropic, openrouter, gemini, zai) register automatically at
+and configuration. Built-in providers (openai, deepseek, cerebras, groq,
+copilot, codex, claude, anthropic, openrouter, gemini, zai) register automatically at
 startup. Each provider ships with a set of seed models that are available
 immediately.
 
@@ -353,6 +353,25 @@ Seed models: `gpt-oss-120b`, `zai-glm-4.7`,
 ```bash
 export CEREBRAS_API_KEY="csk-..."
 ```
+
+### Groq
+
+Used by: `groq` (via OpenAI-compatible Chat Completions endpoint)
+
+Same parameters as the OpenAI Completion API. Groq GPT-OSS models also support
+`reasoning_effort` (`"low"`, `"medium"`, or `"high"`), and `qwen/qwen3-32b`
+supports `"none"` or `"default"`. Sia disables `stream_options` for Groq because
+the endpoint does not accept OpenAI's usage streaming option.
+
+Seed models include `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
+`openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3-32b`,
+`meta-llama/llama-4-scout-17b-16e-instruct`, `groq/compound`, and
+`groq/compound-mini`.
+
+```bash
+export GROQ_API_KEY="gsk_..."
+```
+
 
 ### Gemini
 

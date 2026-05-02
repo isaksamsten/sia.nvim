@@ -405,7 +405,7 @@ M._raw_options = {
           if model.api_name:match("gpt%-5") then
             table.insert(all, tools.apply_diff)
           end
-          return all
+          return all, { grep = true, glob = true }
         end,
       },
     },

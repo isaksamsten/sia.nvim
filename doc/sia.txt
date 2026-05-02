@@ -1,5 +1,5 @@
 *sia.txt*
-                                For Neovim >= 0.11    Last change: 2026 May 01
+                                For Neovim >= 0.11    Last change: 2026 May 02
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -99,7 +99,7 @@ Table of Contents                                      *sia-table-of-contents*
 An LLM assistant for Neovim.
 
 Supports: OpenAI, Copilot and OpenRouter (both OpenAI Chat Completions and
-Responses), Anthropic (native API), Cerebras, Gemini and ZAI.
+Responses), Anthropic (native API), Cerebras, Groq, Gemini and ZAI.
 
 For the latest version, see: https://github.com/isaksamsten/sia.nvim
 
@@ -114,7 +114,7 @@ REQUIREMENTS                                *sia-getting-started-requirements*
 - curl
 - ripgrep <https://github.com/BurntSushi/ripgrep> (`rg`) for code search
 - fd <https://github.com/sharkdp/fd> for file finding and directory listing
-- Access to at least one LLM provider (OpenAI, DeepSeek, Cerebras, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
+- Access to at least one LLM provider (OpenAI, DeepSeek, Cerebras, Groq, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
 
 
 INSTALLATION                                *sia-getting-started-installation*
@@ -198,6 +198,13 @@ CEREBRAS ~
 
 >bash
     export CEREBRAS_API_KEY="csk-..."
+<
+
+
+GROQ ~
+
+>bash
+    export GROQ_API_KEY="gsk_..."
 <
 
 
@@ -1070,10 +1077,10 @@ Sia supports multiple LLM providers. Each model is identified by a
 PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, cerebras, copilot,
-codex, claude, anthropic, openrouter, gemini, zai) register automatically at
-startup. Each provider ships with a set of seed models that are available
-immediately.
+and configuration. Built-in providers (openai, deepseek, cerebras, groq,
+copilot, codex, claude, anthropic, openrouter, gemini, zai) register
+automatically at startup. Each provider ships with a set of seed models that
+are available immediately.
 
 
 DYNAMIC MODEL DISCOVERY ~
@@ -1456,6 +1463,25 @@ and `llama3.1-8b`.
 
 >bash
     export CEREBRAS_API_KEY="csk-..."
+<
+
+
+GROQ ~
+
+Used by: `groq` (via OpenAI-compatible Chat Completions endpoint)
+
+Same parameters as the OpenAI Completion API. Groq GPT-OSS models also support
+`reasoning_effort` (`"low"`, `"medium"`, or `"high"`), and `qwen/qwen3-32b`
+supports `"none"` or `"default"`. Sia disables `stream_options` for Groq
+because the endpoint does not accept OpenAI’s usage streaming option.
+
+Seed models include `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
+`openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3-32b`,
+`meta-llama/llama-4-scout-17b-16e-instruct`, `groq/compound`, and
+`groq/compound-mini`.
+
+>bash
+    export GROQ_API_KEY="gsk_..."
 <
 
 

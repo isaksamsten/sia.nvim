@@ -10,6 +10,7 @@ local PROVIDERS = {
   "gemini",
   "zai",
   "cerebras",
+  "groq",
   "deepseek",
 }
 
