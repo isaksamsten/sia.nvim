@@ -6,7 +6,7 @@
 - curl
 - [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) for code search
 - [fd](https://github.com/sharkdp/fd) for file finding and directory listing
-- Access to at least one LLM provider (OpenAI, DeepSeek, Cerebras, Groq, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
+- Access to at least one LLM provider (OpenAI, DeepSeek, Cerebras, Groq, xAI, Copilot, Anthropic, Gemini, OpenRouter, Codex, or ZAI)
 
 ## Installation
 
@@ -89,6 +89,13 @@ export CEREBRAS_API_KEY="csk-..."
 
 ```bash
 export GROQ_API_KEY="gsk_..."
+```
+
+
+### xAI
+
+```bash
+export XAI_API_KEY="xai-..."
 ```
 
 ### Anthropic API

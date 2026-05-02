@@ -6,7 +6,7 @@ Sia supports multiple LLM providers. Each model is identified by a
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
-and configuration. Built-in providers (openai, deepseek, cerebras, groq,
+and configuration. Built-in providers (openai, deepseek, cerebras, groq, xai,
 copilot, codex, claude, anthropic, openrouter, gemini, zai) register automatically at
 startup. Each provider ships with a set of seed models that are available
 immediately.
@@ -370,6 +370,22 @@ Seed models include `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
 
 ```bash
 export GROQ_API_KEY="gsk_..."
+```
+
+
+### xAI
+
+Used by: `xai` (via OpenAI-compatible Chat Completions endpoint)
+
+Same parameters as the OpenAI Completion API. Sia authenticates with
+`XAI_API_KEY` and seeds current Grok chat/code models, including `grok-4.3`,
+`grok-4.3-fast`, `grok-4`, `grok-4-fast-reasoning`,
+`grok-4-fast-non-reasoning`, `grok-code-fast-1`, `grok-3`, and
+`grok-3-mini`. Run `:SiaModel refresh` to discover the models available to
+your xAI account.
+
+```bash
+export XAI_API_KEY="xai-..."
 ```
 
 

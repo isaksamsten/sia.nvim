@@ -402,4 +402,47 @@ T["context_config"]["rejects flat legacy context fields"] = function()
   eq(err:match("context.max_tool is not supported") ~= nil, true)
 end
 
+
+T["providers"] = MiniTest.new_set()
+
+T["providers"]["resolves built-in xai models"] = function()
+  local provider = require("sia.provider")
+  local resolved = provider.resolve_model("xai/grok-4.3")
+
+  eq("xai", resolved.provider_name)
+  eq("grok-4.3", resolved.api_name)
+  eq(256000, resolved.context_window)
+  eq(true, resolved.support.reasoning)
+  eq(true, resolved.support.image)
+  eq(true, resolved.support.tool_calls)
+  eq(3.00, resolved.pricing.input)
+  eq(15.00, resolved.pricing.output)
+  eq(0.25, resolved.cache_multiplier.read)
+end
+
+T["providers"]["xai provider uses OpenAI compatible chat completions"] = function()
+  local xai = require("sia.provider.xai")
+  local impl = xai.spec.implementations.default
+  local data = { stream = true }
+
+  impl.prepare_messages(data, {}, {
+    { role = "system", content = "system prompt" },
+    { role = "user", content = "hello" },
+  })
+  impl.prepare_parameters(data, {
+    response_format = { type = "json_object" },
+    support = { reasoning = true },
+    options = { temperature = 0.1 },
+  })
+
+  eq("https://api.x.ai/", impl.base_url)
+  eq("v1/chat/completions", impl.chat_endpoint)
+  eq("system", data.messages[1].role)
+  eq("hello", data.messages[2].content)
+  eq(0.1, data.temperature)
+  eq("json_object", data.response_format.type)
+  eq(true, data.stream_options.include_usage)
+end
+
+
 return T
