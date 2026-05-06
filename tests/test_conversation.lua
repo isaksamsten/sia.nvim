@@ -192,6 +192,7 @@ T["serialization"]["serialize omits dropped entries"] = function()
   })
 
   conv:add_system_message("System")
+  local system_turn = conv.entries[1].turn_id
   conv:add_user_message("Hello")
   local turn_id = conv:new_turn()
   conv:add_assistant_message(turn_id, "Hi!")
@@ -339,5 +340,76 @@ T["turn management"]["rollback_to drops messages at and after turn"] = function(
   -- System + user (Hello) + assistant (Hi!)
   eq(3, #messages)
 end
+
+T["turn management"]["add_user_message preserves explicit turn_id"] = function()
+  local conv = require("sia.conversation").new({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conv:add_user_message("Hello", nil, { turn_id = "turn-1" })
+
+  eq("turn-1", conv.entries[1].turn_id)
+  eq({ "turn-1" }, conv:turn_ids())
+end
+
+T["turn management"]["fork_conversation preserves history and runtime config"] = function()
+  local conv = require("sia.conversation").new({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+    workspace = "/tmp/sia-test-workspace",
+    approved_tools = { example = true },
+    tools = {
+      {
+        definition = { name = "example", description = "Example tool", parameters = {} },
+        implementation = {
+          execute = function() end,
+        },
+      },
+    },
+  })
+
+  conv:add_system_message("System")
+  local system_turn = conv.entries[1].turn_id
+  conv:add_user_message("Hello")
+  local turn1 = conv:new_turn()
+  conv:add_assistant_message(turn1, "Hi!")
+  conv:add_user_message("Fork from here")
+  local turn2 = conv:new_turn()
+  conv:add_assistant_message(turn2, "Original response")
+
+  local forked = require("sia.conversation").fork_conversation(conv, turn2)
+
+  eq(true, forked ~= nil)
+  eq("/tmp/sia-test-workspace", forked.workspace)
+  eq(true, forked.approved_tools.example)
+  eq(true, forked:has_tool("example"))
+  eq({ system_turn, turn1 }, forked:turn_ids())
+  eq(3, #forked:serialize())
+end
+
+T["turn management"]["fork_conversation without turn_id copies all entries"] = function()
+  local conv = require("sia.conversation").new({
+    temporary = true,
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+
+  conv:add_system_message("System")
+  local system_turn = conv.entries[1].turn_id
+  conv:add_user_message("Hello")
+  local turn1 = conv:new_turn()
+  conv:add_assistant_message(turn1, "Hi!")
+  conv:add_user_message("Followup")
+  local turn2 = conv:new_turn()
+  conv:add_assistant_message(turn2, "Response")
+
+  local forked = require("sia.conversation").fork_conversation(conv, nil)
+
+  eq(true, forked ~= nil)
+  eq({ system_turn, turn1, turn2 }, forked:turn_ids())
+  eq(5, #forked:serialize())
+end
+
+
 
 return T

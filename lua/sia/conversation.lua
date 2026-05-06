@@ -463,7 +463,8 @@ end
 --- @return sia.UserEntry
 function Conversation:add_user_message(content, region, opts)
   opts = opts or {}
-  local entry = UserEntry.new(content, region and self:track_region(region), opts.hide)
+  local entry =
+    UserEntry.new(content, region and self:track_region(region), opts.hide, opts.turn_id)
   table.insert(self.entries, entry)
   return entry
 end
@@ -946,23 +947,29 @@ function Conversation:serialize()
 end
 
 --- @param source sia.Conversation
---- @param turn_id string
+--- @param turn_id string?
 --- @return sia.Conversation?
 local function fork_conversation(source, turn_id)
-  local entries = source:get_entries_until(turn_id)
-  if not entries then
-    return nil
+  local entries
+  if turn_id then
+    entries = source:get_entries_until(turn_id)
+    if not entries then
+      return nil
+    end
+  else
+    entries = vim.tbl_filter(function(e)
+      return not e.dropped
+    end, source.entries)
   end
 
   local conversation = new_conversation({
     model = source.model,
     approved_tools = source.approved_tools,
-    tools = source.tools, -- TODO: fix me!
+    workspace = source.workspace,
     modes = source.modes,
   })
-  if source.active_mode then
-    conversation.active_mode = nil
-  end
+  conversation.tool_definitions = vim.deepcopy(source.tool_definitions)
+  conversation.tool_implementation = vim.deepcopy(source.tool_implementation)
 
   for _, entry in ipairs(entries) do
     local entry_copy = vim.deepcopy(entry)

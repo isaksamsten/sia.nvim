@@ -581,19 +581,15 @@ vim.api.nvim_create_user_command("SiaFork", function(args)
   end
 
   local parsed = SIA_FORK_PARSER:parse(args.fargs)
+  local prompt = table.concat(parsed.positional, " ")
   local turn_id = parsed.flags.t
-  if not turn_id then
+
+  if not turn_id and prompt ~= "" then
     turn_id = chat.conversation:last_turn_id()
     if not turn_id then
       vim.notify("sia: no turns to fork from", vim.log.levels.WARN)
       return
     end
-  end
-
-  local prompt = table.concat(parsed.positional, " ")
-  if prompt == "" then
-    vim.notify("sia: no prompt provided", vim.log.levels.ERROR)
-    return
   end
 
   local forked = fork_conversation(chat.conversation, turn_id)
@@ -602,14 +598,15 @@ vim.api.nvim_create_user_command("SiaFork", function(args)
     return
   end
 
-  forked:add_instruction({
-    role = "user",
-    content = prompt,
-  }, nil)
-  local new_strategy = require("sia.strategy").new_chat(forked, chat.options)
-  require("sia.assistant").execute_strategy(new_strategy)
+  if prompt ~= "" then
+    forked:add_user_message(prompt)
+    local new_strategy = require("sia.strategy").new_chat(forked, chat.options)
+    require("sia.assistant").execute_strategy(new_strategy)
+  else
+    require("sia.strategy").new_chat(forked, chat.options, { render_all = true })
+  end
 end, {
-  nargs = "+",
+  nargs = "*",
   complete = function(_, cmd_line, cursor_pos)
     local prefix = string.sub(cmd_line, 1, cursor_pos)
     local chat = require("sia.strategy").get_chat()
@@ -623,7 +620,7 @@ end, {
       local parsed = SIA_FORK_PARSER:parse(args_before)
 
       local flag_completions = SIA_FORK_PARSER:complete_flag(parsed, prefix, {
-        t = vim.tbl_keys(chat.conversation:turn_ids()),
+        t = chat.conversation:turn_ids(),
       })
       if flag_completions then
         return flag_completions

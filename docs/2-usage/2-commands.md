@@ -76,13 +76,18 @@ system.
 
 ## Conversation Management
 
-| Command             | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| `:SiaFork <prompt>` | Fork the current conversation into a new chat buffer |
-| `:SiaDebug`         | Show the conversation's JSON payload in a new buffer |
+| Command                     | Description                                                       |
+| --------------------------- | ----------------------------------------------------------------- |
+| `:SiaFork <prompt>`         | Fork before the last turn into a new chat and execute the prompt  |
+| `:SiaFork -t <id> <prompt>` | Fork before the given turn into a new chat and execute the prompt |
+| `:SiaFork -t <id>`          | Fork before the given turn into a new chat without executing      |
+| `:SiaFork`                  | Copy the full conversation into a new chat without executing      |
+| `:SiaDebug`                 | Show the conversation's JSON payload in a new buffer              |
 
-`:SiaFork` supports `-t <turn_id>` to specify which turn to fork from (keeps
-messages before that turn). Tab-completion is available for turn IDs.
+When a prompt is provided, `:SiaFork` immediately starts a new assistant turn.
+Without a prompt, the forked chat opens with the copied history ready for input.
+`-t <turn_id>` specifies which turn to fork from (keeps messages before that
+turn). Tab-completion is available for turn IDs.
 
 ## Shell Process Management
 
