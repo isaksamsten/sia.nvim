@@ -248,8 +248,14 @@ function OpenAIResponsesStream:process_stream_chunk(json)
   then
     --- TODO: we should remove this to not duplicate tools.
     ---       Or at least guard it
+    local has_tool_calls = #self.pending_tool_calls > 0
+    local has_reasoning = self.encrypted_reasoning ~= nil
     for _, item in ipairs(json.response.output) do
-      if item.type == "function_call" and item.status == "completed" then
+      if
+        item.type == "function_call"
+        and item.status == "completed"
+        and not has_tool_calls
+      then
         table.insert(self.pending_tool_calls, {
           id = item.id,
           call_id = item.call_id,
@@ -257,7 +263,7 @@ function OpenAIResponsesStream:process_stream_chunk(json)
           name = item.name,
           arguments = item.arguments or "",
         })
-      elseif item.type == "custom_tool_call" then
+      elseif item.type == "custom_tool_call" and not has_tool_calls then
         table.insert(self.pending_tool_calls, {
           id = item.id,
           call_id = item.call_id,
@@ -265,7 +271,7 @@ function OpenAIResponsesStream:process_stream_chunk(json)
           name = item.name,
           input = item.input or "",
         })
-      elseif item.type == "reasoning" then
+      elseif item.type == "reasoning" and not has_reasoning then
         self.encrypted_reasoning =
           { id = item.id, encrypted_content = item.encrypted_content }
         for _, subitem in ipairs(item.summary) do
