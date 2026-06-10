@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("sia.utils")
 
 local ERROR_API_KEY_MISSING = -100
 local MAX_RETRIES = 1
@@ -40,7 +41,7 @@ local function call_provider(data, opts)
   table.insert(args, "--data-binary")
 
   local tmpfile = vim.fn.tempname()
-  local ok = vim.fn.writefile({ vim.json.encode(data) }, tmpfile)
+  local ok = vim.fn.writefile({ utils.sanitize_utf8(vim.json.encode(data)) }, tmpfile)
   if ok ~= 0 then
     error("Failed to write request to temp file")
   end

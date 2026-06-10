@@ -8,6 +8,114 @@ function M.new_uuid()
     return string.format("%x", v)
   end)
 end
+
+local UTF8_REPLACEMENT = "\239\191\189"
+
+local function is_continuation_byte(byte)
+  return byte and byte >= 0x80 and byte <= 0xbf
+end
+
+---Replace malformed UTF-8 and UTF-16 surrogate code points with U+FFFD.
+---@param value string
+---@return string
+function M.sanitize_utf8(value)
+  local result = {}
+  local i = 1
+  local len = #value
+
+  while i <= len do
+    local b1 = value:byte(i)
+    local width = nil
+
+    if b1 <= 0x7f then
+      width = 1
+    else
+      local b2 = value:byte(i + 1)
+      local b3 = value:byte(i + 2)
+      local b4 = value:byte(i + 3)
+
+      if b1 >= 0xc2 and b1 <= 0xdf and is_continuation_byte(b2) then
+        width = 2
+      elseif
+        b1 == 0xe0
+        and b2
+        and b2 >= 0xa0
+        and b2 <= 0xbf
+        and is_continuation_byte(b3)
+      then
+        width = 3
+      elseif
+        b1 >= 0xe1
+        and b1 <= 0xec
+        and is_continuation_byte(b2)
+        and is_continuation_byte(b3)
+      then
+        width = 3
+      elseif
+        b1 == 0xed
+        and b2
+        and b2 >= 0x80
+        and b2 <= 0x9f
+        and is_continuation_byte(b3)
+      then
+        width = 3
+      elseif
+        b1 == 0xed
+        and b2
+        and b2 >= 0xa0
+        and b2 <= 0xbf
+        and is_continuation_byte(b3)
+      then
+        table.insert(result, UTF8_REPLACEMENT)
+        i = i + 3
+      elseif
+        b1 >= 0xee
+        and b1 <= 0xef
+        and is_continuation_byte(b2)
+        and is_continuation_byte(b3)
+      then
+        width = 3
+      elseif
+        b1 == 0xf0
+        and b2
+        and b2 >= 0x90
+        and b2 <= 0xbf
+        and is_continuation_byte(b3)
+        and is_continuation_byte(b4)
+      then
+        width = 4
+      elseif
+        b1 >= 0xf1
+        and b1 <= 0xf3
+        and is_continuation_byte(b2)
+        and is_continuation_byte(b3)
+        and is_continuation_byte(b4)
+      then
+        width = 4
+      elseif
+        b1 == 0xf4
+        and b2
+        and b2 >= 0x80
+        and b2 <= 0x8f
+        and is_continuation_byte(b3)
+        and is_continuation_byte(b4)
+      then
+        width = 4
+      else
+        table.insert(result, UTF8_REPLACEMENT)
+        i = i + 1
+      end
+    end
+
+    if width then
+      table.insert(result, value:sub(i, i + width - 1))
+      i = i + width
+    end
+  end
+
+  return table.concat(result)
+end
+
 --- A generic command parser that enforces `[flags...] [positional...]` grammar.
 --- Flags must appear before any positional arguments. Each flag consumes one
 --- value token. The parser only parses; completion and validation are the
@@ -240,17 +348,17 @@ end
 
 function M.is_range_commend(cmd_line)
   local range_patterns = {
-    "^%s*%d+", -- Single line number (start), with optional leading spaces
-    "^%s*%d+,%d+", -- Line range (start,end), with optional leading spaces
-    "^%s*%d+[,+-]%d+", -- Line range with arithmetic (start+1, start-1)
-    "^%s*%d+,", -- Line range with open end (start,), with optional leading spaces
-    "^%s*%%", -- Whole file range (%), with optional leading spaces
-    "^%s*[$.]+", -- $, ., etc., with optional leading spaces
-    "^%s*[$.%d]+[%+%-]?%d*", -- Combined offsets (e.g., .+1, $-1)
-    "^%s*'[a-zA-Z]", -- Marks ('a, 'b), etc.
+    "^%s*%d+",                 -- Single line number (start), with optional leading spaces
+    "^%s*%d+,%d+",             -- Line range (start,end), with optional leading spaces
+    "^%s*%d+[,+-]%d+",         -- Line range with arithmetic (start+1, start-1)
+    "^%s*%d+,",                -- Line range with open end (start,), with optional leading spaces
+    "^%s*%%",                  -- Whole file range (%), with optional leading spaces
+    "^%s*[$.]+",               -- $, ., etc., with optional leading spaces
+    "^%s*[$.%d]+[%+%-]?%d*",   -- Combined offsets (e.g., .+1, $-1)
+    "^%s*'[a-zA-Z]",           -- Marks ('a, 'b), etc.
     "^%s*[%d$%.']+,[%d$%.']+", -- Mixed patterns (e.g., ., 'a)
-    "^%s*['<>][<>]", -- Visual selection marks ('<, '>)
-    "^%s*'<[,]'?>", -- Combinations like '<,'>
+    "^%s*['<>][<>]",           -- Visual selection marks ('<, '>)
+    "^%s*'<[,]'?>",            -- Combinations like '<,'>
   }
 
   for _, pattern in ipairs(range_patterns) do
@@ -308,6 +416,7 @@ function M.with_chat_strategy(opts)
     source = buffers,
   })
 end
+
 --- Create a new split with markdown content
 --- @param content string[] The content to insert in the split
 --- @param opts? {cmd: string?, ft: string?} Optional configuration
@@ -324,6 +433,7 @@ function M.create_markdown_split(content, opts)
 
   return buf
 end
+
 --- @type string[]
 local global_file_list = {}
 
@@ -605,9 +715,9 @@ function M.select_buffer(args)
     if
       args.filter == nil
       or args.filter(buf.buf)
-        and not vim.tbl_contains(buffers, function(v)
-          return v.buf == buf
-        end, { predicate = true })
+      and not vim.tbl_contains(buffers, function(v)
+        return v.buf == buf
+      end, { predicate = true })
     then
       table.insert(
         buffers,

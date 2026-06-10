@@ -14,6 +14,57 @@ local eq = MiniTest.expect.equality
 
 T["sia.utils.CommandParser"] = MiniTest.new_set()
 
+T["sia.utils.sanitize_utf8"] = MiniTest.new_set()
+
+T["sia.utils.sanitize_utf8"]["keeps valid UTF-8 unchanged"] = function()
+  local sanitized = child.lua_get([[
+    require("sia.utils").sanitize_utf8("plain åäö 😀")
+  ]])
+
+  eq("plain åäö 😀", sanitized)
+end
+
+T["sia.utils.sanitize_utf8"]["replaces surrogate code points"] = function()
+  local sanitized = child.lua_get([[
+    require("sia.utils").sanitize_utf8("bad " .. "\237\160\128" .. " json")
+  ]])
+
+  eq("bad � json", sanitized)
+end
+
+T["sia.utils.sanitize_utf8"]["replaces malformed byte sequences"] = function()
+  local sanitized = child.lua_get([[
+    require("sia.utils").sanitize_utf8("bad " .. "\255" .. " bytes")
+  ]])
+
+  eq("bad � bytes", sanitized)
+end
+
+T["sia.utils.sanitize_utf8"]["sanitizes encoded JSON without changing structure"] = function()
+  child.lua([[
+    local utils = require("sia.utils")
+    local payload = {
+      messages = {
+        { role = "user", content = "bad " .. "\237\160\128" },
+      },
+      metadata = {
+        ["key" .. "\255"] = "value",
+      },
+      schema = {
+        type = "object",
+        properties = vim.empty_dict(),
+      },
+    }
+    _G.sanitized_json_payload = utils.sanitize_utf8(vim.json.encode(payload))
+  ]])
+  local encoded = child.lua_get("_G.sanitized_json_payload")
+
+  local decoded = vim.json.decode(encoded)
+  eq("bad �", decoded.messages[1].content)
+  eq("value", decoded.metadata["key�"])
+  eq(true, vim.tbl_isempty(decoded.schema.properties))
+end
+
 T["sia.utils.CommandParser"]["parses multiple flags before action and mode"] = function()
   local code = [[
     local parser = require("sia.utils").CommandParser.new({ flags = { "m", "s" } })
