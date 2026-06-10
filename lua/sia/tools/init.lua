@@ -8,6 +8,7 @@ return {
   insert = require("sia.tools.insert"),
   write = require("sia.tools.write"),
   bash = require("sia.tools.bash"),
+  lsp = require("sia.tools.lsp"),
   git_worktree = require("sia.tools.git_worktree"),
   task = require("sia.tools.agent"),
   diagnostics = require("sia.tools.diagnostics"),

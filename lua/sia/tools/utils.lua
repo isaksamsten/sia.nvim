@@ -16,6 +16,7 @@ M.tool_names = {
   write = "write",
   bash = "bash",
   git_worktree = "git_worktree",
+  lsp = "lsp",
   agent = "agent",
   diagnostics = "diagnostics",
   webfetch = "webfetch",

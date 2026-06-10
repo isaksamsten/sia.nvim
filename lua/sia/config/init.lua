@@ -382,6 +382,7 @@ M._raw_options = {
         tools = function(model)
           local tools = require("sia.tools")
           local all = {
+            tools.lsp,
             tools.ask_user,
             tools.grep,
             tools.skills,
