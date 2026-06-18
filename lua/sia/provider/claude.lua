@@ -12,12 +12,13 @@ local DEFAULT_BETAS = {
   "interleaved-thinking-2025-05-14",
   "prompt-caching-scope-2026-01-05",
   "context-management-2025-06-27",
+  "advisor-tool-2026-03-01",
 }
 local BILLING_SALT = "59cf53e54c78"
-local DEFAULT_CLI_VERSION = "2.1.90"
+local DEFAULT_CLI_VERSION = "2.1.112"
 local DEFAULT_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 local DEFAULT_AUTH_URL = "https://claude.ai/oauth/authorize"
-local DEFAULT_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token"
+local DEFAULT_TOKEN_URL = "https://claude.ai/v1/oauth/token"
 local DEFAULT_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 local DEFAULT_SCOPE = "org:create_api_key user:profile user:inference"
 local REFRESH_SKEW_MS = 60000
@@ -72,18 +73,19 @@ local function get_browser_token_path()
 end
 
 ---@return string
-local function get_user_agent()
-  return env("CLAUDE_CODE_AUTH_USER_AGENT") or "claude-cli/2.1.2 (external, cli)"
-end
-
----@return string
 local function get_cli_version()
   return env("ANTHROPIC_CLI_VERSION") or DEFAULT_CLI_VERSION
 end
 
 ---@return string
+local function get_user_agent()
+  return env("CLAUDE_CODE_AUTH_USER_AGENT")
+    or ("claude-cli/%s (external, sdk-cli)"):format(get_cli_version())
+end
+
+---@return string
 local function get_entrypoint()
-  return env("CLAUDE_CODE_ENTRYPOINT") or "cli"
+  return env("CLAUDE_CODE_ENTRYPOINT") or "sdk-cli"
 end
 
 ---@return string[]
@@ -317,18 +319,14 @@ local function token_request(params)
     return nil, "Anthropic token request failed"
   end
 
-  if
-    type(json.access_token) ~= "string"
-    or type(json.refresh_token) ~= "string"
-    or type(json.expires_in) ~= "number"
-  then
+  if type(json.access_token) ~= "string" then
     return nil, "Anthropic token response is missing required fields"
   end
 
   return {
     access = json.access_token,
-    refresh = json.refresh_token,
-    expires = (os.time() * 1000) + (json.expires_in * 1000),
+    refresh = json.refresh_token or params.refresh_token or "",
+    expires = (os.time() * 1000) + ((json.expires_in or 36000) * 1000),
   }
 end
 
@@ -565,13 +563,15 @@ local function build_oauth_headers(model_id)
     return {}
   end
 
-  return {
+  local headers = {
     "--header",
     "anthropic-version: 2023-06-01",
     "--header",
     "authorization: Bearer " .. token,
     "--header",
     "anthropic-beta: " .. table.concat(get_model_betas(model_id), ","),
+    "--header",
+    "anthropic-dangerous-direct-browser-access: true",
     "--header",
     "x-app: cli",
     "--header",
@@ -581,6 +581,24 @@ local function build_oauth_headers(model_id)
     "--header",
     "user-agent: " .. get_user_agent(),
   }
+
+  local uname = vim.uv.os_uname()
+  local stainless_headers = {
+    ["x-stainless-arch"] = uname.machine == "arm64" and "arm64" or uname.machine,
+    ["x-stainless-lang"] = "js",
+    ["x-stainless-os"] = vim.fn.has("mac") == 1 and "MacOS" or uname.sysname,
+    ["x-stainless-package-version"] = "0.81.0",
+    ["x-stainless-retry-count"] = "0",
+    ["x-stainless-runtime"] = "node",
+    ["x-stainless-runtime-version"] = env("CLAUDE_CODE_AUTH_NODE_VERSION") or "v22.0.0",
+    ["x-stainless-timeout"] = "600",
+  }
+
+  for name, value in pairs(stainless_headers) do
+    vim.list_extend(headers, { "--header", name .. ": " .. value })
+  end
+
+  return headers
 end
 
 ---@type sia.Provider
@@ -892,6 +910,7 @@ M._test = {
   extract_first_user_text = extract_first_user_text,
   parse_auth_code = parse_auth_code,
   exchange_auth_code = exchange_auth_code,
+  refresh_browser_token = refresh_browser_token,
   prefix_tool_name = prefix_tool_name,
   unprefix_tool_name = unprefix_tool_name,
 }
