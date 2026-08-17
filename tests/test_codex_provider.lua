@@ -161,5 +161,50 @@ T["sia.provider.codex"]["parses discovered models from codex api"] = function()
   end)
 end
 
-return T
+T["sia.provider.codex"]["uses current OpenCode OAuth client and originator"] = function()
+  local codex = reload_codex()
+  local url = codex._test.build_authorize_url(
+    "http://localhost:1455/auth/callback",
+    { verifier = "verifier", challenge = "challenge" },
+    "state"
+  )
 
+  eq(url:match("client_id=app_EMoamEEZ73f0CkXaXp7hrann") ~= nil, true)
+  eq(url:match("originator=sia") ~= nil, true)
+  eq(url:match("codex_cli_simplified_flow=true") ~= nil, true)
+end
+
+T["sia.provider.codex"]["sets current request headers and lets service size output"] = function()
+  with_stubbed_auth(function()
+    local token_data = {
+      access_token = "access-token",
+      refresh_token = "refresh-token",
+      expires_at = os.time() + 3600,
+      account_id = "acct_123",
+    }
+    local original_readfile = vim.fn.readfile
+    local original_filereadable = vim.fn.filereadable
+    vim.fn.filereadable = function(path)
+      return path:match("codex_token%.json$") and 1 or original_filereadable(path)
+    end
+    vim.fn.readfile = function(path)
+      return path:match("codex_token%.json$") and { vim.json.encode(token_data) }
+        or original_readfile(path)
+    end
+
+    local provider = reload_codex().spec.implementations.default
+    local headers = table.concat(provider.get_headers({}, "access-token", {}), "\n")
+    eq(headers:match("originator: sia") ~= nil, true)
+    eq(headers:match("session%-id: [%w%-]+") ~= nil, true)
+    eq(headers:match("ChatGPT%-Account%-Id: acct_123") ~= nil, true)
+
+    local data = { max_output_tokens = 123 }
+    provider.prepare_parameters(data, { support = {}, options = {} })
+    eq(data.max_output_tokens, nil)
+
+    vim.fn.readfile = original_readfile
+    vim.fn.filereadable = original_filereadable
+  end)
+end
+
+return T

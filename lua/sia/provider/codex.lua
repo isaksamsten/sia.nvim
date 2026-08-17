@@ -4,6 +4,7 @@
 --- Implementation based on: https://github.com/anomalyco/opencode/packages/opencode/src/plugin/codex.ts
 local openai = require("sia.provider.openai")
 local common = require("sia.provider.common")
+local utils = require("sia.utils")
 
 local M = {}
 
@@ -14,6 +15,7 @@ local CODEX_CHAT_ENDPOINT = "responses"
 local CODEX_CLIENT_VERSION = "1.0.0"
 local OAUTH_PORT = 1455
 local OAUTH_TIMEOUT_MS = 5 * 60 * 1000 -- 5 minutes
+local session_id = utils.new_uuid()
 
 --- @class sia.codex.TokenData
 --- @field access_token string
@@ -210,8 +212,9 @@ end
 
 --- Refresh access token using refresh_token
 --- @param refresh_token string
+--- @param current_account_id string?
 --- @return sia.codex.TokenData?
-local function refresh_access_token(refresh_token)
+local function refresh_access_token(refresh_token, current_account_id)
   local body = table.concat({
     "grant_type=refresh_token",
     "refresh_token=" .. vim.uri_encode(refresh_token),
@@ -236,6 +239,7 @@ local function refresh_access_token(refresh_token)
 
   local expires_in = json.expires_in or 3600
   local account_id = extract_account_id(json.id_token, json.access_token)
+    or current_account_id
 
   return {
     access_token = json.access_token,
@@ -574,7 +578,8 @@ local function get_access_token()
   end
 
   if cached_token and cached_token.refresh_token then
-    local refreshed = refresh_access_token(cached_token.refresh_token)
+    local refreshed =
+      refresh_access_token(cached_token.refresh_token, cached_token.account_id)
     if refreshed then
       cached_token = refreshed
       save_cached_token(cached_token)
@@ -779,6 +784,10 @@ end
 --- Build the Codex responses provider using OpenAI responses as base
 local codex = openai.responses_compatible(CODEX_API_BASE, CODEX_CHAT_ENDPOINT, {
   api_key = codex_api_key,
+  prepare_parameters = function(data)
+    -- Codex CLI leaves output sizing to the service.
+    data.max_output_tokens = nil
+  end,
   get_headers = function(model, api_key, messages)
     -- We handle all headers ourselves, return extras beyond Authorization
     local headers = {}
@@ -789,6 +798,8 @@ local codex = openai.responses_compatible(CODEX_API_BASE, CODEX_CHAT_ENDPOINT, {
     end
     table.insert(headers, "--header")
     table.insert(headers, "originator: sia")
+    table.insert(headers, "--header")
+    table.insert(headers, "session-id: " .. session_id)
     table.insert(headers, "--header")
     table.insert(
       headers,
@@ -813,6 +824,11 @@ M.spec = {
   seed = {},
   authorize = browser_authorize,
   discover = discover,
+}
+
+M._test = {
+  build_authorize_url = build_authorize_url,
+  extract_account_id = extract_account_id,
 }
 
 return M
