@@ -117,7 +117,7 @@ T["sia.provider.claude"]["billing header matches known vector"] = function()
     { role = "user", content = "hey" },
   })
   eq(
-    "x-anthropic-billing-header: cc_version=2.1.112.b02; cc_entrypoint=sdk-cli; cch=fa690;",
+    "x-anthropic-billing-header: cc_version=2.1.217.66b; cc_entrypoint=sdk-cli; cch=fa690;",
     header
   )
 end
@@ -212,9 +212,11 @@ T["sia.provider.claude"]["parses discovered models with short names and capabili
       eq(joined:match("authorization: Bearer access%-token") ~= nil, true)
       eq(joined:match("anthropic%-dangerous%-direct%-browser%-access: true") ~= nil, true)
       eq(joined:match("advisor%-tool%-2026%-03%-01") ~= nil, true)
+      eq(joined:match("thinking%-token%-count%-2026%-05%-13") ~= nil, true)
+      eq(joined:match("extended%-cache%-ttl%-2025%-04%-11") ~= nil, true)
       eq(joined:match("x%-stainless%-lang: js") ~= nil, true)
       eq(joined:match("x%-stainless%-runtime: node") ~= nil, true)
-      eq(joined:match("user%-agent: claude%-cli/2%.1%.112 %(external, sdk%-cli%)") ~= nil, true)
+      eq(joined:match("user%-agent: claude%-cli/2%.1%.217 %(external, sdk%-cli%)") ~= nil, true)
 
       on_exit({
         code = 0,

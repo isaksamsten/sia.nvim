@@ -13,9 +13,11 @@ local DEFAULT_BETAS = {
   "prompt-caching-scope-2026-01-05",
   "context-management-2025-06-27",
   "advisor-tool-2026-03-01",
+  "thinking-token-count-2026-05-13",
+  "extended-cache-ttl-2025-04-11",
 }
 local BILLING_SALT = "59cf53e54c78"
-local DEFAULT_CLI_VERSION = "2.1.112"
+local DEFAULT_CLI_VERSION = "2.1.217"
 local DEFAULT_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 local DEFAULT_AUTH_URL = "https://claude.ai/oauth/authorize"
 local DEFAULT_TOKEN_URL = "https://claude.ai/v1/oauth/token"
@@ -79,7 +81,8 @@ end
 
 ---@return string
 local function get_user_agent()
-  return env("CLAUDE_CODE_AUTH_USER_AGENT")
+  return env("ANTHROPIC_USER_AGENT")
+    or env("CLAUDE_CODE_AUTH_USER_AGENT")
     or ("claude-cli/%s (external, sdk-cli)"):format(get_cli_version())
 end
 
@@ -132,9 +135,14 @@ end
 ---@return table?
 local function get_model_override(model_id)
   local lower = model_id:lower()
+  if lower:find("sonnet", 1, true) then
+    return {
+      exclude = { ["effort-2025-11-24"] = true },
+    }
+  end
   if lower:find("haiku", 1, true) then
     return {
-      exclude = { ["interleaved-thinking-2025-05-14"] = true },
+      exclude = { ["effort-2025-11-24"] = true },
       disable_effort = true,
     }
   end
@@ -323,10 +331,16 @@ local function token_request(params)
     return nil, "Anthropic token response is missing required fields"
   end
 
+  local now = os.time() * 1000
+  local expires = type(json.expires_at) == "number" and math.floor(json.expires_at) or nil
+  if not expires or expires <= now then
+    expires = now + ((json.expires_in or 36000) * 1000)
+  end
+
   return {
     access = json.access_token,
     refresh = json.refresh_token or params.refresh_token or "",
-    expires = (os.time() * 1000) + ((json.expires_in or 36000) * 1000),
+    expires = math.floor(expires),
   }
 end
 
