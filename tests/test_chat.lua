@@ -597,6 +597,27 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
     },
   }, tool_result_ranges(strategy.buf))
 
+  strategy:on_tool_status({
+    {
+      key = "tool-1",
+      index = 1,
+      name = "bash",
+      summary = {
+        header = "Running bash: make test",
+        details = "ignored until done",
+      },
+      status = "running",
+    },
+  })
+
+  eq({
+    {
+      start = 4,
+      finish = 5,
+      hl_group = "SiaToolResult",
+    },
+  }, tool_result_ranges(strategy.buf))
+
   strategy:on_tool_results({
     {
       key = "tool-1",

@@ -600,15 +600,15 @@ function Canvas:update_tool_block(
   local previous_end = line + previous_line_count
   if #lines == 0 then
     local replacement = opts.preserve_placeholder and { "" } or {}
+    self:clear_tool_highlights(line, previous_end)
     vim.bo[self.buf].modifiable = true
     vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, replacement)
-    self:clear_tool_highlights(line, previous_end)
     return #replacement
   end
 
+  self:clear_tool_highlights(line, previous_end)
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, lines)
-  self:clear_tool_highlights(line, math.max(previous_end, line + #lines))
   for _, highlight in ipairs(highlights) do
     self:highlight_tool(line + highlight.start, line + highlight.finish)
   end
