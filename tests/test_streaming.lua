@@ -136,6 +136,7 @@ T["assistant.streaming"]["handles partial data across stdout calls"] =
           job_opts.on_stdout(1, {
             'ices":[{"delta":{"content":"lo"}}]}',
             'data: {"choices":[{"delta":{"content":"!"}}]}',
+            "",
           }, 10)
           -- Final events
           job_opts.on_stdout(1, {
@@ -143,8 +144,9 @@ T["assistant.streaming"]["handles partial data across stdout calls"] =
               choices = { { delta = {} } },
               usage = { total_tokens = 5 },
             }),
+            "",
           }, 10)
-          job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+          job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
           job_opts.on_exit(1, 0, nil)
           return 1
         end)
@@ -178,14 +180,16 @@ T["assistant.streaming"]["handles multiple events in single stdout call"] =
             'data: {"choices":[{"delta":{"content":"A"}}]}',
             'data: {"choices":[{"delta":{"content":"B"}}]}',
             'data: {"choices":[{"delta":{"content":"C"}}]}',
+            "",
           }, 10)
           job_opts.on_stdout(1, {
             "data: " .. vim.json.encode({
               choices = { { delta = {} } },
               usage = { total_tokens = 3 },
             }),
+            "",
           }, 10)
-          job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+          job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
           job_opts.on_exit(1, 0, nil)
           return 1
         end)
@@ -260,14 +264,16 @@ T["assistant.streaming"]["handles SSE comment lines"] = MiniTest.new_set({
           'data: {"choices":[{"delta":{"content":"Hello"}}]}',
           ": ping",
           'data: {"choices":[{"delta":{"content":" World"}}]}',
+          "",
         }, 10)
         job_opts.on_stdout(1, {
           "data: " .. vim.json.encode({
             choices = { { delta = {} } },
             usage = { total_tokens = 5 },
           }),
+          "",
         }, 10)
-        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1
       end)
@@ -298,14 +304,16 @@ T["assistant.streaming"]["empty content deltas"] = MiniTest.new_set({
           'data: {"choices":[{"delta":{"content":"Hello"}}]}',
           'data: {"choices":[{"delta":{"content":""}}]}',
           'data: {"choices":[{"delta":{"content":" World"}}]}',
+          "",
         }, 10)
         job_opts.on_stdout(1, {
           "data: " .. vim.json.encode({
             choices = { { delta = {} } },
             usage = { total_tokens = 5 },
           }),
+          "",
         }, 10)
-        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1
       end)
@@ -338,14 +346,16 @@ T["assistant.streaming"]["empty content deltas between newlines"] = MiniTest.new
           'data: {"choices":[{"delta":{"content":"Line 1\\n"}}]}',
           'data: {"choices":[{"delta":{"content":""}}]}',
           'data: {"choices":[{"delta":{"content":"Line 2"}}]}',
+          "",
         }, 10)
         job_opts.on_stdout(1, {
           "data: " .. vim.json.encode({
             choices = { { delta = {} } },
             usage = { total_tokens = 5 },
           }),
+          "",
         }, 10)
-        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1
       end)
@@ -377,14 +387,16 @@ T["assistant.streaming"]["standalone newline deltas"] = MiniTest.new_set({
           'data: {"choices":[{"delta":{"content":"\\n"}}]}',
           'data: {"choices":[{"delta":{"content":"\\n"}}]}',
           'data: {"choices":[{"delta":{"content":"Line 3"}}]}',
+          "",
         }, 10)
         job_opts.on_stdout(1, {
           "data: " .. vim.json.encode({
             choices = { { delta = {} } },
             usage = { total_tokens = 5 },
           }),
+          "",
         }, 10)
-        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1
       end)

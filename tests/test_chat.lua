@@ -746,7 +746,7 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
       local round = rounds[call_count]
       if round then
         for _, datum in ipairs(round) do
-          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum), "" }, 10)
         end
       end
       job_opts.on_stdout(1, {
@@ -754,8 +754,9 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
           choices = { { delta = {} } },
           usage = { total_tokens = 10 * call_count },
         }),
+        "",
       }, 10)
-      job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+      job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
       job_opts.on_exit(1, 0, nil)
       return 1
     end)
@@ -835,7 +836,7 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
         local round = rounds[call_count]
         if round then
           for _, datum in ipairs(round) do
-            job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+            job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum), "" }, 10)
           end
         end
         job_opts.on_stdout(1, {
@@ -843,8 +844,9 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
             choices = { { delta = {} } },
             usage = { total_tokens = 10 * call_count },
           }),
+          "",
         }, 10)
-        job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+        job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
         job_opts.on_exit(1, 0, nil)
         return 1
       end)
@@ -924,7 +926,7 @@ T["strategy.chat"]["multi-turn reasoning"]["tool-only round gets /sia header mat
       local round = rounds[call_count]
       if round then
         for _, datum in ipairs(round) do
-          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+          job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum), "" }, 10)
         end
       end
       job_opts.on_stdout(1, {
@@ -932,8 +934,9 @@ T["strategy.chat"]["multi-turn reasoning"]["tool-only round gets /sia header mat
           choices = { { delta = {} } },
           usage = { total_tokens = 10 * call_count },
         }),
+        "",
       }, 10)
-      job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+      job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
       job_opts.on_exit(1, 0, nil)
       return 1
     end)

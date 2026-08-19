@@ -13,13 +13,14 @@ function M.mock_fn_jobstart(data)
 
     for _, datum in ipairs(data) do
       -- Neovim splits by newlines, so each element is a line without trailing \n
-      job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum) }, 10)
+      job_opts.on_stdout(1, { "data: " .. vim.json.encode(datum), "" }, 10)
     end
     job_opts.on_stdout(1, {
       "data: " .. vim.json.encode({ choices = { { delta = {} } }, usage = { total_tokens = 12 } }),
+      "",
     }, 10)
 
-    job_opts.on_stdout(1, { "data: [DONE]" }, nil)
+    job_opts.on_stdout(1, { "data: [DONE]", "" }, nil)
     job_opts.on_exit(1, 0, nil)
     return 1
   end
