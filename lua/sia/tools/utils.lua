@@ -378,13 +378,12 @@ local function create_user_input_handler(
   persist_allow
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
-  local ignore_confirm = (permission and permission.auto_allow)
-    or (not (permission and permission.ask) and conversation.approved_tools[tool_name])
-
   return function(prompt, input_args)
     local default_level = input_args.level or "info"
     local risk = require("sia.risk")
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
+    local ignore_confirm = (permission and permission.auto_allow)
+      or (not (permission and permission.ask) and conversation.approved_tools[tool_name])
 
     if risk.allows_auto_confirm(resolved_level) and ignore_confirm then
       input_args.on_accept()

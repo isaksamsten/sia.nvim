@@ -574,6 +574,46 @@ T["permissions (nil treated as empty)"]["async confirm always persists an opt-in
   end)
 end
 
+T["permissions (nil treated as empty)"]["parallel handlers observe accept all after creation"] = function()
+  local config = require("sia.config")
+  local original_async = config.options.settings.ui.confirm.async.enable
+  local original_notifier = config.options.settings.ui.confirm.async.notifier
+  package.loaded["sia.ui.confirm"] = nil
+
+  config.options.settings.ui.confirm.async.enable = true
+  config.options.settings.ui.confirm.async.notifier = {
+    show = function() end,
+    clear = function() end,
+  }
+
+  local handlers = {}
+  local executed = 0
+  local tool = create_dummy_tool("dummy", true, function(_, _, callback, opts)
+    table.insert(handlers, function()
+      opts.user_input("Proceed?", {
+        on_accept = function()
+          executed = executed + 1
+          callback({ kind = "ok", content = { "ran" } })
+        end,
+      })
+    end)
+  end)
+  local conversation = { id = 2, name = "chat", approved_tools = {} }
+
+  tool.implementation.execute({}, function() end, { conversation = conversation })
+  tool.implementation.execute({}, function() end, { conversation = conversation })
+  handlers[1]()
+  require("sia.ui.confirm").always()
+  handlers[2]()
+
+  config.options.settings.ui.confirm.async.enable = original_async
+  config.options.settings.ui.confirm.async.notifier = original_notifier
+  package.loaded["sia.ui.confirm"] = nil
+
+  eq(2, executed)
+  eq(0, require("sia.ui.confirm").count())
+end
+
 T["permissions (nil treated as empty)"]["always with multiple candidates presents vim.ui.select and persists chosen rule"] = function()
   with_temp_project({}, function(config_path, auto_path)
     local config = require("sia.config")
