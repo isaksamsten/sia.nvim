@@ -754,7 +754,8 @@ local function discover(callback)
 
       local entries = {}
       for _, model in ipairs(json.models) do
-        if type(model) == "table" and type(model.slug) == "string" then
+        local model_id = type(model) == "table" and (model.slug or model.id)
+        if type(model_id) == "string" then
           local entry = {}
 
           local context_window = get_model_context_window(model)
@@ -772,7 +773,7 @@ local function discover(callback)
             entry.options = options
           end
 
-          entries[model.slug] = entry
+          entries[model_id] = entry
         end
       end
 
