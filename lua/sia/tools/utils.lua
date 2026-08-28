@@ -193,6 +193,7 @@ end
 --- @field level sia.RiskLevel?
 --- @field preview (fun(buf:integer):integer?)?
 --- @field wrap boolean?
+--- @field verifier {system_prompt:string, input:string}?
 
 --- @alias sia.NewToolExecuteUserInput fun(prompt: string, opts: sia.NewToolExecuteUserInputOpts):nil
 --- @alias sia.NewToolExecuteUserChoice fun(prompt: string, opts: sia.NewToolExecuteUserChoiceOpts):nil
@@ -392,14 +393,117 @@ local function create_user_input_handler(
 
     prompt = prompt or ("Execute " .. tool_name)
 
-    local function prompt_user()
+    local VERIFIER_ORDER = { minimal = 1, low = 2, medium = 3, high = 4 }
+    local function verifier_allows(verdict, threshold)
+      return VERIFIER_ORDER[verdict] ~= nil
+        and VERIFIER_ORDER[threshold] ~= nil
+        and VERIFIER_ORDER[verdict] <= VERIFIER_ORDER[threshold]
+    end
+
+    local function run_verifier(on_done)
+      local verifier_config =
+        require("sia.config").options.settings.tool_verifier
+      if
+        not input_args.verifier
+        or not verifier_config
+        or not verifier_config.enable
+      then
+        on_done(nil)
+        return
+      end
+
+      local model = require("sia.model").resolve(
+        verifier_config.model or require("sia.config").options.settings.fast_model
+      )
+      local response_format = {
+        type = "json_schema",
+        json_schema = {
+          name = "tool_risk_verdict",
+          strict = true,
+          schema = {
+            type = "object",
+            additionalProperties = false,
+            properties = {
+              level = {
+                type = "string",
+                enum = { "minimal", "low", "medium", "high" },
+              },
+              action = { type = "string" },
+              matches_approved_action = { type = "boolean" },
+              reason = { type = "string" },
+            },
+            required = {
+              "level",
+              "action",
+              "matches_approved_action",
+              "reason",
+            },
+          },
+        },
+      }
+
+      local verifier = require("sia.conversation").new({
+        model = model,
+        temporary = true,
+        workspace = conversation.workspace,
+      })
+      verifier:add_system_message(table.concat({
+        input_args.verifier.system_prompt,
+        "",
+        "Report intrinsic risk honestly. Also describe the action in a concise, reusable",
+        "phrase including important scope constraints. Set matches_approved_action=true",
+        "only when the operation clearly matches one of the explicitly approved actions.",
+      }, "\n"))
+      local permissions = require("sia.permissions")
+      conversation.approved_verifier_actions =
+        conversation.approved_verifier_actions or {}
+      local approved_actions = vim.list_extend(
+        vim.deepcopy(conversation.approved_verifier_actions[tool_name] or {}),
+        permissions.resolve_verifier_actions(tool_name)
+      )
+      verifier:add_user_message(vim.json.encode({
+        tool_input = input_args.verifier.input,
+        approved_actions = approved_actions,
+      }))
+      require("sia.assistant").fetch_response(verifier, {
+        response_format = response_format,
+        on_complete = function(content)
+          local ok, verdict = pcall(vim.json.decode, content or "")
+          if
+            not ok
+            or type(verdict) ~= "table"
+            or not VERIFIER_ORDER[verdict.level]
+            or type(verdict.action) ~= "string"
+            or verdict.action == ""
+            or type(verdict.matches_approved_action) ~= "boolean"
+            or type(verdict.reason) ~= "string"
+          then
+            on_done(nil)
+            return
+          end
+          if #approved_actions == 0 then
+            verdict.matches_approved_action = false
+          end
+          on_done(verdict)
+        end,
+      })
+    end
+
+    local function prompt_user(verdict)
+      local verifier_suffix = verdict
+          and string.format(
+            "\nVerifier: %s risk - %s",
+            verdict.level,
+            verdict.reason
+          )
+        or ""
       local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
 
       local input_fn = confirm_conf.use_vim_ui and vim.ui.input or input
 
       input_fn({
-        prompt = string.format("%s - %s", prompt, confirmation_text),
+        prompt = string.format("%s%s - %s", prompt, verifier_suffix, confirmation_text),
         preview = input_args.preview,
         wrap = input_args.wrap,
       }, function(resp)
@@ -424,6 +528,125 @@ local function create_user_input_handler(
           end,
         })
       end)
+    end
+
+    local function handle_verdict(verdict)
+      if not verdict then
+        prompt_user()
+        return
+      end
+
+      local permissions = require("sia.permissions")
+      conversation.approved_verifiers = conversation.approved_verifiers or {}
+      local threshold = conversation.approved_verifiers[tool_name]
+        or permissions.resolve_verifier_level(tool_name)
+      if
+        verdict.matches_approved_action
+        or (threshold and verifier_allows(verdict.level, threshold))
+      then
+        input_args.on_accept()
+        return
+      end
+
+      local choices = {
+        "Accept once",
+        string.format("Trust through %s risk for this conversation", verdict.level),
+        string.format("Always trust through %s risk", verdict.level),
+        string.format("Approve action for this conversation: %s", verdict.action),
+        string.format("Always approve action: %s", verdict.action),
+        "Decline",
+      }
+      local select_fn = confirm_conf.use_vim_ui and vim.ui.select or select
+      select_fn(choices, {
+        prompt = string.format(
+          "%s\nVerifier: %s risk - %s",
+          prompt,
+          verdict.level,
+          verdict.reason
+        ),
+      }, function(_, idx)
+        if idx == 1 then
+          input_args.on_accept()
+        elseif idx == 2 then
+          conversation.approved_verifiers[tool_name] = verdict.level
+          input_args.on_accept()
+        elseif idx == 3 then
+          permissions.persist_verifier_level(tool_name, verdict.level)
+          input_args.on_accept()
+        elseif idx == 4 then
+          conversation.approved_verifier_actions[tool_name] =
+            conversation.approved_verifier_actions[tool_name] or {}
+          local actions = conversation.approved_verifier_actions[tool_name]
+          if not vim.tbl_contains(actions, verdict.action) then
+            table.insert(actions, verdict.action)
+          end
+          input_args.on_accept()
+        elseif idx == 5 then
+          permissions.persist_verifier_action(tool_name, verdict.action)
+          input_args.on_accept()
+        else
+          callback({ content = cancellation_message(tool_name) })
+        end
+      end)
+    end
+
+    local verifier_config = require("sia.config").options.settings.tool_verifier
+    if input_args.verifier and verifier_config and verifier_config.enable then
+      if confirm_conf.async and confirm_conf.async.enable then
+        run_verifier(function(result)
+          local permissions = require("sia.permissions")
+          conversation.approved_verifiers = conversation.approved_verifiers or {}
+          local threshold = conversation.approved_verifiers[tool_name]
+            or permissions.resolve_verifier_level(tool_name)
+          if
+            result
+            and
+            (
+              result.matches_approved_action
+              or (threshold and verifier_allows(result.level, threshold))
+            )
+          then
+            input_args.on_accept()
+            return
+          end
+
+          local display_prompt = result
+              and string.format(
+                "%s\nVerifier: %s risk - %s",
+                prompt,
+                result.level,
+                result.reason
+              )
+            or prompt
+          require("sia.ui.confirm").show(conversation, display_prompt, {
+            level = resolved_level,
+            tool_name = tool_name,
+            kind = "input",
+            on_accept = input_args.on_accept,
+            on_cancel = function()
+              callback({ content = cancellation_message(tool_name) })
+            end,
+            on_prompt = function()
+              if result then
+                handle_verdict(result)
+              else
+                prompt_user()
+              end
+            end,
+            on_preview = function()
+              local clear = require("sia.preview").show(
+                input_args.preview,
+                { wrap = true, focusable = true }
+              )
+              vim.cmd.redraw()
+              return clear
+            end,
+          })
+        end)
+        return
+      end
+      run_verifier(handle_verdict)
+      return
     end
 
     local on_always = nil
@@ -451,7 +674,9 @@ local function create_user_input_handler(
             content = cancellation_message(tool_name),
           })
         end,
-        on_prompt = prompt_user,
+        on_prompt = function()
+          prompt_user()
+        end,
         on_preview = function()
           local clear = require("sia.preview").show(
             input_args.preview,

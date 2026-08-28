@@ -427,8 +427,8 @@ local function mock_compaction(summary_response)
   -- Mock fetch_response to synchronously call back with the summary
   local assistant = require("sia.assistant")
   tracker._real_fetch = assistant.fetch_response
-  assistant.fetch_response = function(_, callback)
-    callback(summary_response)
+  assistant.fetch_response = function(_, opts)
+    opts.on_complete(summary_response)
   end
 
   -- Force compaction by making the token budget extremely small.

@@ -122,7 +122,33 @@ local validate = {
 
       for tool_name, tool_perms in pairs(section) do
         local path = "permission." .. section_name .. "." .. tool_name
-        local ok, err = validate_tool_perms(tool_perms, path, section_name)
+        local ok, err
+        if section_name == "verifier" then
+          local valid = { minimal = true, low = true, medium = true, high = true }
+          ok = type(tool_perms) == "table"
+          err = path .. " must be an object"
+          if ok and tool_perms.level ~= nil and not valid[tool_perms.level] then
+            ok = false
+            err = path .. ".level must be minimal, low, medium, or high"
+          end
+          if ok and tool_perms.actions ~= nil then
+            ok = type(tool_perms.actions) == "table"
+              and vim.iter(tool_perms.actions):all(function(action)
+                return type(action) == "string" and action ~= ""
+              end)
+            err = path .. ".actions must be an array of non-empty strings"
+          end
+          if
+            ok
+            and tool_perms.level == nil
+            and (tool_perms.actions == nil or #tool_perms.actions == 0)
+          then
+            ok = false
+            err = path .. " must define a level or at least one action"
+          end
+        else
+          ok, err = validate_tool_perms(tool_perms, path, section_name)
+        end
         if not ok then
           return false, err
         end

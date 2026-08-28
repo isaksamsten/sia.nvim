@@ -643,17 +643,19 @@ function ChatStrategy:on_finish(ctx)
     name_conv:add_user_message(
       table.concat(vim.api.nvim_buf_get_lines(self.buf, 0, -1, true), "\n")
     )
-    require("sia.assistant").fetch_response(name_conv, function(resp)
-      if resp then
-        self.conversation.name = resp:lower():gsub("%s+", "-")
-        pcall(
-          vim.api.nvim_buf_set_name,
-          self.buf,
-          "*sia " .. self.conversation.name .. "*"
-        )
-      end
-      self.has_generated_name = true
-    end)
+    require("sia.assistant").fetch_response(name_conv, {
+      on_complete = function(resp)
+        if resp then
+          self.conversation.name = resp:lower():gsub("%s+", "-")
+          pcall(
+            vim.api.nvim_buf_set_name,
+            self.buf,
+            "*sia " .. self.conversation.name .. "*"
+          )
+        end
+        self.has_generated_name = true
+      end,
+    })
   end
 
   if self.hooks.on_finish then

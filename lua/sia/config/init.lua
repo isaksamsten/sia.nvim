@@ -238,12 +238,12 @@ local settings_proxy = setmetatable({}, {
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 --- @field ui sia.config.Settings.Ui?
 --- @field shell sia.config.Shell?
+--- @field tool_verifier {enable:boolean?, model:(string|{name:string})?}?
 --- @field history { enable: boolean? }?
 
 --- @class sia.config.Shell
 --- @field command string?
 --- @field args string[]|fun():string[]?
---- @field shell sia.config.Shell?
 
 --- @class sia.config.Support
 --- @field image boolean?
@@ -329,6 +329,10 @@ M._raw_options = {
     shell = {
       command = "/bin/bash",
       args = { "-s" },
+    },
+    tool_verifier = {
+      enable = true,
+      model = "codex/gpt-5.6-luna",
     },
 
     actions = {

@@ -10,6 +10,61 @@ With the default settings, tool operations show an approval prompt immediately
 and wait for your response before continuing. This is simple and predictable,
 but interrupts your editing flow for each tool call.
 
+## LLM Tool Verification
+
+Tools can provide a safety prompt that lets a separate model classify an operation
+before confirmation. The Bash tool supports this. Enable verification globally:
+
+```lua
+require("sia").setup({
+  settings = {
+    tool_verifier = {
+      enable = true,
+      -- model = "openai/gpt-4.1", -- Defaults to fast_model
+    },
+  },
+})
+```
+
+The verifier reports the operation's intrinsic risk as `minimal`, `low`, `medium`,
+or `high`, together with a reason and a concise description of the action. A failed
+or malformed verification never approves an operation and falls back to the normal
+confirmation flow.
+
+The first time a verdict needs approval, the prompt offers:
+
+| Choice                                        | Effect                                                   |
+| --------------------------------------------- | -------------------------------------------------------- |
+| Accept once                                   | Execute only this operation                              |
+| Trust through this risk for this conversation | Auto-approve this risk level and lower until chat closes |
+| Always trust through this risk                | Persist that risk threshold for this tool                |
+| Approve this action for this conversation     | Auto-approve matching actions until chat closes          |
+| Always approve this action                    | Persist this semantic action for the tool                |
+| Decline                                       | Do not execute                                           |
+
+Risk thresholds and approved actions are independent. For example, a command may
+remain correctly classified as high risk while being approved because it matches
+the saved action "delete generated build artifacts within the project."
+
+Persistent choices are written to the project's `.sia/auto.json`:
+
+```json
+{
+  "permission": {
+    "verifier": {
+      "bash": {
+        "level": "low",
+        "actions": ["delete generated build artifacts within the project"]
+      }
+    }
+  }
+}
+```
+
+Approved actions are sent back to the verifier on later calls. The model must
+explicitly determine that the current operation matches one of them; the tool's
+description alone does not grant approval.
+
 ## Async Mode
 
 https://github.com/user-attachments/assets/7d9607c9-0846-4415-b32a-db1b51abbf56

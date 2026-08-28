@@ -355,6 +355,8 @@ end
 --- @field model sia.Model
 --- @field todos  {items: sia.conversation.Todo[]}
 --- @field approved_tools table<string, true>
+--- @field approved_verifiers table<string, string>
+--- @field approved_verifier_actions table<string, string[]>
 --- @field usage_history sia.Usage[]
 --- @field process_runtime sia.process.Runtime
 --- @field agent_runtime sia.agents.Runtime
@@ -384,6 +386,8 @@ local function new_conversation(opts)
   obj.tracker = require("sia.tracker").new()
 
   obj.entries = {}
+  obj.approved_verifiers = vim.deepcopy(opts.approved_verifiers or {})
+  obj.approved_verifier_actions = vim.deepcopy(opts.approved_verifier_actions or {})
   if opts.approved_tools == true then
     obj.approved_tools = setmetatable({}, {
       __index = function()
@@ -965,6 +969,8 @@ local function fork_conversation(source, turn_id)
   local conversation = new_conversation({
     model = source.model,
     approved_tools = source.approved_tools,
+    approved_verifiers = source.approved_verifiers,
+    approved_verifier_actions = source.approved_verifier_actions,
     workspace = source.workspace,
     modes = source.modes,
   })
@@ -1093,6 +1099,8 @@ end
 --- @class sia.NewConversationArgs
 --- @field model sia.Model
 --- @field approved_tools true|table<string, true>|nil
+--- @field approved_verifiers table<string, string>?
+--- @field approved_verifier_actions table<string, string[]>?
 --- @field temporary boolean?
 --- @field tools sia.Tool[]?
 --- @field modes table<string, sia.config.Mode>?

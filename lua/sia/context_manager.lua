@@ -152,8 +152,9 @@ the path to the directory.]
     add_summary_message(new_conversation, normalize_for_summary(entry))
   end
 
-  require("sia.assistant").fetch_response(new_conversation, function(content)
-    if content then
+  require("sia.assistant").fetch_response(new_conversation, {
+    on_complete = function(content)
+      if content then
       local dropped = 0
       for _, entry in ipairs(conversation.entries) do
         if entry.role ~= "system" and not entry.dropped then
@@ -185,10 +186,11 @@ the path to the directory.]
       if opts.on_complete then
         opts.on_complete(content)
       end
-    elseif opts.on_complete then
-      opts.on_complete(nil)
-    end
-  end)
+      elseif opts.on_complete then
+        opts.on_complete(nil)
+      end
+    end,
+  })
 end
 
 --- Estimate the number of bytes in an entry.

@@ -58,6 +58,12 @@ require("sia").setup({
       -- args can also be a function returning string[]
     },
 
+    -- LLM verification for tools that provide a safety prompt
+    tool_verifier = {
+      enable = false,
+      -- model = "openai/gpt-4.1", -- Defaults to fast_model
+    },
+
     -- Globally enabled agents and skills
     agents = { "code/review", "code/explore" },
     skills = { "update-docs" },
@@ -112,6 +118,11 @@ Use `settings.agents` to make agent definitions available across all projects.
 Store the agent files themselves in `~/.config/sia/agents/` when you want that
 global behavior. A project can still override the enabled list in
 `.sia/config.json`.
+
+`tool_verifier` applies globally to tools that provide a verifier prompt. It uses
+`fast_model` unless `model` is set. See
+[Tool Confirmation](../4-permissions/1-confirmation.md#llm-tool-verification) for
+risk thresholds, semantic action approvals, and persistence.
 
 ## Context Management
 

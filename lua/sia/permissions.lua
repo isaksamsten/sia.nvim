@@ -295,6 +295,55 @@ function M.resolve_permissions(name, args)
 end
 
 --- @param name string
+--- @return string?
+function M.resolve_verifier_level(name)
+  local permission = require("sia.config").options.settings.permission or {}
+  local verifier = permission.verifier and permission.verifier[name]
+  return type(verifier) == "table" and verifier.level or nil
+end
+
+--- @param name string
+--- @return string[]
+function M.resolve_verifier_actions(name)
+  local permission = require("sia.config").options.settings.permission or {}
+  local verifier = permission.verifier and permission.verifier[name]
+  if type(verifier) ~= "table" or type(verifier.actions) ~= "table" then
+    return {}
+  end
+  return vim.deepcopy(verifier.actions)
+end
+
+--- @param name string
+--- @param level string
+--- @return string?
+function M.persist_verifier_level(name, level)
+  local updated, path = require("sia.config").update_auto_config(function(json)
+    json.permission = json.permission or {}
+    json.permission.verifier = json.permission.verifier or {}
+    json.permission.verifier[name] = json.permission.verifier[name] or {}
+    json.permission.verifier[name].level = level
+  end)
+  return updated and path or nil
+end
+
+--- @param name string
+--- @param action string
+--- @return string?
+function M.persist_verifier_action(name, action)
+  local updated, path = require("sia.config").update_auto_config(function(json)
+    json.permission = json.permission or {}
+    json.permission.verifier = json.permission.verifier or {}
+    local verifier = json.permission.verifier[name] or {}
+    json.permission.verifier[name] = verifier
+    verifier.actions = verifier.actions or {}
+    if not vim.tbl_contains(verifier.actions, action) then
+      table.insert(verifier.actions, action)
+    end
+  end)
+  return updated and path or nil
+end
+
+--- @param name string
 --- @param rule sia.PermissionAllowRule
 --- @return string?
 function M.persist_allow_rule(name, rule)

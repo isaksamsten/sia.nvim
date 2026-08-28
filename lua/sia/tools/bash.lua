@@ -14,6 +14,12 @@ local ACTIONS = {
   kill = true,
 }
 
+local SAFETY_SYSTEM_PROMPT = [[
+Classify the risk of executing this shell command. Consider whether its behavior is
+clear and matches the stated intent, its scope, reversibility, network access, secret
+exposure, privilege changes, destructive effects, and execution of untrusted code.
+Use the worst plausible effect.]]
+
 local ASYNC_START_REPLY = [[
 Async bash process launched successfully.
 processId: %d (This is an internal ID for your use, do not mention it to the user.)
@@ -553,7 +559,7 @@ local function launch_command(args, conversation, opts, on_started)
 
   local runtime = conversation.process_runtime
 
-  opts.user_input(prompt, {
+  local input_args = {
     level = is_dangerous and "warn" or "info",
     preview = function(preview_buf)
       local lines = vim.split(args.command, "\n")
@@ -581,7 +587,17 @@ local function launch_command(args, conversation, opts, on_started)
       end
       on_started(proc)
     end,
-  })
+  }
+
+  input_args.verifier = {
+    system_prompt = SAFETY_SYSTEM_PROMPT,
+    input = vim.json.encode({
+      intent = args.description or "",
+      command = args.command,
+      working_directory = conversation.workspace,
+    }),
+  }
+  opts.user_input(prompt, input_args)
 end
 
 return tool_utils.new_tool({

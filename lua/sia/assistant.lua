@@ -368,41 +368,70 @@ function M.execute_strategy(strategy)
 end
 
 --- @param conversation sia.Conversation
---- @param callback fun(s:string?)
-function M.fetch_response(conversation, callback)
+--- @param opts {on_complete:fun(content:string?), response_format:table?}
+function M.fetch_response(conversation, opts)
   local response = ""
+  local streamed_content = ""
 
   local model = conversation.model
   local provider = model.provider
 
   local data = {
     model = model.api_name,
+    stream = true,
   }
   local messages = conversation:serialize()
   provider.prepare_messages(data, model.api_name, messages)
   if provider.prepare_parameters then
+    if opts.response_format then
+      model = vim.deepcopy(model)
+      model.response_format = opts.response_format
+    end
     provider.prepare_parameters(data, model)
   end
+  local read_stdout_line = create_line_reader(function(line)
+    local payload = line:match("^data:%s*(.+)$")
+    if payload and payload ~= "[DONE]" then
+      local ok, event = pcall(vim.json.decode, payload)
+      if ok then
+        if event.type == "response.output_text.delta" and event.delta then
+          streamed_content = streamed_content .. event.delta
+        elseif
+          event.type == "content_block_delta"
+          and event.delta
+          and event.delta.text
+        then
+          streamed_content = streamed_content .. event.delta.text
+        end
+      end
+    elseif line ~= "" then
+      response = response .. line
+    end
+  end)
   call_provider(data, {
     base_url = provider.base_url,
     chat_endpoint = provider.chat_endpoint,
     extra_args = provider.get_headers(model, provider.api_key(), messages),
     on_stdout = function(_, resp, _)
-      if data ~= nil then
-        response = response .. table.concat(resp, " ")
-      end
+      read_stdout_line(resp)
     end,
     on_exit = function()
+      if streamed_content ~= "" then
+        opts.on_complete(streamed_content)
+        return
+      end
       if response ~= "" then
         local ok, json = pcall(vim.json.decode, response, {
           luanil = { object = true },
         })
 
         if ok and json then
-          callback(provider.process_response(json))
+          opts.on_complete(provider.process_response(json))
         else
-          callback(nil)
+          opts.on_complete(nil)
         end
+      else
+        opts.on_complete(nil)
       end
     end,
     stream = false,

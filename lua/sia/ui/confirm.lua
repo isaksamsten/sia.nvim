@@ -917,6 +917,7 @@ end
 --- @param conversation sia.Conversation The conversation requesting confirmation
 --- @param prompt string The prompt to show to the user
 --- @param opts { level: sia.RiskLevel, on_accept: fun(), on_always: fun()?, on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
+--- @return {accept:fun(), update:fun(new_prompt:string)}
 function M.show(conversation, prompt, opts)
   next_confirm_id = next_confirm_id + 1
 
@@ -956,6 +957,19 @@ function M.show(conversation, prompt, opts)
 
   table.insert(pending_confirms, confirm)
   refresh_ui()
+
+  return {
+    accept = function()
+      local idx = find_confirm_index(confirm.id)
+      if idx then
+        trigger_confirm(idx, "accept")
+      end
+    end,
+    update = function(new_prompt)
+      confirm.prompt = new_prompt
+      refresh_ui()
+    end,
+  }
 end
 
 --- @param id integer
