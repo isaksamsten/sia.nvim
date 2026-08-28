@@ -331,8 +331,7 @@ M._raw_options = {
       args = { "-s" },
     },
     tool_verifier = {
-      enable = true,
-      model = "codex/gpt-5.6-luna",
+      enable = false,
     },
 
     actions = {
