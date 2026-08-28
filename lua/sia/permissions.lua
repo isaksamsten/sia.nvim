@@ -262,19 +262,17 @@ function M.resolve_permissions(name, args)
     if rule_matches_any(deny, args) then
       return {
         deny = true,
-        reason = {
-          "OPERATION BLOCKED BY LOCAL CONFIGURATION",
-          "",
-          string.format(
-            "The USER's local configuration denies executing the %s operation with the provided parameters.",
-            name
-          ),
-          "",
-          "IMPORTANT: Do not proceed with alternative approaches. Instead:",
-          "1. Acknowledge that this operation is denied by policy",
-          "2. Ask the USER if they want to adjust permissions or choose a different approach",
-          "3. Wait for their guidance before taking any further action",
-        },
+        reason = string.format(
+          [[
+OPERATION BLOCKED BY LOCAL CONFIGURATION
+The USER's local configuration denies executing the %s operation with the provided parameters.
+IMPORTANT: Do not proceed with alternative approaches. Instead:
+1. Acknowledge that this operation is denied by policy
+2. Ask the USER if they want to adjust permissions or choose a different approach
+3. Wait for their guidance before taking any further action
+            ]],
+          name
+        ),
       }
     end
   end

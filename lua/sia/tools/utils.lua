@@ -385,7 +385,9 @@ local function create_user_input_handler(
     local risk = require("sia.risk")
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
     local ignore_confirm = (permission and permission.auto_allow)
-      or (not (permission and permission.ask) and conversation.approved_tools[tool_name])
+      or (
+        not (permission and permission.ask) and conversation.approved_tools[tool_name]
+      )
 
     if risk.allows_auto_confirm(resolved_level) and ignore_confirm then
       input_args.on_accept()
@@ -402,8 +404,7 @@ local function create_user_input_handler(
     end
 
     local function run_verifier(on_done)
-      local verifier_config =
-        require("sia.config").options.settings.tool_verifier
+      local verifier_config = require("sia.config").options.settings.tool_verifier
       if
         not input_args.verifier
         or not verifier_config
@@ -456,8 +457,8 @@ local function create_user_input_handler(
         "only when the operation clearly matches one of the explicitly approved actions.",
       }, "\n"))
       local permissions = require("sia.permissions")
-      conversation.approved_verifier_actions =
-        conversation.approved_verifier_actions or {}
+      conversation.approved_verifier_actions = conversation.approved_verifier_actions
+        or {}
       local approved_actions = vim.list_extend(
         vim.deepcopy(conversation.approved_verifier_actions[tool_name] or {}),
         permissions.resolve_verifier_actions(tool_name)
@@ -492,11 +493,7 @@ local function create_user_input_handler(
 
     local function prompt_user(verdict)
       local verifier_suffix = verdict
-          and string.format(
-            "\nVerifier: %s risk - %s",
-            verdict.level,
-            verdict.reason
-          )
+          and string.format("\nVerifier: %s risk - %s", verdict.level, verdict.reason)
         or ""
       local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
@@ -576,8 +573,8 @@ local function create_user_input_handler(
           permissions.persist_verifier_level(tool_name, verdict.level)
           input_args.on_accept()
         elseif idx == 4 then
-          conversation.approved_verifier_actions[tool_name] =
-            conversation.approved_verifier_actions[tool_name] or {}
+          conversation.approved_verifier_actions[tool_name] = conversation.approved_verifier_actions[tool_name]
+            or {}
           local actions = conversation.approved_verifier_actions[tool_name]
           if not vim.tbl_contains(actions, verdict.action) then
             table.insert(actions, verdict.action)
@@ -602,8 +599,7 @@ local function create_user_input_handler(
             or permissions.resolve_verifier_level(tool_name)
           if
             result
-            and
-            (
+            and (
               result.matches_approved_action
               or (threshold and verifier_allows(result.level, threshold))
             )
@@ -843,11 +839,7 @@ M.new_tool = function(opts, execute)
         if permission and permission.deny then
           result_callback({
             content = permission.reason
-              or {
-                "OPERATION BLOCKED",
-                "",
-                string.format("The %s operation was denied.", opts.definition.name),
-              },
+              or string.format("The %s operation was denied.", opts.definition.name),
           })
           return
         end
