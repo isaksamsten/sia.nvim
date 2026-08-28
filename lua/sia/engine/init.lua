@@ -17,6 +17,7 @@ local M = {}
 --- @field summary sia.ToolSummary?
 --- @field status "pending"|"running"|"done"
 --- @field actions table<string, boolean>?
+--- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
 
 --- @class sia.engine.Entry
 --- @field tool sia.engine.ToolCall
@@ -139,6 +140,7 @@ function M.execute_tools(tool_calls, conversation, opts)
   --- @param result sia.ToolResult
   local function on_tool_finished(parsed, result)
     all_statuses[parsed.index].summary = result.summary
+    all_statuses[parsed.index].verification = result.verification
     completed_count = completed_count + 1
     update_status(parsed.index, "done")
     tool_results[parsed.index] = { tool = parsed, result = result }
@@ -166,6 +168,7 @@ function M.execute_tools(tool_calls, conversation, opts)
             summary = tool_results[i].result.summary,
             status = "done",
             actions = actions,
+            verification = tool_results[i].result.verification,
           } --[[@as sia.engine.Status]])
         end
       end

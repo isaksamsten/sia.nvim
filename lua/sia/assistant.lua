@@ -120,6 +120,7 @@ local function apply_tool_results(conversation, turn_id, results)
     conversation:add_tool_message(turn_id, entry.tool.tool_call, entry.result.content, {
       ephemeral = entry.result.ephemeral,
       summary = entry.result.summary,
+      verification = entry.result.verification,
       region = entry.result.region,
     })
   end

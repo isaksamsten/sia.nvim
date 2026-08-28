@@ -276,6 +276,7 @@ end
 --- @field region sia.TrackedRegion?
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean
+--- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
 local ToolEntry = setmetatable({}, { __index = BaseEntry })
 ToolEntry.__index = ToolEntry
 
@@ -284,6 +285,7 @@ ToolEntry.__index = ToolEntry
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean?
 --- @field region sia.TrackedRegion?
+--- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
 
 --- @param content sia.Content?
 --- @param summary sia.ToolSummary?
@@ -301,6 +303,7 @@ function ToolEntry.new(content, summary, args)
   self.ephemeral = args.ephemeral
   self.region = args.region
   self.summary = summary
+  self.verification = args.verification
   return self
 end
 
@@ -541,13 +544,14 @@ end
 --- @param turn_id string
 --- @param tool sia.ToolCall
 --- @param content sia.Content
---- @param opts {summary: sia.ToolSummary?, ephemeral: boolean, region: sia.Region?}?
+--- @param opts {summary: sia.ToolSummary?, ephemeral: boolean, region: sia.Region?, verification:table?}?
 function Conversation:add_tool_message(turn_id, tool, content, opts)
   opts = opts or {}
   local tool_msg = ToolEntry.new(content, opts.summary, {
     turn_id = turn_id,
     tool_call = tool,
     ephemeral = opts.ephemeral,
+    verification = opts.verification,
     region = opts.region and self:track_region(opts.region),
   })
   table.insert(self.entries, tool_msg)

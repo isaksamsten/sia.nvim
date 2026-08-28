@@ -376,7 +376,8 @@ local function create_user_input_handler(
   conversation,
   callback,
   permission,
-  persist_allow
+  persist_allow,
+  verification
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
   return function(prompt, input_args)
@@ -544,6 +545,7 @@ local function create_user_input_handler(
         verdict.matches_approved_action
         or (threshold and verifier_allows(verdict.level, threshold))
       then
+        verification.verdict = verdict
         input_args.on_accept()
         return
       end
@@ -606,6 +608,7 @@ local function create_user_input_handler(
               or (threshold and verifier_allows(result.level, threshold))
             )
           then
+            verification.verdict = result
             input_args.on_accept()
             return
           end
@@ -828,9 +831,17 @@ M.new_tool = function(opts, execute)
         return risk.allows_auto_confirm(resolved_level)
       end,
       execute = function(args, callback, exeution_context)
+        local verification = {}
+        local function result_callback(result)
+          local verdict = verification.verdict
+          if verdict and result then
+            result.verification = vim.deepcopy(verdict)
+          end
+          callback(result)
+        end
         local permission = resolve_permission(args, exeution_context.conversation)
         if permission and permission.deny then
-          callback({
+          result_callback({
             content = permission.reason
               or {
                 "OPERATION BLOCKED",
@@ -845,18 +856,19 @@ M.new_tool = function(opts, execute)
           opts.definition.name,
           args,
           exeution_context.conversation,
-          callback,
+          result_callback,
           permission,
-          opts.persist_allow
+          opts.persist_allow,
+          verification
         )
         local user_choice = create_user_choice_handler(
           opts.definition.name,
           args,
           exeution_context.conversation,
-          callback
+          result_callback
         )
 
-        execute(args, exeution_context.conversation, callback, {
+        execute(args, exeution_context.conversation, result_callback, {
           cancellable = exeution_context.cancellable,
           user_input = user_input,
           user_choice = user_choice,

@@ -62,6 +62,23 @@ local function format_tool_summary_lines(status, summary)
   return lines
 end
 
+--- @param lines string[]
+--- @param verification table?
+local function append_verification(lines, verification)
+  if not verification then
+    return
+  end
+  table.insert(
+    lines,
+    string.format(
+      "%sAutomatically verified (%s risk): %s",
+      TOOL_META_PREFIX,
+      verification.level,
+      verification.reason
+    )
+  )
+end
+
 --- @param line string
 --- @return "reasoning"|"tool"|nil
 local function meta_line_kind(line)
@@ -179,6 +196,9 @@ local function build_tool_block(tool_renders, tool_order)
     if render and render.summary then
       local block_lines = format_tool_summary_lines(render.status, render.summary)
       if block_lines then
+        if render.status == "done" then
+          append_verification(block_lines, render.verification)
+        end
         local start = #lines
         vim.list_extend(lines, block_lines)
         table.insert(highlights, {
@@ -442,6 +462,9 @@ function Canvas:render_messages(messages, model)
 
       local tool_lines = message.summary and format_tool_summary_lines("done", message.summary)
         or nil
+      if tool_lines then
+        append_verification(tool_lines, message.verification)
+      end
       local next_message = next_renderable_message(messages, index)
       if tool_lines then
         local start_line

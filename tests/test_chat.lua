@@ -597,6 +597,36 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
     },
   }, tool_result_ranges(strategy.buf))
 
+  strategy:on_tool_results({
+    {
+      key = "tool-1",
+      index = 1,
+      name = "bash",
+      summary = {
+        header = "Ran bash: make test",
+        details = "Tests passed",
+      },
+      status = "done",
+      actions = {},
+      verification = {
+        level = "low",
+        action = "run tests",
+        matches_approved_action = false,
+        reason = "Only runs the test suite",
+      },
+    },
+  })
+
+  eq(
+    true,
+    vim
+      .iter(vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+      :any(function(line)
+        return line
+          == ">! Automatically verified (low risk): Only runs the test suite"
+      end)
+  )
+
   strategy:on_tool_status({
     {
       key = "tool-1",
