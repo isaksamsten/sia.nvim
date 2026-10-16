@@ -1,5 +1,5 @@
 *sia.txt*
-                             For Neovim >= 0.11    Last change: 2026 August 28
+                            For Neovim >= 0.11    Last change: 2026 October 16
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -84,6 +84,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Extra Tools                                        |sia-tools-extra-tools|
   - Tool Parameters for Permissions|sia-tools-tool-parameters-for-permissions|
   - Adding Tools to Actions                |sia-tools-adding-tools-to-actions|
+  - Hashline edits                                  |sia-tools-hashline-edits|
 16. Reference                                                  |sia-reference|
   - Highlight Groups                          |sia-reference-highlight-groups|
 17. Orchestrator Pattern                            |sia-orchestrator-pattern|
@@ -277,10 +278,10 @@ Open any file and try these:
 >vim
     " Open a chat conversation
     :Sia explain this codebase
-    
+
     " Generate code at your cursor
     :Sia! write a fibonacci function
-    
+
     " Refactor selected code (visual select first, then run)
     :'<,'>Sia! simplify this function
 <
@@ -303,7 +304,7 @@ suggested changes in an inline diff. You navigate changes with `]c`/`[c` and
 accept or reject them individually. Use this for refactoring and targeted
 edits.
 
-See |sia-modes| for a detailed guide on each mode.
+See Modes for a detailed guide on each mode.
 
 
 ==============================================================================
@@ -330,7 +331,7 @@ Chat mode is suited for:
 
 The chat window persists, so you can continue the conversation by typing
 follow-up queries. When the assistant makes file edits, you can review them
-with the |sia-change-review-workflow|.
+with the change review workflow |sia-reviewing-changes|.
 
 
 QUEUEING INPUT WHILE BUSY ~
@@ -496,7 +497,7 @@ CHOOSING THE RIGHT MODE        *sia-interaction-modes-choosing-the-right-mode*
   Modify existing code with suggestions     Diff     :'<,'>Sia! [query]
   -------------------------------------------------------------------------
 You can customize the default behavior for each mode using |sia-actions| and
-|sia-project-configuration|.
+project configuration.
 
 
 ==============================================================================
@@ -604,7 +605,7 @@ TOOL APPROVAL                                     *sia-commands-tool-approval*
   -----------------------------------------------------------------------
 Add `!` (e.g., `:SiaConfirm! accept`) to process only the first pending item.
 
-See |sia-confirmation| for the full approval system.
+See Confirmation for the full approval system.
 
 
 CONVERSATION MANAGEMENT                 *sia-commands-conversation-management*
@@ -675,7 +676,7 @@ MODEL MANAGEMENT                               *sia-commands-model-management*
   :SiaModel refresh           Refresh model lists from all providers
   --------------------------------------------------------------------------
 `:SiaModel refresh` queries each provider’s API to discover available models.
-Results are cached across sessions. See |sia-models-and-providers| for details.
+Results are cached across sessions. See Models and Providers for details.
 
 
 AUTHENTICATION                                   *sia-commands-authentication*
@@ -774,24 +775,24 @@ SUGGESTED GLOBAL KEYBINDINGS    *sia-keybindings-suggested-global-keybindings*
     keys = {
       -- Append selection or operator-pending text to the visible chat
       { "Za", mode = { "n", "x" }, "<Plug>(sia-add-context)" },
-    
+
       -- Execute the buffer's default prompt (vim.b.sia) with the selection
       { "ZZ", mode = { "n", "x" }, "<Plug>(sia-execute)" },
-    
+
       -- Toggle the last chat window
       { "<Leader>at", function() require("sia").chat.toggle() end, desc = "Toggle Sia chat" },
-    
+
       -- Open compose window for a new conversation
       { "<Leader>ap", function() require("sia").chat.compose() end, desc = "Compose new chat" },
-    
+
       -- Accept or reject all changes in the buffer
       { "<Leader>aa", function() require("sia").edit.accept_all() end, desc = "Accept all changes" },
       { "<Leader>ar", function() require("sia").edit.reject_all() end, desc = "Reject all changes" },
-    
+
       -- Show changes in diff view and quickfix
       { "<Leader>ad", function() require("sia").edit.show() end, desc = "Show diff" },
       { "<Leader>aq", function() require("sia").edit.open_qf() end, desc = "Show changes in quickfix" },
-    
+
       -- Navigate between changes (falls back to native [c/]c in diff mode)
       {
         "[c", function()
@@ -807,7 +808,7 @@ SUGGESTED GLOBAL KEYBINDINGS    *sia-keybindings-suggested-global-keybindings*
         end,
         desc = "Next change",
       },
-    
+
       -- Accept or reject the change under the cursor
       { "ga", function() require("sia").edit.accept() end, desc = "Accept change" },
       { "gx", function() require("sia").edit.reject() end, desc = "Reject change" },
@@ -839,16 +840,16 @@ Inside a chat window (`ft=sia`), you can bind these navigation mappings:
     keys = {
       -- Open a reply buffer to continue the conversation
       { "<CR>", require("sia").chat.reply, ft = "sia" },
-    
+
       -- Browse conversation messages
       { "p", require("sia").ui.messages, ft = "sia" },
-    
+
       -- Toggle todo panel
       { "t", require("sia").ui.todos, ft = "sia" },
-    
+
       -- Toggle agent/process status panel
       { "a", require("sia").ui.status, ft = "sia" },
-    
+
       -- Show referenced files in quickfix
       { "c", require("sia").ui.contexts, ft = "sia" },
     }
@@ -857,7 +858,7 @@ Inside a chat window (`ft=sia`), you can bind these navigation mappings:
 
 TOOL APPROVAL KEYBINDINGS          *sia-keybindings-tool-approval-keybindings*
 
-If you use |sia-async-confirmation|, these bindings let you handle pending tool
+If you use async confirmation, these bindings let you handle pending tool
 approvals:
 
 >lua
@@ -876,7 +877,7 @@ approvals:
 
 Configure Sia by calling `require("sia").setup()` in your `init.lua`. This page
 covers global settings that apply to all conversations. For per-project
-overrides, see |sia-project-configuration|.
+overrides, see Project Configuration.
 
 
 MINIMAL SETUP                                     *sia-settings-minimal-setup*
@@ -899,10 +900,10 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
         model = "openai/gpt-5.2",                              -- Main conversational model
         fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
         plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
-    
+
         -- Icon set: "emoji" or a custom table
         icons = "emoji",
-    
+
         -- UI settings
         ui = {
           diff = {
@@ -919,31 +920,32 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
             },
           },
         },
-    
+
+
         -- File operations
         file_ops = {
           trash = true,                     -- Move deleted files to trash instead of removing
           create_dirs_on_rename = true,     -- Auto-create directories when renaming files
           restrict_to_project_root = true,  -- Restrict file operations to the project root
         },
-    
+
         -- Shell configuration for the bash tool
         shell = {
           command = "/bin/bash",
           args = { "-s" },
           -- args can also be a function returning string[]
         },
-    
+
         -- LLM verification for tools that provide a safety prompt
         tool_verifier = {
           enable = false,
           -- model = "openai/gpt-4.1", -- Defaults to fast_model
         },
-    
+
         -- Globally enabled agents and skills
         agents = { "code/review", "code/explore" },
         skills = { "update-docs" },
-    
+
         -- Context retention
         context = {
           tools = {
@@ -966,7 +968,7 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
             },
           },
         },
-    
+
         -- Chat window defaults
         chat = {
           cmd = "botright vnew",
@@ -978,13 +980,13 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
           },
         },
       },
-    
+
       -- Custom actions (see Actions documentation)
       actions = {},
-    
+
       -- Custom provider overrides (see Models documentation)
       providers = {},
-    
+
       -- Model option overrides by provider (see Models documentation)
       models = {},
     })
@@ -996,8 +998,9 @@ global behavior. A project can still override the enabled list in
 `.sia/config.json`.
 
 `tool_verifier` applies globally to tools that provide a verifier prompt. It
-uses `fast_model` unless `model` is set. See |sia-tool-confirmation| for risk
-thresholds, semantic action approvals, and persistence.
+uses `fast_model` unless `model` is set. See Tool Confirmation
+|sia-tool-confirmation-llm-tool-verification| for risk thresholds, semantic
+action approvals, and persistence.
 
 
 CONTEXT MANAGEMENT                           *sia-settings-context-management*
@@ -1129,10 +1132,10 @@ Use the `:SiaModel` command to browse available models:
 >vim
     " List all models
     :SiaModel list
-    
+
     " List models from a specific provider
     :SiaModel list openai
-    
+
     " Show details for a model (context window, support, pricing)
     :SiaModel show openai/gpt-5.2
 <
@@ -1212,7 +1215,7 @@ multipliers automatically.
 MODEL ALIASES                         *sia-models-and-providers-model-aliases*
 
 You can create aliases for models with custom parameters. Define them in
-|sia-project-configuration|:
+project configuration:
 
 >json
     {
@@ -1674,9 +1677,9 @@ AGENTS AND SKILLS ~
 PERMISSIONS AND RISK ~
 
 - **permission** — fine-grained tool access control. See
-    |sia-permission-rules|.
+    Permission Rules.
 - **risk** — visual risk level indicators. See
-    |sia-permission-rules|.
+    Permission Rules |sia-permission-rules-risk-levels|.
 
 
 AUTO-PERSISTED RULES          *sia-project-configuration-auto-persisted-rules*
@@ -1915,7 +1918,7 @@ Example using nvim-notify:
 
 The permission system gives you fine-grained control over which tool operations
 are allowed, denied, or require confirmation. Configure permissions in your
-|sia-project-config| under the `permission` key.
+project config under the `permission` key.
 
 
 RULE PRECEDENCE                         *sia-permission-rules-rule-precedence*
@@ -2164,7 +2167,7 @@ Define custom actions in `setup()`:
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     require("sia").setup({
       actions = {
         yoda = {
@@ -2283,7 +2286,7 @@ You can also use these as functions from
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     system = {
       messages.system.adaptive,
     },
@@ -2308,7 +2311,7 @@ optional region (for tracking file changes):
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     user = {
       messages.user.current_context({ show_line_numbers = true }),
       messages.user.current_buffer({ show_line_numbers = true }),
@@ -2334,7 +2337,7 @@ Options for `current_context()` and `current_buffer()`:
 
 >lua
     local user = require("sia.config.messages").user
-    
+
     user.current_context({ show_line_numbers = true })
     user.current_buffer({ show_line_numbers = true, include_cursor = true })
 <
@@ -2420,8 +2423,8 @@ The `permissions` table controls which tools are available inside the mode:
 - **allow** — table mapping tool names to `true` (unrestricted) or a rule
     with `arguments` patterns that restrict when the tool can be used.
 
-Tools not mentioned in either list fall through to the normal
-|sia-permission-system|.
+Tools not mentioned in either list fall through to the normal permission
+system.
 
 >lua
     permissions = {
@@ -2444,7 +2447,7 @@ EXAMPLE: CUSTOM REVIEW MODE ~
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     require("sia").setup({
       actions = {
         chat = {
@@ -2488,8 +2491,8 @@ existing chat.
 BUILT-IN MODES ~
 
 The default chat action includes the **plan** mode, which restricts the
-assistant to read-only tools and plan file writes. See |sia-interaction-modes|
-for usage details.
+assistant to read-only tools and plan file writes. See Interaction Modes for
+usage details.
 
 
 EXAMPLES                                                *sia-actions-examples*
@@ -2501,7 +2504,7 @@ Generate a code summary formatted as a comment block:
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     actions = {
       summarize = {
         mode = "insert",
@@ -2536,7 +2539,7 @@ DIFF MODE FOR REFACTORING ~
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     actions = {
       refactor = {
         mode = "diff",
@@ -2579,7 +2582,7 @@ CREATING AGENTS                                   *sia-agents-creating-agents*
 1. Create an agent definition file in `~/.config/sia/agents/` for global reuse,
 or in `.sia/agents/` if it only belongs to one project.
 2. Expose the agent either from a chat action with `agents = { ["name"] = true }`,
-or by enabling it in `settings.agents` or |sia-project-config|.
+or by enabling it in `settings.agents` or project config.
 
 
 AGENT FILE FORMAT ~
@@ -2596,7 +2599,7 @@ Agent files are markdown with YAML frontmatter:
     model: openai/gpt-4.1
     interactive: false
     ---
-    
+
     You are a code search specialist. When given a search task, use the available
     tools to find relevant code patterns, function definitions, and implementations.
     Report your findings clearly with file paths and line numbers.
@@ -2819,11 +2822,11 @@ SKILL FILE FORMAT ~
       - grep
       - view
     ---
-    
+
     # Monitor Logs
-    
+
     When asked to monitor or analyze logs, follow these steps:
-    
+
     1. Use `bash` to tail the log file or check recent entries.
     2. Use `grep` to search for error patterns.
     3. ...
@@ -2851,7 +2854,7 @@ assistant can inspect those files directly.
 
 ENABLING SKILLS                                   *sia-skills-enabling-skills*
 
-List skill names in your |sia-project-config|:
+List skill names in your project config:
 
 >json
     {
@@ -2931,26 +2934,27 @@ are included in the default chat action.
 
 FILE OPERATIONS ~
 
-  ------------------------------------------------------------------------------
-  Tool         Default   Description
-  ------------ --------- -------------------------------------------------------
-  view         ★         View file contents with optional line offset and limit
-                         (up to 2000 lines)
+  -------------------------------------------------------------------------------
+  Tool          Default   Description
+  ------------- --------- -------------------------------------------------------
+  view          ★         View file contents with optional line offset and limit
+                          (up to 2000 lines)
 
-  skills       ★         Read a named skill definition with metadata and
-                         markdown body
+  skills        ★         Read a named skill definition with metadata and
+                          markdown body
 
-  write        ★         Write complete file contents (create new or overwrite)
+  write         ★         Write complete file contents (create new or overwrite)
 
-  edit         ★         Hashline edits using snapshot tags and line ranges
+  str_replace             Legacy search-and-replace edits
 
-  str_replace            Legacy search-and-replace edits
+  edit          ★         Hashline edits using snapshot tags and line ranges
 
-  insert                 Insert text at a specific line (1-based, before the
-                         line)
+  insert                  Insert text at a specific line (1-based, before the
+                          line)
 
-  apply_diff             Apply patches in Codex format (custom tool lists)
-  ------------------------------------------------------------------------------
+  apply_diff              Apply patches in Codex format (available for custom
+                          tool lists)
+  -------------------------------------------------------------------------------
 
 CODE SEARCH ~
 
@@ -3032,9 +3036,9 @@ CODE NAVIGATION ~
 
 TOOL PARAMETERS FOR PERMISSIONS    *sia-tools-tool-parameters-for-permissions*
 
-When writing |sia-permission-rules|, you match against tool argument names. The
-table below lists the key arguments for each tool that are useful for
-permission and risk patterns.
+When writing permission rules, you match against tool argument names. The table
+below lists the key arguments for each tool that are useful for permission and
+risk patterns.
 
 
 CORE TOOLS ~
@@ -3048,10 +3052,11 @@ CORE TOOLS ~
 
   write           path                    File path to write
 
-  edit            target_file, tag, edits Hashline operations on a snapshot
+  edit            target_file, tag, edits File to modify, snapshot tag, and
+                                          hashline operations
 
-  str_replace     target_file,            Legacy string replacements
-                  old_string, new_string
+  str_replace     target_file,            Legacy string replacements; optional
+                  old_string, new_string  replace_all
 
   insert          target_file, text       File to modify and the text to insert
 
@@ -3101,13 +3106,6 @@ Auto-approve file reads within `src/`:
       }
     }
 <
-
-The view tool always returns a [PATH#TAG] snapshot header and LINE:TEXT rows.
-Use edit with target_file, tag, and edits for hashline patches. The hashline
-configuration option has been removed. For legacy string replacements, add
-require("sia.tools").str_replace to a custom tool list and use str_replace
-permission rules. Default chat and prose tools omit str_replace, insert, and
-apply_diff.
 
 Only allow edits to Lua and Python files:
 
@@ -3176,6 +3174,23 @@ Include any combination of core and extra tools in custom actions:
 <
 
 
+HASHLINE EDITS                                      *sia-tools-hashline-edits*
+
+The `view` tool always returns a `[PATH#TAG]` snapshot header and numbered
+`LINE:TEXT` rows. The `edit` tool accepts `target_file`, `tag`, and `edits`
+using the core hashline range and gap syntax from oh-my-pi
+<https://github.com/can1357/oh-my-pi>.
+
+Default chat and prose tools use `edit` for existing files and `write` for new
+files. They omit `insert`, `apply_diff`, and `str_replace`. Custom actions can
+include `require("sia.tools").str_replace` for the legacy replacement tool,
+which accepts `target_file`, `old_string`, `new_string`, and `replace_all`.
+
+When migrating replacement-based permissions, use the `str_replace` tool name
+to retain those rules, or match `edits` instead of `old_string`/`new_string`
+for hashline `edit`. The hashline configuration option has been removed.
+
+
 ==============================================================================
 16. Reference                                                  *sia-reference*
 
@@ -3213,7 +3228,7 @@ CHAT UI ~
   --------------- -------------- ---------------------------
   SiaAssistant    DiffAdd        Assistant message markers
   SiaUser         DiffChange     User message markers
-  SiaToolResult   DiffChange     Tool result markers
+  SiaToolResult   Bold           Tool result summaries
   SiaProgress     NonText        Progress indicators
   SiaModel        —              Model name display
   SiaUsage        —              Token usage display
@@ -3360,26 +3375,26 @@ This agent makes code changes inside a dedicated worktree.
       - bash
       - diagnostics
     ---
-    
+
     You are an implementation agent working inside an isolated git worktree.
     Complete the requested change cleanly, verify it, and commit only task-related
     work.
-    
+
     ## Process
-    
+
     1. Read the task carefully.
     2. Explore the workspace before editing.
     3. Implement the change with focused edits.
     4. Run relevant tests or checks.
     5. Commit the result when the task is complete.
-    
+
     ```console
     $ git add -A
     $ git commit -m "<type>(<scope>): <concise description>"
     ```
-    
+
     ## Guidelines
-    
+
     - Keep the change focused on the assigned task.
     - Do not refactor unrelated code unless the task requires it.
     - Explain blockers clearly if you cannot finish.
@@ -3402,24 +3417,24 @@ This agent maps the codebase and reports back without editing files.
       - grep!
       - view!
     ---
-    
+
     You are an exploration-only agent. Find the relevant code paths quickly and
     report only the context needed for implementation.
-    
+
     ## Constraints
-    
+
     - Do not edit files.
     - Do not dump large code excerpts.
     - Prefer symbols, paths, and concise call flow summaries.
-    
+
     ## Process
-    
+
     1. Restate the exploration goal in one sentence.
     2. Use `glob`, `grep`, and `view` to trace the relevant flow.
     3. Stop when you can explain where the change should land.
-    
+
     ## Output Format
-    
+
     - Goal
     - Key entry points
     - Call or data flow
@@ -3442,18 +3457,18 @@ This agent reviews worktree changes before the orchestrator reports back.
       - grep!
       - view!
     ---
-    
+
     You are a code reviewer. Read the provided changes and report concrete issues.
-    
+
     ## Review Areas
-    
+
     - Correctness
     - Security
     - Performance
     - Style
-    
+
     ## Output Format
-    
+
     1. Brief assessment
     2. Issues grouped by severity, with file paths and suggested fixes
     3. Remaining risks or recommendations
@@ -3468,7 +3483,7 @@ behave as an orchestrator.
 
 >lua
     local messages = require("sia.config.messages")
-    
+
     require("sia").setup({
       actions = {
         orchestrate = {
@@ -3483,11 +3498,11 @@ behave as an orchestrator.
             messages.system.adaptive,
             [[
     You are running an orchestrator workflow. Stay in the coordinator role.
-    
+
     Your job is to understand the task, break it into focused units of work,
     create isolated git worktrees, delegate implementation to agents, inspect the
     results, and report clear outcomes back to the user.
-    
+
     Default procedure:
     - Prefer implementation through agents in isolated git worktrees instead of editing directly in the main conversation.
     - Use one focused branch or worktree per task so diffs stay reviewable.
