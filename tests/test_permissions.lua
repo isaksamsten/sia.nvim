@@ -117,7 +117,7 @@ T["permissions (nil treated as empty)"]["deny triggers when arg is missing (nil)
     end, { conversation = { approved_tools = {} } })
 
     eq(false, executed)
-    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
+    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content:match("^[^\n]+"))
   end)
 end
 
@@ -388,7 +388,7 @@ T["permissions (nil treated as empty)"]["deny blocks on positive string pattern"
     end, { conversation = { approved_tools = {} } })
 
     eq(false, executed)
-    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
+    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content:match("^[^\n]+"))
   end)
 end
 
@@ -411,7 +411,7 @@ T["permissions (nil treated as empty)"]["deny blocks on simple string pattern"] 
     end, { conversation = { approved_tools = {} } })
 
     eq(false, executed)
-    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content[1])
+    eq("OPERATION BLOCKED BY LOCAL CONFIGURATION", result.content:match("^[^\n]+"))
   end)
 end
 
