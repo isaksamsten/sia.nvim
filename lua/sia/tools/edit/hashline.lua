@@ -32,7 +32,7 @@ PUT 1.=2:
 +def greet(name):
 +    print(name)
 ```
-To insert a comment ABOVE line 7, preserving the existing line, pass `edits`:
+
 ```
 PUT <7:
 +-- Register the hashline edit tool.

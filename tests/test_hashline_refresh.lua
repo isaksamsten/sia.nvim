@@ -26,7 +26,55 @@ T["refresh returns fresh tagged context usable without another view"] = function
   assert(result, err)
   eq(result[100], "again")
   eq(hashline.apply(conversation, "/test", after, old_tag, "CUT 100.=100"), nil)
-  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 104.=104"), nil)
+  local distant, distant_err =
+    hashline.apply(conversation, "/test", after, tag(output), "PUT 150.=150:\n+next change")
+  assert(distant, distant_err)
+  eq(distant[150], "next change")
+end
+T["refresh preserves only previously seen unshifted lines"] = function()
+  local conversation, before = {}, file_lines(100)
+  hashline.view(conversation, "/test", before, 1, 30)
+  hashline.view(conversation, "/test", before, 60, 80)
+  local after = vim.deepcopy(before)
+  table.insert(after, 40, "inserted")
+  local output = hashline.refresh(conversation, "/test", before, after)
+  local result, err =
+    hashline.apply(conversation, "/test", after, tag(output), "PUT 20.=20:\n+changed")
+  assert(result, err)
+  eq(result[20], "changed")
+  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 61.=61"), nil)
+  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 90.=90"), nil)
+end
+T["refresh does not carry read status from a different source snapshot"] = function()
+  local conversation, before = {}, file_lines(100)
+  hashline.view(conversation, "/test", before, 1, 100)
+  before[1] = "external change"
+  local after = vim.deepcopy(before)
+  after[50] = "edited"
+  local output = hashline.refresh(conversation, "/test", before, after)
+  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 90.=90"), nil)
+end
+T["refresh carries reads again where insertions and deletions restore numbering"] = function()
+  local conversation, before = {}, file_lines(100)
+  hashline.view(conversation, "/test", before, 1, 100)
+  local after = vim.deepcopy(before)
+  table.remove(after, 60)
+  table.insert(after, 20, "inserted")
+  local output = hashline.refresh(conversation, "/test", before, after)
+  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 40.=40"), nil)
+  local result, err =
+    hashline.apply(conversation, "/test", after, tag(output), "PUT 90.=90:\n+changed")
+  assert(result, err)
+  eq(result[90], "changed")
+end
+T["refresh does not preserve truncated lines outside the preview"] = function()
+  local conversation, before = {}, file_lines(100)
+  before[90] = string.rep("x", 2500)
+  hashline.view(conversation, "/test", before, 1, 100, 2000)
+  local after = vim.deepcopy(before)
+  after[20] = "changed"
+  local output = hashline.refresh(conversation, "/test", before, after)
+  eq(hashline.apply(conversation, "/test", after, tag(output), "CUT 90.=90"), nil)
 end
 T["insertion context has new line numbers"] = function()
   local conversation = {}

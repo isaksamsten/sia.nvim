@@ -47,12 +47,34 @@ function M.view(conversation, path, lines, first, last, max_length)
 end
 
 --- Refresh the snapshot with bounded, post-edit context around changed lines.
---- Only rows actually returned here become editable in the new snapshot.
+--- Preserve displayed lines whose content and line number are unchanged.
 function M.refresh(conversation, path, before, lines)
+  path = vim.fn.fnamemodify(path, ":p")
+  local prior = stores[conversation] and stores[conversation][path]
+  local seen = prior and prior.digest == digest(before) and prior.seen or {}
   local changes =
     vim.diff(table.concat(before, "\n") .. "\n", table.concat(lines, "\n") .. "\n", {
       result_type = "indices",
     })
+  local carried = {}
+  local old_line, new_line = 1, 1
+  local function carry_until(last)
+    if old_line == new_line then
+      for i = old_line, last do
+        if seen[i] then
+          carried[i] = true
+        end
+      end
+    end
+  end
+  for _, change in ipairs(changes) do
+    -- Zero-length diff ranges name the line before the insertion/deletion.
+    local old_start = change[1] + (change[2] == 0 and 1 or 0)
+    local new_start = change[3] + (change[4] == 0 and 1 or 0)
+    carry_until(old_start - 1)
+    old_line, new_line = old_start + change[2], new_start + change[4]
+  end
+  carry_until(#before)
   local windows = {}
   for _, change in ipairs(changes) do
     local anchor = math.max(1, math.min(#lines, change[3]))
@@ -99,6 +121,12 @@ function M.refresh(conversation, path, before, lines)
   end
   if previous_last < #lines then
     output[#output + 1] = "…"
+  end
+  local snapshot = stores[conversation] and stores[conversation][path]
+  if snapshot and snapshot.digest == digest(lines) then
+    for i in pairs(carried) do
+      snapshot.seen[i] = true
+    end
   end
   return output
 end
