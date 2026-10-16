@@ -872,4 +872,17 @@ M.new_tool = function(opts, execute)
   }
 end
 
+--- Resolve a tool's schema, prompt and implementation from current settings.
+--- Conversations retain the resolved definition and implementation at creation.
+--- @param resolve fun(settings: sia.config.Settings):sia.Tool
+--- @return sia.Tool
+function M.configured_tool(resolve)
+  local tool = resolve(require("sia.config").options.settings)
+  return setmetatable({}, {
+    __index = function(_, key)
+      return tool[key]
+    end,
+  })
+end
+
 return M

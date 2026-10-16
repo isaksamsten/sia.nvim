@@ -445,4 +445,102 @@ T["providers"]["xai provider uses OpenAI compatible chat completions"] = functio
 end
 
 
+T["hashline_config"] = MiniTest.new_set()
+
+T["hashline_config"]["accepts project booleans and rejects other values"] = function()
+  for _, enabled in ipairs({ true, false }) do
+    local success, config = load_config({ hashline = enabled })
+    eq(success, true)
+    eq(config.hashline, enabled)
+  end
+  local success, err = load_config({ hashline = "true" })
+  eq(success, false)
+  eq(err:find("'hashline' must be a boolean", 1, true) ~= nil, true)
+end
+
+T["hashline_config"]["project setting overrides the global setting"] = function()
+  local config = require("sia.config")
+  local original = config._raw_options.settings.hashline
+  local ok, err = pcall(function()
+    for _, enabled in ipairs({ true, false }) do
+      config._raw_options.settings.hashline = not enabled
+      with_mock_local_config({ hashline = enabled }, function()
+        eq(config.options.settings.hashline, enabled)
+      end)
+    end
+    config._raw_options.settings.hashline = true
+    with_mock_local_config({}, function()
+      eq(config.options.settings.hashline, true)
+    end)
+  end)
+  config._raw_options.settings.hashline = original
+  assert(ok, err)
+end
+
+T["hashline_config"]["edit and view select matching schemas and prompts"] = function()
+  local config = require("sia.config")
+  local tools = require("sia.tools")
+  local original = config._raw_options.settings.hashline
+  local ok, err = pcall(function()
+    with_mock_local_config({}, function()
+      eq(tools.hashline_edit, nil)
+      for _, enabled in ipairs({ true, false, true }) do
+        config._raw_options.settings.hashline = enabled
+        local definition = tools.edit.definition
+        eq(definition.name, "edit")
+        eq(definition.parameters.tag ~= nil, enabled)
+        eq(definition.parameters.edits ~= nil, enabled)
+        eq(definition.parameters.old_string ~= nil, not enabled)
+        eq(definition.parameters.new_string ~= nil, not enabled)
+        eq(vim.tbl_contains(definition.required, "tag"), enabled)
+        eq(
+          tools.edit.implementation.instructions:find("PUT N.=M:", 1, true) ~= nil,
+          enabled
+        )
+        eq(
+          tools.view.implementation.instructions:find("LINE:TEXT", 1, true) ~= nil,
+          enabled
+        )
+      end
+    end)
+  end)
+  config._raw_options.settings.hashline = original
+  assert(ok, err)
+end
+
+T["hashline_config"]["default editing tools switch together for chat and prose"] = function()
+  local config = require("sia.config")
+  local original = config._raw_options.settings.hashline
+  local ok, err = pcall(function()
+    with_mock_local_config({}, function()
+      for _, enabled in ipairs({ true, false }) do
+        config._raw_options.settings.hashline = enabled
+        for _, model in ipairs({
+          { api_name = "gpt-6" },
+          { api_name = "claude-sonnet" },
+        }) do
+          for _, action in ipairs({
+            config._raw_options.settings.actions.chat,
+            config._raw_options.actions.prose,
+          }) do
+            local tools = action.tools(model)
+            local names = {}
+            for _, tool in ipairs(tools) do
+              names[tool.definition.name] = true
+            end
+            eq(names.hashline_edit, nil)
+            eq(names.edit, true)
+            eq(names.insert == true, not enabled)
+            eq(names.apply_diff == true, not enabled and model.api_name == "gpt-6")
+            eq(names.view, true)
+            eq(names.write, true)
+          end
+        end
+      end
+    end)
+  end)
+  config._raw_options.settings.hashline = original
+  assert(ok, err)
+end
+
 return T

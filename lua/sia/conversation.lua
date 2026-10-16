@@ -773,6 +773,10 @@ function Conversation:rollback_to(turn_id)
 end
 
 function Conversation:destroy()
+  local hashline = package.loaded["sia.hashline"]
+  if hashline then
+    hashline.clear_clipboard(self.id)
+  end
   self:untrack_messages()
   self.process_runtime:destroy()
   self.agent_runtime:destroy()

@@ -104,6 +104,7 @@ local settings_proxy = setmetatable({}, {
 --- @field skills string[]?
 --- @field skills_extras string[]?
 --- @field agents string[]?
+--- @field hashline boolean?
 
 --- @class sia.config.Settings.Ui
 --- @field diff sia.config.Settings.Ui.Diff
@@ -228,6 +229,7 @@ local settings_proxy = setmetatable({}, {
 --- @field model string
 --- @field fast_model string
 --- @field plan_model string
+--- @field hashline boolean?
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field actions {diff: sia.config.DiffAction, chat: sia.config.ChatAction, insert: sia.config.InsertAction }
@@ -253,6 +255,17 @@ local settings_proxy = setmetatable({}, {
 
 --- @alias sia.config.ModelOptions table<string, table<string, any>>
 
+local function add_edit_tools(all, model)
+  local tools = require("sia.tools")
+  table.insert(all, tools.edit)
+  if not M.options.settings.hashline then
+    table.insert(all, tools.insert)
+    if model.api_name:match("gpt%-6") then
+      table.insert(all, tools.apply_diff)
+    end
+  end
+end
+
 --- @class sia.config.Options
 --- @field settings sia.config.Settings
 --- @field models table<string, sia.config.ModelOptions>?
@@ -266,6 +279,7 @@ M._raw_options = {
     fast_model = "openai/gpt-4.1",
     plan_model = "openai/gpt-5.2",
     icons = "emoji",
+    hashline = true,
     history = { enable = true },
     context = {
       tools = {
@@ -390,7 +404,6 @@ M._raw_options = {
             tools.grep,
             tools.skills,
             tools.write,
-            tools.insert,
             tools.view,
             tools.glob,
             tools.agent,
@@ -403,12 +416,9 @@ M._raw_options = {
             tools.memory,
             tools.view_image,
             tools.view_document,
-            tools.edit,
             tools.exit_mode,
           }
-          if model.api_name:match("gpt%-5") then
-            table.insert(all, tools.apply_diff)
-          end
+          add_edit_tools(all, model)
           return all, { grep = true, glob = true }
         end,
       },
@@ -431,7 +441,6 @@ M._raw_options = {
           tools.grep,
           tools.skills,
           tools.write,
-          tools.insert,
           tools.view,
           tools.glob,
           tools.diagnostics,
@@ -443,12 +452,9 @@ M._raw_options = {
           tools.memory,
           tools.view_image,
           tools.view_document,
-          tools.edit,
           tools.exit_mode,
         }
-        if model.api_name:match("gpt%-5") then
-          table.insert(all, tools.apply_diff)
-        end
+        add_edit_tools(all, model)
         return all
       end,
     },
