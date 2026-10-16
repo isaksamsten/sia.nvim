@@ -1,6 +1,5 @@
 local tool_utils = require("sia.tools.utils")
 local utils = require("sia.utils")
-local icons = require("sia.ui").icons
 
 local POSITION_ACTION_METHODS = {
   explain = "textDocument/hover",
@@ -444,7 +443,7 @@ local function run_explain(buf, params, args, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("%s Explained '%s'", icons.lsp, args.anchor),
+      summary = string.format("Explained '%s'", args.anchor),
     })
   end)
 end
@@ -468,8 +467,7 @@ local function run_locations(action, buf, params, args, callback)
     callback({
       content = table.concat(location_lines(locations), "\n"),
       summary = string.format(
-        "%s Found %d %s for '%s'",
-        icons.lsp,
+        "Found %d %s for '%s'",
         #locations,
         ACTION_LABELS[action],
         args.anchor
@@ -521,7 +519,7 @@ local function run_rename(buf, params, args, callback)
         #files > 0 and table.concat(vim.tbl_map(relative_path, files), ", ")
           or "unknown"
       ),
-      summary = string.format("%s Renamed '%s'", icons.lsp, args.anchor),
+      summary = string.format("Renamed '%s'", args.anchor),
     })
   end)
 end
@@ -530,7 +528,7 @@ local function run_diagnostics(buf, path, callback)
   local content, count = format_diagnostics(buf, path)
   callback({
     content = content,
-    summary = string.format("%s Found %d diagnostics", icons.diagnostics, count),
+    summary = string.format("Found %d diagnostics", count),
   })
 end
 
@@ -548,7 +546,7 @@ local function run_symbols(buf, path, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("%s Found %d symbols", icons.lsp, #lines),
+      summary = string.format("Found %d symbols", #lines),
     })
   end)
 end
@@ -573,7 +571,7 @@ local function run_workspace_symbols(buf, query, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("%s Found %d workspace symbols", icons.lsp, #lines),
+      summary = string.format("Found %d workspace symbols", #lines),
     })
   end)
 end
@@ -617,7 +615,7 @@ local function run_code_actions(buf, params, args, callback)
       end
       callback({
         content = table.concat(lines, "\n"),
-        summary = string.format("%s Found %d code actions", icons.lsp, #actions),
+        summary = string.format("Found %d code actions", #actions),
       })
       return
     end
@@ -657,7 +655,7 @@ local function run_code_actions(buf, params, args, callback)
               ))
             or ""
         ),
-        summary = string.format("%s Applied code action", icons.lsp),
+        summary = "Applied code action",
       })
     end, args.save ~= false)
   end)
@@ -689,7 +687,7 @@ local function run_format(buf, args, callback)
   end
   callback({
     content = "Formatted " .. relative_path(vim.api.nvim_buf_get_name(buf)),
-    summary = string.format("%s Formatted file", icons.lsp),
+    summary = "Formatted file",
   })
 end
 
@@ -734,7 +732,7 @@ local function execute(args, conversation, callback)
     local content, count = format_clients(buf)
     callback({
       content = content,
-      summary = string.format("%s Found %d LSP clients", icons.lsp, count),
+      summary = string.format("Found %d LSP clients", count),
     })
     return
   elseif action == "diagnostics" then

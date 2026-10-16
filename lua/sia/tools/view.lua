@@ -1,15 +1,13 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 --- Determine the kind of view and return display helpers
 --- @param path string
---- @return { icon: string, label: fun(path: string): string }
+--- @return { label: fun(path: string): string }
 local function view_display(path)
   if require("sia.utils").dirs.is_safe(path) then
     return {
-      icon = icons.view_bash,
       label = function()
         return "tool output"
       end,
@@ -17,7 +15,6 @@ local function view_display(path)
   end
 
   return {
-    icon = icons.view,
     label = function(p)
       return vim.fn.fnamemodify(p, ":.")
     end,
@@ -78,7 +75,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
   if not args.path then
     callback({
       content = "Error: No file path was provided",
-      summary = icons.error .. " Failed to view",
+      summary = "Failed to view",
       ephemeral = true,
     })
     return
@@ -90,7 +87,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
   if vim.fn.filereadable(resolved_path) == 0 then
     callback({
       content = "Error: File cannot be found",
-      summary = icons.error .. " Failed to view",
+      summary = "Failed to view",
       ephemeral = true,
     })
     return
@@ -120,7 +117,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
       if not buf then
         callback({
           content = "Error: Cannot load " .. args.path,
-          summary = icons.error .. " Failed to view",
+          summary = "Failed to view",
           ephemeral = true,
         })
         return
@@ -154,16 +151,14 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
       local summary
       if args.offset or args.limit then
         summary = string.format(
-          "%s Viewed lines %d-%d from %s",
-          display.icon,
+          "Viewed lines %d-%d from %s",
           start_line,
           end_line,
           name
         )
       else
         summary = string.format(
-          "%s Viewed %s (%d lines)",
-          display.icon,
+          "Viewed %s (%d lines)",
           name,
           end_line - start_line + 1
         )

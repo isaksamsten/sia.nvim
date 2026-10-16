@@ -1,14 +1,13 @@
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local failed_matches = {}
 local MAX_FAILED_MATCHES = 3
 
 local function failed_to_edit_file(filename)
-  return icons.error .. " Failed to edit " .. filename
+  return "Failed to edit " .. filename
 end
 
 local clear_outdated_tool_input =
@@ -52,12 +51,10 @@ end
 --- @return string
 local function create_display_description(target_file, pos, col_span, fuzzy)
   local fuzzy_suffix = fuzzy and " - please double-check the changes" or ""
-  local icon = icons.edit
 
   if col_span then
     return string.format(
-      "%s Edited line %d (columns %d-%d) in %s%s",
-      icon,
+      "Edited line %d (columns %d-%d) in %s%s",
       pos[1],
       col_span[1],
       col_span[2],
@@ -70,8 +67,7 @@ local function create_display_description(target_file, pos, col_span, fuzzy)
     or string.format("line %d", pos[1])
 
   return string.format(
-    "%s Edited %s in %s%s",
-    icon,
+    "Edited %s in %s%s",
     edit_span,
     target_file,
     fuzzy_suffix
@@ -203,6 +199,7 @@ Usage:
     },
     required = { "target_file", "old_string", "new_string" },
   },
+  preview = true,
   summary = function(args)
     if args.target_file then
       return string.format("Making changes to %s...", args.target_file)
@@ -218,7 +215,7 @@ Usage:
   if validation_message then
     callback({
       content = validation_message,
-      summary = icons.error .. " Failed to edit",
+      summary = "Failed to edit",
       ephemeral = true,
     })
     return
@@ -230,7 +227,7 @@ Usage:
   if not buf then
     callback({
       content = "Error: Cannot load " .. args.target_file,
-      summary = icons.error .. " Failed to edit",
+      summary = "Failed to edit",
       ephemeral = true,
     })
     return
@@ -314,8 +311,7 @@ Usage:
           )
 
           local display_description = string.format(
-            "%s Replaced all %d occurrence%s in %s",
-            icons.edit,
+            "Replaced all %d occurrence%s in %s",
             num_matches,
             num_matches > 1 and "s" or "",
             filename

@@ -24,7 +24,7 @@ precedence.
 | --------------- | ------------ | ------------------------- |
 | `SiaAssistant`  | `DiffAdd`    | Assistant message markers |
 | `SiaUser`       | `DiffChange` | User message markers      |
-| `SiaToolResult` | `DiffChange` | Tool result markers       |
+| `SiaToolResult` | Bold         | Tool result summaries     |
 | `SiaProgress`   | `NonText`    | Progress indicators       |
 | `SiaModel`      | —            | Model name display        |
 | `SiaUsage`      | —            | Token usage display       |

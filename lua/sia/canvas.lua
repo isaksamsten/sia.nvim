@@ -3,6 +3,7 @@ local M = {}
 local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
 local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
 local TEMPORARY_NS = vim.api.nvim_create_namespace("sia_chat_temporary")
+local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 local REASONING_META_PREFIX = ">| "
 local TOOL_META_PREFIX = ">! "
@@ -27,23 +28,25 @@ local function trim_trailing_empty(lines)
 end
 
 --- @param details string
+--- @param ft string?
 --- @return string[]?
-local function format_tool_detail_lines(details)
+local function format_tool_detail_lines(details, ft)
   local lines = trim_trailing_empty(vim.split(details, "\n", { plain = true }))
   if vim.tbl_isempty(lines) then
     return nil
   end
-
-  local formatted = {}
+  -- A longer fence keeps literal fences in command output inside the preview.
+  local length = 3
   for _, line in ipairs(lines) do
-    if line == "" then
-      table.insert(formatted, TOOL_META_PREFIX)
-    else
-      table.insert(formatted, TOOL_META_PREFIX .. line)
+    for ticks in line:gmatch("`+") do
+      length = math.max(length, #ticks + 1)
     end
   end
-
-  return formatted
+  local fence = string.rep("`", length)
+  local language = (ft or "text"):match("^[%w_+%-]+$") or "text"
+  table.insert(lines, 1, fence .. language)
+  table.insert(lines, fence)
+  return lines
 end
 
 --- @param status "pending"|"done"|"running"
@@ -52,9 +55,20 @@ end
 local function format_tool_summary_lines(status, summary)
   summary = normalize_tool_summary(summary)
   local lines = vim.split(summary.header, "\n", { plain = true })
-  if status == "done" and summary.details then
-    local detail_lines = format_tool_detail_lines(summary.details)
+  for index, line in ipairs(lines) do
+    lines[index] = "• " .. line
+  end
+  if status == "done" and summary.detail then
+    local detail_lines =
+      format_tool_detail_lines(summary.detail.text, summary.detail.ft)
     if detail_lines then
+      local count = #detail_lines - 2 -- Exclude Markdown fences.
+      lines[#lines] = string.format(
+        "%s · %d %s",
+        lines[#lines],
+        count,
+        count == 1 and "line" or "lines"
+      )
       vim.list_extend(lines, detail_lines)
     end
   end
@@ -175,18 +189,37 @@ end
 
 --- @param line integer
 --- @param end_line integer
-function Canvas:highlight_tool(line, end_line)
+--- @param summary sia.ToolSummary?
+function Canvas:highlight_tool(line, end_line, summary)
+  local header_lines = summary
+      and #vim.split(normalize_tool_summary(summary).header, "\n", { plain = true })
+    or end_line - line
+  -- Only the action header is decorated. Markdown injections highlight the body.
   vim.api.nvim_buf_set_extmark(self.buf, TOOL_RESULT_NS, line, 0, {
-    end_line = end_line,
+    end_line = line + header_lines,
+    end_right_gravity = false,
+    priority = 110,
     hl_mode = "combine",
     hl_eol = true,
     hl_group = "SiaToolResult",
   })
+  if type(summary) ~= "table" or not summary.detail then
+    return
+  end
+  local details = format_tool_detail_lines(summary.detail.text, summary.detail.ft)
+  local fence_line = line + header_lines
+  if details and fence_line + #details <= end_line then
+    vim.api.nvim_buf_set_extmark(self.buf, TOOL_PREVIEW_NS, fence_line, 0, {
+      end_row = fence_line + #details,
+      end_right_gravity = false,
+      right_gravity = false,
+    })
+  end
 end
 
 --- @param tool_renders table<string, sia.engine.Status>
 --- @param tool_order string[]
---- @return string[], { start: integer, finish: integer }[]
+--- @return string[], { start: integer, finish: integer, summary: sia.ToolSummary }[]
 local function build_tool_block(tool_renders, tool_order)
   local lines = {}
   local highlights = {}
@@ -199,11 +232,15 @@ local function build_tool_block(tool_renders, tool_order)
         if render.status == "done" then
           append_verification(block_lines, render.verification)
         end
+        if #lines > 0 then
+          table.insert(lines, "")
+        end
         local start = #lines
         vim.list_extend(lines, block_lines)
         table.insert(highlights, {
           start = start,
           finish = #lines,
+          summary = render.summary,
         })
       end
     end
@@ -221,10 +258,26 @@ end
 function Canvas:clear_tool_highlights(start_line, end_line)
   vim.api.nvim_buf_clear_namespace(
     self.buf,
+    TOOL_PREVIEW_NS,
+    start_line or 0,
+    end_line or -1
+  )
+  vim.api.nvim_buf_clear_namespace(
+    self.buf,
     TOOL_RESULT_NS,
     start_line or 0,
     end_line or -1
   )
+end
+
+-- Text changes can evaluate foldexpr before preview extmarks exist. Invalidate
+-- cached levels once all preview ranges have been installed, in every window.
+function Canvas:refresh_folds()
+  for _, win in ipairs(vim.fn.win_findbuf(self.buf)) do
+    if vim.wo[win].foldmethod == "expr" then
+      vim.wo[win].foldexpr = vim.wo[win].foldexpr
+    end
+  end
 end
 
 function Canvas:clear_temporary_text()
@@ -242,6 +295,16 @@ end
 --- @param lnum integer
 --- @return string|integer
 function M.blockquote_foldexpr(lnum)
+  local row = lnum - 1
+  local marks = vim.api.nvim_buf_get_extmarks(0, TOOL_PREVIEW_NS, { row, 0 }, 0, {
+    details = true,
+    limit = 1,
+  })
+  local mark = marks[1]
+  if mark and row < mark[4].end_row then
+    -- Fold both fences and the full body, keeping the action header outside.
+    return row == mark[2] and ">1" or 1
+  end
   local line = vim.fn.getline(lnum)
   local prev = lnum > 1 and vim.fn.getline(lnum - 1) or ""
   local line_kind = meta_line_kind(line)
@@ -264,6 +327,9 @@ function M.blockquote_foldtext()
   local num_lines = foldend - foldstart + 1
 
   local first_line = vim.fn.getline(foldstart)
+  if first_line:match("^```+") then
+    return string.format("Output (%d lines)", math.max(0, num_lines - 2))
+  end
   local kind = meta_line_kind(first_line)
   local preview = kind and strip_meta_prefix(first_line, kind) or first_line
   local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
@@ -460,7 +526,8 @@ function Canvas:render_messages(messages, model)
         inserted_turn_header = true
       end
 
-      local tool_lines = message.summary and format_tool_summary_lines("done", message.summary)
+      local tool_lines = message.summary
+          and format_tool_summary_lines("done", message.summary)
         or nil
       if tool_lines then
         append_verification(tool_lines, message.verification)
@@ -480,7 +547,11 @@ function Canvas:render_messages(messages, model)
         else
           start_line = append_meta_block(self.buf, tool_lines)
         end
-        self:highlight_tool(start_line, start_line + #tool_lines)
+        self:highlight_tool(start_line, start_line + #tool_lines, message.summary)
+        if next_message and next_message.role == "tool" then
+          -- The next tool reuses the final placeholder, leaving one blank line.
+          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
+        end
 
         if
           next_message
@@ -595,6 +666,7 @@ function Canvas:render_messages(messages, model)
 
     ::continue::
   end
+  self:refresh_folds()
   vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()
 end
@@ -626,6 +698,7 @@ function Canvas:update_tool_block(
     self:clear_tool_highlights(line, previous_end)
     vim.bo[self.buf].modifiable = true
     vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, replacement)
+    self:refresh_folds()
     return #replacement
   end
 
@@ -633,8 +706,13 @@ function Canvas:update_tool_block(
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, line, previous_end, false, lines)
   for _, highlight in ipairs(highlights) do
-    self:highlight_tool(line + highlight.start, line + highlight.finish)
+    self:highlight_tool(
+      line + highlight.start,
+      line + highlight.finish,
+      highlight.summary
+    )
   end
+  self:refresh_folds()
   return #lines
 end
 
@@ -660,7 +738,7 @@ function Canvas:clear()
   vim.bo[self.buf].modifiable = true
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
   vim.bo[self.buf].modifiable = false
-  vim.api.nvim_buf_clear_namespace(self.buf, TOOL_RESULT_NS, 0, -1)
+  self:clear_tool_highlights()
   self:clear_temporary_text()
   vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)

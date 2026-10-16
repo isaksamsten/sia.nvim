@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local SUPPORTED_EXTENSIONS = {
@@ -75,7 +74,7 @@ view or analyze the contents of a document file.]],
   if not args.path then
     callback({
       content = "Error: No file path was provided",
-      summary = icons.error .. " Failed to view document",
+      summary = "Failed to view document",
       ephemeral = true,
     })
     return
@@ -90,7 +89,7 @@ view or analyze the contents of a document file.]],
         ext,
         table.concat(SUPPORTED_LIST, ", ")
       ),
-      summary = icons.error .. " Unsupported document format",
+      summary = "Unsupported document format",
       ephemeral = true,
     })
     return
@@ -99,7 +98,7 @@ view or analyze the contents of a document file.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = "Error: Document file cannot be found",
-      summary = icons.error .. " Failed to view document",
+      summary = "Failed to view document",
       ephemeral = true,
     })
     return
@@ -113,7 +112,7 @@ view or analyze the contents of a document file.]],
         stat.size,
         MAX_FILE_SIZE
       ),
-      summary = icons.error .. " Document too large",
+      summary = "Document too large",
       ephemeral = true,
     })
     return
@@ -128,7 +127,7 @@ view or analyze the contents of a document file.]],
       if not file then
         callback({
           content = "Error: Cannot open " .. args.path,
-          summary = icons.error .. " Failed to view document",
+          summary = "Failed to view document",
           ephemeral = true,
         })
         return
@@ -140,7 +139,7 @@ view or analyze the contents of a document file.]],
       if not data or #data == 0 then
         callback({
           content = "Error: Document file is empty",
-          summary = icons.error .. " Failed to view document",
+          summary = "Failed to view document",
           ephemeral = true,
         })
         return
@@ -161,8 +160,7 @@ view or analyze the contents of a document file.]],
       end
 
       local summary = string.format(
-        "%s Viewed document %s%s",
-        icons.document,
+        "Viewed document %s%s",
         vim.fn.fnamemodify(args.path, ":~:."),
         size_str and (" (" .. size_str .. ")") or ""
       )

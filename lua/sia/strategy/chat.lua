@@ -14,12 +14,13 @@ spaces. Only output the name, nothing else.]]
 --- @field buf integer
 --- @field content_writer sia.StreamRenderer
 --- @field reasoning_writer sia.StreamRenderer?
---- @field tool_status table<string, boolean>
+--- @field tool_status table<string, sia.engine.Status>
 --- @field tool_order string[]
 --- @field tool_block_extmark integer?
 --- @field tool_block_line_count integer
 --- @field tool_block_reuses_placeholder boolean
 
+--- @field separate_tools boolean
 --- @field has_tool_blocks boolean
 local AssistantTurnRenderer = {}
 AssistantTurnRenderer.__index = AssistantTurnRenderer
@@ -32,7 +33,7 @@ AssistantTurnRenderer.__index = AssistantTurnRenderer
 --- @field details string?
 --- @field name string?
 
---- @param opts { canvas: sia.Canvas, buf: integer, line: integer }
+--- @param opts { canvas: sia.Canvas, buf: integer, line: integer, separate_tools: boolean? }
 --- @return sia.chat.AssistantTurnRenderer
 function AssistantTurnRenderer.new(opts)
   local obj = {
@@ -51,6 +52,7 @@ function AssistantTurnRenderer.new(opts)
     tool_block_line_count = 0,
     tool_block_reuses_placeholder = false,
     has_tool_blocks = false,
+    separate_tools = opts.separate_tools or false,
   }
   return setmetatable(obj, AssistantTurnRenderer)
 end
@@ -131,7 +133,6 @@ function AssistantTurnRenderer:ensure_order(key)
     return
   end
 
-  self.tool_status[key] = true
   table.insert(self.tool_order, key)
   return render
 end
@@ -140,13 +141,17 @@ function AssistantTurnRenderer:_render_tool_block() end
 
 --- @param statuses sia.engine.Status[]
 function AssistantTurnRenderer:update_tool_blocks(statuses)
-  local keyed_statuses = {}
+  local keyed_statuses = self.tool_status
   for _, status in ipairs(statuses) do
     self:ensure_order(status.key)
     keyed_statuses[status.key] = status
   end
 
   if not self.tool_block_extmark then
+    if self.separate_tools and self.content_writer:is_empty() then
+      self.content_writer:append_newline()
+    end
+    self.separate_tools = false
     self.content_writer:append_newline_if_needed()
     local line = self.content_writer.line
     local current_line = vim.api.nvim_buf_get_lines(self.buf, line, line + 1, false)[1]
@@ -496,6 +501,9 @@ function ChatStrategy:on_stream_start()
     canvas = self.canvas,
     buf = self.buf,
     line = last_line,
+    separate_tools = self.turn_renderer ~= nil
+      and self.turn_renderer.has_tool_blocks
+      and last_text == "",
   })
   return true
 end

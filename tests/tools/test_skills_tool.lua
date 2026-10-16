@@ -63,7 +63,7 @@ T["sia.tools.skills"]["reads a named skill"] = function()
   eq({ "project-skill-test" }, vim.tbl_filter(function(name)
     return name == "project-skill-test"
   end, _G.skill_names or {}))
-  eq("🧩 Read skill project-skill-test", result.summary)
+  eq("Read skill project-skill-test", result.summary)
   eq(true, result.content:find("Skill `project%-skill%-test`") ~= nil)
   eq(
     true,
@@ -81,7 +81,7 @@ T["sia.tools.skills"]["rejects missing skill names"] = function()
     result = res
   end, create_execution_context())
 
-  eq("❌ Failed to read skill", result.summary)
+  eq("Failed to read skill", result.summary)
   eq("Error: No skill name was provided", result.content)
 end
 
@@ -97,7 +97,7 @@ T["sia.tools.skills"]["reports lookup failures"] = function()
     )
   end)
 
-  eq("❌ Failed to read skill", result.summary)
+  eq("Failed to read skill", result.summary)
   eq(
     "Error: Could not read skill `definitely-missing-skill`: unknown error",
     result.content

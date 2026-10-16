@@ -1,4 +1,3 @@
-local icons = require("sia.ui").icons
 
 local diff = require("sia.diff")
 local utils = require("sia.utils")
@@ -16,6 +15,7 @@ return tool_utils.new_tool({
     },
     required = { "path", "content" },
   },
+  preview = true,
   summary = function()
     return "Writing file..."
   end,
@@ -45,7 +45,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.path then
     callback({
       content = "Error: No file path provided",
-      summary = icons.error .. " Failed to write file",
+      summary = "Failed to write file",
       ephemeral = true,
     })
     return
@@ -54,7 +54,7 @@ For small, targeted changes, prefer the edit tool instead.]],
   if not args.content then
     callback({
       content = "Error: No content provided",
-      summary = icons.error .. " Failed to write file",
+      summary = "Failed to write file",
       ephemeral = true,
     })
     return
@@ -66,6 +66,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       and string.format("Overwrite existing file %s with new content", args.path)
     or string.format("Create new file %s", args.path)
   opts.user_input(prompt, {
+    preview_result = true,
     preview = function(preview_buf)
       if file_exists then
         local existing_content = vim.fn.readfile(resolved_path)
@@ -109,7 +110,7 @@ For small, targeted changes, prefer the edit tool instead.]],
       if not buf then
         callback({
           content = "Error: Cannot create buffer for " .. args.path,
-          summary = icons.error .. " Failed to write file",
+          summary = "Failed to write file",
           ephemeral = true,
         })
         return
@@ -127,8 +128,7 @@ For small, targeted changes, prefer the edit tool instead.]],
 
       local action = file_exists and "overwritten" or "created"
       local display_text = string.format(
-        "%s %s %s (%d lines)",
-        icons.save,
+        "%s %s (%d lines)",
         file_exists and "Overwrote" or "Created",
         vim.fn.fnamemodify(args.path, ":."),
         #lines

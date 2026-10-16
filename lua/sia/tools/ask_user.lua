@@ -52,6 +52,7 @@ return tool_utils.new_tool({
 
   if not prompt or not options or #options == 0 then
     callback({
+      summary = "Failed to ask user: invalid arguments",
       content = "ERROR: Invalid arguments to ask_user",
     })
     return
@@ -78,6 +79,7 @@ return tool_utils.new_tool({
       }, function(custom_answer)
         if custom_answer and custom_answer ~= "" then
           callback({
+            summary = "Received user answer",
             content = string.format(
               "USER's response to: %s\nCustom answer: %s",
               prompt,
@@ -86,6 +88,7 @@ return tool_utils.new_tool({
           })
         else
           callback({
+            summary = "User cancelled question",
             content = [[USER CANCELLED
 The USER cancelled the custom input prompt without providing an answer.
 Please ask the USER how they would like to proceed.]],
@@ -94,6 +97,7 @@ Please ask the USER how they would like to proceed.]],
       end)
     else
       callback({
+        summary = "Received user answer",
         content = string.format(
           "USER's response to: %s\nSelected option: %s",
           prompt,

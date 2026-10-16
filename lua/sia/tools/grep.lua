@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local MAX_LINE_LENGTH = 200
 local MAX_MATCHES = 100
 
@@ -18,8 +17,7 @@ end
 local function handle_files_with_matches_mode(lines, args, callback)
   if #lines == 0 then
     local no_match_msg = string.format(
-      "%s No files found matching `%s`",
-      icons.search,
+      "No files found matching `%s`",
       args.pattern
     ) .. format_no_match_context(args)
 
@@ -38,8 +36,7 @@ local function handle_files_with_matches_mode(lines, args, callback)
   end
 
   local display_msg = string.format(
-    "%s Found %d files matching `%s`",
-    icons.search,
+    "Found %d files matching `%s`",
     #lines,
     args.pattern
   ) .. format_no_match_context(args)
@@ -47,14 +44,14 @@ local function handle_files_with_matches_mode(lines, args, callback)
   callback({
     content = table.concat(output, "\n"),
     summary = display_msg,
+    preview = { text = table.concat(lines, "\n"), ft = "text" },
   })
 end
 
 local function handle_count_mode(lines, args, callback)
   if #lines == 0 then
     local no_match_msg = string.format(
-      "%s No matches found for `%s`",
-      icons.search,
+      "No matches found for `%s`",
       args.pattern
     ) .. format_no_match_context(args)
 
@@ -108,8 +105,7 @@ local function handle_count_mode(lines, args, callback)
   end
 
   local display_msg = string.format(
-    "%s Found %d matches in %d files for `%s`",
-    icons.search,
+    "Found %d matches in %d files for `%s`",
     total_count,
     #file_counts,
     args.pattern
@@ -118,6 +114,7 @@ local function handle_count_mode(lines, args, callback)
   callback({
     content = table.concat(output, "\n"),
     summary = display_msg,
+    preview = { text = table.concat(vim.list_slice(output, 2), "\n"), ft = "text" },
   })
 end
 
@@ -145,11 +142,13 @@ local function handle_content_mode(lines, args, callback)
 
     if file and lnum and col then
       local truncated_line = line
+      local preview_text = rest
       if #line > MAX_LINE_LENGTH then
         local prefix = string.format("%s:%s:%s:", file, lnum, col)
         local available_length = MAX_LINE_LENGTH - #prefix - 10
         local truncated_rest = rest:sub(1, available_length)
         truncated_line = prefix .. truncated_rest .. "...[TRUNCATED]"
+        preview_text = truncated_rest .. "...[TRUNCATED]"
       end
 
       table.insert(matches, {
@@ -157,6 +156,7 @@ local function handle_content_mode(lines, args, callback)
         lnum = tonumber(lnum),
         col = tonumber(col),
         text = truncated_line,
+        preview_text = preview_text,
       })
       if not file_mtimes[file] then
         local stat = vim.loop.fs_stat(file)
@@ -167,8 +167,7 @@ local function handle_content_mode(lines, args, callback)
 
   if #matches == 0 then
     local no_match_msg = string.format(
-      "%s No matches found for `%s`",
-      icons.search,
+      "No matches found for `%s`",
       args.pattern
     ) .. format_no_match_context(args)
 
@@ -207,15 +206,55 @@ local function handle_content_mode(lines, args, callback)
     table.insert(output, matches[i].text)
   end
 
+  -- Build the chat preview from parsed matches, keeping the model-facing result
+  -- above unchanged. Group only the matches included in that result.
+  local groups, order = {}, {}
+  for i = 1, math.min(#matches, MAX_MATCHES) do
+    local match = matches[i]
+    if not groups[match.file] then
+      groups[match.file] = {}
+      table.insert(order, match.file)
+    end
+    table.insert(groups[match.file], match)
+  end
+  local preview = {}
+  for _, file in ipairs(order) do
+    if #preview > 0 then
+      table.insert(preview, "")
+    end
+    table.insert(preview, file)
+    table.sort(groups[file], function(a, b)
+      if a.lnum == b.lnum then
+        return a.col < b.col
+      end
+      return a.lnum < b.lnum
+    end)
+    for _, match in ipairs(groups[file]) do
+      table.insert(preview, string.format("  %d: %s", match.lnum, match.preview_text))
+    end
+  end
+  if #matches > MAX_MATCHES then
+    local omitted = #matches - MAX_MATCHES
+    table.insert(
+      preview,
+      string.format("… %d more %s", omitted, omitted == 1 and "match" or "matches")
+    )
+  end
+
+  local files = vim.tbl_count(file_mtimes)
   local display_msg = string.format(
-    "%s Found matches for `%s`",
-    icons.search,
+    "Found %d %s in %d %s for `%s`",
+    #matches,
+    #matches == 1 and "match" or "matches",
+    files,
+    files == 1 and "file" or "files",
     args.pattern
   ) .. format_no_match_context(args)
 
   callback({
     content = table.concat(output, "\n"),
     summary = display_msg,
+    preview = { text = table.concat(preview, "\n"), ft = "text" },
   })
 end
 

@@ -1,6 +1,7 @@
 --- @class sia.ToolResult
 --- @field content sia.Content
 --- @field region sia.Region?
+--- @field preview sia.ToolPreview?
 --- @field summary sia.ToolSummary?
 --- @field ephemeral boolean?
 --- @field actions sia.ToolAction[]?

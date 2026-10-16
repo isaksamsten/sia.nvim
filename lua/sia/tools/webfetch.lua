@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 --- Get the directory containing the fetch-page script (relative to plugin root).
@@ -81,7 +80,7 @@ Usage notes:
   if not args.url or args.url:match("^%s*$") then
     callback({
       content = "Error: No URL specified",
-      summary = icons.error .. " Failed to fetch URL",
+      summary = "Failed to fetch URL",
     })
     return
   end
@@ -89,7 +88,7 @@ Usage notes:
   if not args.url:match("^https?://") then
     callback({
       content = "Error: URL must start with http:// or https://",
-      summary = icons.error .. " Invalid URL format",
+      summary = "Invalid URL format",
     })
     return
   end
@@ -104,7 +103,7 @@ Usage notes:
       if vim.fn.filereadable(script) ~= 1 then
         callback({
           content = "Error: fetch-page script not found at " .. script,
-          summary = icons.error .. " fetch-page script missing",
+          summary = "fetch-page script missing",
         })
         return
       end
@@ -114,7 +113,7 @@ Usage notes:
           callback({
             content = "Error installing fetch-page dependencies: "
               .. (err or "unknown"),
-            summary = icons.error .. " npm install failed",
+            summary = "npm install failed",
           })
           return
         end
@@ -134,7 +133,7 @@ Usage notes:
                 or string.format("fetch-page failed (exit %d)", result.code)
               callback({
                 content = "Error: " .. error_msg,
-                summary = icons.error .. " Failed to fetch URL",
+                summary = "Failed to fetch URL",
               })
               return
             end
@@ -147,7 +146,7 @@ Usage notes:
             if not f then
               callback({
                 content = "Error: fetch-page produced no output",
-                summary = icons.error .. " Failed to fetch URL",
+                summary = "Failed to fetch URL",
               })
               return
             end
@@ -199,7 +198,7 @@ Usage notes:
 
             callback({
               content = table.concat(content, "\n"),
-              summary = string.format("%s Fetched %s", icons.fetch, args.url),
+              summary = string.format("Fetched %s", args.url),
             })
           end)
         )

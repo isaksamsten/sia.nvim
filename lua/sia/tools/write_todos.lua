@@ -206,5 +206,6 @@ of newly added todos for future reference.]],
 
   callback({
     content = table.concat(response, "\n"),
+    summary = "Updated todos",
   })
 end)

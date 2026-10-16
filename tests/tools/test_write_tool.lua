@@ -74,7 +74,7 @@ T["sia.tools.write"]["creates new file with parent directory"] = function()
       .. "/nested/dir/test.lua",
     result.content[1]
   )
-  eq(true, string.find(result.summary, "💾 Created.*test%.lua") ~= nil)
+  eq(true, string.find(result.summary, "Created.*test%.lua") ~= nil)
 end
 
 T["sia.tools.write"]["creates new file without nested directories"] = function()
@@ -115,7 +115,7 @@ T["sia.tools.write"]["creates new file without nested directories"] = function()
 
   eq(true, file_exists)
   eq(true, string.find(result.content[1], "Successfully created buffer") ~= nil)
-  eq(true, string.find(result.summary, "💾 Created") ~= nil)
+  eq(true, string.find(result.summary, "Created") ~= nil)
 end
 
 T["sia.tools.write"]["overwrites existing file"] = function()
@@ -159,7 +159,7 @@ T["sia.tools.write"]["overwrites existing file"] = function()
 
   eq({ "new content" }, new_content)
   eq(true, string.find(result.content[1], "Successfully overwritten buffer") ~= nil)
-  eq(true, string.find(result.summary, "💾 Overwrote") ~= nil)
+  eq(true, string.find(result.summary, "Overwrote") ~= nil)
 end
 
 T["sia.tools.write"]["handles missing path parameter"] = function()
@@ -189,7 +189,7 @@ T["sia.tools.write"]["handles missing path parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No file path provided", result.content[1])
-  eq("❌ Failed to write file", result.summary)
+  eq("Failed to write file", result.summary)
 end
 
 T["sia.tools.write"]["handles missing content parameter"] = function()
@@ -219,7 +219,7 @@ T["sia.tools.write"]["handles missing content parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No content provided", result.content[1])
-  eq("❌ Failed to write file", result.summary)
+  eq("Failed to write file", result.summary)
 end
 
 T["sia.tools.write"]["handles multiline content correctly"] = function()

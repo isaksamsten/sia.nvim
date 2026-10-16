@@ -1,6 +1,5 @@
 local tool_utils = require("sia.tools.utils")
 local utils = require("sia.utils")
-local icons = require("sia.ui").icons
 
 local function find_column(buf, line, pattern, occurrence)
   occurrence = occurrence or 1
@@ -106,8 +105,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         content = table.concat(markdown_lines, "\n"),
         ephemeral = true,
         summary = string.format(
-          "%s Got documentation for '%s'",
-          icons.lsp,
+          "Got documentation for '%s'",
           args.pattern
         ),
       })
@@ -155,8 +153,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         content = table.concat(locations, "\n"),
         ephemeral = true,
         summary = string.format(
-          "%s Found %d %s for '%s'",
-          icons.lsp,
+          "Found %d %s for '%s'",
           #locations,
           #locations == 1 and command_label or command_label .. "s",
           args.pattern
@@ -242,8 +239,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         ),
         ephemeral = true,
         summary = string.format(
-          "%s Renamed '%s' → '%s' in %d file%s",
-          icons.lsp,
+          "Renamed '%s' → '%s' in %d file%s",
           args.pattern,
           args.new_name,
           num_files,

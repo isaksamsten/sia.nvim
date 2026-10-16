@@ -1,6 +1,5 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local INLINE_OUTPUT_LIMIT = 8000
@@ -420,39 +419,29 @@ local function build_process_output_view(proc, runtime, offset, limit, stream)
   return table.concat(content, "\n")
 end
 
---- Format a command for display: inline backticks for single-line,
---- fenced code block for multi-line commands.
 --- @param command string
 --- @return string
 local function format_command(command)
-  if command:find("\n") then
-    return "\n```sh\n" .. command .. "\n```"
-  end
-  return "`" .. command .. "`"
+  return "`" .. command:gsub("\n", " ") .. "`"
 end
 
 --- Build a display message for the bash process
 --- @param proc sia.process.Process
 --- @return string
 local function build_display_message(proc)
-  local desc = proc.description or proc.command
-  local icon = icons.bash_exec
   local cmd = format_command(proc.command)
   if proc.kind == "running" then
-    return string.format("%s %s: %s", icon, desc, cmd)
+    return "Running " .. cmd
   end
-
   if proc.outcome == "completed" then
     if proc.code == 0 then
-      return string.format("%s %s: %s", icon, desc, cmd)
-    else
-      return string.format("%s %s: %s (exit code %d)", icon, desc, cmd, proc.code)
+      return "Ran " .. cmd
     end
+    return string.format("Failed (exit %d) %s", proc.code, cmd)
   elseif proc.outcome == "timed_out" or proc.outcome == "interrupted" then
-    return string.format("%s Stopped %s: %s", icon, desc, cmd)
-  else
-    return string.format("%s %s: %s (failed)", icon, desc, cmd)
+    return "Stopped " .. cmd
   end
+  return "Failed " .. cmd
 end
 
 --- Helper to finalize a completed process and call the callback
@@ -463,9 +452,18 @@ local function return_completed_result(proc, conversation, callback)
   local cwd = conversation.process_runtime:pwd()
   local output = normalize_output(conversation.process_runtime:get_output(proc.id))
   local content = build_result_summary(proc, output, cwd)
+  if output.stdout == "" and output.stderr == "" then
+    output.stdout = "(no output)"
+  end
+  local details = table.concat(vim.tbl_filter(function(part)
+    return part ~= ""
+  end, { output.stdout, output.stderr }), "\n"):gsub("%s+$", "")
   callback({
     content = table.concat(content, "\n"),
-    summary = build_display_message(proc),
+    summary = {
+      header = build_display_message(proc),
+      detail = { text = details, ft = "text" },
+    },
   })
 end
 
@@ -517,7 +515,7 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
       local desc = current_proc.description or current_proc.command
       local cmd = format_command(current_proc.command)
       callback({
-        summary = string.format("%s Paused %s: %s", icons.bash_exec, desc, cmd),
+        summary = string.format("Paused %s: %s", desc, cmd),
         content = waiting_yield_message(current_proc, conversation.process_runtime),
       })
       return
@@ -651,6 +649,7 @@ return tool_utils.new_tool({
     },
     required = {},
   },
+  preview = true,
   summary = function(args)
     local normalized = normalize_args(args)
     if normalized.action == "start" then
@@ -809,7 +808,7 @@ git commit -m "$(cat <<'EOF'
     if not args.command or args.command:match("^%s*$") then
       callback({
         content = "Error: 'command' parameter is required for 'start'",
-        summary = icons.error .. " Failed to execute command",
+        summary = "Failed to execute command",
         kind = "failed",
       })
       return
@@ -820,7 +819,7 @@ git commit -m "$(cat <<'EOF'
         if err then
           callback({
             content = err,
-            summary = icons.error .. " Failed to execute command",
+            summary = "Failed to execute command",
             kind = "failed",
           })
           return
@@ -828,8 +827,7 @@ git commit -m "$(cat <<'EOF'
         callback({
           content = string.format(ASYNC_START_REPLY, proc.id),
           summary = string.format(
-            "%s Started %s (process %d)",
-            icons.started,
+            "Started %s (process %d)",
             format_command(args.description or args.command),
             proc.id
           ),
@@ -840,7 +838,7 @@ git commit -m "$(cat <<'EOF'
         if err then
           callback({
             content = err,
-            summary = icons.error .. " Failed to execute command",
+            summary = "Failed to execute command",
             kind = "failed",
           })
           return
@@ -852,7 +850,7 @@ git commit -m "$(cat <<'EOF'
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'status'",
-        summary = icons.error .. " Missing id parameter",
+        summary = "Missing id parameter",
       })
       return
     end
@@ -884,7 +882,7 @@ git commit -m "$(cat <<'EOF'
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'view'",
-        summary = icons.error .. " Missing id parameter",
+        summary = "Missing id parameter",
       })
       return
     end
@@ -896,7 +894,7 @@ git commit -m "$(cat <<'EOF'
           "Error: Process with ID %d not found in this conversation",
           args.id
         ),
-        summary = icons.error .. " Failed to view process output",
+        summary = "Failed to view process output",
       })
       return
     end
@@ -911,13 +909,13 @@ git commit -m "$(cat <<'EOF'
         limit,
         args.stream
       ),
-      summary = string.format("%s Viewed process %d output", icons.view_bash, args.id),
+      summary = string.format("Viewed process %d output", args.id),
     })
   elseif args.action == "kill" then
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'kill'",
-        summary = icons.error .. " Failed to execute command",
+        summary = "Failed to execute command",
         kind = "failed",
       })
       return
@@ -930,7 +928,7 @@ git commit -m "$(cat <<'EOF'
           "Error: Process with ID %d not found in this conversation",
           args.id
         ),
-        summary = icons.error .. " Failed to execute command",
+        summary = "Failed to execute command",
         kind = "failed",
       })
       return
@@ -962,8 +960,7 @@ git commit -m "$(cat <<'EOF'
     callback({
       content = content,
       summary = string.format(
-        "%s Stopped process %d: %s",
-        stop_result == "stop_requested" and icons.bash_exec or icons.bash_kill,
+        "Stopped process %d: %s",
         args.id,
         format_command(proc and proc.command or "unknown")
       ),

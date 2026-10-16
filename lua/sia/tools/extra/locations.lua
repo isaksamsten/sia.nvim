@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   definition = {
@@ -52,7 +51,7 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
   if not args.items or #args.items == 0 then
     callback({
       content = "Error: No items provided for quickfix list",
-      summary = icons.error .. " Failed to create quickfix list",
+      summary = "Failed to create quickfix list",
       ephemeral = true,
     })
     return
@@ -68,7 +67,7 @@ Use appropriate 'type' values: E (error), W (warning), I (info), N (note).]],
           "Error: Item %d missing required fields (filename, lnum, text)",
           i
         ),
-        summary = icons.error .. " Failed to create quickfix list",
+        summary = "Failed to create quickfix list",
         ephemeral = true,
       })
       return
@@ -105,8 +104,7 @@ Use :cnext/:cprev to navigate, or click items in the quickfix window]],
       #qf_items
     ),
     summary = string.format(
-      "%s Created quickfix list with %d items",
-      icons.locations,
+      "Created quickfix list with %d items",
       #qf_items
     ),
   })

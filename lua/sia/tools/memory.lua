@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   definition = {
@@ -127,7 +126,7 @@ All paths MUST start with `/memories/`.
       end
       callback({
         content = table.concat(output, "\n"),
-        summary = icons.directory .. " Viewed directory " .. (args.path or "/memories"),
+        summary = "Viewed directory " .. (args.path or "/memories"),
       })
     else
       -- Read file
@@ -145,7 +144,7 @@ All paths MUST start with `/memories/`.
         table.insert(content, lines[i])
       end
 
-      local display_info = string.format("%s Viewed %s", icons.view, args.path)
+      local display_info = string.format("Viewed %s", args.path)
       if args.view_range then
         display_info = display_info
           .. string.format(" (lines %d-%d)", start_line, end_line)
@@ -169,7 +168,7 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = "Successfully created " .. args.path,
-      summary = icons.save .. " Created memory " .. args.path,
+      summary = "Created memory " .. args.path,
     })
   elseif args.command == "str_replace" then
     if not args.old_str or not args.new_str then
@@ -228,7 +227,7 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = "Successfully replaced text in " .. args.path,
-      summary = icons.edit .. " Edited memory " .. args.path,
+      summary = "Edited memory " .. args.path,
     })
   elseif args.command == "insert" then
     if not args.insert_line or not args.insert_text then
@@ -254,13 +253,13 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = "Successfully inserted text at line " .. idx,
-      summary = icons.edit .. " Inserted into memory " .. args.path,
+      summary = "Inserted into memory " .. args.path,
     })
   elseif args.command == "delete" then
     if vim.fn.delete(path, "rf") == 0 then
       callback({
         content = "Successfully deleted " .. args.path,
-        summary = icons.delete .. " Deleted memory " .. args.path,
+        summary = "Deleted memory " .. args.path,
       })
     else
       callback({ content = "Failed to delete " .. args.path, ephemeral = true })

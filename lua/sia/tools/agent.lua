@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local START_REPLY = [[
@@ -48,7 +47,7 @@ local function return_pending_result(agent, callback)
   agent.status = "idle"
   callback({
     content = table.concat(content, "\n"),
-    summary = string.format("%s Agent %s replied", icons.agents, agent.name),
+    summary = string.format("Agent %s replied", agent.name),
   })
 end
 
@@ -77,7 +76,7 @@ local function return_settled(agent, callback)
         agent.name,
         agent.error or "Unknown error"
       ),
-      summary = string.format("%s Agent %d failed", icons.error, agent.id),
+      summary = string.format("Agent %d failed", agent.id),
     })
   elseif agent.status == "cancelled" then
     callback({
@@ -86,7 +85,7 @@ local function return_settled(agent, callback)
         agent.id,
         agent.name
       ),
-      summary = string.format("%s Agent %d cancelled", icons.error, agent.id),
+      summary = string.format("Agent %d cancelled", agent.id),
     })
   end
 end
@@ -203,25 +202,25 @@ return tool_utils.new_tool({
   },
   summary = function(args)
     if args.command == "list" then
-      return icons.agents .. " Listing agents"
+      return "Listing agents"
     elseif args.command == "start" then
       return string.format(
-        icons.agents .. " Starting agent '%s'",
+        "Starting agent '%s'",
         args.agent or "unknown"
       )
     elseif args.command == "send" then
-      return string.format(icons.agents .. " Messaging agent '%s'", tostring(args.id))
+      return string.format("Messaging agent '%s'", tostring(args.id))
     elseif args.command == "wait" then
       if args.id then
         return string.format(
-          icons.agents .. " Waiting for agent '%s'",
+          "Waiting for agent '%s'",
           tostring(args.id)
         )
       else
-        return icons.agents .. " Waiting for agents"
+        return "Waiting for agents"
       end
     elseif args.command == "status" then
-      return string.format(icons.agents .. " Checking agent '%s'", tostring(args.id))
+      return string.format("Checking agent '%s'", tostring(args.id))
     end
   end,
   read_only = true,
@@ -292,7 +291,7 @@ When NOT to use the agent tool:
 
         callback({
           content = string.format(START_REPLY, agent.id),
-          summary = string.format("%s Started agent '%s'", icons.agents, args.agent),
+          summary = string.format("Started agent '%s'", args.agent),
         })
       end,
     })
@@ -300,7 +299,7 @@ When NOT to use the agent tool:
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'send' command",
-        summary = icons.error .. " Missing id parameter",
+        summary = "Missing id parameter",
       })
       return
     end
@@ -308,7 +307,7 @@ When NOT to use the agent tool:
     if not args.message then
       callback({
         content = "Error: 'message' parameter is required for 'send' command",
-        summary = icons.error .. " Missing message parameter",
+        summary = "Missing message parameter",
       })
       return
     end
@@ -372,7 +371,7 @@ When NOT to use the agent tool:
 
         callback({
           content = content,
-          summary = string.format("%s Updated agent %s", icons.started, agent.name),
+          summary = string.format("Updated agent %s", agent.name),
         })
       end,
     })
@@ -380,7 +379,7 @@ When NOT to use the agent tool:
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'status' command",
-        summary = icons.error .. " Missing id parameter",
+        summary = "Missing id parameter",
       })
       return
     end

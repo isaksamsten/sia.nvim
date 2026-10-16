@@ -1,6 +1,5 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local GIT_TIMEOUT = 10000
@@ -234,16 +233,16 @@ vim.api.nvim_create_autocmd("User", {
 local function summary(args)
   local branch = args.branch or "unknown"
   if args.command == "create" then
-    return string.format("%s Creating worktree %s", icons.started, branch)
+    return string.format("Creating worktree %s", branch)
   elseif args.command == "remove" then
-    return string.format("%s Removing worktree %s", icons.delete, branch)
+    return string.format("Removing worktree %s", branch)
   elseif args.command == "status" then
-    return string.format("%s Checking worktree %s", icons.directory, branch)
+    return string.format("Checking worktree %s", branch)
   elseif args.command == "diff" then
-    return string.format("%s Diffing worktree %s", icons.view, branch)
+    return string.format("Diffing worktree %s", branch)
   end
 
-  return string.format("%s Listing git worktrees", icons.directory)
+  return "Listing git worktrees"
 end
 
 --- @param args table
@@ -325,7 +324,7 @@ local function create_worktree(args, conversation, callback)
         "",
         "Pass this path as `workspace` when starting agents to work in this worktree.",
       }, "\n"),
-      summary = string.format("%s Re-adopted git worktree %s", icons.started, branch),
+      summary = string.format("Re-adopted git worktree %s", branch),
     })
     return
   end
@@ -430,7 +429,7 @@ local function create_worktree(args, conversation, callback)
 
   callback({
     content = table.concat(message_lines, "\n"),
-    summary = string.format("%s Created git worktree %s", icons.started, branch),
+    summary = string.format("Created git worktree %s", branch),
   })
 end
 
@@ -441,7 +440,7 @@ local function list_worktrees(conversation, callback)
   if vim.tbl_isempty(records) then
     callback({
       content = "No tracked git worktrees for this conversation.",
-      summary = string.format("%s No git worktrees", icons.directory),
+      summary = "No git worktrees",
       ephemeral = true,
     })
     return
@@ -466,7 +465,7 @@ local function list_worktrees(conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("%s Listed %d git worktree(s)", icons.directory, count),
+    summary = string.format("Listed %d git worktree(s)", count),
   })
 end
 
@@ -574,7 +573,7 @@ local function status_worktree(args, conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("%s Status for git worktree %s", icons.directory, branch),
+    summary = string.format("Status for git worktree %s", branch),
   })
 end
 
@@ -642,7 +641,7 @@ local function diff_worktree(args, conversation, callback)
   if diff_output == "" and untracked_output == "" then
     callback({
       content = string.format("No changes in worktree '%s' relative to base.", branch),
-      summary = string.format("%s No diff for git worktree %s", icons.view, branch),
+      summary = string.format("No diff for git worktree %s", branch),
       ephemeral = true,
     })
     return
@@ -678,7 +677,7 @@ local function diff_worktree(args, conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("%s Diffed git worktree %s", icons.view, branch),
+    summary = string.format("Diffed git worktree %s", branch),
   })
 end
 
@@ -729,7 +728,7 @@ local function remove_worktree(args, conversation, callback)
           git_error(delete_branch_result, "git branch -D failed")
         ),
       }, "\n"),
-      summary = string.format("%s Removed git worktree %s", icons.delete, branch),
+      summary = string.format("Removed git worktree %s", branch),
     })
     return
   end
@@ -740,7 +739,7 @@ local function remove_worktree(args, conversation, callback)
       "Path: " .. record.path,
       "Branch deleted: " .. branch,
     }, "\n"),
-    summary = string.format("%s Removed git worktree %s", icons.delete, branch),
+    summary = string.format("Removed git worktree %s", branch),
   })
 end
 

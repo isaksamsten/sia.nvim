@@ -404,8 +404,9 @@ T["sia.tools.glob"]["search in non-existent path"] = function()
   child.lua(code)
   local result = child.lua_get("_G.result")
 
-  -- Should return no files found message for non-existent path
-  eq(true, result.content:find("No files found in nonexistent_directory", 1, true) ~= nil)
+  eq(true, result.summary:find("Failed to find files", 1, true) ~= nil)
+  eq(true, result.content:find("nonexistent_directory", 1, true) ~= nil)
+  eq(nil, result.content:find("No files found", 1, true))
 end
 
 T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
@@ -436,8 +437,9 @@ T["sia.tools.glob"]["search with pattern in non-existent path"] = function()
   child.lua(code)
   local result = child.lua_get("_G.result")
 
-  -- Should return no files found message with pattern and path
-  eq(true, result.content:find("No files found matching pattern: *.lua in does/not/exist", 1, true) ~= nil)
+  eq(true, result.summary:find("Failed to find files", 1, true) ~= nil)
+  eq(true, result.content:find("does/not/exist", 1, true) ~= nil)
+  eq(nil, result.content:find("No files found", 1, true))
 end
 
 T["sia.tools.glob"]["pattern with path separator finds files"] = function()

@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   definition = {
@@ -41,21 +40,21 @@ Usage notes:
   if not vim.fn.executable("curl") then
     callback({
       content = "Error: curl is not installed. Don't try again.",
-      summary = icons.error .. " Failed to access search",
+      summary = "Failed to access search",
     })
     return
   end
   if not os.getenv("GOOGLE_SEARCH_API_KEY") then
     callback({
       content = "Error: The GOOGLE_SEARCH_API_KEY API key has not been set by the user.",
-      summary = icons.error .. " Failed to access search",
+      summary = "Failed to access search",
     })
     return
   end
   if not os.getenv("GOOGLE_SEARCH_CX") then
     callback({
       content = "Error: The GOOGLE_SEARCH_CX programmable search id has not been set by the user.",
-      summary = icons.error .. " Failed to access search",
+      summary = "Failed to access search",
     })
     return
   end
@@ -86,7 +85,7 @@ Usage notes:
                 "Error: Failed to fetch search results - %s",
                 error_msg
               ),
-              summary = icons.error .. " Failed to fetch search results",
+              summary = "Failed to fetch search results",
             })
             return
           end
@@ -128,9 +127,7 @@ Usage notes:
               table.insert(content, "No search results found for this query.")
             end
 
-            local summary = args.description
-                and string.format("%s %s", icons.search, args.description)
-              or string.format("%s Search results for: %s", icons.search, args.query)
+            local summary = string.format("Searched the web for `%s`", args.query)
             callback({
               content = table.concat(content, "\n"),
               summary = summary,
@@ -138,7 +135,7 @@ Usage notes:
           else
             callback({
               content = "Error: Failed to parse json response from search",
-              summary = icons.error .. " Failed to fetch search results",
+              summary = "Failed to fetch search results",
             })
           end
         end)

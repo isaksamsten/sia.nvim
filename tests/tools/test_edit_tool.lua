@@ -143,7 +143,7 @@ T["sia.tools.str_replace"]["successful exact match edit"] = function()
   eq("other code", new_content[4])
 
   eq("Edited test.lua:", result.content[1])
-  eq(true, string.find(result.summary, "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
+  eq(true, string.find(result.summary, "Edited lines 1%-3 in test%.lua") ~= nil)
 end
 
 T["sia.tools.str_replace"]["successful inline edit"] = function()
@@ -189,7 +189,7 @@ T["sia.tools.str_replace"]["successful inline edit"] = function()
   eq("hello world lisa", new_content[1])
   eq(
     true,
-    string.find(result.summary, "✏️ Edited line 1 %(columns 13%-16%) in test%.txt")
+    string.find(result.summary, "Edited line 1 %(columns 13%-16%) in test%.txt")
       ~= nil
   )
 end
@@ -303,7 +303,7 @@ T["sia.tools.str_replace"]["missing target_file parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No target_file was provided", result.content[1])
-  eq("❌ Failed to edit", result.summary)
+  eq("Failed to edit", result.summary)
 end
 
 T["sia.tools.str_replace"]["missing old_string parameter"] = function()
@@ -331,7 +331,7 @@ T["sia.tools.str_replace"]["missing old_string parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No old_string was provided", result.content[1])
-  eq("❌ Failed to edit", result.summary)
+  eq("Failed to edit", result.summary)
 end
 
 T["sia.tools.str_replace"]["missing new_string parameter"] = function()
@@ -359,7 +359,7 @@ T["sia.tools.str_replace"]["missing new_string parameter"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: No new_string was provided", result.content[1])
-  eq("❌ Failed to edit", result.summary)
+  eq("Failed to edit", result.summary)
 end
 
 T["sia.tools.str_replace"]["file cannot be loaded"] = function()
@@ -394,7 +394,7 @@ T["sia.tools.str_replace"]["file cannot be loaded"] = function()
   local result = child.lua_get("_G.result")
 
   eq("Error: Cannot load nonexistent.lua", result.content[1])
-  eq("❌ Failed to edit", result.summary)
+  eq("Failed to edit", result.summary)
 end
 
 T["sia.tools.str_replace"]["no matches found"] = function()
@@ -432,7 +432,7 @@ T["sia.tools.str_replace"]["no matches found"] = function()
   local result = child.lua_get("_G.result")
 
   eq(true, string.find(result.content[1], "Failed to edit test.txt") ~= nil)
-  eq("❌ Failed to edit test.txt", result.summary)
+  eq("Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.str_replace"]["multiple matches found"] = function()
@@ -470,7 +470,7 @@ T["sia.tools.str_replace"]["multiple matches found"] = function()
   local result = child.lua_get("_G.result")
 
   eq(true, string.find(result.content[1], "Failed to edit test.txt because") ~= nil)
-  eq("❌ Failed to edit test.txt", result.summary)
+  eq("Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.str_replace"]["max failed matches reached"] = function()
@@ -581,7 +581,7 @@ T["sia.tools.str_replace"]["replace_all with inline matches"] = function()
   eq("return foo", new_content[4])
 
   eq(true, string.find(result.content[1], "Replaced all %d+ occurrences?") ~= nil)
-  eq(true, string.find(result.summary, "✏️ Replaced all %d+ occurrences?") ~= nil)
+  eq(true, string.find(result.summary, "Replaced all %d+ occurrences?") ~= nil)
 end
 
 T["sia.tools.str_replace"]["replace_all with multi-line matches"] = function()
@@ -650,7 +650,7 @@ T["sia.tools.str_replace"]["replace_all with multi-line matches"] = function()
   eq("end", new_content[11])
 
   eq(true, string.find(result.content[1], "Replaced all 2 occurrences") ~= nil)
-  eq(true, string.find(result.summary, "✏️ Replaced all 2 occurrences") ~= nil)
+  eq(true, string.find(result.summary, "Replaced all 2 occurrences") ~= nil)
 end
 
 T["sia.tools.str_replace"]["replace_all error when no matches"] = function()
@@ -693,7 +693,7 @@ T["sia.tools.str_replace"]["replace_all error when no matches"] = function()
     string.find(result.content[1], "with replace_all because no matches were found")
       ~= nil
   )
-  eq("❌ Failed to edit test.txt", result.summary)
+  eq("Failed to edit test.txt", result.summary)
 end
 
 T["sia.tools.str_replace"]["tool metadata"] = function()
@@ -779,7 +779,7 @@ T["sia.tools.str_replace"]["replace_all with multiple matches on same line"] = f
 
   -- Should have replaced 6 occurrences total (4 on line 1, 1 on line 2, 1 on line 3)
   eq(true, string.find(result.content[1], "Replaced all 6 occurrences") ~= nil)
-  eq(true, string.find(result.summary, "✏️ Replaced all 6 occurrences") ~= nil)
+  eq(true, string.find(result.summary, "Replaced all 6 occurrences") ~= nil)
 end
 
 return T

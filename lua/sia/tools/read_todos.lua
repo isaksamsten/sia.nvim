@@ -25,6 +25,7 @@ todos with the write_todos tool.]],
 
   if #conversation.todos.items == 0 then
     callback({
+      summary = "Read todos (empty)",
       content = "No todos yet. Use write_todos to add some!",
     })
     return
@@ -58,5 +59,6 @@ todos with the write_todos tool.]],
 
   callback({
     content = table.concat(response, "\n"),
+    summary = string.format("Read %d todos", #conversation.todos.items),
   })
 end)

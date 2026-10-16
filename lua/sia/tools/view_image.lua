@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local SUPPORTED_EXTENSIONS = {
@@ -63,7 +62,7 @@ as base64-encoded data that you can directly interpret.]],
   if not args.path then
     callback({
       content = "Error: No file path was provided",
-      summary = icons.error .. " Failed to view image",
+      summary = "Failed to view image",
       ephemeral = true,
     })
     return
@@ -77,7 +76,7 @@ as base64-encoded data that you can directly interpret.]],
         "Error: Unsupported image format '.%s'. Supported formats: png, jpg, jpeg, gif, webp",
         ext
       ),
-      summary = icons.error .. " Unsupported image format",
+      summary = "Unsupported image format",
       ephemeral = true,
     })
     return
@@ -86,7 +85,7 @@ as base64-encoded data that you can directly interpret.]],
   if vim.fn.filereadable(args.path) == 0 then
     callback({
       content = "Error: Image file cannot be found",
-      summary = icons.error .. " Failed to view image",
+      summary = "Failed to view image",
       ephemeral = true,
     })
     return
@@ -100,7 +99,7 @@ as base64-encoded data that you can directly interpret.]],
         stat.size,
         MAX_FILE_SIZE
       ),
-      summary = icons.error .. " Image too large",
+      summary = "Image too large",
       ephemeral = true,
     })
     return
@@ -115,7 +114,7 @@ as base64-encoded data that you can directly interpret.]],
       if not file then
         callback({
           content = { "Error: Cannot open " .. args.path },
-          summary = icons.error .. " Failed to view image",
+          summary = "Failed to view image",
           ephemeral = true,
         })
         return
@@ -127,7 +126,7 @@ as base64-encoded data that you can directly interpret.]],
       if not data or #data == 0 then
         callback({
           content = "Error: Image file is empty",
-          summary = icons.error .. " Failed to view image",
+          summary = "Failed to view image",
           ephemeral = true,
         })
         return
@@ -148,8 +147,7 @@ as base64-encoded data that you can directly interpret.]],
       end
 
       local summary = string.format(
-        "%s Viewed image %s%s",
-        icons.image,
+        "Viewed image %s%s",
         vim.fn.fnamemodify(args.path, ":~:."),
         size_str and (" (" .. size_str .. ")") or ""
       )

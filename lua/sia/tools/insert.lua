@@ -1,7 +1,6 @@
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 local clear_outdated_tool_input = tool_utils.gen_clear_outdated_tool_input({ "text" })
 
@@ -41,6 +40,7 @@ return tool_utils.new_tool({
     },
     required = { "target_file", "line", "text" },
   },
+  preview = true,
   summary = function(args)
     if args.target_file then
       return string.format("Inserting text into %s...", args.target_file)
@@ -72,7 +72,7 @@ Use cases:
   if not args.target_file then
     callback({
       content = "Error: No target_file was provided",
-      summary = icons.error .. " Failed to insert",
+      summary = "Failed to insert",
       ephemeral = true,
     })
     return
@@ -81,7 +81,7 @@ Use cases:
   if not args.line then
     callback({
       content = "Error: No line number was provided",
-      summary = icons.error .. " Failed to insert",
+      summary = "Failed to insert",
       ephemeral = true,
     })
     return
@@ -90,7 +90,7 @@ Use cases:
   if not args.text then
     callback({
       content = "Error: No text was provided",
-      summary = icons.error .. " Failed to insert",
+      summary = "Failed to insert",
       ephemeral = true,
     })
     return
@@ -101,7 +101,7 @@ Use cases:
   if not buf then
     callback({
       content = "Error: Cannot load " .. args.target_file,
-      summary = icons.error .. " Failed to insert",
+      summary = "Failed to insert",
       ephemeral = true,
     })
     return
@@ -121,7 +121,7 @@ Use cases:
   if insert_line < 1 then
     callback({
       content = string.format("Error: Line number must be >= 1, got %d", insert_line),
-      summary = icons.error .. " Failed to insert",
+      summary = "Failed to insert",
       ephemeral = true,
     })
     return
@@ -205,8 +205,7 @@ Use cases:
         args.target_file
       )
       local display_description = string.format(
-        "%s Inserted %d line%s at line %d in %s",
-        icons.insert,
+        "Inserted %d line%s at line %d in %s",
         #text_lines,
         #text_lines == 1 and "" or "s",
         insert_line,

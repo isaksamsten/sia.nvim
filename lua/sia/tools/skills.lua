@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local tool_names = tool_utils.tool_names
 
 local function format_skill(skill)
@@ -48,7 +47,7 @@ return tool_utils.new_tool({
   if not args.name or args.name == "" then
     callback({
       content = "Error: No skill name was provided",
-      summary = icons.error .. " Failed to read skill",
+      summary = "Failed to read skill",
       ephemeral = true,
     })
     return
@@ -63,7 +62,7 @@ return tool_utils.new_tool({
         args.name,
         err or "unknown error"
       ),
-      summary = icons.error .. " Failed to read skill",
+      summary = "Failed to read skill",
       ephemeral = true,
     })
     return
@@ -71,6 +70,6 @@ return tool_utils.new_tool({
 
   callback({
     content = format_skill(skill),
-    summary = string.format("%s Read skill %s", icons.view_skill, skill.name),
+    summary = string.format("Read skill %s", skill.name),
   })
 end)

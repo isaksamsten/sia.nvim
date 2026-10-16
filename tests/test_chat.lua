@@ -511,7 +511,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
     {
       summary = {
         header = "Ran make test",
-        details = "Last lines:\n- 120 passed\n- 2 skipped",
+        detail = { text = "Last lines:\n- 120 passed\n- 2 skipped" },
       },
     }
   )
@@ -522,10 +522,12 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
     "/sia",
     "",
     ">| Plan the check",
-    "Ran make test",
-    ">! Last lines:",
-    ">! - 120 passed",
-    ">! - 2 skipped",
+    "• Ran make test · 3 lines",
+    "```text",
+    "Last lines:",
+    "- 120 passed",
+    "- 2 skipped",
+    "```",
     "All good",
   }
 
@@ -534,7 +536,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
   eq({
     {
       start = 3,
-      finish = 7,
+      finish = 4,
       hl_group = "SiaToolResult",
     },
   }, tool_result_ranges(strategy.buf))
@@ -548,7 +550,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
   eq({
     {
       start = 3,
-      finish = 7,
+      finish = 4,
       hl_group = "SiaToolResult",
     },
   }, tool_result_ranges(strategy.buf))
@@ -586,7 +588,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
     "",
     ">| Plan the check",
     "",
-    "Running bash: make test",
+    "• Running bash: make test",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   eq({
@@ -604,7 +606,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
       name = "bash",
       summary = {
         header = "Ran bash: make test",
-        details = "Tests passed",
+        detail = { text = "Tests passed" },
       },
       status = "done",
       actions = {},
@@ -634,7 +636,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
       name = "bash",
       summary = {
         header = "Running bash: make test",
-        details = "ignored until done",
+        detail = { text = "ignored until done" },
       },
       status = "running",
     },
@@ -1046,7 +1048,7 @@ T["strategy.chat"]["tool-only round renders /sia header on redraw"] = function()
   local expected = {
     "/sia",
     "",
-    "Ran ls",
+    "• Ran ls",
     "Here are the files",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -1092,8 +1094,9 @@ T["strategy.chat"]["tool-only round with multiple tools renders single /sia head
   local expected = {
     "/sia",
     "",
-    "Ran ls",
-    "Searched for hello",
+    "• Ran ls",
+    "",
+    "• Searched for hello",
     "Found it",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -1299,6 +1302,112 @@ T["strategy.chat"]["StreamRenderer append empty"] = function()
   eq({ "existing text" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
 
   vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["strategy.chat"]["partial tool updates preserve earlier tools and their highlights"] = function()
+  local conversation = Conversation.new({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  strategy:on_tool_status({ { key = "one", status = "done", summary = "First tool" } })
+  strategy:on_tool_status({ { key = "two", status = "running", summary = "Second tool" } })
+  local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  eq({ "• First tool", "", "• Second tool", "" }, vim.list_slice(lines, #lines - 3))
+  eq(2, #tool_result_ranges(strategy.buf))
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = function()
+  local conversation = Conversation.new({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  conversation:add_system_message("Ok")
+  local turn = conversation:new_turn()
+  local summary = {
+    header = "Edited file",
+    detail = { text = "--- orig/file\n+++ ai/file\n@@ -1 +1 @@\n-old\n+new", ft = "diff" },
+  }
+  local second = { header = "Ran check", detail = { text = "one" } }
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  local statuses = {
+    { key = "edit", status = "done", summary = summary },
+    { key = "bash", status = "done", summary = second },
+  }
+  local function check()
+    local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+    local first, next_tool
+    for row, line in ipairs(lines) do
+      if line == "```diff" then first = row end
+      if line == "• Ran check · 1 line" then next_tool = row end
+    end
+    eq("", lines[next_tool - 1])
+    eq("```", lines[next_tool - 2])
+    local foldexpr = require("sia.canvas").blockquote_foldexpr
+    eq(">1", foldexpr(first))
+    eq(1, foldexpr(first + 3))
+    eq(1, foldexpr(first + 4))
+    eq(1, foldexpr(first + 6))
+    eq(0, foldexpr(next_tool - 1))
+    eq(0, foldexpr(next_tool))
+    eq(first, vim.fn.foldclosed(first))
+    eq(next_tool - 2, vim.fn.foldclosedend(first))
+    eq(-1, vim.fn.foldclosed(next_tool))
+    eq(next_tool + 1, vim.fn.foldclosed(next_tool + 1))
+    vim.api.nvim_win_set_cursor(0, { next_tool + 1, 0 })
+    vim.cmd("normal! zo")
+    eq("• Ran check · 1 line", vim.fn.getline(next_tool))
+    eq(-1, vim.fn.foldclosed(next_tool + 1))
+    vim.cmd("normal! zc")
+  end
+  strategy:on_tool_status(statuses)
+  check()
+  strategy:on_tool_status(statuses)
+  check()
+  for index, item in ipairs(statuses) do
+    conversation:add_tool_message(turn, {
+      key = item.key, id = item.key, call_id = item.key, type = "function", name = "edit", arguments = "{}",
+    }, "Done", { summary = item.summary })
+  end
+  strategy:redraw()
+  check()
+  strategy:redraw()
+  check()
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] = function()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  local canvas = require("sia.canvas").Canvas:new(buf)
+  canvas:update_tool_block({ 0, 0 }, 1, {
+    tool = { status = "done", summary = { header = "Ran command", detail = { text = "```lua\n>| literal\n```\nend" } } },
+  }, { "tool" })
+  eq({ "• Ran command · 4 lines", "````text", "```lua", ">| literal", "```", "end", "````", "" },
+    vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+  -- Metadata-looking text in the fenced body must not create a reasoning fold.
+  eq(1, require("sia.canvas").blockquote_foldexpr(4))
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["strategy.chat"]["tools in consecutive streams retain a blank separator"] = function()
+  local conversation = Conversation.new({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  strategy:on_tool_status({ { key = "first", status = "done", summary = "Ran first" } })
+  strategy:on_stream_start()
+  strategy:on_tool_status({ { key = "second", status = "done", summary = "Ran second" } })
+  local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  eq({ "• Ran first", "", "• Ran second", "" }, vim.list_slice(lines, #lines - 3))
+  ChatStrategy.remove(strategy.buf)
 end
 
 return T

@@ -1,5 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local patch_mod = require("sia.patch")
@@ -74,18 +73,18 @@ local function summarize_commit(commit)
   for path, change in pairs(commit) do
     local rel = vim.fn.fnamemodify(path, ":.")
     if change.type == "add" then
-      table.insert(summary, string.format("%s Created %s", icons.save, rel))
+      table.insert(summary, string.format("Created %s", rel))
     elseif change.type == "delete" then
-      table.insert(summary, string.format("%s Deleted %s", icons.delete, rel))
+      table.insert(summary, string.format("Deleted %s", rel))
     elseif change.type == "update" then
       if change.move_path then
         local dest_rel = vim.fn.fnamemodify(change.move_path, ":.")
         table.insert(
           summary,
-          string.format("%s Moved %s → %s", icons.rename, rel, dest_rel)
+          string.format("Moved %s → %s", rel, dest_rel)
         )
       else
-        table.insert(summary, string.format("%s Updated %s", icons.edit, rel))
+        table.insert(summary, string.format("Edited %s", rel))
       end
     end
   end
@@ -103,6 +102,7 @@ return tool_utils.new_tool({
       definition = APPLY_PATCH_GRAMMAR,
     },
   },
+  preview = true,
   summary = function()
     return "Applying diff..."
   end,
@@ -136,7 +136,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not raw_input or raw_input == "" then
     callback({
       content = "Error: No patch input received",
-      summary = icons.error .. " No patch input",
+      summary = "No patch input",
       ephemeral = true,
     })
     return
@@ -161,7 +161,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not ok then
     callback({
       content = "Error parsing patch: " .. tostring(patch_or_err),
-      summary = icons.error .. " Failed to parse patch",
+      summary = "Failed to parse patch",
       ephemeral = true,
     })
     return
@@ -172,7 +172,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if not commit_ok then
     callback({
       content = "Error applying patch: " .. tostring(commit_or_err),
-      summary = icons.error .. " Failed to apply patch",
+      summary = "Failed to apply patch",
       ephemeral = true,
     })
     return
@@ -184,7 +184,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
   if change_count == 0 then
     callback({
       content = "Patch produced no changes.",
-      summary = icons.edit .. " No changes to apply",
+      summary = "No changes to apply",
     })
     return
   end
@@ -278,7 +278,9 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
 
       callback({
         content = table.concat(content_lines, "\n"),
-        summary = table.concat(display_lines, "\n"),
+        summary = {
+          header = string.format("Applied patch to %d file%s", change_count, change_count == 1 and "" or "s"),
+        },
       })
     end,
   })

@@ -1,6 +1,5 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   definition = {
@@ -35,7 +34,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not args.file then
     callback({
       content = "Error: No file path was provided",
-      summary = icons.error .. " Failed to read diagnostics",
+      summary = "Failed to read diagnostics",
       ephemeral = true,
     })
     return
@@ -44,7 +43,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if vim.fn.filereadable(args.file) == 0 then
     callback({
       content = "Error: File cannot be found or is not readable",
-      summary = icons.error .. " Failed to read diagnostics",
+      summary = "Failed to read diagnostics",
       ephemeral = true,
     })
     return
@@ -56,7 +55,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if not buf then
     callback({
       content = "Error: Cannot load file into buffer",
-      summary = icons.error .. " Failed to read diagnostics",
+      summary = "Failed to read diagnostics",
       ephemeral = true,
     })
     return
@@ -66,8 +65,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   if #diagnostics == 0 then
     callback({
       summary = string.format(
-        "%s No diagnostics found for %s",
-        icons.diagnostics,
+        "No diagnostics found for %s",
         args.file
       ),
       content = string.format("No diagnostics found for %s", args.file),
@@ -112,8 +110,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
       },
     },
     summary = string.format(
-      "%s Found %d diagnostics for %s",
-      icons.diagnostics,
+      "Found %d diagnostics for %s",
       #diagnostics,
       args.file
     ),

@@ -1,9 +1,40 @@
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
-local icons = require("sia.ui").icons
 
 local MAX_FILES_RESULT = 100
 local MAX_FILES_SORT = 1000
+
+--- Group the selected files for chat without changing their model-facing order.
+--- @param files string[]
+--- @return sia.ToolPreview
+local function build_preview(files)
+  local groups = {}
+  for _, file in ipairs(files) do
+    local path = file:gsub("/+$", "")
+    local directory, name = path:match("^(.*)/([^/]+)$")
+    directory = directory and (directory .. "/") or "./"
+    name = name or path
+    if file:sub(-1) == "/" then
+      name = name .. "/"
+    end
+    groups[directory] = groups[directory] or {}
+    table.insert(groups[directory], name)
+  end
+  local directories = vim.tbl_keys(groups)
+  table.sort(directories)
+  local lines = {}
+  for _, directory in ipairs(directories) do
+    if #lines > 0 then
+      table.insert(lines, "")
+    end
+    table.insert(lines, directory)
+    table.sort(groups[directory])
+    for _, name in ipairs(groups[directory]) do
+      table.insert(lines, "  " .. name)
+    end
+  end
+  return { text = table.concat(lines, "\n"), ft = "text" }
+end
 
 return tool_utils.new_tool({
   definition = {
@@ -94,20 +125,22 @@ return tool_utils.new_tool({
         table.insert(cmd, path)
       end
 
-      vim.system(cmd, { text = true, cwd = conversation.workspace }, function(obj)
+      local function failed(message, code)
+        local summary = "Failed to find files"
+        if code then
+          summary = summary .. string.format(" (exit %d)", code)
+        end
+        callback({
+          content = "Error: " .. message,
+          summary = summary,
+          preview = { text = message, ft = "text" },
+          ephemeral = true,
+        })
+      end
+      local ok, err = pcall(vim.system, cmd, { text = true, cwd = conversation.workspace }, function(obj)
         if obj.code ~= 0 then
-          local msg
-          if pattern and path then
-            msg =
-              string.format("No files found matching pattern: %s in %s", pattern, path)
-          elseif pattern then
-            msg = "No files found matching pattern: " .. pattern
-          elseif path then
-            msg = "No files found in " .. path
-          else
-            msg = "No files found (or fd is not installed)."
-          end
-          callback({ content = msg })
+          local message = vim.trim(obj.stderr or "")
+          failed(message ~= "" and message or "File search command failed.", obj.code)
           return
         end
 
@@ -124,7 +157,7 @@ return tool_utils.new_tool({
           else
             msg = "No files found."
           end
-          callback({ content = msg })
+          callback({ content = msg, summary = msg })
           return
         end
 
@@ -132,6 +165,8 @@ return tool_utils.new_tool({
           files,
           { max_count = MAX_FILES_RESULT, max_sort = MAX_FILES_SORT }
         )
+
+        local preview = build_preview(limited_files)
 
         local header
         if pattern and path then
@@ -177,36 +212,37 @@ return tool_utils.new_tool({
         local display_line
         if pattern and path then
           display_line = string.format(
-            "%s Found %d files matching `%s` in `%s`",
-            icons.directory,
+            "Found %d files matching `%s` in `%s`",
             total_count,
             pattern,
             path
           )
         elseif pattern then
           display_line = string.format(
-            "%s Found %d files matching `%s`",
-            icons.directory,
+            "Found %d files matching `%s`",
             total_count,
             pattern
           )
         elseif path then
           display_line = string.format(
-            "%s Found %d files in `%s`",
-            icons.directory,
+            "Found %d files in `%s`",
             total_count,
             path
           )
         else
           display_line =
-            string.format("%s Found %d files", icons.directory, total_count)
+            string.format("Found %d files", total_count)
         end
 
         callback({
           content = table.concat(limited_files, "\n"),
           summary = display_line,
+          preview = preview,
         })
       end)
+      if not ok then
+        failed(tostring(err))
+      end
     end,
   })
 end)

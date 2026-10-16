@@ -30,6 +30,7 @@ that are restricted in the current mode. Provide a brief summary of what was acc
 }, function(args, conversation, callback, _)
   if not conversation.active_mode then
     callback({
+      summary = "No active mode to exit",
       content = "No active mode to exit. You are already in the default mode.",
     })
     return
@@ -39,6 +40,7 @@ that are restricted in the current mode. Provide a brief summary of what was acc
   if info then
     callback({
       content = info.content,
+      summary = "Exited conversation mode",
       actions = info.truncate_after_id and {
         { type = "drop_after", message_id = info.truncate_after_id },
       } or nil,
@@ -46,6 +48,7 @@ that are restricted in the current mode. Provide a brief summary of what was acc
   else
     callback({
       content = string.format("Failed to exit mode"),
+      summary = "Failed to exit mode",
     })
   end
 end)

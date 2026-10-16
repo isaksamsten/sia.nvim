@@ -42,9 +42,13 @@ end
 --- @alias sia.MultiPart sia.TextContent|sia.FileContent|sia.ImageContent
 --- @alias sia.Content (sia.MultiPart)[]|string
 
+--- @class sia.ToolPreview
+--- @field text string
+--- @field ft string?
+
 --- @class sia.ToolSummaryParts
 --- @field header string
---- @field details string?
+--- @field detail sia.ToolPreview?
 ---
 --- @alias sia.ToolSummary string|sia.ToolSummaryParts
 

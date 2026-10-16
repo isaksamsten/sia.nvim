@@ -2,7 +2,6 @@ local tool_utils = require("sia.tools.utils")
 local utils = require("sia.utils")
 local diff = require("sia.diff")
 local hashline = require("sia.hashline")
-local icons = require("sia.ui").icons
 
 return tool_utils.new_tool({
   definition = {
@@ -52,6 +51,7 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
     },
     required = { "target_file", "tag", "edits" },
   },
+  preview = true,
   summary = function(args)
     return "Editing " .. (args.target_file or "file") .. " with hashline..."
   end,
@@ -62,7 +62,7 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
   local function fail(message)
     callback({
       content = "Error: " .. message,
-      summary = icons.error .. " Failed to edit",
+      summary = "Failed to edit",
       ephemeral = true,
     })
   end
@@ -140,7 +140,7 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
           refreshed,
           "\n"
         ),
-        summary = icons.edit .. " Edited " .. args.target_file,
+        summary = "Edited " .. args.target_file,
         region = {
           buf = buf,
           stale = {

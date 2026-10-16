@@ -139,6 +139,7 @@ function M.execute_tools(tool_calls, conversation, opts)
   --- @param parsed sia.engine.ToolCall
   --- @param result sia.ToolResult
   local function on_tool_finished(parsed, result)
+    require("sia.tool_output").complete(result)
     all_statuses[parsed.index].summary = result.summary
     all_statuses[parsed.index].verification = result.verification
     completed_count = completed_count + 1
