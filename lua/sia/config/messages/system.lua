@@ -271,6 +271,9 @@ Guidelines:
 {% if has_tool('insert') %}
 - Always view files before using insert
 {% end %}
+{% if has_tool('edit') %}
+- Use edit to change files. You should prefer this to using bash or scripts.
+{% end %}
 - Be concise in your responses
  ]]
 
