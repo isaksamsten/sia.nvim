@@ -5,6 +5,7 @@ return {
   grep = require("sia.tools.grep"),
   glob = require("sia.tools.glob"),
   edit = require("sia.tools.edit"),
+  str_replace = require("sia.tools.str_replace"),
   insert = require("sia.tools.insert"),
   write = require("sia.tools.write"),
   bash = require("sia.tools.bash"),

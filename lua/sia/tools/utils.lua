@@ -12,6 +12,7 @@ M.tool_names = {
   grep = "grep",
   glob = "glob",
   edit = "edit",
+  str_replace = "str_replace",
   insert = "insert",
   write = "write",
   bash = "bash",

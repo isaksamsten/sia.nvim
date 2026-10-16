@@ -15,9 +15,10 @@ are included in the default chat action.
 | **view**       | ★       | View file contents with optional line offset and limit (up to 2000 lines) |
 | **skills**     | ★       | Read a named skill definition with metadata and markdown body              |
 | **write**      | ★       | Write complete file contents (create new or overwrite)                    |
-| **edit**       | ★       | Search-and-replace or hashline edits, selected by configuration                     |
-| **insert**     | ★       | Insert text at a specific line (1-based, before the line)                 |
-| **apply_diff** |         | Apply patches in Codex format (auto-added for GPT-5 models)               |
+| **str_replace** |         | Legacy search-and-replace edits |
+| **edit**       | ★       | Hashline edits using snapshot tags and line ranges                     |
+| **insert**     |         | Insert text at a specific line (1-based, before the line)                 |
+| **apply_diff** |         | Apply patches in Codex format (available for custom tool lists)               |
 
 ### Code Search
 
@@ -85,7 +86,8 @@ tool that are useful for permission and risk patterns.
 | **view**          | **path**                                        | File path to read                                                             |
 | **skills**        | **name**                                        | Skill name to resolve and read                                                |
 | **write**         | **path**                                        | File path to write                                                            |
-| **edit**          | **target_file**, **old_string**, **new_string** | File to modify; hashline mode uses **tag** and **edits** instead of strings                                       |
+| **edit**          | **target_file**, **tag**, **edits** | File to modify, snapshot tag, and hashline operations                                       |
+| **str_replace**   | **target_file**, **old_string**, **new_string** | Legacy string replacements; optional **replace_all** |
 | **insert**        | **target_file**, **text**                       | File to modify and the text to insert                                         |
 | **grep**          | **pattern**, **path**, **glob**                 | Search pattern, directory, and file glob                                      |
 | **glob**          | **pattern**, **path**                           | File glob and directory to search                                             |
@@ -185,26 +187,16 @@ require("sia").setup({
 
 ## Hashline edits
 
-The `edit` and `view` tools support the core hashline range and gap syntax from
-[oh-my-pi](https://github.com/can1357/oh-my-pi). Enable it in configuration
-(default: `false`):
+The `view` tool always returns a `[PATH#TAG]` snapshot header and numbered
+`LINE:TEXT` rows. The `edit` tool accepts `target_file`, `tag`, and `edits`
+using the core hashline range and gap syntax from
+[oh-my-pi](https://github.com/can1357/oh-my-pi).
 
-```lua
-require("sia").setup({
-  settings = { hashline = true },
-})
-```
+Default chat and prose tools use `edit` for existing files and `write` for new
+files. They omit `insert`, `apply_diff`, and `str_replace`. Custom actions can
+include `require("sia.tools").str_replace` for the legacy replacement tool,
+which accepts `target_file`, `old_string`, `new_string`, and `replace_all`.
 
-When enabled, `view` returns hashline output and `edit` switches its parameters,
-prompt, and implementation to hashline editing. Its parameters become
-`target_file`, `tag`, and `edits`, replacing `old_string`, `new_string`, and
-`replace_all`. Tool names and path-based `edit` permission rules remain the same.
-Rules matching `old_string` or `new_string` need to match `edits` in hashline mode.
-The default chat and prose tool sets omit `insert` and `apply_diff` in this mode,
-for every model. `write` remains available for creating files.
-With hashline disabled, Sia uses its existing view format and editing tools.
-Custom actions using `tools.edit` and `tools.view` also select the configured
-implementations; custom tool lists should omit `insert` and `apply_diff` in
-hashline mode. Each conversation retains the selected schemas, prompts, and
-implementations; configuration changes apply to new conversations.
-
+When migrating replacement-based permissions, use the `str_replace` tool name
+to retain those rules, or match `edits` instead of `old_string`/`new_string`
+for hashline `edit`. The hashline configuration option has been removed.

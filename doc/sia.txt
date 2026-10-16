@@ -2942,13 +2942,14 @@ FILE OPERATIONS ~
 
   write        ★         Write complete file contents (create new or overwrite)
 
-  edit         ★         Targeted search-and-replace edits with fuzzy matching
+  edit         ★         Hashline edits using snapshot tags and line ranges
 
-  insert       ★         Insert text at a specific line (1-based, before the
+  str_replace            Legacy search-and-replace edits
+
+  insert                 Insert text at a specific line (1-based, before the
                          line)
 
-  apply_diff             Apply patches in Codex format (auto-added for GPT-5
-                         models)
+  apply_diff             Apply patches in Codex format (custom tool lists)
   ------------------------------------------------------------------------------
 
 CODE SEARCH ~
@@ -3047,8 +3048,10 @@ CORE TOOLS ~
 
   write           path                    File path to write
 
-  edit            target_file,            File to modify and the strings
-                  old_string, new_string  involved
+  edit            target_file, tag, edits Hashline operations on a snapshot
+
+  str_replace     target_file,            Legacy string replacements
+                  old_string, new_string
 
   insert          target_file, text       File to modify and the text to insert
 
@@ -3098,6 +3101,13 @@ Auto-approve file reads within `src/`:
       }
     }
 <
+
+The view tool always returns a [PATH#TAG] snapshot header and LINE:TEXT rows.
+Use edit with target_file, tag, and edits for hashline patches. The hashline
+configuration option has been removed. For legacy string replacements, add
+require("sia.tools").str_replace to a custom tool list and use str_replace
+permission rules. Default chat and prose tools omit str_replace, insert, and
+apply_diff.
 
 Only allow edits to Lua and Python files:
 

@@ -44,8 +44,6 @@ require("sia").setup({
       },
     },
 
-    -- Switch edit/view to hashline mode; omit insert/patch from default tools
-    hashline = true,
 
     -- File operations
     file_ops = {

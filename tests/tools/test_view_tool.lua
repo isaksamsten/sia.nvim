@@ -80,10 +80,11 @@ T["sia.tools.view"]["view text file basic"] = function()
   view_tool.implementation.execute(args, callback, create_execution_context())
 
   local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
-  eq(3, #content)
-  eq("     1\tline 1", content[1])
-  eq("     2\tline 2", content[2])
-  eq("     3\tline 3", content[3])
+  eq(type(content[1]:match("#%x%x%x%x%]$")), "string")
+  eq(4, #content)
+  eq("1:line 1", content[2])
+  eq("2:line 2", content[3])
+  eq("3:line 3", content[4])
   eq("📖 Viewed test.txt (3 lines)", result.summary)
 
   restore_file_loader()
@@ -128,9 +129,9 @@ T["sia.tools.view"]["view text file with offset and limit"] = function()
   view_tool.implementation.execute(args, callback, create_execution_context())
 
   local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
-  eq(2, #content)
-  eq("     2\tline 2", content[1])
-  eq("     3\tline 3", content[2])
+  eq(3, #content)
+  eq("2:line 2", content[2])
+  eq("3:line 3", content[3])
   eq("📖 Viewed lines 2-3 from test.txt", result.summary)
 
   restore_file_loader()
@@ -189,8 +190,8 @@ T["sia.tools.view"]["offset beyond end of file"] = function()
   -- With offset beyond end of file, the view tool clamps to the last line
   -- and returns the content from that line
   local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
-  eq(1, #content)
-  eq("     2\tline 2", content[1])
+  eq(2, #content)
+  eq("2:line 2", content[2])
 
   restore_file_loader()
   restore_tracker()
@@ -198,7 +199,6 @@ end
 
 T["sia.tools.view"]["tool metadata"] = function()
   eq("view", view_tool.definition.name)
-  eq("Views a file from the local filesystem.", view_tool.definition.description)
 
   local required = view_tool.definition.required
   eq(true, vim.tbl_contains(required, "path"))

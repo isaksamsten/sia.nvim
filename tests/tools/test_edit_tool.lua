@@ -12,7 +12,7 @@ local T = MiniTest.new_set({
 
 local eq = MiniTest.expect.equality
 
-T["sia.tools.edit"] = MiniTest.new_set()
+T["sia.tools.str_replace"] = MiniTest.new_set()
 
 -- Mock tracker that just runs the function
 local function mock_tracker()
@@ -23,9 +23,9 @@ local function mock_tracker()
   }
 end
 
-T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
+T["sia.tools.str_replace"]["successful exact match edit multiple changes"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     -- Create test buffer
@@ -58,7 +58,7 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
     }
 
     local conversation = {
-      approved_tools = { edit = true },
+      approved_tools = { str_replace = true },
       
       tracker = { suppress = function(_, _, fn) fn() end },
     }
@@ -90,9 +90,9 @@ T["sia.tools.edit"]["successful exact match edit multiple changes"] = function()
   eq("+  print(test)", result.content[7])
 end
 
-T["sia.tools.edit"]["successful exact match edit"] = function()
+T["sia.tools.str_replace"]["successful exact match edit"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -120,7 +120,7 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, { conversation = {
-      approved_tools = { edit = true },
+      approved_tools = { str_replace = true },
       
       tracker = { suppress = function(_, _, fn) fn() end },
     } })
@@ -146,9 +146,9 @@ T["sia.tools.edit"]["successful exact match edit"] = function()
   eq(true, string.find(result.summary, "✏️ Edited lines 1%-3 in test%.lua") ~= nil)
 end
 
-T["sia.tools.edit"]["successful inline edit"] = function()
+T["sia.tools.str_replace"]["successful inline edit"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -169,7 +169,7 @@ T["sia.tools.edit"]["successful inline edit"] = function()
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
     end, { conversation = {
-      approved_tools = { edit = true },
+      approved_tools = { str_replace = true },
       
       tracker = { suppress = function(_, _, fn) fn() end },
     } })
@@ -194,9 +194,9 @@ T["sia.tools.edit"]["successful inline edit"] = function()
   )
 end
 
-T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
+T["sia.tools.str_replace"]["successful edit with line numbers stripped"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -216,7 +216,7 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -238,9 +238,9 @@ T["sia.tools.edit"]["successful edit with line numbers stripped"] = function()
   eq(true, string.find(result.summary, "please double%-check the changes") ~= nil)
 end
 
-T["sia.tools.edit"]["create new file"] = function()
+T["sia.tools.str_replace"]["create new file"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -260,7 +260,7 @@ T["sia.tools.edit"]["create new file"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -278,9 +278,9 @@ T["sia.tools.edit"]["create new file"] = function()
   eq("Edited new_file.lua:", result.content[1])
 end
 
-T["sia.tools.edit"]["missing target_file parameter"] = function()
+T["sia.tools.str_replace"]["missing target_file parameter"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
 
     local result = nil
 
@@ -292,7 +292,7 @@ T["sia.tools.edit"]["missing target_file parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -306,9 +306,9 @@ T["sia.tools.edit"]["missing target_file parameter"] = function()
   eq("❌ Failed to edit", result.summary)
 end
 
-T["sia.tools.edit"]["missing old_string parameter"] = function()
+T["sia.tools.str_replace"]["missing old_string parameter"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
 
     local result = nil
 
@@ -320,7 +320,7 @@ T["sia.tools.edit"]["missing old_string parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -334,9 +334,9 @@ T["sia.tools.edit"]["missing old_string parameter"] = function()
   eq("❌ Failed to edit", result.summary)
 end
 
-T["sia.tools.edit"]["missing new_string parameter"] = function()
+T["sia.tools.str_replace"]["missing new_string parameter"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
 
     local result = nil
 
@@ -348,7 +348,7 @@ T["sia.tools.edit"]["missing new_string parameter"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -362,9 +362,9 @@ T["sia.tools.edit"]["missing new_string parameter"] = function()
   eq("❌ Failed to edit", result.summary)
 end
 
-T["sia.tools.edit"]["file cannot be loaded"] = function()
+T["sia.tools.str_replace"]["file cannot be loaded"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local original_ensure_file_is_loaded = utils.ensure_file_is_loaded
@@ -381,7 +381,7 @@ T["sia.tools.edit"]["file cannot be loaded"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -397,9 +397,9 @@ T["sia.tools.edit"]["file cannot be loaded"] = function()
   eq("❌ Failed to edit", result.summary)
 end
 
-T["sia.tools.edit"]["no matches found"] = function()
+T["sia.tools.str_replace"]["no matches found"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -419,7 +419,7 @@ T["sia.tools.edit"]["no matches found"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -435,9 +435,9 @@ T["sia.tools.edit"]["no matches found"] = function()
   eq("❌ Failed to edit test.txt", result.summary)
 end
 
-T["sia.tools.edit"]["multiple matches found"] = function()
+T["sia.tools.str_replace"]["multiple matches found"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -457,7 +457,7 @@ T["sia.tools.edit"]["multiple matches found"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -473,9 +473,9 @@ T["sia.tools.edit"]["multiple matches found"] = function()
   eq("❌ Failed to edit test.txt", result.summary)
 end
 
-T["sia.tools.edit"]["max failed matches reached"] = function()
+T["sia.tools.str_replace"]["max failed matches reached"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -485,7 +485,7 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
     utils.ensure_file_is_loaded = function(_) return buf end
 
     local results = {}
-    local conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } }
+    local conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } }
 
     local args = {
       target_file = "test.txt",
@@ -532,9 +532,9 @@ T["sia.tools.edit"]["max failed matches reached"] = function()
   )
 end
 
-T["sia.tools.edit"]["replace_all with inline matches"] = function()
+T["sia.tools.str_replace"]["replace_all with inline matches"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -560,7 +560,7 @@ T["sia.tools.edit"]["replace_all with inline matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -584,9 +584,9 @@ T["sia.tools.edit"]["replace_all with inline matches"] = function()
   eq(true, string.find(result.summary, "✏️ Replaced all %d+ occurrences?") ~= nil)
 end
 
-T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
+T["sia.tools.str_replace"]["replace_all with multi-line matches"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -621,7 +621,7 @@ T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -653,9 +653,9 @@ T["sia.tools.edit"]["replace_all with multi-line matches"] = function()
   eq(true, string.find(result.summary, "✏️ Replaced all 2 occurrences") ~= nil)
 end
 
-T["sia.tools.edit"]["replace_all error when no matches"] = function()
+T["sia.tools.str_replace"]["replace_all error when no matches"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -676,7 +676,7 @@ T["sia.tools.edit"]["replace_all error when no matches"] = function()
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 
@@ -696,9 +696,9 @@ T["sia.tools.edit"]["replace_all error when no matches"] = function()
   eq("❌ Failed to edit test.txt", result.summary)
 end
 
-T["sia.tools.edit"]["tool metadata"] = function()
+T["sia.tools.str_replace"]["tool metadata"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
 
     local args = {
       target_file = "test.txt",
@@ -715,8 +715,8 @@ T["sia.tools.edit"]["tool metadata"] = function()
 
   child.lua(code)
 
-  eq("edit", child.lua_get("_G.name"))
-  eq("Tool for editing files", child.lua_get("_G.description"))
+  eq("str_replace", child.lua_get("_G.name"))
+  eq(true, child.lua_get("_G.description"):find("Performs exact string replacements", 1, true) ~= nil)
   eq("Making changes to test.txt...", child.lua_get("_G.summary"))
 
   local required = child.lua_get("_G.required")
@@ -731,9 +731,9 @@ T["sia.tools.edit"]["tool metadata"] = function()
   eq("boolean", parameters.replace_all.type)
 end
 
-T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function()
+T["sia.tools.str_replace"]["replace_all with multiple matches on same line"] = function()
   local code = [[
-    local edit_tool = require("sia.tools.edit")
+    local edit_tool = require("sia.tools.str_replace")
     local utils = require("sia.utils")
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -758,7 +758,7 @@ T["sia.tools.edit"]["replace_all with multiple matches on same line"] = function
         summary = res.summary,
         content = type(res.content) == "string" and vim.split(res.content, "\n") or res.content,
       }
-    end, { conversation = { approved_tools = { edit = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
+    end, { conversation = { approved_tools = { str_replace = true }, tracker = { suppress = function(_, _, fn) fn() end } } })
 
     vim.wait(2000, function() return result ~= nil end)
 

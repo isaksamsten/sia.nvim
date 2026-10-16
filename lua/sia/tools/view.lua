@@ -29,195 +29,172 @@ local outdated_tpl = string.format(
   tool_names.view
 )
 
-local function create_view(hashline)
-  return tool_utils.new_tool({
-    definition = {
-      type = "function",
-      name = tool_names.view,
-      description = [[Views a file from the local filesystem. By default, it reads up to
+return tool_utils.new_tool({
+  definition = {
+    type = "function",
+    name = tool_names.view,
+    description = [[Views a file from the local filesystem. By default, it reads up to
 2000 lines starting from the beginning of the file. You can optionally specify a line
 offset and limit (especially handy for long files), but it`s RECOMMENDED TO READ THE
 WHOLE FILE by not providing these parameters. Any lines longer than 2000 characters
-will be truncated.]]
-        .. (
-          hashline
-            and [[
+will be truncated.
 
 Output includes a [PATH#TAG] snapshot header and LINE:TEXT rows for the edit tool.
-Truncated lines cannot be edited; read the complete lines before editing them.]]
-          or ""
-        ),
-      parameters = {
-        path = { type = "string", description = "The file path" },
-        offset = {
-          type = "integer",
-          description = "Line offset to start reading from (1-based, optional)",
-        },
-        limit = {
-          type = "integer",
-          description = "Maximum number of lines to read (default: 2000)",
-        },
+Truncated lines cannot be edited; read the complete lines before editing them.]],
+    parameters = {
+      path = { type = "string", description = "The file path" },
+      offset = {
+        type = "integer",
+        description = "Line offset to start reading from (1-based, optional)",
       },
-      required = { "path" },
+      limit = {
+        type = "integer",
+        description = "Maximum number of lines to read (default: 2000)",
+      },
     },
-    read_only = true,
-    summary = function(args)
-      if args.path then
-        return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
-      else
-        return "Viewing..."
-      end
-    end,
-
-    persist_allow = function(args)
-      return tool_utils.path_allow_rules("path", args.path)
-    end,
-    is_approved = function(args, _)
-      if args.path then
-        if require("sia.utils").dirs.is_safe(args.path) then
-          return true
-        end
-      end
-      return false
-    end,
-  }, function(args, conversation, callback, opts)
-    if not args.path then
-      callback({
-        content = "Error: No file path was provided",
-        summary = icons.error .. " Failed to view",
-        ephemeral = true,
-      })
-      return
-    end
-
-    local resolved_path =
-      tool_utils.resolve_workspace_path(args.path, conversation.workspace)
-
-    if vim.fn.filereadable(resolved_path) == 0 then
-      callback({
-        content = "Error: File cannot be found",
-        summary = icons.error .. " Failed to view",
-        ephemeral = true,
-      })
-      return
-    end
-
-    local offset = tonumber(args.offset) or 1
-    local limit = args.limit or 2000
-    local max_line_length = 2000
-    local confirm_message
-    if args.offset then
-      confirm_message = string.format(
-        "View lines %d-%d from %s",
-        args.offset,
-        args.offset + limit - 1,
-        args.path
-      )
+    required = { "path" },
+  },
+  read_only = true,
+  summary = function(args)
+    if args.path then
+      return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
     else
-      confirm_message = string.format("View %s (up to %d lines)", args.path, limit)
+      return "Viewing..."
     end
+  end,
 
-    opts.user_input(confirm_message, {
-      on_accept = function()
-        local buf = utils.ensure_file_is_loaded(resolved_path, {
-          read_only = true,
-          listed = false,
-        })
-        if not buf then
-          callback({
-            content = "Error: Cannot load " .. args.path,
-            summary = icons.error .. " Failed to view",
-            ephemeral = true,
-          })
-          return
-        end
-        local total_lines = vim.api.nvim_buf_line_count(buf)
-
-        if offset > total_lines then
-          offset = total_lines
-        end
-
-        local start_line = math.max(1, offset)
-        local end_line = math.min(total_lines, start_line + limit - 1)
-
-        local content = utils.get_content(
-          buf,
-          start_line - 1,
-          end_line,
-          { show_line_numbers = true, max_line_length = max_line_length }
-        )
-
-        if hashline then
-          content = require("sia.hashline").view(
-            conversation,
-            resolved_path,
-            vim.api.nvim_buf_get_lines(buf, 0, -1, false),
-            start_line,
-            end_line,
-            max_line_length
-          )
-        end
-
-        local pos = nil
-        if args.offset or args.limit then
-          pos = { start_line, end_line }
-        end
-
-        local display = view_display(args.path)
-        local name = display.label(args.path)
-
-        local summary
-        if args.offset or args.limit then
-          summary = string.format(
-            "%s Viewed lines %d-%d from %s",
-            display.icon,
-            start_line,
-            end_line,
-            name
-          )
-        else
-          summary = string.format(
-            "%s Viewed %s (%d lines)",
-            display.icon,
-            name,
-            end_line - start_line + 1
-          )
-        end
-
-        local outdated_message
-        if args.offset or args.limit then
-          local span = start_line ~= end_line
-              and string.format("lines %d-%d", start_line, end_line)
-            or string.format("line %d", start_line)
-          outdated_message =
-            string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
-        else
-          local span = end_line > 1
-              and string.format("lines %d-%d", start_line, end_line)
-            or string.format("line %d", start_line)
-          outdated_message =
-            string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
-        end
-
-        callback({
-          content = table.concat(content, "\n"),
-          region = {
-            buf = buf,
-            pos = pos,
-            stale = {
-              content = outdated_message,
-            },
-            idempotent = true,
-          },
-          summary = summary,
-        })
-      end,
+  persist_allow = function(args)
+    return tool_utils.path_allow_rules("path", args.path)
+  end,
+  is_approved = function(args, _)
+    if args.path then
+      if require("sia.utils").dirs.is_safe(args.path) then
+        return true
+      end
+    end
+    return false
+  end,
+}, function(args, conversation, callback, opts)
+  if not args.path then
+    callback({
+      content = "Error: No file path was provided",
+      summary = icons.error .. " Failed to view",
+      ephemeral = true,
     })
-  end)
-end
+    return
+  end
 
-local plain_view = create_view(false)
-local hashline_view = create_view(true)
-return tool_utils.configured_tool(function(settings)
-  return settings.hashline and hashline_view or plain_view
+  local resolved_path =
+    tool_utils.resolve_workspace_path(args.path, conversation.workspace)
+
+  if vim.fn.filereadable(resolved_path) == 0 then
+    callback({
+      content = "Error: File cannot be found",
+      summary = icons.error .. " Failed to view",
+      ephemeral = true,
+    })
+    return
+  end
+
+  local offset = tonumber(args.offset) or 1
+  local limit = args.limit or 2000
+  local max_line_length = 2000
+  local confirm_message
+  if args.offset then
+    confirm_message = string.format(
+      "View lines %d-%d from %s",
+      args.offset,
+      args.offset + limit - 1,
+      args.path
+    )
+  else
+    confirm_message = string.format("View %s (up to %d lines)", args.path, limit)
+  end
+
+  opts.user_input(confirm_message, {
+    on_accept = function()
+      local buf = utils.ensure_file_is_loaded(resolved_path, {
+        read_only = true,
+        listed = false,
+      })
+      if not buf then
+        callback({
+          content = "Error: Cannot load " .. args.path,
+          summary = icons.error .. " Failed to view",
+          ephemeral = true,
+        })
+        return
+      end
+      local total_lines = vim.api.nvim_buf_line_count(buf)
+
+      if offset > total_lines then
+        offset = total_lines
+      end
+
+      local start_line = math.max(1, offset)
+      local end_line = math.min(total_lines, start_line + limit - 1)
+
+      local content = require("sia.hashline").view(
+        conversation,
+        resolved_path,
+        vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+        start_line,
+        end_line,
+        max_line_length
+      )
+
+      local pos = nil
+      if args.offset or args.limit then
+        pos = { start_line, end_line }
+      end
+
+      local display = view_display(args.path)
+      local name = display.label(args.path)
+
+      local summary
+      if args.offset or args.limit then
+        summary = string.format(
+          "%s Viewed lines %d-%d from %s",
+          display.icon,
+          start_line,
+          end_line,
+          name
+        )
+      else
+        summary = string.format(
+          "%s Viewed %s (%d lines)",
+          display.icon,
+          name,
+          end_line - start_line + 1
+        )
+      end
+
+      local outdated_message
+      if args.offset or args.limit then
+        local span = start_line ~= end_line
+            and string.format("lines %d-%d", start_line, end_line)
+          or string.format("line %d", start_line)
+        outdated_message =
+          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
+      else
+        local span = end_line > 1 and string.format("lines %d-%d", start_line, end_line)
+          or string.format("line %d", start_line)
+        outdated_message =
+          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
+      end
+
+      callback({
+        content = table.concat(content, "\n"),
+        region = {
+          buf = buf,
+          pos = pos,
+          stale = {
+            content = outdated_message,
+          },
+          idempotent = true,
+        },
+        summary = summary,
+      })
+    end,
+  })
 end)

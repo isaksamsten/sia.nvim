@@ -1,12 +1,10 @@
 local eq = MiniTest.expect.equality
 local tool = require("sia.tools.edit")
 local view = require("sia.tools.view")
-local path, conversation, tag, buf, original_hashline
+local path, conversation, tag, buf
 local T = MiniTest.new_set({
   hooks = {
     pre_case = function()
-      original_hashline = require("sia.config").options.settings.hashline
-      require("sia.config").options.settings.hashline = true
       path = vim.fn.tempname()
       vim.fn.writefile({ "one", "two", "three" }, path)
       conversation = {
@@ -25,7 +23,6 @@ local T = MiniTest.new_set({
       buf = vim.fn.bufnr(path)
     end,
     post_case = function()
-      require("sia.config").options.settings.hashline = original_hashline
       if buf and vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_buf_delete(buf, { force = true })
       end
@@ -127,16 +124,15 @@ T["file deletion during approval prevents writes"] = function()
   eq(result().ephemeral, true)
   eq(vim.fn.filereadable(path), 0)
 end
-T["view output follows config instead of a tool argument"] = function()
-  require("sia.config").options.settings.hashline = false
+T["view always returns hashline output"] = function()
   local result
   view.implementation.execute({ path = path, hashline = true }, function(res)
     result = res
   end, { conversation = conversation })
-  eq(result.content, "     1\tone\n     2\ttwo\n     3\tthree")
+  eq(result.content:match("#(%x+)%]"), tag)
   eq(view.definition.parameters.hashline, nil)
 end
-T["conversation retains selected tools after config changes"] = function()
+T["conversation uses hashline tools"] = function()
   local conv = require("sia.conversation").new({
     temporary = true,
     model = require("sia.model").resolve("openai/gpt-4.1"),
@@ -145,10 +141,8 @@ T["conversation retains selected tools after config changes"] = function()
   })
   local selected_edit = conv.tool_implementation.edit
   local selected_view = conv.tool_implementation.view
-  require("sia.config").options.settings.hashline = false
   eq(conv.tool_definitions[1].parameters.tag.type, "string")
   eq(conv.tool_definitions[1].parameters.old_string, nil)
-  eq(selected_edit.instructions:find("PUT N.=M:", 1, true) ~= nil, true)
   local result
   selected_view.execute({ path = path }, function(res)
     result = res
