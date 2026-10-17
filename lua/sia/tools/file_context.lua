@@ -1,6 +1,5 @@
 local hashline = require("sia.hashline")
 local M = {}
-
 --- Build tagged context and the region that tracks its freshness.
 --- Recovery callers can cap bytes as well as lines without marking omitted rows seen.
 function M.build(conversation, path, buf, opts)
@@ -48,25 +47,6 @@ function M.build(conversation, path, buf, opts)
       },
     },
   }
-end
-
---- Refuse to mint recovery context when disk and buffer disagree.
-function M.disk_conflict(path, buf)
-  local ok, disk = pcall(vim.fn.readfile, path)
-  if not ok then
-    return "The file on disk is missing or unreadable."
-  end
-  if vim.bo[buf].fileformat == "dos" then
-    for i, line in ipairs(disk) do
-      disk[i] = line:gsub("\r$", "")
-    end
-  end
-  if #disk == 0 then
-    disk = { "" }
-  end
-  if not vim.deep_equal(disk, vim.api.nvim_buf_get_lines(buf, 0, -1, false)) then
-    return "Disk contents differ from the loaded buffer. Resolve the buffer/disk differences before editing."
-  end
 end
 
 --- Old coordinates are only a hint: never apply a stale edit automatically.

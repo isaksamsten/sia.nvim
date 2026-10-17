@@ -2,6 +2,7 @@ local tool_utils = require("sia.tools.utils")
 local utils = require("sia.utils")
 local diff = require("sia.diff")
 local hashline = require("sia.hashline")
+local file_context = require("sia.tools.file_context")
 
 return tool_utils.new_tool({
   definition = {
@@ -19,8 +20,8 @@ Pass `target_file`, `tag`, and `edits` containing operations only (no `[PATH#TAG
 
 <rules>
 - `:` ops only: body rows `+TEXT` verbatim incl. indent; lone `+` blank. Literal `- item`/`+ item` → `+- item`/`++ item`. NEVER `-`/bare context. Body length independent of range; delete with CUT, not empty PUT.
-- Touch displayed changed lines only; `…`, `..`, collapsed `N-M:` and out-of-window lines UNSEEN. Re-read first. Tight ranges: split nonadjacent changes; NEVER include keepers or start/end mid-expression/block. Pure addition uses gap PUT.
-- NEVER restyle unrelated code. After EVERY edit tag/numbers change: use edit response or fresh `view`; stale tag/surprise → STOP, re-read.
+- Touch displayed changed lines only; omitted or truncated lines are UNSEEN: use `view` to read them first. Tight ranges: split nonadjacent changes; NEVER include keepers or start/end mid-expression/block. Pure addition uses gap PUT.
+- NEVER restyle unrelated code. Use the latest tag and displayed line numbers from `view` or an edit response, including rejected edits.
 </rules>
 
 <example>
@@ -62,7 +63,6 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
   local function fail(message)
     callback({
       content = "Error: " .. message,
-      summary = "Failed to edit",
       ephemeral = true,
     })
   end
@@ -78,15 +78,31 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
   if not buf then
     return fail("Cannot load " .. args.target_file)
   end
+  local function reject_snapshot(reasons)
+    local context = file_context.recovery(conversation, path, buf, args.edits)
+    callback({
+      content = "Edit rejected: "
+        .. table.concat(reasons, " ")
+        .. " No changes applied. Old line numbers may have shifted."
+        .. "\nCurrent context:\n"
+        .. context.content
+        .. "\nReview this context, then retry edit with its tag and line numbers."
+        .. " Fully displayed rows need no additional view; read only missing or truncated rows.",
+      region = context.region,
+    })
+  end
   local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local mismatch = hashline.validate_snapshot(conversation, path, before, args.tag)
+  if mismatch then
+    return reject_snapshot(mismatch.reasons)
+  end
   local after, err, commit_clipboard =
     hashline.apply(conversation, path, before, args.tag, args.edits)
   if not after then
     return fail(err)
   end
-  local tick = vim.api.nvim_buf_get_changedtick(buf)
   local disk_before = vim.fn.readfile(path, "b")
-  opts.user_input("Edit " .. args.target_file .. " with hashline", {
+  opts.user_input("Edit " .. args.target_file, {
     preview = function(preview_buf)
       local patch = utils.create_unified_diff(
         table.concat(before, "\n"),
@@ -103,11 +119,12 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
     on_accept = function()
       if
         not vim.api.nvim_buf_is_valid(buf)
-        or vim.api.nvim_buf_get_changedtick(buf) ~= tick
+        or not vim.deep_equal(vim.api.nvim_buf_get_lines(buf, 0, -1, false), before)
       then
-        return fail(
-          "File changed while awaiting approval. Read it again before editing."
-        )
+        if not vim.api.nvim_buf_is_valid(buf) then
+          return fail("Buffer was closed while awaiting approval. No changes applied.")
+        end
+        return reject_snapshot({ "Buffer contents changed while awaiting approval." })
       end
       local disk_ok, disk_now = pcall(vim.fn.readfile, path, "b")
       if not disk_ok or not vim.deep_equal(disk_before, disk_now) then

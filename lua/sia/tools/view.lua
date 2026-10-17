@@ -21,11 +21,6 @@ local function view_display(path)
   }
 end
 
-local outdated_tpl = string.format(
-  "Previously viewed %%s from %%s - file was modified, use %s tool to get current content",
-  tool_names.view
-)
-
 return tool_utils.new_tool({
   definition = {
     type = "function",
@@ -95,7 +90,6 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
 
   local offset = tonumber(args.offset) or 1
   local limit = args.limit or 2000
-  local max_line_length = 2000
   local confirm_message
   if args.offset then
     confirm_message = string.format(
@@ -122,28 +116,12 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
         })
         return
       end
-      local total_lines = vim.api.nvim_buf_line_count(buf)
-
-      if offset > total_lines then
-        offset = total_lines
-      end
-
-      local start_line = math.max(1, offset)
-      local end_line = math.min(total_lines, start_line + limit - 1)
-
-      local content = require("sia.hashline").view(
-        conversation,
-        resolved_path,
-        vim.api.nvim_buf_get_lines(buf, 0, -1, false),
-        start_line,
-        end_line,
-        max_line_length
-      )
-
-      local pos = nil
-      if args.offset or args.limit then
-        pos = { start_line, end_line }
-      end
+      local context = require("sia.tools.file_context").build(conversation, resolved_path, buf, {
+        first = offset,
+        limit = limit,
+        whole_buffer = not (args.offset or args.limit),
+      })
+      local start_line, end_line = context.first, context.last
 
       local display = view_display(args.path)
       local name = display.label(args.path)
@@ -164,30 +142,9 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
         )
       end
 
-      local outdated_message
-      if args.offset or args.limit then
-        local span = start_line ~= end_line
-            and string.format("lines %d-%d", start_line, end_line)
-          or string.format("line %d", start_line)
-        outdated_message =
-          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
-      else
-        local span = end_line > 1 and string.format("lines %d-%d", start_line, end_line)
-          or string.format("line %d", start_line)
-        outdated_message =
-          string.format(outdated_tpl, span, vim.fn.fnamemodify(args.path, ":."))
-      end
-
       callback({
-        content = table.concat(content, "\n"),
-        region = {
-          buf = buf,
-          pos = pos,
-          stale = {
-            content = outdated_message,
-          },
-          idempotent = true,
-        },
+        content = context.content,
+        region = context.region,
         summary = summary,
       })
     end,

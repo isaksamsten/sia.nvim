@@ -179,6 +179,7 @@ end
 --- @field is_approved (fun(args: any, conversation:sia.Conversation):boolean)|boolean|nil
 --- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
 --- @field summary (fun(args:table):sia.ToolSummary?)?
+--- @field preview boolean|(fun(args:any, result:sia.ToolResult):sia.ToolPreview?)|nil
 --- @field instructions string?
 
 --- @class sia.NewToolExecuteUserChoiceOpts
@@ -193,6 +194,7 @@ end
 --- @field on_accept fun()
 --- @field level sia.RiskLevel?
 --- @field preview (fun(buf:integer):integer?)?
+--- @field preview_result boolean? Reuse non-diff approval content as the result preview.
 --- @field wrap boolean?
 --- @field verifier {system_prompt:string, input:string}?
 
@@ -829,10 +831,22 @@ M.new_tool = function(opts, execute)
       end,
       execute = function(args, callback, exeution_context)
         local verification = {}
+        local accepted_preview
         local function result_callback(result)
           local verdict = verification.verdict
           if verdict and result then
             result.verification = vim.deepcopy(verdict)
+          end
+          if result and result.summary and not result.preview then
+            if opts.preview == true then
+              result.preview = accepted_preview
+                or require("sia.tool_output").from_content(result.content)
+            elseif type(opts.preview) == "function" then
+              local ok, preview = pcall(opts.preview, args, result)
+              if ok then
+                result.preview = preview
+              end
+            end
           end
           callback(result)
         end
@@ -863,7 +877,21 @@ M.new_tool = function(opts, execute)
 
         execute(args, exeution_context.conversation, result_callback, {
           cancellable = exeution_context.cancellable,
-          user_input = user_input,
+          user_input = function(prompt, input_args)
+            local on_accept = input_args.on_accept
+            input_args.on_accept = function()
+              -- Capture before mutation, including automatically approved tools.
+              -- Non-diff approval text describes intent rather than the result.
+              if opts.preview then
+                local preview = require("sia.tool_output").capture(input_args.preview)
+                if preview and (preview.ft == "diff" or input_args.preview_result) then
+                  accepted_preview = preview
+                end
+              end
+              on_accept()
+            end
+            user_input(prompt, input_args)
+          end,
           user_choice = user_choice,
           turn_id = exeution_context.turn_id,
         })
@@ -871,19 +899,6 @@ M.new_tool = function(opts, execute)
     },
     definition = opts.definition,
   }
-end
-
---- Resolve a tool's schema, prompt and implementation from current settings.
---- Conversations retain the resolved definition and implementation at creation.
---- @param resolve fun(settings: sia.config.Settings):sia.Tool
---- @return sia.Tool
-function M.configured_tool(resolve)
-  local tool = resolve(require("sia.config").options.settings)
-  return setmetatable({}, {
-    __index = function(_, key)
-      return tool[key]
-    end,
-  })
 end
 
 return M

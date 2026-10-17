@@ -13,6 +13,27 @@ local function digest(lines)
   return vim.fn.sha256(table.concat(lines, "\n"))
 end
 
+--- Diagnose snapshot mismatches without recording a new read.
+--- Content digests, rather than buffer change ticks, determine validity.
+function M.validate_snapshot(conversation, path, lines, tag)
+  path = vim.fn.fnamemodify(path, ":p")
+  local snapshot = stores[conversation] and stores[conversation][path]
+  local reasons = {}
+  if not snapshot then
+    reasons[#reasons + 1] = "No recorded snapshot exists for this file."
+  else
+    if type(tag) ~= "string" or tag:upper() ~= snapshot.digest:sub(1, 4):upper() then
+      reasons[#reasons + 1] = "The supplied tag does not match the latest recorded snapshot."
+    end
+    if digest(lines) ~= snapshot.digest then
+      reasons[#reasons + 1] = "Buffer contents changed since the recorded snapshot."
+    end
+  end
+  if #reasons > 0 then
+    return { reasons = reasons }
+  end
+end
+
 --- Record only fully displayed lines; truncated lines cannot be edited.
 function M.view(conversation, path, lines, first, last, max_length)
   path = vim.fn.fnamemodify(path, ":p")
@@ -136,15 +157,11 @@ end
 --- The third return value commits captured registers after a successful file write.
 function M.apply(conversation, path, lines, tag, input)
   path = vim.fn.fnamemodify(path, ":p")
-  local snapshot = stores[conversation] and stores[conversation][path]
-  if
-    type(tag) ~= "string"
-    or not snapshot
-    or tag:upper() ~= snapshot.digest:sub(1, 4):upper()
-    or digest(lines) ~= snapshot.digest
-  then
-    return nil, "Stale or unknown snapshot. Use view before editing."
+  local mismatch = M.validate_snapshot(conversation, path, lines, tag)
+  if mismatch then
+    return nil, table.concat(mismatch.reasons, " ") .. " Use view before editing."
   end
+  local snapshot = stores[conversation][path]
   if type(input) ~= "string" or input == "" then
     return nil, "No hashline operations provided."
   end
