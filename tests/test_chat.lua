@@ -364,6 +364,11 @@ T["strategy.chat"]["reasoning rendering"]["inserts folded reasoning into the buf
   local win = strategy:get_win()
   vim.api.nvim_set_current_win(win)
   eq("expr", vim.wo[win].foldmethod)
+  eq("SiaFolded", vim.opt_local.winhighlight:get().Folded)
+  vim.opt_local.winhighlight:append({ Normal = "Normal" })
+  vim.api.nvim_exec_autocmds("BufWinEnter", { buffer = strategy.buf })
+  eq("SiaFolded", vim.opt_local.winhighlight:get().Folded)
+  eq("Normal", vim.opt_local.winhighlight:get().Normal)
   eq(3, vim.fn.foldclosed(3))
 
   strategy:redraw()
@@ -522,7 +527,8 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
     "/sia",
     "",
     ">| Plan the check",
-    "• Ran make test · 3 lines",
+    "• Ran make test",
+    "  + Details",
     "```text",
     "Last lines:",
     "- 120 passed",
@@ -670,6 +676,28 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   eq({}, tool_result_ranges(strategy.buf))
 
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["hidden tools restore spacing and allow subsequent tool rendering"] = function()
+  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  strategy.turn_renderer:append_content("Before")
+  local before = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  strategy:on_tool_results({ { key = "hidden", status = "done", actions = {} } })
+  eq(before, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+  for i = 1, 2 do
+    local key = "failed-" .. i
+    strategy:on_tool_status({ { key = key, status = "running", summary = "Editing" } })
+    strategy:on_tool_results({ { key = key, status = "done", actions = {} } })
+    eq(before, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+    eq({}, tool_result_ranges(strategy.buf))
+  end
+  strategy:on_tool_results({ { key = "success", status = "done", summary = "Edited file", actions = {} } })
+  eq(1, #tool_result_ranges(strategy.buf))
   ChatStrategy.remove(strategy.buf)
 end
 
@@ -913,6 +941,7 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
     ">| First thought",
     "",
     "First content",
+    "",
     ">| Second thought",
     "",
     "Second content",
@@ -1095,7 +1124,6 @@ T["strategy.chat"]["tool-only round with multiple tools renders single /sia head
     "/sia",
     "",
     "• Ran ls",
-    "",
     "• Searched for hello",
     "Found it",
   }
@@ -1315,7 +1343,7 @@ T["strategy.chat"]["partial tool updates preserve earlier tools and their highli
   strategy:on_tool_status({ { key = "one", status = "done", summary = "First tool" } })
   strategy:on_tool_status({ { key = "two", status = "running", summary = "Second tool" } })
   local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  eq({ "• First tool", "", "• Second tool", "" }, vim.list_slice(lines, #lines - 3))
+  eq({ "• First tool", "• Second tool", "" }, vim.list_slice(lines, #lines - 2))
   eq(2, #tool_result_ranges(strategy.buf))
   ChatStrategy.remove(strategy.buf)
 end
@@ -1342,25 +1370,24 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
     local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
     local first, next_tool
     for row, line in ipairs(lines) do
-      if line == "```diff" then first = row end
-      if line == "• Ran check · 1 line" then next_tool = row end
+      if line == "```diff" then first = row - 1 end
+      if line == "• Ran check" then next_tool = row end
     end
-    eq("", lines[next_tool - 1])
-    eq("```", lines[next_tool - 2])
+    eq("```", lines[next_tool - 1])
     local foldexpr = require("sia.canvas").blockquote_foldexpr
     eq(">1", foldexpr(first))
     eq(1, foldexpr(first + 3))
     eq(1, foldexpr(first + 4))
     eq(1, foldexpr(first + 6))
-    eq(0, foldexpr(next_tool - 1))
+    eq(1, foldexpr(next_tool - 1))
     eq(0, foldexpr(next_tool))
     eq(first, vim.fn.foldclosed(first))
-    eq(next_tool - 2, vim.fn.foldclosedend(first))
+    eq(next_tool - 1, vim.fn.foldclosedend(first))
     eq(-1, vim.fn.foldclosed(next_tool))
     eq(next_tool + 1, vim.fn.foldclosed(next_tool + 1))
     vim.api.nvim_win_set_cursor(0, { next_tool + 1, 0 })
     vim.cmd("normal! zo")
-    eq("• Ran check · 1 line", vim.fn.getline(next_tool))
+    eq("• Ran check", vim.fn.getline(next_tool))
     eq(-1, vim.fn.foldclosed(next_tool + 1))
     vim.cmd("normal! zc")
   end
@@ -1380,6 +1407,32 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
   ChatStrategy.remove(strategy.buf)
 end
 
+T["strategy.chat"]["updating adjacent tool blocks preserves preceding preview folds"] = function()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_current_buf(buf)
+  local canvas = require("sia.canvas").Canvas:new(buf)
+  local first = { status = "done", summary = { header = "First", detail = { text = "first output" } } }
+  local second = { status = "done", summary = { header = "Second", detail = { text = "second output" } } }
+  canvas:update_tool_block({ 0, 0 }, 1, { first = first }, { "first" })
+  local function check()
+    local ns = vim.api.nvim_get_namespaces().sia_chat_tool_preview
+    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+    eq(2, #marks)
+    eq({ 1, 5 }, { marks[1][2], marks[1][4].end_row })
+    eq({ 6, 10 }, { marks[2][2], marks[2][4].end_row })
+    local expr = require("sia.canvas").blockquote_foldexpr
+    eq(">1", expr(2))
+    eq(1, expr(4))
+    eq(0, expr(6))
+    eq(">1", expr(7))
+  end
+  local count = canvas:update_tool_block({ 5, 0 }, 1, { second = second }, { "second" })
+  check()
+  canvas:update_tool_block({ 5, 0 }, count, { second = second }, { "second" })
+  check()
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
 T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, buf)
@@ -1387,14 +1440,14 @@ T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] 
   canvas:update_tool_block({ 0, 0 }, 1, {
     tool = { status = "done", summary = { header = "Ran command", detail = { text = "```lua\n>| literal\n```\nend" } } },
   }, { "tool" })
-  eq({ "• Ran command · 4 lines", "````text", "```lua", ">| literal", "```", "end", "````", "" },
+  eq({ "• Ran command", "  + Details", "````text", "```lua", ">| literal", "```", "end", "````", "" },
     vim.api.nvim_buf_get_lines(buf, 0, -1, false))
   -- Metadata-looking text in the fenced body must not create a reasoning fold.
   eq(1, require("sia.canvas").blockquote_foldexpr(4))
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
-T["strategy.chat"]["tools in consecutive streams retain a blank separator"] = function()
+T["strategy.chat"]["tools in consecutive streams use the same compact spacing as batched tools"] = function()
   local conversation = Conversation.new({
     model = require("sia.model").resolve("openai/gpt-4.1"),
   })
@@ -1406,8 +1459,73 @@ T["strategy.chat"]["tools in consecutive streams retain a blank separator"] = fu
   strategy:on_stream_start()
   strategy:on_tool_status({ { key = "second", status = "done", summary = "Ran second" } })
   local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  eq({ "• Ran first", "", "• Ran second", "" }, vim.list_slice(lines, #lines - 3))
+  eq({ "• Ran first", "• Ran second", "" }, vim.list_slice(lines, #lines - 2))
   ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["fold text explicitly highlights reasoning and output despite window remapping"] = function()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.bo[buf].filetype = "sia"
+  local canvas = require("sia.canvas").Canvas:new(buf)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+    ">| Think through it", ">| Check the result", "", "• Ran check",
+    "  + Details", "```text", "first", "second", "```", "",
+  })
+  canvas:highlight_tool(3, 9, { header = "Ran check", detail = { text = "first\nsecond" } })
+  -- Window options can replace the mapping originally installed by ftplugin.
+  vim.wo.winhighlight = "Folded:ErrorMsg"
+  local observed
+  _G.SiaTestFoldtext = function()
+    observed = require("sia.canvas").blockquote_foldtext()
+    return observed
+  end
+  vim.wo.foldtext = "v:lua.SiaTestFoldtext()"
+  canvas:refresh_folds()
+  local ok, err = pcall(function()
+    vim.fn.foldtextresult(1)
+    eq({ { "Think through it  (2 lines)", "SiaFolded" } }, observed)
+    observed = nil
+    vim.wo.conceallevel = 3
+    eq(3, vim.wo.conceallevel)
+    eq(true, vim.fn.foldtextresult(5):find("Show details", 1, true) ~= nil)
+    eq({ { "  + Show details… · 2 lines", "SiaFolded" } }, observed)
+  end)
+  _G.SiaTestFoldtext = nil
+  vim.api.nvim_buf_delete(buf, { force = true })
+  assert(ok, err)
+end
+
+T["strategy.chat"]["details fold stays visible when Markdown fences conceal whole lines"] = function()
+  local screen = MiniTest.new_child_neovim()
+  screen.start({ "-u", "assets/minimal.lua", "-i", "NONE", "-n" })
+  local ok, err = pcall(function()
+    screen.lua([[
+      local canvas = require("sia.canvas").Canvas:new(vim.api.nvim_get_current_buf())
+      canvas:update_tool_block({ 0, 0 }, 1, {
+        tool = { status = "done", summary = { header = "Ran check", detail = { text = "output" } } },
+      }, { "tool" })
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
+      vim.wo.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
+      vim.wo.foldlevel = 0
+      vim.wo.concealcursor = "n"
+      local ns = vim.api.nvim_create_namespace("test_concealed_fences")
+      for _, row in ipairs({ 2, 4 }) do
+        vim.api.nvim_buf_set_extmark(0, ns, row, 0, { end_row = row + 1, conceal_lines = "" })
+      end
+      canvas:refresh_folds()
+    ]])
+    for _, level in ipairs({ 2, 3 }) do
+      screen.lua("vim.wo.conceallevel = " .. level .. "; vim.cmd('redraw!')")
+      local shot = screen.get_screenshot()
+      eq(true, table.concat(shot.text[2]):find("+ Show details… · 1 line", 1, true) ~= nil)
+      eq(2, screen.lua_get("vim.fn.foldclosed(2)"))
+      eq(5, screen.lua_get("vim.fn.foldclosedend(2)"))
+    end
+  end)
+  screen.stop()
+  assert(ok, err)
 end
 
 return T

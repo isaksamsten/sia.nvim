@@ -33,7 +33,7 @@ AssistantTurnRenderer.__index = AssistantTurnRenderer
 --- @field details string?
 --- @field name string?
 
---- @param opts { canvas: sia.Canvas, buf: integer, line: integer, separate_tools: boolean? }
+--- @param opts { canvas: sia.Canvas, buf: integer, line: integer }
 --- @return sia.chat.AssistantTurnRenderer
 function AssistantTurnRenderer.new(opts)
   local obj = {
@@ -52,7 +52,6 @@ function AssistantTurnRenderer.new(opts)
     tool_block_line_count = 0,
     tool_block_reuses_placeholder = false,
     has_tool_blocks = false,
-    separate_tools = opts.separate_tools or false,
   }
   return setmetatable(obj, AssistantTurnRenderer)
 end
@@ -147,11 +146,60 @@ function AssistantTurnRenderer:update_tool_blocks(statuses)
     keyed_statuses[status.key] = status
   end
 
-  if not self.tool_block_extmark then
-    if self.separate_tools and self.content_writer:is_empty() then
-      self.content_writer:append_newline()
+  local visible = false
+  for _, status in pairs(keyed_statuses) do
+    if status.summary then
+      visible = true
+      break
     end
-    self.separate_tools = false
+  end
+  if not visible then
+    if self.tool_block_extmark then
+      local position = vim.api.nvim_buf_get_extmark_by_id(
+        self.buf,
+        TOOL_RENDER_NS,
+        self.tool_block_extmark,
+        {}
+      )
+      local saved = self.tool_block_origin
+      if #position > 0 then
+        self.canvas:clear_tool_highlights(
+          position[1],
+          position[1] + self.tool_block_line_count
+        )
+        vim.bo[self.buf].modifiable = true
+        vim.api.nvim_buf_set_lines(
+          self.buf,
+          saved.line,
+          position[1] + self.tool_block_line_count,
+          false,
+          saved.lines
+        )
+        self.canvas:refresh_folds()
+      end
+      vim.api.nvim_buf_del_extmark(self.buf, TOOL_RENDER_NS, self.tool_block_extmark)
+      self.content_writer.line = saved.line
+      self.content_writer.column = saved.column
+      self.content_writer.temporary_line = saved.line
+      self.content_writer.temporary_column = saved.column
+      self.tool_block_extmark = nil
+      self.tool_block_line_count = 0
+      self.has_tool_blocks = false
+    end
+    return
+  end
+
+  if not self.tool_block_extmark then
+    self.tool_block_origin = {
+      line = self.content_writer.line,
+      column = self.content_writer.column,
+      lines = vim.api.nvim_buf_get_lines(
+        self.buf,
+        self.content_writer.line,
+        self.content_writer.line + 1,
+        false
+      ),
+    }
     self.content_writer:append_newline_if_needed()
     local line = self.content_writer.line
     local current_line = vim.api.nvim_buf_get_lines(self.buf, line, line + 1, false)[1]
@@ -501,9 +549,6 @@ function ChatStrategy:on_stream_start()
     canvas = self.canvas,
     buf = self.buf,
     line = last_line,
-    separate_tools = self.turn_renderer ~= nil
-      and self.turn_renderer.has_tool_blocks
-      and last_text == "",
   })
   return true
 end

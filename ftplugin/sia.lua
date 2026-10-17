@@ -6,6 +6,7 @@ local function setup_window()
   vim.opt_local.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
   vim.opt_local.foldenable = true
   vim.opt_local.foldlevel = 0
+  vim.opt_local.winhighlight:append({ Folded = "SiaFolded" })
   vim.opt_local.conceallevel = 3
   vim.opt_local.concealcursor = "n"
 

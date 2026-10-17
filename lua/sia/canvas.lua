@@ -7,6 +7,7 @@ local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 local REASONING_META_PREFIX = ">| "
 local TOOL_META_PREFIX = ">! "
+local DETAILS_LABEL = "  + Details"
 
 --- @param summary sia.ToolSummary
 --- @return sia.ToolSummaryParts
@@ -45,6 +46,7 @@ local function format_tool_detail_lines(details, ft)
   local fence = string.rep("`", length)
   local language = (ft or "text"):match("^[%w_+%-]+$") or "text"
   table.insert(lines, 1, fence .. language)
+  table.insert(lines, 1, DETAILS_LABEL)
   table.insert(lines, fence)
   return lines
 end
@@ -62,13 +64,6 @@ local function format_tool_summary_lines(status, summary)
     local detail_lines =
       format_tool_detail_lines(summary.detail.text, summary.detail.ft)
     if detail_lines then
-      local count = #detail_lines - 2 -- Exclude Markdown fences.
-      lines[#lines] = string.format(
-        "%s · %d %s",
-        lines[#lines],
-        count,
-        count == 1 and "line" or "lines"
-      )
       vim.list_extend(lines, detail_lines)
     end
   end
@@ -232,9 +227,6 @@ local function build_tool_block(tool_renders, tool_order)
         if render.status == "done" then
           append_verification(block_lines, render.verification)
         end
-        if #lines > 0 then
-          table.insert(lines, "")
-        end
         local start = #lines
         vim.list_extend(lines, block_lines)
         table.insert(highlights, {
@@ -256,18 +248,20 @@ end
 --- @param start_line integer?
 --- @param end_line integer?
 function Canvas:clear_tool_highlights(start_line, end_line)
-  vim.api.nvim_buf_clear_namespace(
-    self.buf,
-    TOOL_PREVIEW_NS,
-    start_line or 0,
-    end_line or -1
-  )
-  vim.api.nvim_buf_clear_namespace(
-    self.buf,
-    TOOL_RESULT_NS,
-    start_line or 0,
-    end_line or -1
-  )
+  for _, namespace in ipairs({ TOOL_PREVIEW_NS, TOOL_RESULT_NS }) do
+    if start_line == nil and end_line == nil then
+      vim.api.nvim_buf_clear_namespace(self.buf, namespace, 0, -1)
+    else
+      -- Namespace range clearing also removes ranges that end at the start
+      -- boundary. Adjacent tool blocks must retain those preceding marks.
+      local marks = vim.api.nvim_buf_get_extmarks(self.buf, namespace, 0, -1, {})
+      for _, mark in ipairs(marks) do
+        if mark[2] >= (start_line or 0) and (not end_line or end_line == -1 or mark[2] < end_line) then
+          vim.api.nvim_buf_del_extmark(self.buf, namespace, mark[1])
+        end
+      end
+    end
+  end
 end
 
 -- Text changes can evaluate foldexpr before preview extmarks exist. Invalidate
@@ -302,7 +296,7 @@ function M.blockquote_foldexpr(lnum)
   })
   local mark = marks[1]
   if mark and row < mark[4].end_row then
-    -- Fold both fences and the full body, keeping the action header outside.
+    -- Fold the details label, fences, and body; keep the action header outside.
     return row == mark[2] and ">1" or 1
   end
   local line = vim.fn.getline(lnum)
@@ -320,15 +314,20 @@ function M.blockquote_foldexpr(lnum)
   return 0
 end
 
---- @return string
+--- @return [string, string][]
 function M.blockquote_foldtext()
   local foldstart = vim.v.foldstart
   local foldend = vim.v.foldend
   local num_lines = foldend - foldstart + 1
 
   local first_line = vim.fn.getline(foldstart)
-  if first_line:match("^```+") then
-    return string.format("Output (%d lines)", math.max(0, num_lines - 2))
+  if first_line == DETAILS_LABEL then
+    return {
+      {
+        string.format("  + Show details… · %d %s", math.max(0, num_lines - 3), num_lines == 4 and "line" or "lines"),
+        "SiaFolded",
+      },
+    }
   end
   local kind = meta_line_kind(first_line)
   local preview = kind and strip_meta_prefix(first_line, kind) or first_line
@@ -337,7 +336,7 @@ function M.blockquote_foldtext()
     preview = preview:sub(1, max_width) .. "…"
   end
 
-  return string.format("%s  (%d lines)", preview, num_lines)
+  return { { string.format("%s  (%d lines)", preview, num_lines), "SiaFolded" } }
 end
 
 function Canvas:get_win()
@@ -549,8 +548,8 @@ function Canvas:render_messages(messages, model)
         end
         self:highlight_tool(start_line, start_line + #tool_lines, message.summary)
         if next_message and next_message.role == "tool" then
-          -- The next tool reuses the final placeholder, leaving one blank line.
-          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
+          -- The next tool reuses this placeholder without adding a separator.
+          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
         end
 
         if

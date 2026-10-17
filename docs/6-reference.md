@@ -25,10 +25,17 @@ precedence.
 | `SiaAssistant`  | `DiffAdd`    | Assistant message markers |
 | `SiaUser`       | `DiffChange` | User message markers      |
 | `SiaToolResult` | Bold         | Tool result summaries     |
+| `SiaFolded`     | Italic       | Collapsed reasoning and tool output |
 | `SiaProgress`   | `NonText`    | Progress indicators       |
 | `SiaModel`      | —            | Model name display        |
 | `SiaUsage`      | —            | Token usage display       |
 | `SiaStatus`     | —            | Status display            |
+
+Customize collapsed chat output without changing the global `Folded` highlight:
+
+```lua
+vim.api.nvim_set_hl(0, "SiaFolded", { fg = "#888888", italic = true })
+```
 
 ### Tool Approval
 
