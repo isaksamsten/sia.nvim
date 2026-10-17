@@ -1,6 +1,4 @@
 local tool_utils = require("sia.tools.utils")
-local MAX_LINE_LENGTH = 200
-local MAX_MATCHES = 100
 
 local function format_no_match_context(args)
   local context = ""
@@ -48,7 +46,7 @@ local function handle_files_with_matches_mode(lines, args, callback)
   })
 end
 
-local function handle_count_mode(lines, args, callback)
+local function handle_count_mode(lines, args, callback, conversation)
   if #lines == 0 then
     local no_match_msg = string.format(
       "No matches found for `%s`",
@@ -64,7 +62,7 @@ local function handle_count_mode(lines, args, callback)
 
   local is_single_file = false
   if args.path then
-    local stat = vim.loop.fs_stat(args.path)
+    local stat = vim.loop.fs_stat(tool_utils.resolve_workspace_path(args.path, conversation.workspace))
     is_single_file = stat ~= nil and stat.type == "file"
   end
 
@@ -118,151 +116,11 @@ local function handle_count_mode(lines, args, callback)
   })
 end
 
-local function handle_content_mode(lines, args, callback)
-  local matches = {}
-  local file_mtimes = {}
-
-  local is_single_file = false
-  if args.path then
-    local stat = vim.loop.fs_stat(args.path)
-    is_single_file = stat ~= nil and stat.type == "file"
-  end
-
-  for _, line in ipairs(lines) do
-    local file, lnum, col, rest
-
-    if is_single_file then
-      lnum, col, rest = line:match("^(%d+):(%d+):(.*)$")
-      if lnum and col then
-        file = args.path
-      end
-    else
-      file, lnum, col, rest = line:match("^([^:]+):(%d+):(%d+):(.*)$")
-    end
-
-    if file and lnum and col then
-      local truncated_line = line
-      local preview_text = rest
-      if #line > MAX_LINE_LENGTH then
-        local prefix = string.format("%s:%s:%s:", file, lnum, col)
-        local available_length = MAX_LINE_LENGTH - #prefix - 10
-        local truncated_rest = rest:sub(1, available_length)
-        truncated_line = prefix .. truncated_rest .. "...[TRUNCATED]"
-        preview_text = truncated_rest .. "...[TRUNCATED]"
-      end
-
-      table.insert(matches, {
-        file = file,
-        lnum = tonumber(lnum),
-        col = tonumber(col),
-        text = truncated_line,
-        preview_text = preview_text,
-      })
-      if not file_mtimes[file] then
-        local stat = vim.loop.fs_stat(file)
-        file_mtimes[file] = stat and stat.mtime and stat.mtime.sec or 0
-      end
-    end
-  end
-
-  if #matches == 0 then
-    local no_match_msg = string.format(
-      "No matches found for `%s`",
-      args.pattern
-    ) .. format_no_match_context(args)
-
-    callback({
-      content = "No matches found.",
-      summary = no_match_msg,
-    })
-    return
-  end
-
-  table.sort(matches, function(a, b)
-    return (file_mtimes[a.file] or 0) > (file_mtimes[b.file] or 0)
-  end)
-
-  local header = "The following search results were returned"
-  if #matches > MAX_MATCHES then
-    header = header
-      .. string.format(
-        "\n\nWARNING: Search returned %d matches (showing %d most recent by file mtime). Results may be incomplete.",
-        #matches,
-        MAX_MATCHES
-      )
-    header = header .. "\nConsider:"
-    header = header .. "\n- Using a more specific search pattern"
-    header = header .. "\n- Adding a glob parameter to limit file types"
-  else
-    header = header .. string.format(" (%d matches found)", #matches)
-  end
-
-  local output = {}
-  for _, line in ipairs(vim.split(header, "\n", { trimempty = false })) do
-    table.insert(output, line)
-  end
-
-  for i = 1, math.min(#matches, MAX_MATCHES) do
-    table.insert(output, matches[i].text)
-  end
-
-  -- Build the chat preview from parsed matches, keeping the model-facing result
-  -- above unchanged. Group only the matches included in that result.
-  local groups, order = {}, {}
-  for i = 1, math.min(#matches, MAX_MATCHES) do
-    local match = matches[i]
-    if not groups[match.file] then
-      groups[match.file] = {}
-      table.insert(order, match.file)
-    end
-    table.insert(groups[match.file], match)
-  end
-  local preview = {}
-  for _, file in ipairs(order) do
-    if #preview > 0 then
-      table.insert(preview, "")
-    end
-    table.insert(preview, file)
-    table.sort(groups[file], function(a, b)
-      if a.lnum == b.lnum then
-        return a.col < b.col
-      end
-      return a.lnum < b.lnum
-    end)
-    for _, match in ipairs(groups[file]) do
-      table.insert(preview, string.format("  %d: %s", match.lnum, match.preview_text))
-    end
-  end
-  if #matches > MAX_MATCHES then
-    local omitted = #matches - MAX_MATCHES
-    table.insert(
-      preview,
-      string.format("… %d more %s", omitted, omitted == 1 and "match" or "matches")
-    )
-  end
-
-  local files = vim.tbl_count(file_mtimes)
-  local display_msg = string.format(
-    "Found %d %s in %d %s for `%s`",
-    #matches,
-    #matches == 1 and "match" or "matches",
-    files,
-    files == 1 and "file" or "files",
-    args.pattern
-  ) .. format_no_match_context(args)
-
-  callback({
-    content = table.concat(output, "\n"),
-    summary = display_msg,
-    preview = { text = table.concat(preview, "\n"), ft = "text" },
-  })
-end
-
 return tool_utils.new_tool({
   definition = {
     type = "function",
     name = "grep",
-    description = "Grep for a pattern in files using rg",
+    description = "Search files on disk using rg. Content results include buffer-based hashline tags and surrounding context (1 line before, 3 after), usable directly by edit without a separate view. Unsaved-only matches are not searched.",
     parameters = {
       glob = { type = "string", description = "Glob pattern for files to search" },
       pattern = { type = "string", description = "Search pattern" },
@@ -303,6 +161,13 @@ Usage:
     return conversation.approved_tools["grep"]
   end,
 }, function(args, conversation, callback, opts)
+  local result_callback = callback
+  callback = function(result)
+    if result.summary then
+      result.summary = string.format("Searched `%s` in `%s`", args.pattern, args.path or ".")
+    end
+    result_callback(result)
+  end
   local output_mode = args.output_mode or "content"
   local command = { "rg", "--no-heading", "--no-follow", "--color=never" }
 
@@ -311,7 +176,7 @@ Usage:
   elseif output_mode == "count" then
     table.insert(command, "-c")
   else
-    table.insert(command, "--column")
+    table.insert(command, "--json")
   end
 
   if args.multiline then
@@ -353,20 +218,23 @@ Usage:
 
       vim.system(command, {
         text = true,
-        stderr = false,
         timeout = 5000,
         cwd = conversation.workspace,
-      }, function(obj)
-        local lines = vim.split(obj.stdout, "\n", { trimempty = true })
+      }, vim.schedule_wrap(function(obj)
+        if obj.code ~= 0 and obj.code ~= 1 then
+          callback({ content = "Search failed: " .. (obj.stderr or "rg exited with code " .. obj.code), ephemeral = true })
+          return
+        end
+        local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
 
         if output_mode == "files_with_matches" then
           handle_files_with_matches_mode(lines, args, callback)
         elseif output_mode == "count" then
-          handle_count_mode(lines, args, callback)
+          handle_count_mode(lines, args, callback, conversation)
         else
-          handle_content_mode(lines, args, callback)
+          callback(require("sia.tools.grep_context").build(lines, args, conversation))
         end
-      end)
+      end))
     end,
   })
 end)

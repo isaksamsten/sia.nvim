@@ -126,20 +126,9 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
       local display = view_display(args.path)
       local name = display.label(args.path)
 
-      local summary
+      local summary = "Read " .. name
       if args.offset or args.limit then
-        summary = string.format(
-          "Viewed lines %d-%d from %s",
-          start_line,
-          end_line,
-          name
-        )
-      else
-        summary = string.format(
-          "Viewed %s (%d lines)",
-          name,
-          end_line - start_line + 1
-        )
+        summary = summary .. string.format(":%d-%d", start_line, end_line)
       end
 
       callback({

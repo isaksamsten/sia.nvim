@@ -18,7 +18,7 @@ function M.build(conversation, path, buf, opts)
       bytes = bytes + size
     end
   end
-  local rows = hashline.view(conversation, path, lines, first, last, 2000)
+  local rows = hashline.view(conversation, path, lines, first, last, opts.max_length or 2000)
   if opts.elisions then
     if first > 1 then
       table.insert(rows, 2, "…")

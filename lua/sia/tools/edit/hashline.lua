@@ -8,7 +8,7 @@ return tool_utils.new_tool({
   definition = {
     type = "function",
     name = tool_utils.tool_names.edit,
-    description = [[Hashline patches existing files; new files: `write`. Each file: `[PATH#TAG]`, `TAG` required 4-hex snapshot from latest `view` or edit response. Numbers: original `LINE:TEXT`, never hunk-shifted.
+    description = [[Hashline patches existing files; new files: `write`. Each file: `[PATH#TAG]`, `TAG` required 4-hex snapshot from latest `view`, `grep`, or edit response. Numbers: original `LINE:TEXT`, never hunk-shifted.
 Pass `target_file`, `tag`, and `edits` containing operations only (no `[PATH#TAG]` header). One file per call.
 
 <ops>
@@ -21,7 +21,7 @@ Pass `target_file`, `tag`, and `edits` containing operations only (no `[PATH#TAG
 <rules>
 - `:` ops only: body rows `+TEXT` verbatim incl. indent; lone `+` blank. Literal `- item`/`+ item` → `+- item`/`++ item`. NEVER `-`/bare context. Body length independent of range; delete with CUT, not empty PUT.
 - Touch displayed changed lines only; omitted or truncated lines are UNSEEN: use `view` to read them first. Tight ranges: split nonadjacent changes; NEVER include keepers or start/end mid-expression/block. Pure addition uses gap PUT.
-- NEVER restyle unrelated code. Use the latest tag and displayed line numbers from `view` or an edit response, including rejected edits.
+- NEVER restyle unrelated code. Use the latest tag and displayed line numbers from `view`, `grep`, or an edit response, including rejected edits.
 </rules>
 
 <example>
@@ -43,7 +43,7 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
       target_file = { type = "string", description = "File to edit" },
       tag = {
         type = "string",
-        description = "Four-hex snapshot tag from the latest view or edit response",
+        description = "Four-hex snapshot tag from the latest view, grep, or edit response",
       },
       edits = {
         type = "string",
