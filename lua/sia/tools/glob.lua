@@ -157,7 +157,10 @@ return tool_utils.new_tool({
           else
             msg = "No files found."
           end
-          callback({ content = msg, summary = msg })
+          local summary = "Searched for files"
+          if pattern then summary = summary .. " matching `" .. pattern .. "`" end
+          if path then summary = summary .. " in `" .. path .. "`" end
+          callback({ content = msg, summary = summary })
           return
         end
 
@@ -209,29 +212,12 @@ return tool_utils.new_tool({
           )
         end
 
-        local display_line
-        if pattern and path then
-          display_line = string.format(
-            "Found %d files matching `%s` in `%s`",
-            total_count,
-            pattern,
-            path
-          )
-        elseif pattern then
-          display_line = string.format(
-            "Found %d files matching `%s`",
-            total_count,
-            pattern
-          )
-        elseif path then
-          display_line = string.format(
-            "Found %d files in `%s`",
-            total_count,
-            path
-          )
-        else
-          display_line =
-            string.format("Found %d files", total_count)
+        local display_line = "Searched for files"
+        if pattern then
+          display_line = display_line .. " matching `" .. pattern .. "`"
+        end
+        if path then
+          display_line = display_line .. " in `" .. path .. "`"
         end
 
         callback({

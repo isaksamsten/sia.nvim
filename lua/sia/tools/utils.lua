@@ -92,6 +92,14 @@ Do not attempt to continue with alternative approaches unless explicitly request
 end
 
 --- @param items string[]
+local function cancellation_result(name)
+  return {
+    content = cancellation_message(name),
+    summary = "Cancelled " .. name:gsub("_", " "),
+    kind = "cancelled",
+  }
+end
+
 --- @param opts table
 --- @param on_choice fun(item: string?, idx:integer?):nil
 local function select(items, opts, on_choice)
@@ -573,9 +581,7 @@ local function create_user_input_handler(
             input_args.on_accept()
           end,
           on_cancel = function()
-            callback({
-              content = cancellation_message(tool_name),
-            })
+            callback(cancellation_result(tool_name))
           end,
         })
       end)
@@ -642,7 +648,7 @@ local function create_user_input_handler(
           permissions.persist_verifier_action(tool_name, verdict.action)
           input_args.on_accept()
         else
-          callback({ content = cancellation_message(tool_name) })
+          callback(cancellation_result(tool_name))
         end
       end)
     end
@@ -677,7 +683,7 @@ local function create_user_input_handler(
               if input_args.on_cancel then
                 input_args.on_cancel()
               end
-              callback({ content = cancellation_message(tool_name) })
+              callback(cancellation_result(tool_name))
             end,
             on_prompt = function()
               if result then
@@ -723,9 +729,7 @@ local function create_user_input_handler(
         on_accept = input_args.on_accept,
         on_always = on_always,
         on_cancel = function()
-          callback({
-            content = cancellation_message(tool_name),
-          })
+          callback(cancellation_result(tool_name))
         end,
         on_prompt = function()
           prompt_user()
@@ -781,9 +785,7 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
           if choice_args.on_cancel then
             choice_args.on_cancel()
           else
-            callback({
-              content = cancellation_message(tool_name),
-            })
+            callback(cancellation_result(tool_name))
           end
         end
       end)
@@ -796,9 +798,7 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
         kind = "choice",
         on_accept = prompt_user,
         on_cancel = function()
-          callback({
-            content = cancellation_message(tool_name),
-          })
+          callback(cancellation_result(tool_name))
         end,
         on_prompt = prompt_user,
         on_preview = choice_args.preview and function()
@@ -888,7 +888,10 @@ M.new_tool = function(opts, execute)
           if verdict and result then
             result.verification = vim.deepcopy(verdict)
           end
-          if result and result.summary and not result.preview then
+          if result then
+            require("sia.tool_output").ensure_summary(result, opts.definition.name)
+          end
+          if result and result.summary and result.kind ~= "cancelled" and not result.preview then
             if opts.preview == true then
               result.preview = accepted_preview
                 or require("sia.tool_output").from_content(result.content)
@@ -906,6 +909,7 @@ M.new_tool = function(opts, execute)
           result_callback({
             content = permission.reason
               or string.format("The %s operation was denied.", opts.definition.name),
+            summary = "Denied " .. opts.definition.name:gsub("_", " "),
           })
           return
         end

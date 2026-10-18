@@ -163,8 +163,8 @@ Usage:
 }, function(args, conversation, callback, opts)
   local result_callback = callback
   callback = function(result)
-    if result.summary then
-      result.summary = string.format("Searched `%s` in `%s`", args.pattern, args.path or ".")
+    if result.summary and not result.ephemeral then
+      result.summary = string.format("Searched for `%s` in `%s`", args.pattern, args.path or ".")
     end
     result_callback(result)
   end
@@ -189,7 +189,7 @@ Usage:
   end
 
   if args.pattern == nil then
-    callback({ content = "No pattern was given" })
+    callback({ content = "No pattern was given", summary = "Failed to search: missing pattern", ephemeral = true })
     return
   end
 
@@ -222,7 +222,9 @@ Usage:
         cwd = conversation.workspace,
       }, vim.schedule_wrap(function(obj)
         if obj.code ~= 0 and obj.code ~= 1 then
-          callback({ content = "Search failed: " .. (obj.stderr or "rg exited with code " .. obj.code), ephemeral = true })
+          callback({ content = "Search failed: " .. (obj.stderr or "rg exited with code " .. obj.code),
+            summary = "Failed to search for `" .. args.pattern .. "`",
+            preview = { text = obj.stderr or "Search failed", ft = "text" }, ephemeral = true })
           return
         end
         local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })

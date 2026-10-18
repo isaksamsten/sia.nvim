@@ -404,7 +404,8 @@ T["sia.tools.bash"]["view paginates full process output"] = function()
   eq(true, result.content:find("Use offset=4 to continue.", 1, true) ~= nil)
   eq(true, result.content:find("stderr:", 1, true) ~= nil)
   eq(true, result.content:find("warn%-2", 1) ~= nil)
-  eq(true, result.summary:find("Viewed process 1 output", 1, true) ~= nil)
+  eq(false, result.summary)
+  eq(nil, result.preview)
 end
 
 T["sia.tools.bash"]["view requires process id"] = function()
@@ -506,7 +507,7 @@ T["sia.tools.bash"]["async startup keeps model instructions out of chat previews
     _G.async_start_result = result
   ]])
   local result = child.lua_get("_G.async_start_result")
-  eq("Started `sleep 10` (process 7)", result.summary)
+  eq("Started `sleep 10`", result.summary)
   eq(nil, result.preview)
   eq(true, result.content:find("processId: 7", 1, true) ~= nil)
   eq(true, result.content:find('bash(action="wait")', 1, true) ~= nil)

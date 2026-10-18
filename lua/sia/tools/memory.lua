@@ -126,7 +126,7 @@ All paths MUST start with `/memories/`.
       end
       callback({
         content = table.concat(output, "\n"),
-        summary = "Viewed directory " .. (args.path or "/memories"),
+        summary = "Read directory " .. (args.path or "/memories"),
       })
     else
       -- Read file
@@ -144,7 +144,7 @@ All paths MUST start with `/memories/`.
         table.insert(content, lines[i])
       end
 
-      local display_info = string.format("Viewed %s", args.path)
+      local display_info = string.format("Read memory %s", args.path)
       if args.view_range then
         display_info = display_info
           .. string.format(" (lines %d-%d)", start_line, end_line)
@@ -253,7 +253,7 @@ All paths MUST start with `/memories/`.
     vim.fn.writefile(lines, path)
     callback({
       content = "Successfully inserted text at line " .. idx,
-      summary = "Inserted into memory " .. args.path,
+      summary = "Edited memory " .. args.path,
     })
   elseif args.command == "delete" then
     if vim.fn.delete(path, "rf") == 0 then
@@ -301,6 +301,7 @@ All paths MUST start with `/memories/`.
     if vim.fn.rename(old, new) == 0 then
       callback({
         content = "Successfully renamed " .. args.old_path .. " to " .. args.new_path,
+        summary = "Renamed memory " .. args.old_path .. " to " .. args.new_path,
       })
     else
       callback({ content = "Failed to rename", ephemeral = true })

@@ -619,7 +619,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
   })
 
   eq(
-    true,
+    false,
     vim
       .iter(vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
       :any(function(line)
@@ -823,7 +823,7 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
     conversation.tool_implementation["test_tool"] = {
       summary = function() return "test_tool" end,
       execute = function(_args, callback, _opts)
-        callback({ content = "tool result" })
+        callback({ content = "tool result", summary = false })
       end,
     }
 
@@ -912,7 +912,7 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
       conversation.tool_implementation["test_tool"] = {
         summary = function() return "test_tool" end,
         execute = function(_args, callback, _opts)
-          callback({ content = "tool result" })
+          callback({ content = "tool result", summary = false })
         end,
       }
 
@@ -1002,7 +1002,7 @@ T["strategy.chat"]["multi-turn reasoning"]["tool-only round has matching streami
     conversation.tool_implementation["test_tool"] = {
       summary = function() return "test_tool" end,
       execute = function(_args, callback, _opts)
-        callback({ content = "tool result" })
+        callback({ content = "tool result", summary = false })
       end,
     }
 
@@ -1597,6 +1597,11 @@ T["strategy.chat"]["query blocks and footers keep metadata through redraw withou
   conversation:add_assistant_message(turn, "The file contains code.")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   strategy:redraw()
+  local footer_ns = vim.api.nvim_get_namespaces()["sia_chat"]
+  local initial_footer = vim.api.nvim_buf_get_extmark_by_id(
+    strategy.buf, footer_ns, strategy.canvas.footer_marks[turn], { details = true }
+  )
+  eq({ { "  #" .. turn:sub(1, 6), "SiaStatus" } }, initial_footer[3].virt_text)
   strategy.canvas:update_assistant_footer(nil, {
     model = conversation.model.name, turn_id = turn, usage = { total_time = 2.4 },
   })
@@ -1618,8 +1623,7 @@ T["strategy.chat"]["query blocks and footers keep metadata through redraw withou
     eq(2, ranges[1][4].end_row)
     eq(1, #footers)
     eq({
-      { "  " .. conversation.model.name, "SiaModel" },
-      { " · 2.4s", "SiaUsage" },
+      { "  Worked for 2s", "SiaUsage" },
       { " · #" .. turn:sub(1, 6), "SiaStatus" },
     }, footers[1][4].virt_text)
     eq(vim.api.nvim_buf_line_count(strategy.buf) - 1, footers[1][2])
@@ -1649,6 +1653,10 @@ T["strategy.chat"]["completed streaming metadata matches its redrawn footer"] = 
     return { row = mark[1], text = mark[3].virt_text }
   end
   local live = footer()
+  eq({
+    { "  Worked for 2s", "SiaUsage" },
+    { " · #" .. turn:sub(1, 6), "SiaStatus" },
+  }, live.text)
   local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
   strategy:redraw()
   eq(live, footer())
@@ -1674,7 +1682,7 @@ T["strategy.chat"]["query markers and footer are visible without role header bar
     local text = table.concat(vim.tbl_map(function(row) return table.concat(row) end, shot.text), "\n")
     eq(true, text:find("> Explain this file.", 1, true) ~= nil)
     eq(true, text:find("· The file contains code.", 1, true) ~= nil)
-    eq(true, text:find("model · 2.4s · #", 1, true) ~= nil)
+    eq(true, text:find("Worked for 2s · #", 1, true) ~= nil)
     eq(nil, text:find("/sia", 1, true))
     eq(nil, text:find("/you", 1, true))
   end)

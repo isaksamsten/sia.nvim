@@ -35,7 +35,7 @@ local function run(args)
   vim.wait(5000, function() return result ~= nil end)
   assert(result, "grep did not finish")
   if not result.ephemeral then
-    eq(string.format("Searched `%s` in `%s`", args.pattern, args.path or "."), result.summary)
+    eq(string.format("Searched for `%s` in `%s`", args.pattern, args.path or "."), result.summary)
   end
   return result
 end

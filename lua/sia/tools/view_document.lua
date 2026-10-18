@@ -148,22 +148,7 @@ view or analyze the contents of a document file.]],
       local base64_data = vim.base64.encode(data)
       local data_url = string.format("data:%s;base64,%s", mime_type, base64_data)
 
-      local size_str
-      if stat then
-        if stat.size < 1024 then
-          size_str = string.format("%d B", stat.size)
-        elseif stat.size < 1024 * 1024 then
-          size_str = string.format("%.1f KB", stat.size / 1024)
-        else
-          size_str = string.format("%.1f MB", stat.size / (1024 * 1024))
-        end
-      end
-
-      local summary = string.format(
-        "Viewed document %s%s",
-        vim.fn.fnamemodify(args.path, ":~:."),
-        size_str and (" (" .. size_str .. ")") or ""
-      )
+      local summary = "Viewed document " .. vim.fn.fnamemodify(args.path, ":~:.")
 
       --- @type sia.Content[]
       local content = {

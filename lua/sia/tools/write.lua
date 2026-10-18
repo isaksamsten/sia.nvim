@@ -128,10 +128,9 @@ For small, targeted changes, prefer the edit tool instead.]],
 
       local action = file_exists and "overwritten" or "created"
       local display_text = string.format(
-        "%s %s (%d lines)",
+        "%s %s",
         file_exists and "Overwrote" or "Created",
-        vim.fn.fnamemodify(args.path, ":."),
-        #lines
+        vim.fn.fnamemodify(args.path, ":.")
       )
       callback({
         content = string.format("Successfully %s buffer for %s", action, args.path),

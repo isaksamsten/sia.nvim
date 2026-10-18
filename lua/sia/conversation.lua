@@ -50,7 +50,7 @@ end
 --- @field header string
 --- @field detail sia.ToolPreview?
 ---
---- @alias sia.ToolSummary string|sia.ToolSummaryParts
+--- @alias sia.ToolSummary string|sia.ToolSummaryParts|false
 
 --- @class sia.BaseToolCall
 --- @field key string?

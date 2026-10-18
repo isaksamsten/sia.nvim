@@ -64,10 +64,7 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
     callback({
-      summary = string.format(
-        "No diagnostics found for %s",
-        args.file
-      ),
+      summary = "Checked diagnostics for " .. args.file,
       content = string.format("No diagnostics found for %s", args.file),
     })
     return
@@ -109,10 +106,6 @@ If no diagnostics are found, the code has no LSP-detected issues.]],
         content = "File changed",
       },
     },
-    summary = string.format(
-      "Found %d diagnostics for %s",
-      #diagnostics,
-      args.file
-    ),
+    summary = "Checked diagnostics for " .. args.file,
   })
 end)

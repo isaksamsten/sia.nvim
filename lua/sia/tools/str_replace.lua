@@ -45,33 +45,12 @@ end
 
 --- Create display description for a successful edit
 --- @param target_file string
---- @param pos [integer, integer]
---- @param col_span table|nil
 --- @param fuzzy boolean
 --- @return string
-local function create_display_description(target_file, pos, col_span, fuzzy)
+local function create_display_description(target_file, fuzzy)
   local fuzzy_suffix = fuzzy and " - please double-check the changes" or ""
 
-  if col_span then
-    return string.format(
-      "Edited line %d (columns %d-%d) in %s%s",
-      pos[1],
-      col_span[1],
-      col_span[2],
-      target_file,
-      fuzzy_suffix
-    )
-  end
-
-  local edit_span = pos[1] ~= pos[2] and string.format("lines %d-%d", pos[1], pos[2])
-    or string.format("line %d", pos[1])
-
-  return string.format(
-    "Edited %s in %s%s",
-    edit_span,
-    target_file,
-    fuzzy_suffix
-  )
+  return "Edited " .. target_file .. fuzzy_suffix
 end
 
 --- Execute multiple edits in reverse order to maintain line numbers
@@ -310,12 +289,7 @@ Usage:
             args.target_file
           )
 
-          local display_description = string.format(
-            "Replaced all %d occurrence%s in %s",
-            num_matches,
-            num_matches > 1 and "s" or "",
-            filename
-          )
+          local display_description = "Edited " .. filename
 
           callback({
             content = success_msg,
@@ -391,7 +365,7 @@ Usage:
 
           local pos = { edit_start, edit_end }
           local display_description =
-            create_display_description(filename, pos, match.col_span, result.fuzzy)
+            create_display_description(filename, result.fuzzy)
 
           callback({
             content = table.concat(diff_lines, "\n"),

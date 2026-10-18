@@ -105,7 +105,7 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         content = table.concat(markdown_lines, "\n"),
         ephemeral = true,
         summary = string.format(
-          "Got documentation for '%s'",
+          "Read documentation for '%s'",
           args.pattern
         ),
       })
@@ -153,9 +153,9 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         content = table.concat(locations, "\n"),
         ephemeral = true,
         summary = string.format(
-          "Found %d %s for '%s'",
-          #locations,
-          #locations == 1 and command_label or command_label .. "s",
+          "Searched for %s %s '%s'",
+          command_label,
+          command == "references" and "to" or "of",
           args.pattern
         ),
       })
@@ -239,11 +239,9 @@ local function handle_lsp_command(command, buf, line, col, args, callback)
         ),
         ephemeral = true,
         summary = string.format(
-          "Renamed '%s' → '%s' in %d file%s",
+          "Renamed '%s' to '%s'",
           args.pattern,
-          args.new_name,
-          num_files,
-          num_files == 1 and "" or "s"
+          args.new_name
         ),
       })
     end)

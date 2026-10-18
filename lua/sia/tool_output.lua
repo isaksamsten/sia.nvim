@@ -75,7 +75,9 @@ function M.from_content(content)
     parts = { content }
   elseif type(content) == "table" then
     for _, part in ipairs(content) do
-      if part.type == "text" then
+      if type(part) == "string" then
+        table.insert(parts, part)
+      elseif part.type == "text" then
         table.insert(parts, part.text)
       end
     end
@@ -87,7 +89,11 @@ end
 --- result.preview, or summary.detail. Keep this serializable for history/redraw.
 --- @param result sia.ToolResult
 function M.complete(result)
+  if result.kind == "cancelled" then
+    result.preview = nil
+  end
   if not result.summary then
+    result.preview = nil
     return
   end
   local summary = type(result.summary) == "string" and { header = result.summary }
@@ -104,9 +110,38 @@ function M.complete(result)
   end
   if summary.detail then
     summary.detail.text = M.limit(summary.detail.text)
+    if summary.detail.text == "" then
+      summary.detail = nil
+    end
     result.summary = summary
   end
   result.preview = nil
+end
+
+--- Fill accidental omissions without changing explicitly hidden results or model content.
+--- @param result sia.ToolResult
+--- @param name string
+function M.ensure_summary(result, name)
+  if result.summary ~= nil then
+    return
+  end
+  local text = M.from_content(result.content).text
+  local first = text:match("[^\r\n]+") or ""
+  local label = name:gsub("_", " ")
+  if first:match("^OPERATION DECLINED") then
+    result.summary = "Cancelled " .. label
+  elseif first:match("^Error:") or first:match("^LSP Error:") or result.kind == "failed"
+    or (result.ephemeral and not first:match("^No "))
+  then
+    local reason = first:gsub("^[^:]+:%s*", "")
+    result.summary = "Failed " .. label .. (reason ~= "" and ": " .. reason or "")
+  elseif first:match("^No ") or first:match("^Nothing ") then
+    result.summary = first
+  else
+    result.summary = "Completed " .. label
+  end
+  -- Keep a fallback header on one line, bounded even for verbose server errors.
+  result.summary = M.limit(result.summary):match("[^\n]*")
 end
 
 return M

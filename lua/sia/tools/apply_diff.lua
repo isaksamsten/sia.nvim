@@ -217,6 +217,14 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
         elseif change.type == "delete" then
           table.insert(preview_lines, "--- orig/" .. path)
           table.insert(preview_lines, "+++ /dev/null")
+          local old_text = change.old_content or ""
+          if old_text ~= "" and not old_text:match("\n$") then
+            old_text = old_text .. "\n"
+          end
+          local unified = vim.diff(old_text, "", { result_type = "unified", ctxlen = 3 })
+          if unified then
+            vim.list_extend(preview_lines, vim.split(unified, "\n"))
+          end
           table.insert(preview_lines, "")
         end
       end
@@ -279,7 +287,7 @@ IMPORTANT: Output the patch directly. Do NOT wrap it in JSON or code fences.]],
       callback({
         content = table.concat(content_lines, "\n"),
         summary = {
-          header = string.format("Applied patch to %d file%s", change_count, change_count == 1 and "" or "s"),
+          header = change_count == 1 and display_lines[1] or "Edited files",
         },
       })
     end,

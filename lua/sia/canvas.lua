@@ -72,23 +72,6 @@ local function format_tool_summary_lines(status, summary)
   return lines
 end
 
---- @param lines string[]
---- @param verification table?
-local function append_verification(lines, verification)
-  if not verification then
-    return
-  end
-  table.insert(
-    lines,
-    string.format(
-      "%sAutomatically verified (%s risk): %s",
-      TOOL_META_PREFIX,
-      verification.level,
-      verification.reason
-    )
-  )
-end
-
 --- @param line string
 --- @return "reasoning"|"tool"|nil
 local function meta_line_kind(line)
@@ -240,9 +223,6 @@ local function build_tool_block(tool_renders, tool_order)
     if render and render.summary then
       local block_lines = format_tool_summary_lines(render.status, render.summary)
       if block_lines then
-        if render.status == "done" then
-          append_verification(block_lines, render.verification)
-        end
         local start = #lines
         vim.list_extend(lines, block_lines)
         table.insert(highlights, {
@@ -378,9 +358,12 @@ function Canvas:ensure_placeholder(separate)
     local marks = vim.api.nvim_buf_get_extmarks(
       self.buf, CHAT_NS, { count - 1, 0 }, { count - 1, 0 }, { details = true }
     )
+    local footer_ids = {}
+    for _, id in pairs(self.footer_marks) do
+      footer_ids[id] = true
+    end
     for _, mark in ipairs(marks) do
-      local chunks = mark[4].virt_text
-      if chunks and chunks[1] and chunks[1][2] == "SiaModel" then
+      if footer_ids[mark[1]] then
         occupied = true
         break
       end
@@ -395,11 +378,11 @@ function Canvas:ensure_placeholder(separate)
 end
 
 --- @param line integer Zero-based row below the assistant's content.
---- @param model string?
+--- @param _model string?
 --- @param turn_id string
 --- @param usage sia.Usage?
 --- @param id integer?
-function Canvas:set_assistant_footer(line, model, turn_id, usage, id)
+function Canvas:set_assistant_footer(line, _model, turn_id, usage, id)
   -- Use an ordinary blank row so folds and concealed Markdown fences cannot
   -- hide the footer together with the last line of assistant content.
   if vim.api.nvim_buf_get_lines(self.buf, line, line + 1, false)[1] ~= "" then
@@ -414,11 +397,12 @@ function Canvas:set_assistant_footer(line, model, turn_id, usage, id)
     self.turn_usage[turn_id] = vim.deepcopy(usage)
   end
   usage = usage or self.turn_usage[turn_id]
-  local chunks = { { "  " .. (model or "sia"), "SiaModel" } }
+  local chunks = {}
   if usage and usage.total_time then
-    table.insert(chunks, { string.format(" · %.1fs", usage.total_time), "SiaUsage" })
+    table.insert(chunks, { string.format("  Worked for %ds", math.floor(usage.total_time + 0.5)), "SiaUsage" })
   end
-  table.insert(chunks, { " · #" .. turn_id:sub(1, 6), "SiaStatus" })
+  local prefix = #chunks > 0 and " · #" or "  #"
+  table.insert(chunks, { prefix .. turn_id:sub(1, 6), "SiaStatus" })
   self.footer_marks[turn_id] = vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
     id = id or previous,
     virt_text = chunks,
@@ -483,7 +467,6 @@ function Canvas:render_messages(messages, model)
         goto continue
       end
       local lines = format_tool_summary_lines("done", message.summary)
-      append_verification(lines, message.verification)
       local row = self:ensure_placeholder(previous_role == "user")
       vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, lines)
       self:highlight_tool(row, row + #lines, message.summary)

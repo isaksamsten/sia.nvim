@@ -143,7 +143,7 @@ T["sia.tools.str_replace"]["successful exact match edit"] = function()
   eq("other code", new_content[4])
 
   eq("Edited test.lua:", result.content[1])
-  eq(true, string.find(result.summary, "Edited lines 1%-3 in test%.lua") ~= nil)
+  eq(true, string.find(result.summary, "Edited test%.lua") ~= nil)
 end
 
 T["sia.tools.str_replace"]["successful inline edit"] = function()
@@ -189,7 +189,7 @@ T["sia.tools.str_replace"]["successful inline edit"] = function()
   eq("hello world lisa", new_content[1])
   eq(
     true,
-    string.find(result.summary, "Edited line 1 %(columns 13%-16%) in test%.txt")
+    string.find(result.summary, "Edited test%.txt")
       ~= nil
   )
 end
@@ -581,7 +581,7 @@ T["sia.tools.str_replace"]["replace_all with inline matches"] = function()
   eq("return foo", new_content[4])
 
   eq(true, string.find(result.content[1], "Replaced all %d+ occurrences?") ~= nil)
-  eq(true, string.find(result.summary, "Replaced all %d+ occurrences?") ~= nil)
+  eq("Edited test.lua", result.summary)
 end
 
 T["sia.tools.str_replace"]["replace_all with multi-line matches"] = function()
@@ -650,7 +650,7 @@ T["sia.tools.str_replace"]["replace_all with multi-line matches"] = function()
   eq("end", new_content[11])
 
   eq(true, string.find(result.content[1], "Replaced all 2 occurrences") ~= nil)
-  eq(true, string.find(result.summary, "Replaced all 2 occurrences") ~= nil)
+  eq("Edited test.lua", result.summary)
 end
 
 T["sia.tools.str_replace"]["replace_all error when no matches"] = function()
@@ -779,7 +779,7 @@ T["sia.tools.str_replace"]["replace_all with multiple matches on same line"] = f
 
   -- Should have replaced 6 occurrences total (4 on line 1, 1 on line 2, 1 on line 3)
   eq(true, string.find(result.content[1], "Replaced all 6 occurrences") ~= nil)
-  eq(true, string.find(result.summary, "Replaced all 6 occurrences") ~= nil)
+  eq("Edited test.lua", result.summary)
 end
 
 return T

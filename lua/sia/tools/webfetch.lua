@@ -103,7 +103,7 @@ Usage notes:
       if vim.fn.filereadable(script) ~= 1 then
         callback({
           content = "Error: fetch-page script not found at " .. script,
-          summary = "fetch-page script missing",
+          summary = "Failed to fetch URL: fetch service unavailable",
         })
         return
       end
@@ -113,7 +113,7 @@ Usage notes:
           callback({
             content = "Error installing fetch-page dependencies: "
               .. (err or "unknown"),
-            summary = "npm install failed",
+            summary = "Failed to fetch URL: fetch service unavailable",
           })
           return
         end

@@ -258,7 +258,7 @@ T["sia.tools.write"]["handles multiline content correctly"] = function()
   local file_content = child.lua_get("_G.file_content")
 
   eq({ "line 1", "line 2", "line 3" }, file_content)
-  eq(true, string.find(result.summary, "%(3 lines%)") ~= nil)
+  eq(nil, string.find(result.summary, "lines", 1, true))
 end
 
 T["sia.tools.write"]["tool metadata"] = function()

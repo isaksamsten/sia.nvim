@@ -443,7 +443,7 @@ local function run_explain(buf, params, args, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("Explained '%s'", args.anchor),
+      summary = string.format("Read documentation for '%s'", args.anchor),
     })
   end)
 end
@@ -467,9 +467,9 @@ local function run_locations(action, buf, params, args, callback)
     callback({
       content = table.concat(location_lines(locations), "\n"),
       summary = string.format(
-        "Found %d %s for '%s'",
-        #locations,
+        "Searched for %s %s '%s'",
         ACTION_LABELS[action],
+        action == "references" and "to" or "of",
         args.anchor
       ),
     })
@@ -504,7 +504,10 @@ local function run_rename(buf, params, args, callback)
           table.insert(lines, "- " .. relative_path(file))
         end
       end
-      callback({ content = table.concat(lines, "\n") })
+      callback({
+        content = table.concat(lines, "\n"),
+        summary = string.format("Previewed rename of '%s' to '%s'", args.anchor, args.new_name),
+      })
       return
     end
 
@@ -519,7 +522,7 @@ local function run_rename(buf, params, args, callback)
         #files > 0 and table.concat(vim.tbl_map(relative_path, files), ", ")
           or "unknown"
       ),
-      summary = string.format("Renamed '%s'", args.anchor),
+      summary = string.format("Renamed '%s' to '%s'", args.anchor, args.new_name),
     })
   end)
 end
@@ -528,7 +531,7 @@ local function run_diagnostics(buf, path, callback)
   local content, count = format_diagnostics(buf, path)
   callback({
     content = content,
-    summary = string.format("Found %d diagnostics", count),
+    summary = "Checked diagnostics for " .. path,
   })
 end
 
@@ -546,7 +549,7 @@ local function run_symbols(buf, path, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("Found %d symbols", #lines),
+      summary = "Read symbols in " .. path,
     })
   end)
 end
@@ -571,7 +574,7 @@ local function run_workspace_symbols(buf, query, callback)
     end
     callback({
       content = table.concat(lines, "\n"),
-      summary = string.format("Found %d workspace symbols", #lines),
+      summary = "Searched workspace symbols",
     })
   end)
 end
@@ -615,7 +618,7 @@ local function run_code_actions(buf, params, args, callback)
       end
       callback({
         content = table.concat(lines, "\n"),
-        summary = string.format("Found %d code actions", #actions),
+        summary = "Read code actions for " .. args.path,
       })
       return
     end
@@ -687,7 +690,7 @@ local function run_format(buf, args, callback)
   end
   callback({
     content = "Formatted " .. relative_path(vim.api.nvim_buf_get_name(buf)),
-    summary = "Formatted file",
+    summary = "Formatted " .. relative_path(vim.api.nvim_buf_get_name(buf)),
   })
 end
 
@@ -732,7 +735,7 @@ local function execute(args, conversation, callback)
     local content, count = format_clients(buf)
     callback({
       content = content,
-      summary = string.format("Found %d LSP clients", count),
+      summary = "Read LSP clients",
     })
     return
   elseif action == "diagnostics" then

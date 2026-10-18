@@ -103,9 +103,6 @@ Use :cnext/:cprev to navigate, or click items in the quickfix window]],
       title,
       #qf_items
     ),
-    summary = string.format(
-      "Created quickfix list with %d items",
-      #qf_items
-    ),
+    summary = "Created quickfix list",
   })
 end)

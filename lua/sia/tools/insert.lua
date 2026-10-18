@@ -204,13 +204,7 @@ Use cases:
         insert_line,
         args.target_file
       )
-      local display_description = string.format(
-        "Inserted %d line%s at line %d in %s",
-        #text_lines,
-        #text_lines == 1 and "" or "s",
-        insert_line,
-        vim.fn.fnamemodify(args.target_file, ":.")
-      )
+      local display_description = "Edited " .. vim.fn.fnamemodify(args.target_file, ":.")
 
       callback({
         content = success_msg,

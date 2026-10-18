@@ -172,4 +172,51 @@ T["view errors remain summary only"] = function()
   eq(nil, result.preview)
 end
 
+T["explicit omission clears previews without exposing model instructions"] = function()
+  local result = { summary = false, content = "Use process 7 to poll", preview = { text = "private" } }
+  output.ensure_summary(result, "bash")
+  output.complete(result)
+  eq(false, result.summary)
+  eq(nil, result.preview)
+  eq("Use process 7 to poll", result.content)
+end
+
+T["missing summaries remain visible without enabling previews"] = function()
+  for _, case in ipairs({
+    { content = "Error: process not found", expected = "Failed bash: process not found" },
+    { content = "No references found.", expected = "No references found." },
+    { content = "model-only result", expected = "Completed bash" },
+  }) do
+    local result = { content = case.content }
+    output.ensure_summary(result, "bash")
+    output.complete(result)
+    eq(case.expected, result.summary)
+    eq(case.content, result.content)
+    eq(nil, result.preview)
+  end
+end
+
+T["empty details do not create a details row"] = function()
+  local result = { summary = { header = "Ran command", detail = { text = "\n\n" } }, content = "done" }
+  output.complete(result)
+  eq(nil, result.summary.detail)
+end
+
+T["cancelled tools retain model instructions without showing them in details"] = function()
+  local tool = require("sia.tools.utils").new_tool({
+    definition = { name = "cancel_test", type = "function" },
+    preview = true,
+  }, function(_, _, callback)
+    callback({ summary = "Cancelled editing file", kind = "cancelled", content = "IMPORTANT: model instructions" })
+  end)
+  local result
+  tool.implementation.execute({}, function(res) result = res end, {
+    conversation = { approved_tools = { cancel_test = true } },
+  })
+  output.complete(result)
+  eq("Cancelled editing file", result.summary)
+  eq("IMPORTANT: model instructions", result.content)
+  eq(nil, result.preview)
+end
+
 return T

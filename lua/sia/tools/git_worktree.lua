@@ -324,7 +324,7 @@ local function create_worktree(args, conversation, callback)
         "",
         "Pass this path as `workspace` when starting agents to work in this worktree.",
       }, "\n"),
-      summary = string.format("Re-adopted git worktree %s", branch),
+      summary = string.format("Adopted git worktree %s", branch),
     })
     return
   end
@@ -465,7 +465,7 @@ local function list_worktrees(conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("Listed %d git worktree(s)", count),
+    summary = "Listed git worktrees",
   })
 end
 
@@ -573,7 +573,7 @@ local function status_worktree(args, conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("Status for git worktree %s", branch),
+    summary = string.format("Read status for git worktree %s", branch),
   })
 end
 
@@ -677,7 +677,7 @@ local function diff_worktree(args, conversation, callback)
 
   callback({
     content = table.concat(lines, "\n"),
-    summary = string.format("Diffed git worktree %s", branch),
+    summary = string.format("Read diff for git worktree %s", branch),
   })
 end
 

@@ -76,7 +76,7 @@ local function return_settled(agent, callback)
         agent.name,
         agent.error or "Unknown error"
       ),
-      summary = string.format("Agent %d failed", agent.id),
+      summary = string.format("Agent %s failed", agent.name),
     })
   elseif agent.status == "cancelled" then
     callback({
@@ -85,7 +85,7 @@ local function return_settled(agent, callback)
         agent.id,
         agent.name
       ),
-      summary = string.format("Agent %d cancelled", agent.id),
+      summary = string.format("Agent %s cancelled", agent.name),
     })
   end
 end
@@ -120,7 +120,7 @@ local function wait_for_agent(id, conversation, callback)
     if is_settled(current) then
       return_settled(current, callback)
     elseif conversation:has_pending_user_messages() then
-      callback({ content = waiting_yield_message(current) })
+      callback({ content = waiting_yield_message(current), summary = false })
     elseif current.view == "open" then
       vim.defer_fn(poll, 1000)
     else
@@ -143,6 +143,7 @@ local function wait_for_any(conversation, callback)
     else
       callback({
         content = "No agents are running or have pending results.",
+        summary = false,
         ephemeral = true,
       })
     end
@@ -156,12 +157,14 @@ local function wait_for_any(conversation, callback)
     elseif conversation:has_pending_user_messages() then
       callback({
         content = "Agents are still running. Yielding to process user input.",
+        summary = false,
       })
     elseif runtime:any(is_running) then
       vim.defer_fn(poll, 500)
     else
       callback({
         content = "All agents finished but none produced results.",
+        summary = "Agents finished without replies",
         ephemeral = true,
       })
     end
@@ -201,6 +204,9 @@ return tool_utils.new_tool({
     required = { "command" },
   },
   summary = function(args)
+    if args.command == "status" or args.command == "wait" or args.command == "send" then
+      return false
+    end
     if args.command == "list" then
       return "Listing agents"
     elseif args.command == "start" then
@@ -299,7 +305,7 @@ When NOT to use the agent tool:
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'send' command",
-        summary = "Missing id parameter",
+        summary = "Failed to access agent: missing agent id",
       })
       return
     end
@@ -307,7 +313,7 @@ When NOT to use the agent tool:
     if not args.message then
       callback({
         content = "Error: 'message' parameter is required for 'send' command",
-        summary = "Missing message parameter",
+        summary = "Failed to message agent: missing message",
       })
       return
     end
@@ -324,6 +330,7 @@ When NOT to use the agent tool:
     end
     if agent.status == "failed" then
       callback({
+        summary = string.format("Failed to message agent %s: agent failed", agent.name),
         content = string.format(
           "Agent %d (%s) has failed and cannot accept new messages",
           agent.id,
@@ -334,6 +341,7 @@ When NOT to use the agent tool:
     end
     if agent.status == "pending" then
       callback({
+        summary = false,
         content = string.format(
           "Agent %d (%s) already has a reply waiting. Call wait before sending more input.",
           agent.id,
@@ -371,7 +379,7 @@ When NOT to use the agent tool:
 
         callback({
           content = content,
-          summary = string.format("Updated agent %s", agent.name),
+          summary = false,
         })
       end,
     })
@@ -379,7 +387,7 @@ When NOT to use the agent tool:
     if not args.id then
       callback({
         content = "Error: 'id' parameter is required for 'status' command",
-        summary = "Missing id parameter",
+        summary = "Failed to access agent: missing agent id",
       })
       return
     end
@@ -396,7 +404,15 @@ When NOT to use the agent tool:
       return
     end
 
-    callback({ content = agent:get_preview() })
+    local summary = false
+    if agent.status == "pending" then
+      summary = string.format("Agent %s replied", agent.name)
+    elseif agent.status == "failed" then
+      summary = string.format("Agent %s failed", agent.name)
+    elseif agent.status == "cancelled" then
+      summary = string.format("Agent %s cancelled", agent.name)
+    end
+    callback({ content = agent:get_preview(), summary = summary })
   elseif args.command == "wait" then
     if args.id then
       wait_for_agent(args.id, conversation, callback)

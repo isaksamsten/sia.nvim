@@ -83,6 +83,8 @@ T["sia.tools.agent"]["status returns agent preview"] = function()
   eq(true, result.content:find("Agent ID: 1", 1, true) ~= nil)
   eq(true, result.content:find("Agent: code/review", 1, true) ~= nil)
   eq(true, result.content:find("Status: running", 1, true) ~= nil)
+  eq(false, result.summary)
+  eq(nil, result.preview)
 end
 
 T["sia.tools.agent"]["status errors on missing id"] = function()
@@ -676,6 +678,26 @@ T["sia.tools.agent"]["wait without id yields on pending user input"] = function(
 
   local result = child.lua_get("_G.result")
   eq(true, result.content:find("Yielding to process user input", 1, true) ~= nil)
+end
+
+T["sia.tools.agent"]["settled status remains visible without changing model content"] = function()
+  child.lua([[
+    _G.settled_statuses = {}
+    for _, status in ipairs({ "pending", "failed", "cancelled" }) do
+      local agent = { name = "review", status = status, get_preview = function() return "model status" end }
+      require("sia.tools.agent").implementation.execute({ command = "status", id = 1 }, function(res)
+        _G.settled_statuses[status] = res
+      end, { conversation = { approved_tools = { agent = true }, agent_runtime = { get = function() return agent end } } })
+    end
+  ]])
+  local results = child.lua_get("_G.settled_statuses")
+  eq("Agent review replied", results.pending.summary)
+  eq("Agent review failed", results.failed.summary)
+  eq("Agent review cancelled", results.cancelled.summary)
+  for _, result in pairs(results) do
+    eq("model status", result.content)
+    eq(nil, result.preview)
+  end
 end
 
 return T
