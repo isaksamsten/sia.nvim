@@ -553,16 +553,40 @@ end
 --- @param on_started fun(proc: sia.process.Process?, err: string?) called immediately after launch
 local function launch_command(args, conversation, opts, on_started)
   local is_dangerous = is_suspicious(args.command)
-  local prompt = string.format("Execute: %s", args.command)
+  local prompt = args.description or string.format("Execute: %s", args.command)
 
   local runtime = conversation.process_runtime
 
   local input_args = {
     level = is_dangerous and "warn" or "info",
-    preview = function(preview_buf)
-      local lines = vim.split(args.command, "\n")
+    wrap = true,
+    preview = function(preview_buf, assessment)
+      local fence_length = 3
+      for ticks in args.command:gmatch("`+") do
+        fence_length = math.max(fence_length, #ticks + 1)
+      end
+      local fence = string.rep("`", fence_length)
+      local lines = { "## Command", "", fence .. "sh" }
+      vim.list_extend(lines, vim.split(args.command, "\n", { plain = true }))
+      vim.list_extend(lines, {
+        fence,
+        "",
+        "Working directory: " .. (runtime.pwd and runtime:pwd() or conversation.workspace or vim.fn.getcwd()),
+      })
+      if assessment then
+        vim.list_extend(lines, {
+          "",
+          "## Risk assessment",
+          "",
+          "**Level:** " .. assessment.level,
+          "**Action:** " .. assessment.action,
+          "",
+          assessment.reason,
+        })
+      end
       vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
-      vim.bo[preview_buf].ft = "sh"
+      vim.bo[preview_buf].ft = "markdown"
+      pcall(vim.treesitter.start, preview_buf)
       return #lines
     end,
     on_accept = function()
@@ -649,7 +673,14 @@ return tool_utils.new_tool({
     },
     required = {},
   },
-  preview = true,
+  preview = function(args, result)
+    local normalized = normalize_args(args)
+    if normalized.action == "start" and normalized.async and result.kind ~= "failed" then
+      -- Startup instructions are for the model, not chat output.
+      return nil
+    end
+    return require("sia.tool_output").from_content(result.content)
+  end,
   summary = function(args)
     local normalized = normalize_args(args)
     if normalized.action == "start" then

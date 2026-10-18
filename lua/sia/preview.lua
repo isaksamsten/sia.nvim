@@ -42,6 +42,10 @@ function M.show(content, opts)
   })
 
   vim.wo[win].winhighlight = "Normal:MsgArea"
+  if wrap ~= nil then
+    vim.wo[win].wrap = wrap
+    vim.wo[win].linebreak = wrap
+  end
   if type(content) == "table" then
     --- @cast content string[]
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
@@ -67,8 +71,9 @@ function M.show(content, opts)
   else
     local height = content(buf)
     if height then
+      local display_height = wrap and vim.api.nvim_win_text_height(win, {}).all or height
       vim.api.nvim_win_set_config(win, {
-        height = math.min(height, max_height),
+        height = math.max(1, math.min(display_height, max_height)),
       })
     end
   end

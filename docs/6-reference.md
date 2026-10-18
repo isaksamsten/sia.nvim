@@ -22,14 +22,14 @@ precedence.
 
 | Group           | Default Link | Description               |
 | --------------- | ------------ | ------------------------- |
-| `SiaAssistant`  | `DiffAdd`    | Assistant message markers |
-| `SiaUser`       | `DiffChange` | User message markers      |
+| `SiaAssistantMarker` | `Normal` | Small dot before assistant text |
+| `SiaUser`       | `DiffChange` | User queries and `>` markers |
 | `SiaToolResult` | Bold         | Tool result summaries     |
 | `SiaFolded`     | Italic       | Collapsed reasoning and tool output |
 | `SiaProgress`   | `NonText`    | Progress indicators       |
-| `SiaModel`      | —            | Model name display        |
-| `SiaUsage`      | —            | Token usage display       |
-| `SiaStatus`     | —            | Status display            |
+| `SiaModel`      | `Comment`    | Footer model name         |
+| `SiaUsage`      | `Comment`    | Footer elapsed time       |
+| `SiaStatus`     | `Comment`    | Footer turn hash          |
 
 Customize collapsed chat output without changing the global `Folded` highlight:
 

@@ -4,6 +4,7 @@ local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
 local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
 local TEMPORARY_NS = vim.api.nvim_create_namespace("sia_chat_temporary")
 local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
+local ASSISTANT_TEXT_NS = vim.api.nvim_create_namespace("sia_chat_assistant_text")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 local REASONING_META_PREFIX = ">| "
 local TOOL_META_PREFIX = ">! "
@@ -143,6 +144,8 @@ end
 --- @field temporary_extmark integer?
 --- @field temporary_content string[]
 --- @field temporary_line integer?
+--- @field footer_marks table<string, integer>
+--- @field turn_usage table<string, sia.Usage>
 --- @field opts sia.CanvasOpts
 local Canvas = {}
 Canvas.__index = Canvas
@@ -157,9 +160,22 @@ function Canvas:new(buf, opts)
     temporary_content = {},
     temporary_line = nil,
     opts = opts or {},
+    footer_marks = {},
+    turn_usage = {},
   }
   setmetatable(obj, self)
   return obj
+end
+
+--- Mark the start of an assistant text block without altering Markdown content.
+--- @param line integer Zero-based buffer row.
+function Canvas:mark_assistant_text(line)
+  vim.api.nvim_buf_set_extmark(self.buf, ASSISTANT_TEXT_NS, line, 0, {
+    virt_text = { { "· ", "SiaAssistantMarker" } },
+    virt_text_pos = "inline",
+    right_gravity = true,
+    hl_mode = "combine",
+  })
 end
 
 function Canvas:update_tool_progress(content)
@@ -350,94 +366,90 @@ function Canvas:scroll_to_bottom()
   end
 end
 
---- @param extmark_id integer
---- @param opts {model: string?, usage: sia.Usage?, status_text: string?},
-function Canvas:update_assistant_extmark(extmark_id, opts)
-  if extmark_id == nil then
-    return
-  end
-  opts = opts or {}
-
-  local extmark_details = vim.api.nvim_buf_get_extmark_by_id(
-    self.buf,
-    CHAT_NS,
-    extmark_id,
-    { details = true }
-  )
-  if not extmark_details or #extmark_details < 3 then
-    return
-  end
-
-  local line = extmark_details[1]
-  local virt_text = {}
-
-  local usage = opts.usage
-  if usage then
-    local usage_text = {}
-
-    if usage.total_time then
-      table.insert(
-        usage_text,
-        { string.format(" 󰥔 %.1fs", usage.total_time), "SiaUsage" }
-      )
-    end
-
-    if #usage_text > 0 then
-      usage_text[#usage_text][1] = usage_text[#usage_text][1] .. "  "
-      for _, text in ipairs(usage_text) do
-        table.insert(virt_text, text)
+--- Keep an empty write position, optionally separated from the previous block.
+--- @param separate boolean
+--- @return integer Zero-based row.
+function Canvas:ensure_placeholder(separate)
+  local count = self:line_count()
+  local lines = vim.api.nvim_buf_get_lines(self.buf, math.max(0, count - 2), count, false)
+  local last = lines[#lines]
+  local occupied = false
+  if last == "" then
+    local marks = vim.api.nvim_buf_get_extmarks(
+      self.buf, CHAT_NS, { count - 1, 0 }, { count - 1, 0 }, { details = true }
+    )
+    for _, mark in ipairs(marks) do
+      local chunks = mark[4].virt_text
+      if chunks and chunks[1] and chunks[1][2] == "SiaModel" then
+        occupied = true
+        break
       end
     end
   end
-
-  if opts.model then
-    table.insert(virt_text, { opts.model, "SiaModel" })
+  if last ~= "" or occupied then
+    self:insert_lines_at(count, separate and { "", "" } or { "" })
+  elseif separate and count > 1 and lines[#lines - 1] ~= "" then
+    self:insert_lines_at(count, { "" })
   end
-
-  if opts.status_text then
-    table.insert(virt_text, { " [" .. opts.status_text .. "]", "SiaStatus" })
-  end
-
-  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
-    id = extmark_id,
-    end_line = line + 1,
-    hl_eol = true,
-    hl_group = "SiaAssistant",
-    hl_mode = "combine",
-    virt_text = virt_text,
-    virt_text_pos = "right_align",
-  })
+  return self:line_count() - 1
 end
 
---- @param line integer
+--- @param line integer Zero-based row below the assistant's content.
 --- @param model string?
---- @param status_text string?
---- @return integer? extmark_id
-function Canvas:_set_assistant_extmark(line, model, status_text)
-  if model == nil then
-    return nil
+--- @param turn_id string
+--- @param usage sia.Usage?
+--- @param id integer?
+function Canvas:set_assistant_footer(line, model, turn_id, usage, id)
+  -- Use an ordinary blank row so folds and concealed Markdown fences cannot
+  -- hide the footer together with the last line of assistant content.
+  if vim.api.nvim_buf_get_lines(self.buf, line, line + 1, false)[1] ~= "" then
+    self:insert_lines_at(line + 1, { "" })
+    line = line + 1
   end
-  local virt_text = { { model, "SiaModel" } }
-  if status_text then
-    table.insert(virt_text, { " [#" .. status_text .. "]", "SiaStatus" })
+  local previous = self.footer_marks[turn_id]
+  if id and previous and previous ~= id then
+    vim.api.nvim_buf_del_extmark(self.buf, CHAT_NS, previous)
   end
-  return vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
-    end_line = line,
-    hl_eol = true,
-    hl_group = "SiaAssistant",
-    hl_mode = "combine",
-    virt_text = virt_text,
-    virt_text_pos = "right_align",
+  if usage then
+    self.turn_usage[turn_id] = vim.deepcopy(usage)
+  end
+  usage = usage or self.turn_usage[turn_id]
+  local chunks = { { "  " .. (model or "sia"), "SiaModel" } }
+  if usage and usage.total_time then
+    table.insert(chunks, { string.format(" · %.1fs", usage.total_time), "SiaUsage" })
+  end
+  table.insert(chunks, { " · #" .. turn_id:sub(1, 6), "SiaStatus" })
+  self.footer_marks[turn_id] = vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
+    id = id or previous,
+    virt_text = chunks,
+    virt_text_pos = "inline",
+    right_gravity = false,
   })
 end
 
-function Canvas:_set_user_extmark(line)
-  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line - 1, 0, {
-    end_line = line,
+--- @param id integer?
+--- @param opts {model:string?, usage:sia.Usage?, turn_id:string}
+function Canvas:update_assistant_footer(id, opts)
+  self:set_assistant_footer(self:line_count() - 1, opts.model, opts.turn_id, opts.usage, id)
+end
+
+--- @param line integer Zero-based first row of the query.
+--- @param count integer
+function Canvas:highlight_user_query(line, count)
+  vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, line, 0, {
+    end_row = line + count,
     hl_mode = "combine",
     hl_eol = true,
     hl_group = "SiaUser",
+    end_right_gravity = false,
   })
+  for row = line, line + count - 1 do
+    vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, row, 0, {
+      virt_text = { { "> ", "SiaUser" } },
+      virt_text_pos = "inline",
+      right_gravity = true,
+    })
+  end
 end
 
 --- @param message sia.Entry
@@ -447,224 +459,67 @@ local function is_renderable_message(message)
 end
 
 --- @param messages sia.Entry[]
---- @param index integer
---- @return sia.Entry?
-local function next_renderable_message(messages, index)
-  for next_index = index + 1, #messages do
-    local next_message = messages[next_index]
-    if is_renderable_message(next_message) then
-      return next_message
-    end
-  end
-  return nil
-end
-
---- @param buf integer
---- @return string
-local function get_last_line(buf)
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  return vim.api.nvim_buf_get_lines(buf, line_count - 1, line_count, false)[1] or ""
-end
-
---- @param buf integer
---- @param lines string[]
---- @return integer start_line
-local function append_meta_block(buf, lines)
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  local last_line = get_last_line(buf)
-  local start_line = line_count
-
-  if last_line == "" then
-    start_line = line_count - 1
-    vim.api.nvim_buf_set_lines(buf, start_line, line_count, false, lines)
-  else
-    vim.api.nvim_buf_set_lines(buf, line_count, line_count, false, lines)
-  end
-
-  return start_line
-end
-
---- @param messages sia.Entry[]
 --- @param model string?
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
-  local last_assistant_turn_id = nil
-  for index, message in ipairs(messages) do
+  local previous_role
+  local pending_turn
+  local function finish_turn()
+    if pending_turn then
+      self:set_assistant_footer(self:line_count() - 1, model, pending_turn)
+      pending_turn = nil
+    end
+  end
+  for _, message in ipairs(messages) do
     if not is_renderable_message(message) then
       goto continue
     end
-
+    if pending_turn and (message.role == "user" or message.turn_id ~= pending_turn) then
+      finish_turn()
+    end
+    local content = message.content
     if message.role == "tool" then
-      -- If this tool entry belongs to a turn that hasn't rendered an
-      -- assistant header yet, render /sia before the tool block so the
-      -- rendered output matches what the user saw during streaming.
-      local inserted_turn_header = false
-      if message.turn_id and message.turn_id ~= last_assistant_turn_id then
-        local line_count = vim.api.nvim_buf_line_count(self.buf)
-        local status_text = message.turn_id:sub(1, 6)
-        if line_count == 1 then
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            line_count - 1,
-            line_count,
-            false,
-            { "/sia", "" }
-          )
-          self:_set_assistant_extmark(line_count, model, status_text)
-        else
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            line_count,
-            line_count,
-            false,
-            { "", "/sia", "" }
-          )
-          self:_set_assistant_extmark(line_count + 2, model, status_text)
-        end
-        last_assistant_turn_id = message.turn_id
-        inserted_turn_header = true
+      if not message.summary then
+        goto continue
       end
-
-      local tool_lines = message.summary
-          and format_tool_summary_lines("done", message.summary)
-        or nil
-      if tool_lines then
-        append_verification(tool_lines, message.verification)
+      local lines = format_tool_summary_lines("done", message.summary)
+      append_verification(lines, message.verification)
+      local row = self:ensure_placeholder(previous_role == "user")
+      vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, lines)
+      self:highlight_tool(row, row + #lines, message.summary)
+      self:insert_lines_at(self:line_count(), { "" })
+    elseif message.role == "user" then
+      if type(content) ~= "string" or content == "" then
+        goto continue
       end
-      local next_message = next_renderable_message(messages, index)
-      if tool_lines then
-        local start_line
-        if inserted_turn_header then
-          start_line = vim.api.nvim_buf_line_count(self.buf)
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            start_line,
-            start_line,
-            false,
-            tool_lines
-          )
-        else
-          start_line = append_meta_block(self.buf, tool_lines)
-        end
-        self:highlight_tool(start_line, start_line + #tool_lines, message.summary)
-        if next_message and next_message.role == "tool" then
-          -- The next tool reuses this placeholder without adding a separator.
-          vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
-        end
-
-        if
-          next_message
-          and next_message.role == "assistant"
-          and next_message.turn_id == message.turn_id
-        then
-          local line_count = vim.api.nvim_buf_line_count(self.buf)
-          -- Leave a single placeholder line so the assistant continuation can
-          -- reuse it, matching the streaming layout for tool-only rounds.
-          vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
-        end
-      elseif
-        inserted_turn_header
-        and next_message
-        and next_message.role == "assistant"
-        and next_message.turn_id == message.turn_id
-      then
-        local line_count = vim.api.nvim_buf_line_count(self.buf)
-        -- Preserve the placeholder line that streaming leaves behind when a
-        -- tool-only round finishes without a final summary.
-        vim.api.nvim_buf_set_lines(self.buf, line_count, line_count, false, { "" })
+      local row = self:ensure_placeholder(true)
+      local lines = vim.split(content, "\n", { plain = true })
+      vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, lines)
+      self:highlight_user_query(row, #lines)
+    elseif message.role == "assistant" then
+      local reasoning = message.reasoning and format_reasoning_lines(message.reasoning.text)
+      local text = type(content) == "string" and content:gsub("^\n+", "") or ""
+      if not reasoning and text == "" then
+        goto continue
       end
-      goto continue
-    end
-
-    do
-      local content = message.content
-      local is_assistant = message.role == "assistant"
-
-      local skip_header = is_assistant
-        and message.turn_id
-        and message.turn_id == last_assistant_turn_id
-
-      if is_assistant and message.turn_id then
-        last_assistant_turn_id = message.turn_id
+      local row = self:ensure_placeholder(previous_role ~= "tool")
+      if reasoning then
+        vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, reasoning)
+        self:insert_lines_at(self:line_count(), text ~= "" and { "", "" } or { "" })
+        row = self:line_count() - 1
       end
-
-      if not skip_header then
-        local line_count = vim.api.nvim_buf_line_count(self.buf)
-        local heading = "/you"
-        if is_assistant then
-          heading = "/sia"
-        end
-        local status_text = is_assistant
-            and message.turn_id
-            and message.turn_id:sub(1, 6)
-          or nil
-        if line_count == 1 then
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            line_count - 1,
-            line_count,
-            false,
-            { heading, "" }
-          )
-          if is_assistant then
-            self:_set_assistant_extmark(line_count, model, status_text)
-          else
-            self:_set_user_extmark(line_count)
-          end
-        else
-          vim.api.nvim_buf_set_lines(
-            self.buf,
-            line_count,
-            line_count,
-            false,
-            { "", heading, "" }
-          )
-          if is_assistant then
-            self:_set_assistant_extmark(line_count + 2, model, status_text)
-          else
-            self:_set_user_extmark(line_count + 2)
-            -- We need to render a new assistant header
-            last_assistant_turn_id = nil
-          end
-        end
-      end
-
-      if is_assistant then
-        if message.reasoning then
-          local reasoning = format_reasoning_lines(message.reasoning.text)
-          if reasoning then
-            local line_count = vim.api.nvim_buf_line_count(self.buf)
-            vim.api.nvim_buf_set_lines(
-              self.buf,
-              line_count,
-              line_count,
-              false,
-              reasoning
-            )
-            local has_content = content and type(content) == "string" and content ~= ""
-            if has_content then
-              vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "", "" })
-            else
-              vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { "" })
-            end
-          end
-        end
-      end
-
-      if content and type(content) == "string" then
-        local line_count = vim.api.nvim_buf_line_count(self.buf)
-        vim.api.nvim_buf_set_lines(
-          self.buf,
-          line_count - 1,
-          line_count,
-          false,
-          vim.split(content, "\n")
-        )
+      if text ~= "" then
+        vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, vim.split(text, "\n"))
+        self:mark_assistant_text(row)
       end
     end
-
+    if message.role ~= "user" and message.turn_id then
+      pending_turn = message.turn_id
+    end
+    previous_role = message.role
     ::continue::
   end
+  finish_turn()
   self:refresh_folds()
   vim.bo[self.buf].modifiable = false
   self:scroll_to_bottom()
@@ -715,20 +570,11 @@ function Canvas:update_tool_block(
   return #lines
 end
 
---- @param model string?
---- @return integer? extmark_id
-function Canvas:render_assistant_header(model)
+--- @return integer extmark_id
+function Canvas:begin_assistant_turn()
   vim.bo[self.buf].modifiable = true
-  local buf = self.buf
-  local id
-  if self:line_count() == 1 then
-    vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "/sia", "" })
-    id = self:_set_assistant_extmark(1, model)
-  else
-    vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "/sia", "" })
-    id = self:_set_assistant_extmark(self:line_count() - 1, model)
-  end
-  vim.bo[self.buf].modifiable = false
+  local row = self:ensure_placeholder(true)
+  local id = vim.api.nvim_buf_set_extmark(self.buf, CHAT_NS, row, 0, { right_gravity = true })
   self:scroll_to_bottom()
   return id
 end
@@ -738,9 +584,11 @@ function Canvas:clear()
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
   vim.bo[self.buf].modifiable = false
   self:clear_tool_highlights()
+  vim.api.nvim_buf_clear_namespace(self.buf, ASSISTANT_TEXT_NS, 0, -1)
   self:clear_temporary_text()
   vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)
+  self.footer_marks = {}
 end
 
 function Canvas:line_count()

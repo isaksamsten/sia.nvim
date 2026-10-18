@@ -53,6 +53,13 @@ Keybindings in the compose window:
 
 ### Chat Window Features
 
+User queries are highlighted and marked with `>`. Tool summaries use `•`, and
+assistant text starts with `·`. A muted footer below each assistant turn shows
+the model, elapsed time when available, and the short turn hash used for
+rollback. Query and assistant markers are visual decorations, so copied text
+keeps its original content. See [highlight groups](../6-reference.md) to
+customize their appearance.
+
 Inside a chat buffer (`ft=sia`), you have access to several views:
 
 - **Todos** — when the assistant works on multi-step tasks, it creates a todo

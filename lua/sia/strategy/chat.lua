@@ -97,7 +97,11 @@ function AssistantTurnRenderer:append_content(content)
       return
     end
   end
+  local first_content = self.content_writer:is_empty()
   self.content_writer:append(content)
+  if first_content then
+    self.canvas:mark_assistant_text(self.content_writer.start_line)
+  end
 end
 
 --- @param content string
@@ -469,7 +473,7 @@ function ChatStrategy:on_request_start()
     self.conversation:get_last_entry(),
   }, self.conversation.model.name)
   self.assistant_extmark =
-    self.canvas:render_assistant_header(self.conversation.model.name)
+    self.canvas:begin_assistant_turn()
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
@@ -480,11 +484,6 @@ function ChatStrategy:on_round_start()
   if not self:buf_is_loaded() then
     return false
   end
-
-  self.canvas:update_assistant_extmark(
-    self.assistant_extmark,
-    { model = self.conversation.model.name }
-  )
 end
 
 --- @param turn_id string
@@ -492,7 +491,7 @@ function ChatStrategy:on_round_end(turn_id)
   local new_entries = self.conversation:attach_pending_user_messages()
   if new_entries then
     self.canvas:render_messages(new_entries, self.conversation.model.name)
-    self.canvas:render_assistant_header(self.conversation.model.name)
+    self.assistant_extmark = self.canvas:begin_assistant_turn()
   end
 end
 
@@ -636,7 +635,7 @@ function ChatStrategy:on_tool_results(statuses)
     end
     self:redraw()
     self.assistant_extmark =
-      self.canvas:render_assistant_header(self.conversation.model.name)
+      self.canvas:begin_assistant_turn()
   end
 end
 
@@ -676,13 +675,11 @@ function ChatStrategy:on_finish(ctx)
   self.canvas:clear_temporary_text()
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
-  if ctx.usage then
-    self.canvas:update_assistant_extmark(self.assistant_extmark, {
-      usage = ctx.usage,
-      model = self.conversation.model.name,
-      status_text = ctx.turn_id:sub(1, 5),
-    })
-  end
+  self.canvas:update_assistant_footer(self.assistant_extmark, {
+    usage = ctx.usage,
+    model = self.conversation.model.name,
+    turn_id = ctx.turn_id,
+  })
   vim.bo[self.buf].modifiable = false
 
   if not self.has_generated_name then

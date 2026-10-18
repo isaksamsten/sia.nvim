@@ -99,7 +99,21 @@ local function select(items, opts, on_choice)
   for i, item in ipairs(items) do
     table.insert(choices, string.format("%d: %s", i, item))
   end
-  local clear_preview = require("sia.preview").show(choices)
+  --- @type string[]|fun(buf:integer):integer?
+  local content = choices
+  if opts.preview then
+    content = function(buf)
+      if type(opts.preview) == "table" then
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, opts.preview)
+      else
+        opts.preview(buf)
+      end
+      vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "## Choices", "" })
+      vim.api.nvim_buf_set_lines(buf, -1, -1, false, choices)
+      return vim.api.nvim_buf_line_count(buf)
+    end
+  end
+  local clear_preview = require("sia.preview").show(content, { wrap = opts.wrap })
   vim.cmd.redraw()
   vim.ui.input(
     { prompt = "Type number and Enter or (Esc or empty cancels): " },
@@ -146,7 +160,12 @@ local function input(opts, on_confirm)
   end
 
   local clear_preview
-  if #prompt > 80 or prompt:find("\n") then
+  local show_preview = require("sia.config").options.settings.ui.confirm.show_preview
+  if show_preview and opts.preview then
+    clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
+    confirmation_text = confirmation_text and (prompt .. " - " .. confirmation_text) or prompt
+    vim.cmd.redraw()
+  elseif #prompt > 80 or prompt:find("\n") then
     clear_preview = require("sia.preview").show(
       vim.split(prompt, "\n", { trimempty = true, plain = true }),
       { wrap = opts.wrap }
@@ -156,12 +175,6 @@ local function input(opts, on_confirm)
     confirmation_text = string.format("%s - %s", prompt, confirmation_text)
   else
     confirmation_text = prompt
-  end
-
-  local show_preview = require("sia.config").options.settings.ui.confirm.show_preview
-  if show_preview and opts.preview and not clear_preview then
-    clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
-    vim.cmd.redraw()
   end
 
   vim.ui.input({ prompt = confirmation_text }, function(resp)
@@ -190,10 +203,17 @@ end
 --- @field preview (string[]|fun(buf:integer):integer?)?
 --- @field wrap boolean?
 
+--- @class sia.ToolRiskAssessment
+--- @field level "minimal"|"low"|"medium"|"high"
+--- @field action string
+--- @field reason string
+--- @field matches_approved_action boolean
+
 --- @class sia.NewToolExecuteUserInputOpts
 --- @field on_accept fun()
+--- @field on_cancel fun()?
 --- @field level sia.RiskLevel?
---- @field preview (fun(buf:integer):integer?)?
+--- @field preview (fun(buf:integer, assessment:sia.ToolRiskAssessment?):integer?)?
 --- @field preview_result boolean? Reuse non-diff approval content as the result preview.
 --- @field wrap boolean?
 --- @field verifier {system_prompt:string, input:string}?
@@ -399,6 +419,19 @@ local function create_user_input_handler(
 
     prompt = prompt or ("Execute " .. tool_name)
 
+    local function approval_prompt(assessment)
+      return assessment and assessment.action or prompt
+    end
+
+    local function approval_preview(assessment)
+      if type(input_args.preview) ~= "function" then
+        return input_args.preview
+      end
+      return function(buf)
+        return input_args.preview(buf, assessment)
+      end
+    end
+
     local VERIFIER_ORDER = { minimal = 1, low = 2, medium = 3, high = 4 }
     local function verifier_allows(verdict, threshold)
       return VERIFIER_ORDER[verdict] ~= nil
@@ -435,7 +468,10 @@ local function create_user_input_handler(
               },
               action = { type = "string" },
               matches_approved_action = { type = "boolean" },
-              reason = { type = "string" },
+              reason = {
+                type = "string",
+                description = "Explain intrinsic risk only; omit approval history and approval matching.",
+              },
             },
             required = {
               "level",
@@ -455,9 +491,13 @@ local function create_user_input_handler(
       verifier:add_system_message(table.concat({
         input_args.verifier.system_prompt,
         "",
-        "Report intrinsic risk honestly. Also describe the action in a concise, reusable",
-        "phrase including important scope constraints. Set matches_approved_action=true",
-        "only when the operation clearly matches one of the explicitly approved actions.",
+        "Report intrinsic risk honestly. The reason must explain only the operation's",
+        "effects, scope, and reversibility. Do not mention approval history, approval",
+        "matching, or whether approved actions were provided in the reason.",
+        "Describe the action in a concise, reusable phrase including important scope constraints.",
+        "Report approval matching only in matches_approved_action. Set it to true only",
+        "when the operation clearly matches an explicitly approved action; otherwise false.",
+        "An empty approved_actions list means matches_approved_action=false and does not affect risk.",
       }, "\n"))
       local permissions = require("sia.permissions")
       conversation.approved_verifier_actions = conversation.approved_verifier_actions
@@ -486,6 +526,11 @@ local function create_user_input_handler(
             on_done(nil)
             return
           end
+          verdict.action = vim.trim(verdict.action:gsub("[\r\n]+", " "))
+          if verdict.action == "" then
+            on_done(nil)
+            return
+          end
           if #approved_actions == 0 then
             verdict.matches_approved_action = false
           end
@@ -495,19 +540,24 @@ local function create_user_input_handler(
     end
 
     local function prompt_user(verdict)
-      local verifier_suffix = verdict
-          and string.format("\nVerifier: %s risk - %s", verdict.level, verdict.reason)
-        or ""
       local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
 
       local input_fn = confirm_conf.use_vim_ui and vim.ui.input or input
+      local preview = approval_preview(verdict)
+      local clear_preview
+      if confirm_conf.use_vim_ui and confirm_conf.show_preview and preview then
+        clear_preview = require("sia.preview").show(preview, { wrap = input_args.wrap })
+      end
 
       input_fn({
-        prompt = string.format("%s%s - %s", prompt, verifier_suffix, confirmation_text),
-        preview = input_args.preview,
+        prompt = string.format("%s - %s", approval_prompt(verdict), confirmation_text),
+        preview = preview,
         wrap = input_args.wrap,
       }, function(resp)
+        if clear_preview then
+          clear_preview()
+        end
         handle_user_response(resp, resolved_level, {
           on_accept = function(mode)
             if mode == "always" then
@@ -559,14 +609,19 @@ local function create_user_input_handler(
         "Decline",
       }
       local select_fn = confirm_conf.use_vim_ui and vim.ui.select or select
+      local preview = approval_preview(verdict)
+      local clear_preview
+      if confirm_conf.use_vim_ui and confirm_conf.show_preview and preview then
+        clear_preview = require("sia.preview").show(preview, { wrap = true })
+      end
       select_fn(choices, {
-        prompt = string.format(
-          "%s\nVerifier: %s risk - %s",
-          prompt,
-          verdict.level,
-          verdict.reason
-        ),
+        prompt = approval_prompt(verdict),
+        preview = confirm_conf.show_preview and preview or nil,
+        wrap = true,
       }, function(_, idx)
+        if clear_preview then
+          clear_preview()
+        end
         if idx == 1 then
           input_args.on_accept()
         elseif idx == 2 then
@@ -612,20 +667,16 @@ local function create_user_input_handler(
             return
           end
 
-          local display_prompt = result
-              and string.format(
-                "%s\nVerifier: %s risk - %s",
-                prompt,
-                result.level,
-                result.reason
-              )
-            or prompt
+          local display_prompt = approval_prompt(result)
           require("sia.ui.confirm").show(conversation, display_prompt, {
             level = resolved_level,
             tool_name = tool_name,
             kind = "input",
             on_accept = input_args.on_accept,
             on_cancel = function()
+              if input_args.on_cancel then
+                input_args.on_cancel()
+              end
               callback({ content = cancellation_message(tool_name) })
             end,
             on_prompt = function()
@@ -637,7 +688,7 @@ local function create_user_input_handler(
             end,
             on_preview = function()
               local clear = require("sia.preview").show(
-                input_args.preview,
+                approval_preview(result),
                 { wrap = true, focusable = true }
               )
               vim.cmd.redraw()

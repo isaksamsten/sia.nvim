@@ -487,4 +487,45 @@ T["sia.tools.bash"]["legacy aliases remain supported"] = function()
   eq(true, result.content:find("legacy ok", 1, true) ~= nil)
 end
 
+T["sia.tools.bash"]["async startup keeps model instructions out of chat previews"] = function()
+  child.lua([[
+    local result
+    require("sia.tools.bash").implementation.execute({
+      action = "start", command = "sleep 10", async = true,
+    }, function(res) result = res end, {
+      conversation = {
+        approved_tools = { bash = true },
+        process_runtime = {
+          exec_async = function(_, command)
+            return { id = 7, kind = "running", command = command }
+          end,
+        },
+      },
+    })
+    require("sia.tool_output").complete(result)
+    _G.async_start_result = result
+  ]])
+  local result = child.lua_get("_G.async_start_result")
+  eq("Started `sleep 10` (process 7)", result.summary)
+  eq(nil, result.preview)
+  eq(true, result.content:find("processId: 7", 1, true) ~= nil)
+  eq(true, result.content:find('bash(action="wait")', 1, true) ~= nil)
+end
+
+T["sia.tools.bash"]["async startup errors retain their preview"] = function()
+  child.lua([[
+    local result
+    require("sia.tools.bash").implementation.execute({
+      action = "start", command = "", async = true,
+    }, function(res) result = res end, {
+      conversation = { approved_tools = { bash = true } },
+    })
+    require("sia.tool_output").complete(result)
+    _G.async_start_error = result
+  ]])
+  local result = child.lua_get("_G.async_start_error")
+  eq("Failed to execute command", result.summary.header)
+  eq(true, result.summary.detail.text:find("command", 1, true) ~= nil)
+end
+
 return T
