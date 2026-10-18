@@ -48,11 +48,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
   },
   read_only = true,
   summary = function(args)
-    if args.path then
-      return "Viewing " .. vim.fn.fnamemodify(args.path, ":t")
-    else
-      return "Viewing..."
-    end
+    return "Reading " .. (args.path or "file") .. "..."
   end,
 
   persist_allow = function(args)

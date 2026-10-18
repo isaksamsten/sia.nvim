@@ -30,6 +30,55 @@ M.tool_names = {
   exit_mode = "exit_mode",
 }
 
+--- Describe a pending LSP operation, including while it awaits approval.
+--- @param args table
+--- @return string
+function M.lsp_summary(args)
+  args = args or {}
+  local action = args.action or args.command
+  local symbol = args.anchor or args.pattern
+  local target = symbol and (" '" .. symbol .. "'") or ""
+  local path = args.path or "file"
+  if action == "explain" or action == "hover" then
+    return "Reading documentation" .. (symbol and (" for" .. target) or "") .. "..."
+  elseif action == "rename" then
+    return "Renaming"
+      .. (symbol and target or " symbol")
+      .. (args.new_name and (" to '" .. args.new_name .. "'") or "")
+      .. "..."
+  elseif action == "format" then
+    return "Formatting " .. path .. "..."
+  elseif action == "diagnostics" then
+    return "Checking diagnostics for " .. path .. "..."
+  elseif action == "symbols" then
+    return "Reading symbols in " .. path .. "..."
+  elseif action == "workspace_symbols" then
+    return "Searching workspace symbols"
+      .. (args.query and (" for `" .. args.query .. "`") or "")
+      .. "..."
+  elseif action == "code_actions" then
+    return (args.apply and "Applying code action for " or "Reading code actions for ")
+      .. path
+      .. "..."
+  elseif action == "clients" then
+    return "Reading LSP clients for " .. path .. "..."
+  end
+  local labels = {
+    references = "references to",
+    definition = "definition of",
+    type_definition = "type definition of",
+    implementations = "implementations of",
+    implementation = "implementations of",
+  }
+  if labels[action] then
+    return "Searching for "
+      .. labels[action]
+      .. (symbol and target or " symbol")
+      .. "..."
+  end
+  return "Running LSP action..."
+end
+
 --- TODO: refactor to only return the arguments..
 --- fun(t:table):table
 --- @param clear_args string[]
@@ -171,7 +220,8 @@ local function input(opts, on_confirm)
   local show_preview = require("sia.config").options.settings.ui.confirm.show_preview
   if show_preview and opts.preview then
     clear_preview = require("sia.preview").show(opts.preview, { wrap = opts.wrap })
-    confirmation_text = confirmation_text and (prompt .. " - " .. confirmation_text) or prompt
+    confirmation_text = confirmation_text and (prompt .. " - " .. confirmation_text)
+      or prompt
     vim.cmd.redraw()
   elseif #prompt > 80 or prompt:find("\n") then
     clear_preview = require("sia.preview").show(
@@ -408,7 +458,8 @@ local function create_user_input_handler(
   callback,
   permission,
   persist_allow,
-  verification
+  verification,
+  on_confirmation
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
   return function(prompt, input_args)
@@ -548,6 +599,7 @@ local function create_user_input_handler(
     end
 
     local function prompt_user(verdict)
+      on_confirmation(true)
       local confirmation_text = (resolved_level == "warn") and "Proceed? (y/N): "
         or "Proceed? (Y/n/[a]lways): "
 
@@ -606,6 +658,7 @@ local function create_user_input_handler(
         return
       end
 
+      on_confirmation(true)
       local choices = {
         "Accept once",
         string.format("Trust through %s risk for this conversation", verdict.level),
@@ -674,6 +727,7 @@ local function create_user_input_handler(
           end
 
           local display_prompt = approval_prompt(result)
+          on_confirmation(true)
           require("sia.ui.confirm").show(conversation, display_prompt, {
             level = resolved_level,
             tool_name = tool_name,
@@ -722,6 +776,7 @@ local function create_user_input_handler(
     end
 
     if confirm_conf.async and confirm_conf.async.enable then
+      on_confirmation(true)
       require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
         tool_name = tool_name,
@@ -754,7 +809,13 @@ end
 --- @param conversation sia.Conversation
 --- @param callback fun(result:sia.ToolResult)
 --- @return sia.NewToolExecuteUserChoice
-local function create_user_choice_handler(tool_name, args, conversation, callback)
+local function create_user_choice_handler(
+  tool_name,
+  args,
+  conversation,
+  callback,
+  on_confirmation
+)
   return function(prompt, choice_args)
     local confirm_conf = require("sia.config").options.settings.ui.confirm
     local default_level = choice_args.level or "info"
@@ -762,6 +823,7 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
     local resolved_level = risk.get_risk_level(tool_name, args, default_level)
 
     local function prompt_user()
+      on_confirmation(true)
       local select_fn = select
       local clear_preview
       if confirm_conf.use_vim_ui then
@@ -780,6 +842,7 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
           clear_preview()
         end
         if idx then
+          on_confirmation(false)
           choice_args.on_accept(idx)
         else
           if choice_args.on_cancel then
@@ -792,6 +855,7 @@ local function create_user_choice_handler(tool_name, args, conversation, callbac
     end
 
     if confirm_conf.async and confirm_conf.async.enable then
+      on_confirmation(true)
       require("sia.ui.confirm").show(conversation, prompt, {
         level = resolved_level,
         tool_name = tool_name,
@@ -883,7 +947,17 @@ M.new_tool = function(opts, execute)
       execute = function(args, callback, exeution_context)
         local verification = {}
         local accepted_preview
+        local waiting_for_confirmation = false
+        local function on_confirmation(waiting)
+          if waiting_for_confirmation ~= waiting then
+            waiting_for_confirmation = waiting
+            if exeution_context.on_confirmation then
+              exeution_context.on_confirmation(waiting)
+            end
+          end
+        end
         local function result_callback(result)
+          on_confirmation(false)
           local verdict = verification.verdict
           if verdict and result then
             result.verification = vim.deepcopy(verdict)
@@ -891,7 +965,12 @@ M.new_tool = function(opts, execute)
           if result then
             require("sia.tool_output").ensure_summary(result, opts.definition.name)
           end
-          if result and result.summary and result.kind ~= "cancelled" and not result.preview then
+          if
+            result
+            and result.summary
+            and result.kind ~= "cancelled"
+            and not result.preview
+          then
             if opts.preview == true then
               result.preview = accepted_preview
                 or require("sia.tool_output").from_content(result.content)
@@ -921,13 +1000,15 @@ M.new_tool = function(opts, execute)
           result_callback,
           permission,
           opts.persist_allow,
-          verification
+          verification,
+          on_confirmation
         )
         local user_choice = create_user_choice_handler(
           opts.definition.name,
           args,
           exeution_context.conversation,
-          result_callback
+          result_callback,
+          on_confirmation
         )
 
         execute(args, exeution_context.conversation, result_callback, {
@@ -935,6 +1016,7 @@ M.new_tool = function(opts, execute)
           user_input = function(prompt, input_args)
             local on_accept = input_args.on_accept
             input_args.on_accept = function()
+              on_confirmation(false)
               -- Capture before mutation, including automatically approved tools.
               -- Non-diff approval text describes intent rather than the result.
               if opts.preview then

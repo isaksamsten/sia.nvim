@@ -231,18 +231,17 @@ vim.api.nvim_create_autocmd("User", {
 --- @param args table
 --- @return string
 local function summary(args)
-  local branch = args.branch or "unknown"
+  local branch = args.branch or "worktree"
   if args.command == "create" then
-    return string.format("Creating worktree %s", branch)
+    return "Creating git worktree " .. branch .. "..."
   elseif args.command == "remove" then
-    return string.format("Removing worktree %s", branch)
+    return "Removing git worktree " .. branch .. "..."
   elseif args.command == "status" then
-    return string.format("Checking worktree %s", branch)
+    return "Reading status for git worktree " .. branch .. "..."
   elseif args.command == "diff" then
-    return string.format("Diffing worktree %s", branch)
+    return "Reading diff for git worktree " .. branch .. "..."
   end
-
-  return "Listing git worktrees"
+  return "Listing git worktrees..."
 end
 
 --- @param args table

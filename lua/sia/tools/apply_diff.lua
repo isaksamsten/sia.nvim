@@ -104,7 +104,7 @@ return tool_utils.new_tool({
   },
   preview = true,
   summary = function()
-    return "Applying diff..."
+    return "Editing files..."
   end,
   instructions = [[Use the `apply_diff` tool to make changes to existing files.
 

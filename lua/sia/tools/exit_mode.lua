@@ -14,11 +14,8 @@ return tool_utils.new_tool({
     required = {},
   },
   read_only = true,
-  summary = function(args)
-    if args.summary and args.summary ~= "" then
-      return "Exiting mode: " .. args.summary:sub(1, 60)
-    end
-    return "Exiting mode..."
+  summary = function()
+    return "Exiting conversation mode..."
   end,
   instructions = [[Exit the current conversation mode and return to unrestricted tool access.
 

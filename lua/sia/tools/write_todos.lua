@@ -62,21 +62,8 @@ return tool_utils.new_tool({
     required = {},
   },
   read_only = false,
-  summary = function(args)
-    local parts = {}
-    if args.replace and #args.replace > 0 then
-      table.insert(parts, string.format("replacing with %d todo(s)", #args.replace))
-    end
-    if args.add and #args.add > 0 then
-      table.insert(parts, string.format("adding %d todo(s)", #args.add))
-    end
-    if args.update and #args.update > 0 then
-      table.insert(parts, string.format("updating %d todo(s)", #args.update))
-    end
-    if args.clear then
-      table.insert(parts, "clearing completed todos")
-    end
-    return "Writing todos: " .. table.concat(parts, ", ")
+  summary = function()
+    return false
   end,
   instructions = [[Manage todos for this conversation. You can add new todos, update
 existing ones, clear completed todos, or replace the entire list.
@@ -206,6 +193,6 @@ of newly added todos for future reference.]],
 
   callback({
     content = table.concat(response, "\n"),
-    summary = "Updated todos",
+    summary = false,
   })
 end)

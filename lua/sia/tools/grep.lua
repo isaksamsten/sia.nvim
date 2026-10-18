@@ -152,7 +152,8 @@ Usage:
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
   summary = function(args)
-    return string.format("Searching for %s...", args.pattern)
+    local label = args.pattern and ("Searching for `" .. args.pattern .. "`") or "Searching"
+    return label .. " in `" .. (args.path or ".") .. "`..."
   end,
   is_approved = function(args, conversation)
     if args.path and require("sia.utils").dirs.is_safe(args.path) then

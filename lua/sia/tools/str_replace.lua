@@ -180,10 +180,7 @@ Usage:
   },
   preview = true,
   summary = function(args)
-    if args.target_file then
-      return string.format("Making changes to %s...", args.target_file)
-    end
-    return "Making file changes..."
+    return "Editing " .. (args.target_file or "file") .. "..."
   end,
 
   persist_allow = function(args)

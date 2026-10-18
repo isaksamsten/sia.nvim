@@ -42,10 +42,7 @@ return tool_utils.new_tool({
   },
   preview = true,
   summary = function(args)
-    if args.target_file then
-      return string.format("Inserting text into %s...", args.target_file)
-    end
-    return "Inserting text..."
+    return "Editing " .. (args.target_file or "file") .. "..."
   end,
   instructions = [[Insert text at a specific line in a file.
 

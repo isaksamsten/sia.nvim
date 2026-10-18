@@ -219,4 +219,44 @@ T["cancelled tools retain model instructions without showing them in details"] =
   eq(nil, result.preview)
 end
 
+T["hidden results still have visible transient summaries while awaiting approval"] = function()
+  for _, case in ipairs({
+    { name = "agent", args = { command = "send", id = 1, message = "Continue" } },
+    { name = "bash", args = { action = "kill", id = 1 } },
+  }) do
+    local finish, confirmation, running, results
+    local implementation = require("sia.tools." .. case.name).implementation
+    require("sia.engine").execute_tools({
+      { key = "pending", type = "function", name = case.name, arguments = vim.json.encode(case.args) },
+    }, {
+      tool_implementation = { [case.name] = implementation },
+      approved_tools = { [case.name] = true },
+      execute_tool = function(_, _, _, opts)
+        -- Hold the result until the pending approval is resolved.
+        finish = opts.callback
+        confirmation = opts.on_confirmation
+      end,
+    }, {
+      turn_id = "turn",
+      on_status = function(statuses)
+        if statuses[1].status == "running" then
+          running = statuses[1].summary
+        end
+      end,
+      on_complete = function(entries) results = entries end,
+    })
+    vim.wait(1000, function() return finish ~= nil end)
+    eq(false, running)
+    confirmation(true)
+    eq("string", type(running))
+    eq(nil, results)
+    confirmation(false)
+    eq(false, running)
+    finish({ summary = false, content = "model-only result" })
+    vim.wait(1000, function() return results ~= nil end)
+    eq(false, results[1].result.summary)
+    eq("model-only result", results[1].result.content)
+  end
+end
+
 return T

@@ -446,9 +446,14 @@ end
 
 local function output_detail(proc, conversation)
   local output = normalize_output(conversation.process_runtime:get_output(proc.id))
-  local text = table.concat(vim.tbl_filter(function(part)
-    return part ~= ""
-  end, { output.stdout, output.stderr }), "\n"):gsub("%s+$", "")
+  local text = table
+    .concat(
+      vim.tbl_filter(function(part)
+        return part ~= ""
+      end, { output.stdout, output.stderr }),
+      "\n"
+    )
+    :gsub("%s+$", "")
   return text ~= "" and { text = text, ft = "text" } or nil
 end
 
@@ -518,7 +523,10 @@ local function wait_for_process(proc_id, conversation, callback, wait_timeout)
     if conversation:has_pending_user_messages() then
       local cmd = format_command(current_proc.command)
       callback({
-        summary = { header = "Paused " .. cmd, detail = output_detail(current_proc, conversation) },
+        summary = {
+          header = "Paused " .. cmd,
+          detail = output_detail(current_proc, conversation),
+        },
         content = waiting_yield_message(current_proc, conversation.process_runtime),
       })
       return
@@ -575,7 +583,12 @@ local function launch_command(args, conversation, opts, on_started)
       vim.list_extend(lines, {
         fence,
         "",
-        "Working directory: " .. (runtime.pwd and runtime:pwd() or conversation.workspace or vim.fn.getcwd()),
+        "Working directory: "
+          .. (
+            runtime.pwd and runtime:pwd()
+            or conversation.workspace
+            or vim.fn.getcwd()
+          ),
       })
       if assessment then
         vim.list_extend(lines, {
@@ -685,20 +698,19 @@ return tool_utils.new_tool({
   end,
   summary = function(args)
     local normalized = normalize_args(args)
-    if normalized.action == "status" or normalized.action == "view" or normalized.action == "wait" then
-      return false
-    end
     if normalized.action == "start" then
-      if normalized.description then
-        return string.format("Starting: %s...", args.description)
-      end
-      return "Starting command..."
+      local action = normalized.async and "Starting " or "Running "
+      return action
+        .. (normalized.command and format_command(normalized.command) or "command")
+        .. "..."
     elseif normalized.action == "status" then
-      return string.format("Checking process %d...", normalized.id or 0)
+      return "Checking command status..."
     elseif normalized.action == "wait" then
-      return string.format("Waiting for process %d...", normalized.id or 0)
+      return "Waiting for command..."
     elseif normalized.action == "view" then
-      return string.format("Viewing process %d output...", normalized.id or 0)
+      return "Reading command output..."
+    elseif normalized.action == "kill" then
+      return "Stopping command..."
     end
     return "Running command..."
   end,
@@ -862,10 +874,7 @@ git commit -m "$(cat <<'EOF'
         end
         callback({
           content = string.format(ASYNC_START_REPLY, proc.id),
-          summary = string.format(
-            "Started %s",
-            format_command(args.command)
-          ),
+          summary = string.format("Started %s", format_command(args.command)),
         })
       end)
     else
@@ -905,7 +914,10 @@ git commit -m "$(cat <<'EOF'
 
     local summary = false
     if proc.kind ~= "running" then
-      summary = { header = build_display_message(proc), detail = output_detail(proc, conversation) }
+      summary = {
+        header = build_display_message(proc),
+        detail = output_detail(proc, conversation),
+      }
     end
     callback({
       content = build_process_preview(proc, conversation.process_runtime),
@@ -1005,9 +1017,11 @@ git commit -m "$(cat <<'EOF'
     callback({
       content = content,
       summary = {
-        header = (stop_result == "already_finished" and "Already finished "
-          or stop_result == "stop_requested" and "Requested stop for " or "Stopped ")
-          .. format_command(proc and proc.command or "unknown"),
+        header = (
+          stop_result == "already_finished" and "Already finished "
+          or stop_result == "stop_requested" and "Requested stop for "
+          or "Stopped "
+        ) .. format_command(proc and proc.command or "unknown"),
         detail = proc and output_detail(proc, conversation) or nil,
       },
     })

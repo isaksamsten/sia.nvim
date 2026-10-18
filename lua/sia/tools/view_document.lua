@@ -49,11 +49,7 @@ return tool_utils.new_tool({
   end,
   read_only = true,
   summary = function(args)
-    if args.path then
-      return "Viewing document " .. vim.fn.fnamemodify(args.path, ":t")
-    else
-      return "Viewing document..."
-    end
+    return "Viewing document" .. (args.path and (" " .. args.path) or "") .. "..."
   end,
   instructions = string.format(
     [[Views a document file from the local filesystem and returns it as file content

@@ -119,6 +119,7 @@ end
 --- @field conversation sia.Conversation
 --- @field turn_id string
 --- @field cancellable sia.Cancellable?
+--- @field on_confirmation (fun(waiting:boolean))?
 
 --- @class sia.tool.Implementation
 --- @field instructions string?
@@ -474,8 +475,12 @@ end
 --- @return sia.UserEntry
 function Conversation:add_user_message(content, region, opts)
   opts = opts or {}
-  local entry =
-    UserEntry.new(content, region and self:track_region(region), opts.hide, opts.turn_id)
+  local entry = UserEntry.new(
+    content,
+    region and self:track_region(region),
+    opts.hide,
+    opts.turn_id
+  )
   table.insert(self.entries, entry)
   return entry
 end
@@ -841,7 +846,7 @@ end
 
 --- @param name string
 --- @param arguments table
---- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string? }
+--- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string?, on_confirmation: (fun(waiting:boolean))? }
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, opts)
   if self:has_tool(name) then
@@ -850,6 +855,7 @@ function Conversation:execute_tool(name, arguments, opts)
         cancellable = opts.cancellable,
         turn_id = opts.turn_id,
         conversation = self,
+        on_confirmation = opts.on_confirmation,
       })
     if not ok then
       print(vim.inspect(err))

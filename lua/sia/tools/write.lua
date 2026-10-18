@@ -16,8 +16,8 @@ return tool_utils.new_tool({
     required = { "path", "content" },
   },
   preview = true,
-  summary = function()
-    return "Writing file..."
+  summary = function(args)
+    return "Writing " .. (args.path or "file") .. "..."
   end,
   instructions = [[Write complete file contents to a buffer.
 

@@ -19,6 +19,7 @@ local T = MiniTest.new_set({ hooks = {
         reason = "Executes project code and may create generated files.", matches_approved_action = false,
       }
       _G.executions, _G.previews, _G.cleared = 0, {}, 0
+      _G.confirmation_events = {}
       require("sia.assistant").fetch_response = function(_, opts)
         opts.on_complete(_G.verifier_response or vim.json.encode(_G.test_verdict))
       end
@@ -61,6 +62,7 @@ local T = MiniTest.new_set({ hooks = {
           command = _G.command, description = "Run shell checks",
         }, function(result) _G.result = result end, {
           conversation = { approved_tools = {}, process_runtime = runtime },
+          on_confirmation = function(waiting) table.insert(_G.confirmation_events, waiting) end,
         })
       end
     ]])
@@ -72,6 +74,7 @@ T["async approval uses AI description and previews exact command plus risk"] = f
   child.lua("start_bash(); approval.on_preview()")
   eq("Check the project workspace", child.lua_get("approval_prompt"))
   eq(0, child.lua_get("executions"))
+  eq({ true }, child.lua_get("confirmation_events"))
   local preview = child.lua_get("previews[1]")
   eq("markdown", preview.ft)
   local text = table.concat(preview.lines, "\n")
@@ -82,6 +85,7 @@ T["async approval uses AI description and previews exact command plus risk"] = f
   eq(true, preview.opts.wrap)
   child.lua("approval.on_accept()")
   eq(1, child.lua_get("executions"))
+  eq({ true, false }, child.lua_get("confirmation_events"))
   -- Approval assessment is separate from the completed command's chat preview.
   eq("done", child.lua_get("result.summary.detail.text"))
 end
@@ -131,6 +135,7 @@ T["trusted risk thresholds still auto approve without opening UI"] = function()
   eq(0, child.lua_get("#previews"))
   eq(true, child.lua_get("approval == nil"))
   eq("medium", child.lua_get("result.verification.level"))
+  eq({}, child.lua_get("confirmation_events"))
 end
 
 T["declining the approval never runs the command"] = function()
@@ -182,6 +187,21 @@ T["external input fallback still shows the command preview"] = function()
   child.lua("answer(nil)")
   eq(0, child.lua_get("executions"))
   eq(1, child.lua_get("cleared"))
+end
+
+T["AI assessment stays quiet until it requests manual approval"] = function()
+  child.lua([[
+    require("sia.assistant").fetch_response = function(_, opts)
+      _G.finish_assessment = opts.on_complete
+    end
+    start_bash()
+  ]])
+  eq({}, child.lua_get("confirmation_events"))
+  eq(0, child.lua_get("executions"))
+  child.lua("finish_assessment(vim.json.encode(test_verdict))")
+  eq({ true }, child.lua_get("confirmation_events"))
+  child.lua("approval.on_accept()")
+  eq({ true, false }, child.lua_get("confirmation_events"))
 end
 
 return T

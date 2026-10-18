@@ -33,7 +33,7 @@ return tool_utils.new_tool({
     required = { "items" },
   },
   summary = function()
-    return "Creating location list..."
+    return "Creating quickfix list..."
   end,
   instructions = [[SHOWS MULTIPLE LOCATIONS TO THE USER - creates a navigable quickfix list.
 

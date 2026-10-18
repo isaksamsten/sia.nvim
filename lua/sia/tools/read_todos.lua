@@ -10,7 +10,7 @@ return tool_utils.new_tool({
   },
   read_only = true,
   summary = function()
-    return "Reading todos..."
+    return false
   end,
   instructions = [[Read the current list of todos for this conversation.
 Returns all todos with their ID, description, and status. Use the IDs when updating
@@ -25,7 +25,7 @@ todos with the write_todos tool.]],
 
   if #conversation.todos.items == 0 then
     callback({
-      summary = "Read todos",
+      summary = false,
       content = "No todos yet. Use write_todos to add some!",
     })
     return
@@ -59,6 +59,6 @@ todos with the write_todos tool.]],
 
   callback({
     content = table.concat(response, "\n"),
-    summary = "Read todos",
+    summary = false,
   })
 end)

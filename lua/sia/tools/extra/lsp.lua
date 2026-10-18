@@ -286,8 +286,8 @@ return tool_utils.new_tool({
     required = { "command", "path", "line", "pattern" },
   },
   read_only = false,
-  summary = function()
-    return "Querying LSP..."
+  summary = function(args)
+    return tool_utils.lsp_summary(args)
   end,
   instructions = [[Interact with Language Server Protocol (LSP) servers to get code intelligence features.
 Supported commands:

@@ -22,10 +22,7 @@ return tool_utils.new_tool({
       and os.getenv("GOOGLE_SEARCH_CX") ~= nil
   end,
   summary = function(args)
-    if args.description then
-      return string.format("%s...", args.description)
-    end
-    return string.format("Searching for: %s", args.query)
+    return "Searching the web" .. (args.query and (" for `" .. args.query .. "`") or "") .. "..."
   end,
   instructions = [[- Searches the web using Google Custom Search API
 - Returns search results with titles, URLs, and snippets

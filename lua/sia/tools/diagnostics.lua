@@ -12,8 +12,10 @@ return tool_utils.new_tool({
     required = { "file" },
   },
   read_only = true,
-  summary = function()
-    return "Retrieving diagnostics..."
+  summary = function(args)
+    return "Checking diagnostics"
+      .. (args.file and (" for " .. args.file) or "")
+      .. "..."
   end,
   instructions = [[Get LSP diagnostics for a specific file - includes syntax errors,
 type errors, warnings, and hints from the Language Server Protocol.

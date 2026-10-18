@@ -204,30 +204,16 @@ return tool_utils.new_tool({
     required = { "command" },
   },
   summary = function(args)
-    if args.command == "status" or args.command == "wait" or args.command == "send" then
-      return false
-    end
-    if args.command == "list" then
-      return "Listing agents"
-    elseif args.command == "start" then
-      return string.format(
-        "Starting agent '%s'",
-        args.agent or "unknown"
-      )
+    if args.command == "start" then
+      return "Starting agent" .. (args.agent and (" '" .. args.agent .. "'") or "") .. "..."
     elseif args.command == "send" then
-      return string.format("Messaging agent '%s'", tostring(args.id))
+      return "Sending follow-up to agent..."
     elseif args.command == "wait" then
-      if args.id then
-        return string.format(
-          "Waiting for agent '%s'",
-          tostring(args.id)
-        )
-      else
-        return "Waiting for agents"
-      end
+      return args.id and "Waiting for agent..." or "Waiting for agents..."
     elseif args.command == "status" then
-      return string.format("Checking agent '%s'", tostring(args.id))
+      return "Checking agent status..."
     end
+    return "Listing agents..."
   end,
   read_only = true,
   instructions = string.format(

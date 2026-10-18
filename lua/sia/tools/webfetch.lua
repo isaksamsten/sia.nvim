@@ -52,7 +52,7 @@ return tool_utils.new_tool({
     required = { "url" },
   },
   summary = function(args)
-    return string.format("Fetching %s...", args.url)
+    return "Fetching " .. (args.url or "URL") .. "..."
   end,
   is_supported = function()
     return vim.fn.executable("npm") == 1 and vim.fn.executable("node") == 1

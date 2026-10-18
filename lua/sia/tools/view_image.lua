@@ -39,11 +39,7 @@ return tool_utils.new_tool({
   end,
   read_only = true,
   summary = function(args)
-    if args.path then
-      return "Viewing image " .. vim.fn.fnamemodify(args.path, ":t")
-    else
-      return "Viewing image..."
-    end
+    return "Viewing image" .. (args.path and (" " .. args.path) or "") .. "..."
   end,
   instructions = [[Views an image file from the local filesystem and returns it as an
 image for visual analysis. Supports PNG, JPEG, GIF, and WebP formats. Use this tool

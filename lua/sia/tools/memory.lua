@@ -51,7 +51,13 @@ All paths MUST start with `/memories/`.
 ]],
   read_only = false,
   summary = function(args)
-    return string.format("Executing memory command: %s", args.command)
+    local verbs = { view = "Reading", create = "Creating", str_replace = "Editing", insert = "Editing", delete = "Deleting" }
+    if args.command == "rename" then
+      return "Renaming memory " .. (args.old_path or "file") .. " to " .. (args.new_path or "file") .. "..."
+    elseif args.command == "search" then
+      return "Searching memory" .. (args.query and (" for `" .. args.query .. "`") or "") .. "..."
+    end
+    return (verbs[args.command] or "Updating") .. " memory " .. (args.path or "/memories") .. "..."
   end,
   is_approved = function(args, _)
     return true

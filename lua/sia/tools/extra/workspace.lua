@@ -11,7 +11,7 @@ return tool_utils.new_tool({
     required = {},
   },
   summary = function()
-    return "Getting workspace information..."
+    return "Reading current workspace..."
   end,
   instructions = [[Use this tool to get information about which files and line
 ranges are currently visible in the user's workspace.

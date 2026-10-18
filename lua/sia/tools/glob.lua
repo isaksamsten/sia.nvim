@@ -66,8 +66,15 @@ return tool_utils.new_tool({
   and grepping, use the Agent tool instead
 - You can call multiple tools in a single response. It is always better to speculatively
   perform multiple searches in parallel if they are potentially useful.]],
-  summary = function()
-    return "Searching for files..."
+  summary = function(args)
+    local label = "Searching for files"
+    if args.pattern then
+      label = label .. " matching `" .. args.pattern .. "`"
+    end
+    if args.path then
+      label = label .. " in `" .. args.path .. "`"
+    end
+    return label .. "..."
   end,
   confirm = function(args)
     local msg = ""

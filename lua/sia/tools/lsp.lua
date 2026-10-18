@@ -853,8 +853,7 @@ local M = tool_utils.new_tool({
   },
   read_only = false,
   summary = function(args)
-    local label = args and ACTION_LABELS[args.action] or nil
-    return label and ("Running LSP " .. label .. "...") or "Running LSP..."
+    return tool_utils.lsp_summary(args)
   end,
   instructions = [[Use Neovim's attached Language Server Protocol clients.
 

@@ -106,7 +106,7 @@ function M.execute_tools(tool_calls, conversation, opts)
       key = parsed.key,
       index = parsed.index,
       name = parsed.name,
-      summary = parsed.summary,
+      summary = false,
       status = "pending",
     }
     tool_results[i] = nil
@@ -199,6 +199,18 @@ function M.execute_tools(tool_calls, conversation, opts)
       conversation:execute_tool(parsed.name, parsed.args, {
         cancellable = opts.cancellable,
         turn_id = opts.turn_id,
+        on_confirmation = function(waiting)
+          local summary = false
+          if waiting then
+            summary = parsed.summary
+          end
+          if all_statuses[parsed.index].summary ~= summary then
+            all_statuses[parsed.index].summary = summary
+            if opts.on_status then
+              opts.on_status(all_statuses)
+            end
+          end
+        end,
         callback = vim.schedule_wrap(function(tool_result)
           if not tool_result then
             tool_result = { content = "Could not find tool...", ephemeral = true }

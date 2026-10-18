@@ -717,7 +717,7 @@ T["sia.tools.str_replace"]["tool metadata"] = function()
 
   eq("str_replace", child.lua_get("_G.name"))
   eq(true, child.lua_get("_G.description"):find("Performs exact string replacements", 1, true) ~= nil)
-  eq("Making changes to test.txt...", child.lua_get("_G.summary"))
+  eq("Editing test.txt...", child.lua_get("_G.summary"))
 
   local required = child.lua_get("_G.required")
   eq(true, vim.tbl_contains(required, "target_file"))
