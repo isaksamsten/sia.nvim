@@ -1,5 +1,5 @@
 *sia.txt*
-                            For Neovim >= 0.11    Last change: 2026 October 17
+                            For Neovim >= 0.11    Last change: 2026 October 18
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -366,6 +366,13 @@ Keybindings in the compose window:
 
 
 CHAT WINDOW FEATURES ~
+
+User queries are highlighted and marked with `>`. Tool summaries use `•`, and
+assistant text starts with `·`. A muted footer below each assistant turn shows
+the model, elapsed time when available, and the short turn hash used for
+rollback. Query and assistant markers are visual decorations, so copied text
+keeps its original content. See highlight groups |sia-reference| to customize
+their appearance.
 
 Inside a chat buffer (`ft=sia`), you have access to several views:
 
@@ -3224,16 +3231,16 @@ CHANGE REVIEW ~
 
 CHAT UI ~
 
-  Group           Default Link   Description
-  --------------- -------------- -------------------------------------
-  SiaAssistant    DiffAdd        Assistant message markers
-  SiaUser         DiffChange     User message markers
-  SiaToolResult   Bold           Tool result summaries
-  SiaFolded       Italic         Collapsed reasoning and tool output
-  SiaProgress     NonText        Progress indicators
-  SiaModel        —              Model name display
-  SiaUsage        —              Token usage display
-  SiaStatus       —              Status display
+  Group                Default Link   Description
+  -------------------- -------------- -------------------------------------
+  SiaAssistantMarker   Normal         Small dot before assistant text
+  SiaUser              DiffChange     User queries and > markers
+  SiaToolResult        Bold           Tool result summaries
+  SiaFolded            Italic         Collapsed reasoning and tool output
+  SiaProgress          NonText        Progress indicators
+  SiaModel             Comment        Footer model name
+  SiaUsage             Comment        Footer elapsed time
+  SiaStatus            Comment        Footer turn hash
 Customize collapsed chat output without changing the global `Folded` highlight:
 
 >lua
