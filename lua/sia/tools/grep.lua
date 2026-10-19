@@ -150,8 +150,7 @@ Usage:
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
   summary = function(args)
-    local label = args.pattern and ("Searching for `" .. args.pattern .. "`")
-      or "Searching"
+    local label = args.pattern and ("Searching `" .. args.pattern .. "`") or "Searching"
     return label .. " in `" .. (args.path or ".") .. "`..."
   end,
   is_approved = function(args, conversation)
@@ -165,7 +164,7 @@ Usage:
   callback = function(result)
     if result.summary and not result.ephemeral then
       result.summary =
-        string.format("Searched for `%s` in `%s`", args.pattern, args.path or ".")
+        string.format("Searched `%s` in `%s`", args.pattern, args.path or ".")
     end
     result_callback(result)
   end

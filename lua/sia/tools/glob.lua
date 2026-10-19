@@ -67,14 +67,7 @@ return tool_utils.new_tool({
 - You can call multiple tools in a single response. It is always better to speculatively
   perform multiple searches in parallel if they are potentially useful.]],
   summary = function(args)
-    local label = "Searching for files"
-    if args.pattern then
-      label = label .. " matching `" .. args.pattern .. "`"
-    end
-    if args.path then
-      label = label .. " in `" .. args.path .. "`"
-    end
-    return label .. "..."
+    return "Exploring " .. "`" .. (args.path or ".") .. "`..."
   end,
   confirm = function(args)
     local msg = ""
@@ -132,15 +125,9 @@ return tool_utils.new_tool({
         table.insert(cmd, path)
       end
 
-      local function failed(message, code)
-        local summary = "Failed to find files"
-        if code then
-          summary = summary .. string.format(" (exit %d)", code)
-        end
+      local function failed(message)
         callback({
           content = "Error: " .. message,
-          summary = summary,
-          preview = { text = message, ft = "text" },
           ephemeral = true,
         })
       end
@@ -151,7 +138,7 @@ return tool_utils.new_tool({
         function(obj)
           if obj.code ~= 0 then
             local message = vim.trim(obj.stderr or "")
-            failed(message ~= "" and message or "File search command failed.", obj.code)
+            failed(message ~= "" and message or "File search command failed.")
             return
           end
 
@@ -171,14 +158,7 @@ return tool_utils.new_tool({
             else
               msg = "No files found."
             end
-            local summary = "Explored "
-            if pattern then
-              summary = summary .. "`" .. pattern .. "`"
-            end
-            if path then
-              summary = summary .. "`" .. path .. "`"
-            end
-            callback({ content = msg, summary = summary })
+            callback({ content = msg })
             return
           end
 
@@ -230,17 +210,9 @@ return tool_utils.new_tool({
             )
           end
 
-          local display_line = "Explored "
-          if pattern then
-            display_line = display_line .. "`" .. pattern .. "`"
-          end
-          if path then
-            display_line = display_line .. "`" .. path .. "`"
-          end
-
           callback({
             content = table.concat(limited_files, "\n"),
-            summary = display_line,
+            summary = "Explored " .. "`" .. (path or ".") .. "`",
             preview = preview,
           })
         end
