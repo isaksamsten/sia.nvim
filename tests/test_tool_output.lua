@@ -18,10 +18,13 @@ end
 
 T["broken preview releases its buffer and does not throw"] = function()
   local captured_buf
-  eq(nil, output.capture(function(buf)
-    captured_buf = buf
-    error("bad preview")
-  end))
+  eq(
+    nil,
+    output.capture(function(buf)
+      captured_buf = buf
+      error("bad preview")
+    end)
+  )
   eq(false, vim.api.nvim_buf_is_valid(captured_buf))
 end
 
@@ -32,7 +35,10 @@ T["completion prefers explicit details then accepted diff then result text"] = f
     preview = { text = "-old\n+new", ft = "diff" },
   }
   output.complete(result)
-  eq({ header = "Edited file", detail = { text = "-old\n+new", ft = "diff" } }, result.summary)
+  eq(
+    { header = "Edited file", detail = { text = "-old\n+new", ft = "diff" } },
+    result.summary
+  )
   eq(nil, result.preview)
   result.summary = { header = "Edited file", detail = { text = "Explicit output" } }
   result.preview = { text = "ignored", ft = "diff" }
@@ -57,7 +63,10 @@ end
 T["multipart previews include text and leave image data alone"] = function()
   local result = {
     summary = "Viewed image",
-    content = { { type = "text", text = "Image dimensions: 10x10" }, { type = "image", data = "secret" } },
+    content = {
+      { type = "text", text = "Image dimensions: 10x10" },
+      { type = "image", data = "secret" },
+    },
   }
   result.preview = output.from_content(result.content)
   output.complete(result)
@@ -93,7 +102,9 @@ T["automatic approval captures diff before mutation"] = function()
     })
   end)
   local result
-  tool.implementation.execute({}, function(res) result = res end, {
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { preview_test = true } },
   })
   eq("new", value)
@@ -107,9 +118,17 @@ T["engine delivers normalized previews in final results and statuses"] = functio
   require("sia.engine").execute_tools({
     { key = "call", type = "function", name = "read", arguments = "{}" },
   }, {
-    tool_implementation = { read = { summary = function() return "Reading file" end } },
+    tool_implementation = { read = {
+      summary = function()
+        return "Reading file"
+      end,
+    } },
     execute_tool = function(_, _, _, opts)
-      opts.callback({ summary = "Read file", content = "file contents", preview = output.from_content("file contents") })
+      opts.callback({
+        summary = "Read file",
+        content = "file contents",
+        preview = output.from_content("file contents"),
+      })
     end,
   }, {
     turn_id = "turn",
@@ -117,8 +136,13 @@ T["engine delivers normalized previews in final results and statuses"] = functio
       entries, statuses = results, final_statuses
     end,
   })
-  vim.wait(1000, function() return entries ~= nil end)
-  eq({ header = "Read file", detail = { text = "file contents", ft = "text" } }, entries[1].result.summary)
+  vim.wait(1000, function()
+    return entries ~= nil
+  end)
+  eq(
+    { header = "Read file", detail = { text = "file contents", ft = "text" } },
+    entries[1].result.summary
+  )
   eq(entries[1].result.summary, statuses[1].summary)
 end
 
@@ -136,7 +160,9 @@ T["tools without preview opt-in keep summary only"] = function()
     callback({ summary = "Viewed file", content = "Large file contents" })
   end)
   local result
-  tool.implementation.execute({}, function(res) result = res end, {
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { preview_test = true } },
   })
   output.complete(result)
@@ -154,26 +180,58 @@ T["custom tool preview function opts in without a built-in tool name"] = functio
     callback({ summary = "Computed result", content = "return 42" })
   end)
   local result
-  tool.implementation.execute({ label = "-- answer" }, function(res) result = res end, {
+  tool.implementation.execute({ label = "-- answer" }, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { custom_preview = true } },
   })
   output.complete(result)
-  eq({ header = "Computed result", detail = { text = "-- answer\nreturn 42", ft = "lua" } }, result.summary)
+  eq(
+    {
+      header = "Computed result",
+      detail = { text = "-- answer\nreturn 42", ft = "lua" },
+    },
+    result.summary
+  )
 end
 
-T["view errors remain summary only"] = function()
+T["view errors hide summaries without hiding model errors"] = function()
   local view = require("sia.tools.view")
   local result
   view.implementation.execute({ path = "missing-sia-preview-test-file" }, function(res)
     result = res
   end, { conversation = { approved_tools = { view = true } } })
+  output.ensure_summary(result, "view")
   output.complete(result)
-  eq("string", type(result.summary))
+  eq(false, result.summary)
+  eq("Error: File cannot be found", result.content)
   eq(nil, result.preview)
 end
 
+T["search errors hide summaries without hiding model errors"] = function()
+  for _, args in ipairs({ {}, { pattern = "[" } }) do
+    local result
+    require("sia.tools.grep").implementation.execute(args, function(res)
+      result = res
+    end, { conversation = { approved_tools = { grep = true } } })
+    vim.wait(1000, function()
+      return result ~= nil
+    end)
+    output.ensure_summary(result, "grep")
+    output.complete(result)
+    eq(false, result.summary)
+    eq("string", type(result.content))
+    eq(true, #result.content > 0)
+    eq(nil, result.preview)
+  end
+end
+
 T["explicit omission clears previews without exposing model instructions"] = function()
-  local result = { summary = false, content = "Use process 7 to poll", preview = { text = "private" } }
+  local result = {
+    summary = false,
+    content = "Use process 7 to poll",
+    preview = { text = "private" },
+  }
   output.ensure_summary(result, "bash")
   output.complete(result)
   eq(false, result.summary)
@@ -183,7 +241,10 @@ end
 
 T["missing summaries remain visible without enabling previews"] = function()
   for _, case in ipairs({
-    { content = "Error: process not found", expected = "Failed bash: process not found" },
+    {
+      content = "Error: process not found",
+      expected = "Failed bash: process not found",
+    },
     { content = "No references found.", expected = "No references found." },
     { content = "model-only result", expected = "Completed bash" },
   }) do
@@ -197,7 +258,10 @@ T["missing summaries remain visible without enabling previews"] = function()
 end
 
 T["empty details do not create a details row"] = function()
-  local result = { summary = { header = "Ran command", detail = { text = "\n\n" } }, content = "done" }
+  local result = {
+    summary = { header = "Ran command", detail = { text = "\n\n" } },
+    content = "done",
+  }
   output.complete(result)
   eq(nil, result.summary.detail)
 end
@@ -207,10 +271,16 @@ T["cancelled tools retain model instructions without showing them in details"] =
     definition = { name = "cancel_test", type = "function" },
     preview = true,
   }, function(_, _, callback)
-    callback({ summary = "Cancelled editing file", kind = "cancelled", content = "IMPORTANT: model instructions" })
+    callback({
+      summary = "Cancelled editing file",
+      kind = "cancelled",
+      content = "IMPORTANT: model instructions",
+    })
   end)
   local result
-  tool.implementation.execute({}, function(res) result = res end, {
+  tool.implementation.execute({}, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { cancel_test = true } },
   })
   output.complete(result)
@@ -227,7 +297,12 @@ T["hidden results still have visible transient summaries while awaiting approval
     local finish, confirmation, running, results
     local implementation = require("sia.tools." .. case.name).implementation
     require("sia.engine").execute_tools({
-      { key = "pending", type = "function", name = case.name, arguments = vim.json.encode(case.args) },
+      {
+        key = "pending",
+        type = "function",
+        name = case.name,
+        arguments = vim.json.encode(case.args),
+      },
     }, {
       tool_implementation = { [case.name] = implementation },
       approved_tools = { [case.name] = true },
@@ -243,9 +318,13 @@ T["hidden results still have visible transient summaries while awaiting approval
           running = statuses[1].summary
         end
       end,
-      on_complete = function(entries) results = entries end,
+      on_complete = function(entries)
+        results = entries
+      end,
     })
-    vim.wait(1000, function() return finish ~= nil end)
+    vim.wait(1000, function()
+      return finish ~= nil
+    end)
     eq(false, running)
     confirmation(true)
     eq("string", type(running))
@@ -253,7 +332,9 @@ T["hidden results still have visible transient summaries while awaiting approval
     confirmation(false)
     eq(false, running)
     finish({ summary = false, content = "model-only result" })
-    vim.wait(1000, function() return results ~= nil end)
+    vim.wait(1000, function()
+      return results ~= nil
+    end)
     eq(false, results[1].result.summary)
     eq("model-only result", results[1].result.content)
   end

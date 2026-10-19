@@ -144,7 +144,7 @@ end
 local function cancellation_result(name)
   return {
     content = cancellation_message(name),
-    summary = "Cancelled " .. name:gsub("_", " "),
+    summary = false,
     kind = "cancelled",
   }
 end

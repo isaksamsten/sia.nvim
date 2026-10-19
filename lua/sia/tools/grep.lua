@@ -14,10 +14,8 @@ end
 
 local function handle_files_with_matches_mode(lines, args, callback)
   if #lines == 0 then
-    local no_match_msg = string.format(
-      "No files found matching `%s`",
-      args.pattern
-    ) .. format_no_match_context(args)
+    local no_match_msg = string.format("No files found matching `%s`", args.pattern)
+      .. format_no_match_context(args)
 
     callback({
       content = "No files with matches found.",
@@ -48,10 +46,8 @@ end
 
 local function handle_count_mode(lines, args, callback, conversation)
   if #lines == 0 then
-    local no_match_msg = string.format(
-      "No matches found for `%s`",
-      args.pattern
-    ) .. format_no_match_context(args)
+    local no_match_msg = string.format("No matches found for `%s`", args.pattern)
+      .. format_no_match_context(args)
 
     callback({
       content = "No matches found.",
@@ -62,7 +58,9 @@ local function handle_count_mode(lines, args, callback, conversation)
 
   local is_single_file = false
   if args.path then
-    local stat = vim.loop.fs_stat(tool_utils.resolve_workspace_path(args.path, conversation.workspace))
+    local stat = vim.loop.fs_stat(
+      tool_utils.resolve_workspace_path(args.path, conversation.workspace)
+    )
     is_single_file = stat ~= nil and stat.type == "file"
   end
 
@@ -152,7 +150,8 @@ Usage:
 - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
 - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`]],
   summary = function(args)
-    local label = args.pattern and ("Searching for `" .. args.pattern .. "`") or "Searching"
+    local label = args.pattern and ("Searching for `" .. args.pattern .. "`")
+      or "Searching"
     return label .. " in `" .. (args.path or ".") .. "`..."
   end,
   is_approved = function(args, conversation)
@@ -165,7 +164,8 @@ Usage:
   local result_callback = callback
   callback = function(result)
     if result.summary and not result.ephemeral then
-      result.summary = string.format("Searched for `%s` in `%s`", args.pattern, args.path or ".")
+      result.summary =
+        string.format("Searched for `%s` in `%s`", args.pattern, args.path or ".")
     end
     result_callback(result)
   end
@@ -190,7 +190,7 @@ Usage:
   end
 
   if args.pattern == nil then
-    callback({ content = "No pattern was given", summary = "Failed to search: missing pattern", ephemeral = true })
+    callback({ content = "No pattern was given", summary = false, ephemeral = true })
     return
   end
 
@@ -217,27 +217,34 @@ Usage:
         table.insert(command, args.path)
       end
 
-      vim.system(command, {
-        text = true,
-        timeout = 5000,
-        cwd = conversation.workspace,
-      }, vim.schedule_wrap(function(obj)
-        if obj.code ~= 0 and obj.code ~= 1 then
-          callback({ content = "Search failed: " .. (obj.stderr or "rg exited with code " .. obj.code),
-            summary = "Failed to search for `" .. args.pattern .. "`",
-            preview = { text = obj.stderr or "Search failed", ft = "text" }, ephemeral = true })
-          return
-        end
-        local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
+      vim.system(
+        command,
+        {
+          text = true,
+          timeout = 5000,
+          cwd = conversation.workspace,
+        },
+        vim.schedule_wrap(function(obj)
+          if obj.code ~= 0 and obj.code ~= 1 then
+            callback({
+              content = "Search failed: "
+                .. (obj.stderr or "rg exited with code " .. obj.code),
+              summary = false,
+              ephemeral = true,
+            })
+            return
+          end
+          local lines = vim.split(obj.stdout or "", "\n", { trimempty = true })
 
-        if output_mode == "files_with_matches" then
-          handle_files_with_matches_mode(lines, args, callback)
-        elseif output_mode == "count" then
-          handle_count_mode(lines, args, callback, conversation)
-        else
-          callback(require("sia.tools.grep_context").build(lines, args, conversation))
-        end
-      end))
+          if output_mode == "files_with_matches" then
+            handle_files_with_matches_mode(lines, args, callback)
+          elseif output_mode == "count" then
+            handle_count_mode(lines, args, callback, conversation)
+          else
+            callback(require("sia.tools.grep_context").build(lines, args, conversation))
+          end
+        end)
+      )
     end,
   })
 end)

@@ -66,7 +66,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
   if not args.path then
     callback({
       content = "Error: No file path was provided",
-      summary = "Failed to view",
+      summary = false,
       ephemeral = true,
     })
     return
@@ -78,7 +78,7 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
   if vim.fn.filereadable(resolved_path) == 0 then
     callback({
       content = "Error: File cannot be found",
-      summary = "Failed to view",
+      summary = false,
       ephemeral = true,
     })
     return
@@ -107,16 +107,17 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
       if not buf then
         callback({
           content = "Error: Cannot load " .. args.path,
-          summary = "Failed to view",
+          summary = false,
           ephemeral = true,
         })
         return
       end
-      local context = require("sia.tools.file_context").build(conversation, resolved_path, buf, {
-        first = offset,
-        limit = limit,
-        whole_buffer = not (args.offset or args.limit),
-      })
+      local context =
+        require("sia.tools.file_context").build(conversation, resolved_path, buf, {
+          first = offset,
+          limit = limit,
+          whole_buffer = not (args.offset or args.limit),
+        })
       local start_line, end_line = context.first, context.last
 
       local display = view_display(args.path)
