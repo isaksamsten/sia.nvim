@@ -219,20 +219,25 @@ end, {
       return flag_completions
     end
 
-    local positional = parsed.positional
-
-    if chat and #positional == 1 then
-      if vim.startswith(ArgLead, "@") then
-        local term = ArgLead:sub(2)
-        local completions = {}
-        for mode_name, _ in pairs(chat.conversation.modes) do
-          if vim.startswith(mode_name, term) then
-            table.insert(completions, mode_name)
-          end
-        end
-        return completions
+    -- Determine the grammar position before the token being completed. The
+    -- parser extracts action and mode tokens rather than keeping them positional.
+    local parsed_with_lead = parsed
+    if ArgLead ~= "" then
+      table.remove(args_before)
+    end
+    parsed = SIA_PARSER:parse(args_before)
+    for name, value in pairs(parsed_with_lead.flags) do
+      if parsed.flags[name] ~= value then
+        return {}
       end
-    elseif vim.startswith(ArgLead, "/") and #positional == 1 then
+    end
+
+    if
+      vim.startswith(ArgLead, "/")
+      and not parsed.action
+      and not parsed.mode
+      and #parsed.positional == 0
+    then
       local complete = {}
       local term = ArgLead:sub(2)
       for key, prompt in pairs(config.options.actions) do
@@ -247,17 +252,22 @@ end, {
         end
       end
       return complete
-    elseif vim.startswith(ArgLead, "@") then
+    elseif
+      vim.startswith(ArgLead, "@")
+      and not parsed.mode
+      and #parsed.positional == 0
+    then
       local action_modes = nil
-      if #positional <= 1 and not is_bang then
+      if parsed.action then
+        local action = config.options.actions[parsed.action] --[[@as sia.config.Action?]]
+        if action and action.mode == "chat" then
+          action_modes = action.modes
+        end
+      elseif chat then
+        action_modes = chat.conversation.modes
+      elseif not is_bang then
         local action = config.options.settings.actions.chat
         action_modes = action and action.modes
-      elseif #positional == 2 and vim.startswith(positional[1], "/") then
-        local action_name = positional[1]:sub(2)
-        local action = config.options.actions[action_name] --[[@as sia.config.Action]]
-        if action.mode == "chat" then
-          action_modes = action and action.modes
-        end
       end
 
       if action_modes then
