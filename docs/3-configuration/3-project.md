@@ -7,12 +7,17 @@ the project root. Local settings override global ones.
 
 ```json
 {
-  "model": "copilot/gpt-5-mini",
-  "fast_model": {
-    "name": "openai/gpt-4.1-mini",
-    "options": { "temperature": 0.1 }
+  "model": {
+    "default": {
+      "default": "copilot/gpt-5-mini",
+      "mini": {
+        "name": "openai/gpt-4.1",
+        "options": { "temperature": 0.1 }
+      },
+      "pro": "openai/gpt-5.2"
+    },
+    "vision": "openai/gpt-5.2"
   },
-  "plan_model": "openai/gpt-5.2",
   "action": {
     "insert": "custom_insert_action",
     "diff": "custom_diff_action",
@@ -47,9 +52,10 @@ the project root. Local settings override global ones.
 
 ### Model Overrides
 
-- **model** — override the main model. Accepts a string (`"openai/gpt-4.1"`)
-  or an object (`{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }`).
-- **fast_model** / **plan_model** — same format as **model**.
+- **model** — override [model roles and tiers](2-models.md#model-roles-and-tiers).
+  Accepts a model name for all default tiers, or an object mapping role names to
+  model names or tier objects. Model leaves also accept `{ "name": "...", "options": {...} }`.
+  Local tiers override global tiers; other roles and tiers are preserved.
 - **models** — override parameters for specific models, organized by provider:
 
   ```json

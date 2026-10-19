@@ -82,13 +82,17 @@ Runtime.__index = Runtime
 --- @param workspace string?
 --- @return sia.Conversation
 local function create_conversation(agent_def, agent, workspace)
-  local config = require("sia.config")
+  local models = require("sia.model")
   local tools = require("sia.tools")
+  local selection = require("sia.config.model").normalize_selection(
+    agent_def.model,
+    "mini",
+    "agent.model"
+  )
+  local model = models.resolve_role(selection.role, selection.tier, agent_def.requires)
 
   local conversation = require("sia.conversation").new({
-    model = require("sia.model").resolve(
-      agent_def.model or config.options.settings.fast_model
-    ),
+    model = model,
     approved_tools = agent_def.auto_approve,
     workspace = workspace,
     tools = vim
@@ -154,7 +158,7 @@ end
 --- @param agent_name string
 --- @param task string
 --- @param opts sia.agents.SpawnOpts?
---- @return sia.agents.Agent?
+--- @return sia.agents.Agent?, string?
 function Runtime:spawn(agent_name, task, opts)
   opts = opts or {}
 
@@ -163,8 +167,13 @@ function Runtime:spawn(agent_name, task, opts)
     return nil
   end
 
-  local agent = self:create(agent_name, task, opts.source or "user")
-  agent.conversation = create_conversation(agent_def, agent, opts.workspace)
+  local agent = Agent.new(#self.items + 1, agent_name, task, opts.source or "user")
+  local ok, conversation = pcall(create_conversation, agent_def, agent, opts.workspace)
+  if not ok then
+    return nil, tostring(conversation)
+  end
+  agent.conversation = conversation
+  table.insert(self.items, agent)
   agent.view = agent_def.interactive and "pending" or "closed"
 
   agent.background = require("sia.strategy").new_hidden(nil, agent.conversation, {

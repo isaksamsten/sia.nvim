@@ -904,9 +904,13 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
     require("sia").setup({
       settings = {
         -- Models
-        model = "openai/gpt-5.2",                              -- Main conversational model
-        fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
-        plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
+        model = {
+          default = {
+            default = "openai/gpt-5.2", -- Main conversational model
+            mini = "openai/gpt-4.1",    -- Quick tasks and compaction
+            pro = "openai/gpt-5.4",     -- Demanding agent tasks
+          },
+        },
 
         -- Icon set: "emoji" or a custom table
         icons = "emoji",
@@ -946,7 +950,6 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
         -- LLM verification for tools that provide a safety prompt
         tool_verifier = {
           enable = false,
-          -- model = "openai/gpt-4.1", -- Defaults to fast_model
         },
 
         -- Globally enabled agents and skills
@@ -1005,7 +1008,8 @@ global behavior. A project can still override the enabled list in
 `.sia/config.json`.
 
 `tool_verifier` applies globally to tools that provide a verifier prompt. It
-uses `fast_model` unless `model` is set. See Tool Confirmation
+uses `model.verify.mini` (falling back to `model.default.mini`) for model
+selection. See Tool Confirmation
 |sia-tool-confirmation-llm-tool-verification| for risk thresholds, semantic
 action approvals, and persistence.
 
@@ -1047,7 +1051,7 @@ and the matching result message, starting from the oldest. Outdated messages
 
 
 2. **Compact the conversation** (last resort) — summarizes the conversation
-history using `fast_model` and replaces old messages with the summary.
+history using `model.compact.mini` and replaces old messages with the summary.
 
 
 
@@ -1071,8 +1075,9 @@ The chat winbar displays a context budget indicator when the model has a
 The indicator changes color: normal below 85%, warning (`DiagnosticWarn`) at
 85%+, error (`DiagnosticError`) at 95%+.
 
-Compaction uses `fast_model` to generate summaries. Make sure your fast model
-has a large enough context window (e.g., `openai/gpt-4.1` with 1M tokens).
+Compaction uses `model.compact.mini` (falling back to `model.default.mini`) to
+generate summaries. Make sure the selected model has a large enough context
+window (e.g., `openai/gpt-4.1` with 1M tokens).
 
 
 WINBAR CUSTOMIZATION ~
@@ -1114,6 +1119,85 @@ Sia supports multiple LLM providers. Each model is identified by a
 `provider/model-name` string (e.g., `openai/gpt-4.1`,
 `copilot/claude-sonnet-4.6`).
 
+
+MODEL ROLES AND TIERS ~
+
+`settings.model` chooses models by role and tier. Roles are user-defined
+names, like `vision` or `coding`; tiers are always `mini`, `default`, and
+`pro`.
+
+The minimal configuration is a model name:
+
+>lua
+    require("sia").setup({ settings = { model = "openai/gpt-5.2" } })
+<
+
+A string selects that model for every tier of the `default` role. Expand
+roles into tier tables when you need separate choices:
+
+>lua
+    require("sia").setup({
+      settings = {
+        model = {
+          default = {
+            default = "openai/gpt-5.2",
+            mini = "openai/gpt-4.1",
+            pro = "openai/gpt-5.4",
+          },
+          vision = "openai/gpt-5.2", -- All three vision tiers use this model
+          coding = {
+            pro = "openai/gpt-5.2-codex",
+          },
+        },
+      },
+    })
+<
+
+Model leaves accept a name, a project alias, or `{ name = "...", options =
+{...} }`. The concrete `{ name, options }` format also works as shorthand
+for an entire role.
+
+Selection falls back from the requested `role.tier` to `default.tier`, then
+to `default.default`. Unknown roles use this fallback; unknown tiers are
+errors. The effective configuration must contain `default.default` (provided
+by Sia's built-in defaults). Missing tiers remain unset until selection, so
+a role table containing only `default` does not implicitly fill its `mini`
+or `pro` tiers. Use a string to assign the same model to every tier in a
+role.
+
+Project configuration uses the same `model` structure and overrides global
+configuration per role and tier. Replacing a model also replaces its inline
+options. A string overrides all tiers of that role while preserving other
+roles.
+
+Ordinary conversations use `default.default`. Internal tasks request these roles
+at the `mini` tier:
+
+- `summarize`: generating conversation titles.
+- `compact`: summarizing conversation history during compaction.
+- `verify`: assessing tool operations.
+
+These roles need no configuration: each falls back to `default.mini`, then
+`default.default`. Override them independently, for example with
+`model.compact = "openai/gpt-4.1"` or
+`model.verify = { mini = "openai/gpt-5.2" }`. Roles remain open to custom names.
+
+Agents without an explicit selection use `default.mini`. Agents can request
+another role and tier in their frontmatter; see Agents. Capability requirements
+are checked on the selected model, including when selection falls back.
+
+Actions select roles and tiers through
+`action.model = { role = "...", tier = "..." }`. Their default is
+`default.default`. Actions and agents also accept a role name as shorthand:
+`model = "coding"` selects `coding.default`, regardless of the caller's
+omitted-tier default. The bundled commit action requests `commit.default`;
+configure `model.commit` to override its model independently.
+
+Invocation model overrides (`:Sia -m`) continue to select concrete models or
+aliases and take precedence over the action's selection.
+
+`fast_model` and `plan_model` have been removed. Configure
+`model.default.mini` and `model.default.pro` instead.
 
 PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
@@ -1559,12 +1643,17 @@ EXAMPLE                                    *sia-project-configuration-example*
 
 >json
     {
-      "model": "copilot/gpt-5-mini",
-      "fast_model": {
-        "name": "openai/gpt-4.1-mini",
-        "options": { "temperature": 0.1 }
+      "model": {
+        "default": {
+          "default": "copilot/gpt-5-mini",
+          "mini": {
+            "name": "openai/gpt-4.1",
+            "options": { "temperature": 0.1 }
+          },
+          "pro": "openai/gpt-5.2"
+        },
+        "vision": "openai/gpt-5.2"
       },
-      "plan_model": "openai/gpt-5.2",
       "action": {
         "insert": "custom_insert_action",
         "diff": "custom_diff_action",
@@ -1601,9 +1690,10 @@ AVAILABLE OPTIONS                *sia-project-configuration-available-options*
 
 MODEL OVERRIDES ~
 
-- **model** — override the main model. Accepts a string (`"openai/gpt-4.1"`) or
-    an object (`{ "name": "openai/gpt-4.1", "options": { "temperature": 0.7 } }`).
-- **fast_model** / **plan_model** — same format as **model**.
+- **model** — override model roles and tiers. Accepts a model name for all
+    default tiers, or a table mapping roles to model names or tier tables.
+    Model leaves also accept { "name": "...", "options": {...} }.
+    Local tiers override global tiers; other roles and tiers are preserved.
 - **models** — override parameters for specific models, organized by provider:
 
 >json
@@ -1723,11 +1813,14 @@ globally:
       settings = {
         tool_verifier = {
           enable = true,
-          -- model = "openai/gpt-4.1", -- Defaults to fast_model
         },
       },
     })
 <
+
+Verification uses `model.verify.mini`, falling back to `model.default.mini`
+and then `model.default.default`. Configure the model through `settings.model`,
+for example `model = { verify = "openai/gpt-4.1" }`.
 
 The verifier reports the operation’s intrinsic risk as `minimal`, `low`,
 `medium`, or `high`, together with a reason and a concise description of the
@@ -2211,7 +2304,7 @@ CORE OPTIONS ~
   user      array              User-level context messages (functions, strings, or
                                tables)
 
-  model     string             Override the default model
+  model     string/table       Select a model role and tier
 
   tools     function           (model) -> tool[] returning available tools
 
@@ -2225,6 +2318,37 @@ CORE OPTIONS ~
 
   enabled   function/boolean   Whether the action is available
   --------------------------------------------------------------------------------
+
+MODEL SELECTION ~
+
+Actions select a configured role and tier rather than a concrete model name:
+
+>lua
+    model = { role = "coding", tier = "pro" }
+<
+
+A string is shorthand for the named role's default tier:
+
+>lua
+    model = "default" -- default.default
+    model = "commit"  -- commit.default
+    model = "coding"  -- coding.default
+<
+
+Strings always name roles here; they are never resolved as concrete models or
+aliases. Use a table to select another tier.
+
+Both fields are optional. Omitted role uses default; omitted tier uses default.
+Omitting model therefore selects default.default. Missing roles and tiers
+follow the standard fallback rules. Concrete model names and { name, options }
+tables are not accepted in actions.
+
+The bundled commit action requests commit.default, which falls back to the
+main model when unconfigured. Set settings.model.commit = "..." to choose a
+model for it, or pass a role/tier selection to require("sia.actions").commit().
+
+:Sia -m <model> remains a concrete model or alias override for one invocation
+and takes precedence over the action's role and tier.
 
 MODE-SPECIFIC OPTIONS ~
 
@@ -2603,7 +2727,9 @@ Agent files are markdown with YAML frontmatter:
       - glob!
       - grep!
       - view!
-    model: openai/gpt-4.1
+    model:
+      role: coding
+      tier: mini
     interactive: false
     ---
 
@@ -2626,11 +2752,41 @@ FRONTMATTER FIELDS ~
 
   tools         yes        —            Array of tool names; append ! to auto-approve
 
-  model         no         fast_model   Override the model for this agent
+  model         no         default /    Select a role name or role and tier
+                           mini
+
+  requires      no         —            Required capabilities, such as image
 
   interactive   no         false        Open the agent as an interactive chat
                                         automatically when it starts
   ------------------------------------------------------------------------------------
+
+MODEL SELECTION ~
+
+Agents request a user-configured role and one of the fixed tiers: `mini`,
+`default`, or `pro`. Omitted `role` defaults to `default`; omitted `tier`
+defaults to `mini`. A string is shorthand for the named role's default tier:
+`model: vision` means { role = "vision", tier = "default" }.
+This differs from omitting model, which still selects default.mini.
+Strings always name roles, never concrete models or aliases.
+
+Actions use the same shorthand, but their omitted tier defaults to default
+rather than mini. :Sia -m still accepts a concrete model or alias.
+
+For example, an image description agent can request a vision model:
+
+>yaml
+    model:
+      role: vision
+      tier: default
+    requires:
+      - image
+<
+
+Configure it with `settings.model.vision = "openai/gpt-5.2"`, or a tier
+table. Missing roles and tiers use the model fallback rules. If the selected
+model lacks a required capability, launching the agent fails with an error
+identifying the model and capability, before making a request.
 
 NAMING ~
 

@@ -52,8 +52,6 @@ T["strategy.chat"] = MiniTest.new_set({
   hooks = {
     pre_once = function()
       config.options.settings.model = "openai/gpt-4.1"
-      config.options.settings.fast_model = "openai/gpt-4.1"
-      config.options.settings.plan_model = "openai/gpt-4.1"
       vim.notify = function() end
     end,
     post_once = function()
@@ -1662,6 +1660,35 @@ T["strategy.chat"]["query blocks and footers keep metadata through redraw withou
     strategy:redraw()
   end
   ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["conversation naming uses the summarize role model"] = function()
+  local old_model = config._raw_options.settings.model
+  local old_fetch = assistant.fetch_response
+  config.options.settings.model = {
+    default = "openai/gpt-4.1",
+    summarize = "openai/gpt-5.2",
+  }
+  local captured_model
+  assistant.fetch_response = function(conversation)
+    captured_model = conversation.model.name
+  end
+  local ok, err = pcall(function()
+    vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
+    local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+    conversation:add_user_message("Question")
+    local turn = conversation:new_turn()
+    local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+    strategy:on_request_start()
+    strategy:on_stream_start()
+    strategy:on_stream({ content = "Answer" })
+    conversation:add_assistant_message(turn, "Answer")
+    strategy:on_finish({ turn_id = turn, usage = {} })
+    eq("openai/gpt-5.2", captured_model)
+  end)
+  config.options.settings.model = old_model
+  assistant.fetch_response = old_fetch
+  if not ok then error(err) end
 end
 
 T["strategy.chat"]["completed streaming metadata matches its redrawn footer"] = function()

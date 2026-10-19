@@ -20,11 +20,14 @@ require("sia").setup({
   settings = {
     tool_verifier = {
       enable = true,
-      -- model = "openai/gpt-4.1", -- Defaults to fast_model
     },
   },
 })
 ```
+
+Verification uses `model.verify.mini`, falling back to `model.default.mini`
+and then `model.default.default`. Configure the model through `settings.model`,
+for example `model = { verify = "openai/gpt-4.1" }`.
 
 The verifier reports the operation's intrinsic risk as `minimal`, `low`, `medium`,
 or `high`, together with a reason and a concise description of the action. A failed

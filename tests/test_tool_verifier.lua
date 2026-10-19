@@ -20,7 +20,8 @@ local T = MiniTest.new_set({ hooks = {
       }
       _G.executions, _G.previews, _G.cleared = 0, {}, 0
       _G.confirmation_events = {}
-      require("sia.assistant").fetch_response = function(_, opts)
+      require("sia.assistant").fetch_response = function(conversation, opts)
+        _G.assessed_model = conversation.model.name
         opts.on_complete(_G.verifier_response or vim.json.encode(_G.test_verdict))
       end
       require("sia.ui.confirm").show = function(_, prompt, opts)
@@ -69,6 +70,28 @@ local T = MiniTest.new_set({ hooks = {
   end,
   post_case = function() child.stop() end,
 } })
+
+T["verification uses the verify role model"] = function()
+  child.lua([[
+    local config = require("sia.config")
+    config.options.settings.model = {
+      default = "openai/gpt-4.1",
+      verify = "openai/gpt-5.2",
+    }
+    start_bash()
+  ]])
+  eq("openai/gpt-5.2", child.lua_get("assessed_model"))
+end
+
+T["unconfigured verification role falls back to the default mini tier"] = function()
+  child.lua([[
+    require("sia.config").options.settings.model = {
+      default = { default = "openai/gpt-5.2", mini = "openai/gpt-4.1" },
+    }
+    start_bash()
+  ]])
+  eq("openai/gpt-4.1", child.lua_get("assessed_model"))
+end
 
 T["async approval uses AI description and previews exact command plus risk"] = function()
   child.lua("start_bash(); approval.on_preview()")

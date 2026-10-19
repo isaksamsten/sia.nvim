@@ -496,7 +496,8 @@ M.chat = {
     vim.keymap.set("n", "m", function()
       vim.ui.input({
         prompt = "Model: ",
-        default = vim.b[buf].sia_prompt_model or config.options.settings.model.name,
+        default = vim.b[buf].sia_prompt_model
+          or require("sia.model").resolve_role("default", "default").name,
         completion = "customlist,v:lua.sia_model_complete",
       }, function(input)
         if input and input ~= "" then

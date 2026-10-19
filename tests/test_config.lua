@@ -153,7 +153,34 @@ T["validate_aliases"]["allows alias as default model"] = function()
   }
   local success, result = load_config(config)
   eq(success, true)
-  eq(result.model.name, "codex-high")
+  eq(result.model.default.default.name, "codex-high")
+end
+
+T["model_roles"] = MiniTest.new_set()
+
+T["model_roles"]["validates nested models and aliases"] = function()
+  local success, result = load_config({
+    model = {
+      default = { default = "openai/gpt-4.1", mini = "openai/gpt-4.1" },
+      vision = "visual",
+    },
+    aliases = { visual = { name = "openai/gpt-5.2" } },
+  })
+  eq(success, true)
+  eq(result.model.default.mini.name, "openai/gpt-4.1")
+  eq(result.model.vision.pro.name, "visual")
+end
+
+T["model_roles"]["rejects unknown tiers"] = function()
+  local success, err = load_config({ model = { vision = { typo = "openai/gpt-4.1" } } })
+  eq(success, false)
+  eq(err:find("model.vision.typo", 1, true) ~= nil, true)
+end
+
+T["model_roles"]["rejects unknown models in nested tiers"] = function()
+  local success, err = load_config({ model = { vision = { pro = "invalid/model" } } })
+  eq(success, false)
+  eq(err:find("model.vision.pro", 1, true) ~= nil, true)
 end
 
 T["resolve_aliases"] = MiniTest.new_set()
@@ -402,7 +429,6 @@ T["context_config"]["rejects flat legacy context fields"] = function()
   eq(err:match("context.max_tool is not supported") ~= nil, true)
 end
 
-
 T["providers"] = MiniTest.new_set()
 
 T["providers"]["resolves built-in xai models"] = function()
@@ -443,7 +469,6 @@ T["providers"]["xai provider uses OpenAI compatible chat completions"] = functio
   eq("json_object", data.response_format.type)
   eq(true, data.stream_options.include_usage)
 end
-
 
 T["default editing tools use hashlines for chat and prose"] = function()
   local config = require("sia.config")

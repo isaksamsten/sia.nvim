@@ -401,7 +401,8 @@ local function mock_compaction(summary_response)
   -- Mock new_conversation to return a lightweight object that captures entries
   local real_conv = require("sia.conversation")
   tracker._real_new = real_conv.new
-  real_conv.new = function(_, _)
+  real_conv.new = function(opts)
+    tracker.model = opts.model
     return {
       add_system_message = function(_, content)
         table.insert(tracker.captured_entries, {
@@ -458,6 +459,29 @@ local function mock_compaction(summary_response)
   end
 
   return tracker
+end
+
+T["context_manager"]["compaction uses the compact role model"] = function()
+  local config = require("sia.config")
+  local old_model = config._raw_options.settings.model
+  local old_local = config.get_local_config
+  config.get_local_config = function() return nil end
+  config.options.settings.model = {
+    default = "openai/gpt-5.2",
+    compact = "openai/gpt-4.1",
+  }
+  local tracker = mock_compaction("Summary")
+  local ok, err = pcall(function()
+    local conversation = make_conversation(50, {
+      make_system("system prompt"), make_user("hello"), make_assistant("hi there"),
+    })
+    require("sia.context_manager").ensure_token_budget(conversation, { on_complete = function() end })
+    expect.equality(tracker.model.name, "openai/gpt-4.1")
+  end)
+  tracker.restore()
+  config.options.settings.model = old_model
+  config.get_local_config = old_local
+  if not ok then error(err) end
 end
 
 T["context_manager"]["compact includes dropped entries in summarizer input"] = function()

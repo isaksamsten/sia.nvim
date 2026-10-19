@@ -57,12 +57,43 @@ Use it with `:Sia /yoda` on a visual selection.
 | **mode**    | string           | UI mode: `"chat"`, `"diff"`, `"insert"`, or `"hidden"`                  |
 | **system**  | array            | System-level messages (strings or functions returning strings)          |
 | **user**    | array            | User-level context messages (functions, strings, or tables)             |
-| **model**   | string           | Override the default model                                              |
+| **model**   | string/table     | Select a model role and tier                                              |
 | **tools**   | function         | `(model) -> tool[]` returning available tools                           |
 | **input**   | string           | `"require"` (must include user text) or `"ignore"` (user text not used) |
 | **range**   | boolean          | Whether a range/selection is required (default: false)                  |
 | **capture** | function         | Auto-capture context (e.g., using treesitter)                           |
 | **enabled** | function/boolean | Whether the action is available                                         |
+
+### Model Selection
+
+Actions select a configured role and tier rather than a concrete model name:
+
+```lua
+model = { role = "coding", tier = "pro" }
+```
+
+A string is shorthand for the named role's `default` tier:
+
+```lua
+model = "default" -- default.default
+model = "commit"  -- commit.default
+model = "coding"  -- coding.default
+```
+
+Strings always name roles here; they are never resolved as concrete models or
+aliases. Use a table to select another tier.
+
+Both fields are optional. Omitted `role` uses `default`; omitted `tier` uses
+`default`. Omitting `model` therefore selects `default.default`. Missing roles
+and tiers follow the [standard fallback rules](../3-configuration/2-models.md#model-roles-and-tiers).
+Concrete model names and `{ name, options }` tables are not accepted in actions.
+
+The bundled commit action requests `commit.default`, which falls back to the
+main model when unconfigured. Set `settings.model.commit = "..."` to choose a
+model for it, or pass a role/tier selection to `require("sia.actions").commit()`.
+
+`:Sia -m <model>` remains a concrete model or alias override for one invocation
+and takes precedence over the action's role and tier.
 
 ### Mode-Specific Options
 

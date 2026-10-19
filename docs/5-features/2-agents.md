@@ -22,7 +22,9 @@ tools:
   - glob!
   - grep!
   - view!
-model: openai/gpt-4.1
+model:
+  role: coding
+  tier: mini
 interactive: false
 ---
 
@@ -41,8 +43,36 @@ approval before each use.
 | --------------- | -------- | ------------ | ------------------------------------------------------------------ |
 | **description** | yes      | —            | Shown to the AI when listing available agents                      |
 | **tools**       | yes      | —            | Array of tool names; append `!` to auto-approve                    |
-| **model**       | no       | `fast_model` | Override the model for this agent                                  |
+| **model**       | no       | default role, mini tier | Role name or model selection with `role` and `tier` |
+| **requires**    | no       | —            | List of capabilities the selected model must support, such as `image` |
 | **interactive** | no       | `false`      | Open the agent as an interactive chat automatically when it starts |
+
+### Model Selection
+
+Agents request a user-configured role and one of the fixed tiers: `mini`,
+`default`, or `pro`. Omitted `role` defaults to `default`; omitted `tier` defaults
+to `mini`. A string is shorthand for the named role's **default** tier:
+`model: vision` means `{ role = "vision", tier = "default" }`.
+This differs from omitting `model`, which still selects `default.mini`.
+Strings always name roles, never concrete models or aliases.
+
+Actions use the same shorthand, but their omitted tier defaults to `default`
+rather than `mini`. `:Sia -m` still accepts a concrete model or alias.
+
+For example, an image description agent can request a vision model:
+
+```yaml
+model:
+  role: vision
+  tier: default
+requires:
+  - image
+```
+
+Configure it with `settings.model.vision = "openai/gpt-5.2"`, or a tier table.
+Missing roles and tiers use the [model fallback rules](../3-configuration/2-models.md#model-roles-and-tiers).
+If the selected model lacks a required capability, launching the agent fails
+with an error identifying the model and capability, before making a request.
 
 ### Naming
 

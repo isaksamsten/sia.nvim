@@ -14,7 +14,8 @@ local agents = {}
 --- @field interactive boolean
 --- @field tools string[]
 --- @field auto_approve table<string, true>
---- @field model string?
+--- @field model sia.ModelSelection?
+--- @field requires string[]?
 --- @field system_prompt string[]
 --- @field filepath string
 
@@ -65,14 +66,29 @@ local function parse_agent_file(filepath, name)
     end
   end
 
-  local model = type(metadata.model) == "string" and metadata.model or nil
+  local model = metadata.model
+  if model ~= nil then
+    require("sia.config.model").validate_selection(model, "agent.model")
+  end
+  local requires = metadata.requires
+  if requires ~= nil then
+    if type(requires) ~= "table" or not vim.islist(requires) then
+      error("requires must be a list of model capabilities")
+    end
+    for _, capability in ipairs(requires) do
+      if type(capability) ~= "string" or capability == "" then
+        error("requires must contain non-empty capability names")
+      end
+    end
+  end
   --- @type sia.agents.registry.Agent
   return {
     name = name,
     description = metadata.description --[[@as string]],
     tools = tool_names,
     auto_approve = auto_approve,
-    model = model --[[@as string]],
+    model = model,
+    requires = requires,
     system_prompt = system_prompt,
     filepath = filepath,
     interactive = metadata.interactive == true,

@@ -79,8 +79,7 @@ end
 --- @param opts { oldest_fraction: number?, on_complete: fun(content: string?)? }
 local compact_conversation = function(conversation, opts)
   opts = opts or {}
-  local model =
-    require("sia.model").resolve(require("sia.config").options.settings.fast_model)
+  local model = require("sia.model").resolve_role("compact", "mini")
   local new_conversation = require("sia.conversation").new({
     model = model,
     temporary = true,
@@ -155,37 +154,37 @@ the path to the directory.]
   require("sia.assistant").fetch_response(new_conversation, {
     on_complete = function(content)
       if content then
-      local dropped = 0
-      for _, entry in ipairs(conversation.entries) do
-        if entry.role ~= "system" and not entry.dropped then
-          entry.dropped = true
-          dropped = dropped + 1
-          if dropped >= compact_count then
-            break
+        local dropped = 0
+        for _, entry in ipairs(conversation.entries) do
+          if entry.role ~= "system" and not entry.dropped then
+            entry.dropped = true
+            dropped = dropped + 1
+            if dropped >= compact_count then
+              break
+            end
           end
         end
-      end
 
-      local summarized_set = {}
-      for _, entry in ipairs(dropped_entries) do
-        summarized_set[entry.id] = true
-      end
-      for i = 1, compact_count do
-        summarized_set[non_system[i].entry.id] = true
-      end
+        local summarized_set = {}
+        for _, entry in ipairs(dropped_entries) do
+          summarized_set[entry.id] = true
+        end
+        for i = 1, compact_count do
+          summarized_set[non_system[i].entry.id] = true
+        end
 
-      conversation.entries = vim
-        .iter(conversation.entries)
-        --- @param entry sia.Entry
-        :filter(function(entry)
-          return not summarized_set[entry.id]
-        end)
-        :totable()
+        conversation.entries = vim
+          .iter(conversation.entries)
+          --- @param entry sia.Entry
+          :filter(function(entry)
+            return not summarized_set[entry.id]
+          end)
+          :totable()
 
-      conversation:add_user_message(content, nil, { hide = true })
-      if opts.on_complete then
-        opts.on_complete(content)
-      end
+        conversation:add_user_message(content, nil, { hide = true })
+        if opts.on_complete then
+          opts.on_complete(content)
+        end
       elseif opts.on_complete then
         opts.on_complete(nil)
       end

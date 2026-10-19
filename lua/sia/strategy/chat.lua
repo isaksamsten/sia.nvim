@@ -478,8 +478,7 @@ function ChatStrategy:on_request_start()
   self.canvas:render_messages({
     self.conversation:get_last_entry(),
   }, self.conversation.model.name)
-  self.assistant_extmark =
-    self.canvas:begin_assistant_turn()
+  self.assistant_extmark = self.canvas:begin_assistant_turn()
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
@@ -640,8 +639,7 @@ function ChatStrategy:on_tool_results(statuses)
       self.turn_renderer = nil
     end
     self:redraw()
-    self.assistant_extmark =
-      self.canvas:begin_assistant_turn()
+    self.assistant_extmark = self.canvas:begin_assistant_turn()
   end
 end
 
@@ -689,10 +687,9 @@ function ChatStrategy:on_finish(ctx)
   vim.bo[self.buf].modifiable = false
 
   if not self.has_generated_name then
-    local fast_model =
-      require("sia.model").resolve(require("sia.config").options.settings.fast_model)
+    local model = require("sia.model").resolve_role("summarize", "mini")
     local name_conv = require("sia.conversation").new({
-      model = fast_model,
+      model = model,
       temporary = true,
     })
     name_conv:add_system_message(SUMMARIZE_PROMPT)

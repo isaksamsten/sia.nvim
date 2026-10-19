@@ -3,22 +3,7 @@ local M = {}
 local local_config = require("sia.config.local")
 local messages = require("sia.config.messages")
 
---- Normalize model config to a consistent table format
---- @param model_value string|table|nil
---- @return {name:string}?
-local function normalize_model_config(model_value)
-  if model_value == nil then
-    return nil
-  end
-
-  if type(model_value) == "string" then
-    return { name = model_value }
-  elseif type(model_value) == "table" then
-    return model_value
-  end
-
-  return nil
-end
+local model_config = require("sia.config.model")
 
 local action_proxy = setmetatable({}, {
   __index = function(_, mode)
@@ -30,7 +15,6 @@ local action_proxy = setmetatable({}, {
   end,
 })
 
-local MODEL_KEYS = { model = true, fast_model = true, plan_model = true }
 local LOCAL_ONLY_KEYS = {
   permission = true,
   risk = true,
@@ -61,15 +45,15 @@ local settings_proxy = setmetatable({}, {
       )
     end
 
-    if MODEL_KEYS[key] then
-      if lc and lc[key] then
-        return lc[key]
+    if key == "model" then
+      local roles = model_config.merge(
+        model_config.normalize(M._raw_options.settings.model),
+        model_config.normalize(lc and lc.model)
+      )
+      if not roles.default or not roles.default.default then
+        error("model.default.default is not set")
       end
-      local default_model = normalize_model_config(M._raw_options.settings[key])
-      if not default_model then
-        error("default " .. key .. " is not set")
-      end
-      return default_model
+      return roles
     end
 
     if LOCAL_ONLY_KEYS[key] then
@@ -93,9 +77,7 @@ local settings_proxy = setmetatable({}, {
 
 --- @class sia.LocalConfig
 --- @field action { insert: string?, diff: string?, chat: string?}?
---- @field model {name: string}?
---- @field fast_model {name: string}?
---- @field plan_model {name: string}?
+--- @field model sia.ModelConfig|sia.ModelRoles?
 --- @field models table<string, sia.config.ModelOptions>?
 --- @field aliases table<string, {name: string, options: table<string, any>?}>?
 --- @field permission { deny: table?, allow: table?, ask: table?}?
@@ -175,7 +157,7 @@ local settings_proxy = setmetatable({}, {
 --- @field system sia.config.SystemMessage[]
 --- @field user sia.config.UserMessage[]
 --- @field tools (fun(model: sia.Model):sia.Tool[],true|table<string, true>?)?
---- @field model (string|{name: string})?
+--- @field model sia.ModelSelection?
 --- @field input sia.config.ActionInput?
 --- @field enabled ((fun():boolean)|boolean)?
 --- @field capture (fun(arg: sia.Invocation):sia.Capture?)?
@@ -225,9 +207,7 @@ local settings_proxy = setmetatable({}, {
 --- @field tokens sia.config.ContextTokens?
 
 --- @class sia.config.Settings
---- @field model string
---- @field fast_model string
---- @field plan_model string
+--- @field model sia.ModelConfig|sia.ModelRoles
 --- @field icons sia.IconSet?
 --- @field context sia.config.Context?
 --- @field actions {diff: sia.config.DiffAction, chat: sia.config.ChatAction, insert: sia.config.InsertAction }
@@ -238,7 +218,7 @@ local settings_proxy = setmetatable({}, {
 --- @field file_ops {trash: boolean?, restrict_to_project_root: boolean?, create_dirs_on_rename: boolean?}?
 --- @field ui sia.config.Settings.Ui?
 --- @field shell sia.config.Shell?
---- @field tool_verifier {enable:boolean?, model:(string|{name:string})?}?
+--- @field tool_verifier {enable:boolean?}?
 --- @field history { enable: boolean? }?
 
 --- @class sia.config.Shell
@@ -262,9 +242,7 @@ M._raw_options = {
   providers = {},
   --- @type sia.config.Settings
   settings = {
-    model = "openai/gpt-5.2",
-    fast_model = "openai/gpt-4.1",
-    plan_model = "openai/gpt-5.2",
+    model = { default = { default = "openai/gpt-5.2", mini = "openai/gpt-4.1" } },
     icons = "emoji",
     history = { enable = true },
     context = {
@@ -474,7 +452,14 @@ M.invalidate_local_config = local_config.invalidate_local_config
 M.update_auto_config = local_config.update_auto_config
 
 function M.setup(options)
-  M._raw_options = vim.tbl_deep_extend("force", {}, M._raw_options, options or {})
+  options = vim.deepcopy(options or {})
+  local roles = model_config.normalize(M._raw_options.settings.model)
+  if options.settings then
+    roles = model_config.merge(roles, model_config.normalize(options.settings.model))
+    options.settings.model = nil
+  end
+  M._raw_options = vim.tbl_deep_extend("force", {}, M._raw_options, options)
+  M._raw_options.settings.model = roles
   local registry = require("sia.provider")
   registry.bootstrap(M._raw_options.models, M._raw_options.providers)
 end

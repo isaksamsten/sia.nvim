@@ -18,7 +18,7 @@ function M.resolve(model_config)
   local config = require("sia.config")
 
   if not model_config then
-    model_config = config.options.settings.model
+    return M.resolve_role("default", "default")
   end
 
   if type(model_config) == "string" then
@@ -76,6 +76,41 @@ function M.resolve(model_config)
   obj.options = vim.tbl_extend("force", obj.options, model_config.options or {})
 
   return obj
+end
+
+--- Resolve a role and tier, then verify any capabilities required by the caller.
+---@param role string?
+---@param tier sia.ModelTier?
+---@param requires string[]?
+---@return sia.Model
+function M.resolve_role(role, tier, requires)
+  role = role or "default"
+  tier = tier or "default"
+  require("sia.config.model").validate_selection({ role = role, tier = tier })
+  local roles = require("sia.config").options.settings.model
+  local defaults = roles.default
+  local selection = (roles[role] and roles[role][tier])
+    or defaults[tier]
+    or defaults.default
+  local model = M.resolve(selection)
+  M.check_support(model, requires)
+  return model
+end
+
+---@param model sia.Model
+---@param requires string[]?
+function M.check_support(model, requires)
+  for _, capability in ipairs(requires or {}) do
+    if not model.support[capability] then
+      error(
+        string.format(
+          "Model '%s' does not support '%s'; configure a suitable model for this role and tier",
+          model.name,
+          capability
+        )
+      )
+    end
+  end
 end
 
 return M

@@ -1060,10 +1060,14 @@ end
 --- @return sia.Conversation
 local function from_action(action, invocation, overrides)
   overrides = overrides or {}
-  local config = require("sia.config")
-  local model = require("sia.model").resolve(
-    overrides.model or action.model or config.options.settings.model
+  local models = require("sia.model")
+  local selection = require("sia.config.model").normalize_selection(
+    action.model,
+    "default",
+    "action.model"
   )
+  local model = overrides.model and models.resolve(overrides.model)
+    or models.resolve_role(selection.role, selection.tier)
   local tools, approved
   if action.tools then
     tools, approved = action.tools(model)

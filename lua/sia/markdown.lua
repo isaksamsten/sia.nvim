@@ -6,36 +6,37 @@ local State = {
   IN_BODY = 3,
 }
 
---- Parse simple YAML frontmatter (flat key-value pairs and simple lists).
---- Supports:
----   key: value          -> result[key] = "value"
----   key:                -> result[key] stays unset until a list item follows
----   - item              -> appended to the most recently seen list key
----   bool: true/false    -> result[key] = true/false (Lua boolean)
+--- Parse the YAML subset used by frontmatter: mappings, lists, and booleans.
+--- Indented mappings allow structured model selections in agent definitions.
 --- @param lines string[]
---- @return table<string, string|string[]|boolean>
+--- @return table
 function M.parse_yaml_frontmatter(lines)
   local result = {}
-  local current_key = nil
+  local stack = { { indent = -1, value = result } }
 
   for _, line in ipairs(lines) do
-    local list_item = line:match("^%s+-%s+(.+)$")
-    if list_item and current_key then
-      if type(result[current_key]) ~= "table" then
-        result[current_key] = {}
+    local whitespace, content = line:match("^(%s*)(%S.*)$")
+    if content and content:sub(1, 1) ~= "#" then
+      local indent = #whitespace
+      while #stack > 1 and indent <= stack[#stack].indent do
+        table.remove(stack)
       end
-      table.insert(result[current_key], list_item)
-    else
-      local key, value = line:match("^(%w[%w_]*):%s*(.-)%s*$")
-      if key then
-        current_key = key
-        if value ~= "" then
-          if value == "true" then
-            result[key] = true
+      local parent = stack[#stack].value
+      local list_item = content:match("^%-%s+(.+)$")
+      if list_item and #stack > 1 then
+        table.insert(parent, list_item)
+      else
+        local key, value = content:match("^(%w[%w_]*):%s*(.-)%s*$")
+        if key then
+          if value == "" then
+            parent[key] = {}
+            table.insert(stack, { indent = indent, value = parent[key] })
+          elseif value == "true" then
+            parent[key] = true
           elseif value == "false" then
-            result[key] = false
+            parent[key] = false
           else
-            result[key] = value
+            parent[key] = value
           end
         end
       end
@@ -46,7 +47,7 @@ function M.parse_yaml_frontmatter(lines)
 end
 
 --- @class sia.markdown.Document
---- @field metadata table<string, string|string[]|boolean>
+--- @field metadata table
 --- @field body string[]
 
 --- Split markdown content into frontmatter and body, then parse metadata.

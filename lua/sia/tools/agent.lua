@@ -205,7 +205,9 @@ return tool_utils.new_tool({
   },
   summary = function(args)
     if args.command == "start" then
-      return "Starting agent" .. (args.agent and (" '" .. args.agent .. "'") or "") .. "..."
+      return "Starting agent"
+        .. (args.agent and (" '" .. args.agent .. "'") or "")
+        .. "..."
     elseif args.command == "send" then
       return "Sending follow-up to agent..."
     elseif args.command == "wait" then
@@ -268,14 +270,14 @@ When NOT to use the agent tool:
       string.format("Launch %s agent with message: %s", args.agent, args.message)
     opts.user_input(confirm_message, {
       on_accept = function()
-        local agent = conversation.agent_runtime:spawn(args.agent, args.message, {
+        local agent, err = conversation.agent_runtime:spawn(args.agent, args.message, {
           workspace = args.workspace,
           source = "tool",
         })
 
         if not agent then
           callback({
-            content = string.format("Agent %s not found", args.agent),
+            content = err or string.format("Agent %s not found", args.agent),
             ephemeral = true,
           })
           return

@@ -42,7 +42,9 @@ T["sia.agent.registry"]["parse_agent_file parses valid agent markdown"] = functi
       "tools:",
       "  - bash!",
       "  - view",
-      "model: openai/gpt-4.1",
+      "model:",
+      "  role: coding",
+      "  tier: mini",
       "---",
       "",
       "You are a helpful coding agent.",
@@ -65,7 +67,7 @@ T["sia.agent.registry"]["parse_agent_file parses valid agent markdown"] = functi
   eq("A coding agent", agent.description)
   eq({ "bash", "view" }, agent.tools)
   eq({ bash = true }, agent.auto_approve)
-  eq("openai/gpt-4.1", agent.model)
+  eq({ role = "coding", tier = "mini" }, agent.model)
   eq(3, #agent.system_prompt)
   eq("", agent.system_prompt[1])
   eq("You are a helpful coding agent.", agent.system_prompt[2])
@@ -266,7 +268,11 @@ T["sia.agent.registry"]["parse_agent_file fails on missing description"] = funct
   ]])
 
   eq(false, child.lua_get("_G.ok"))
-  eq(true, child.lua_get("_G.agent"):find("Missing required field: description", 1, true) ~= nil)
+  eq(
+    true,
+    child.lua_get("_G.agent"):find("Missing required field: description", 1, true)
+      ~= nil
+  )
 end
 
 T["sia.agent.registry"]["parse_agent_file fails on missing tools"] = function()
@@ -292,11 +298,10 @@ T["sia.agent.registry"]["parse_agent_file fails on missing tools"] = function()
   eq(false, child.lua_get("_G.ok"))
   eq(
     true,
-    child.lua_get("_G.agent"):find(
-      "Missing or invalid required field: tools (must be a list)",
-      1,
-      true
-    ) ~= nil
+    child
+      .lua_get("_G.agent")
+      :find("Missing or invalid required field: tools (must be a list)", 1, true)
+      ~= nil
   )
 end
 
@@ -475,6 +480,62 @@ T["sia.markdown"]["parse_yaml_frontmatter handles boolean values"] = function()
   eq(false, result.interactive)
   eq(true, result.active)
   eq({ "bash" }, result.tools)
+end
+
+T["sia.agent.registry"]["parses model role and tier with capability requirements"] = function()
+  child.lua([[
+    local path = vim.fn.tempname()
+    vim.fn.writefile({
+      "---", "description: Describe images", "tools:", "  - view!",
+      "model:", "  role: vision", "  tier: default",
+      "requires:", "  - image", "interactive: true", "---", "Describe the image.",
+    }, path)
+    _G.agent = require("sia.agent.registry")._parse_agent_file(path, "vision")
+    vim.fn.delete(path)
+  ]])
+  local agent = child.lua_get("_G.agent")
+  eq({ role = "vision", tier = "default" }, agent.model)
+  eq({ "image" }, agent.requires)
+  eq({ "view" }, agent.tools)
+  eq(true, agent.interactive)
+end
+
+T["sia.agent.registry"]["parses role string shorthand"] = function()
+  child.lua([[
+    local path = vim.fn.tempname()
+    vim.fn.writefile({
+      "---", "description: Describe images", "tools:", "  - view!",
+      "model: vision", "---", "Describe the image.",
+    }, path)
+    _G.agent = require("sia.agent.registry")._parse_agent_file(path, "vision")
+    vim.fn.delete(path)
+  ]])
+  eq("vision", child.lua_get("_G.agent.model"))
+end
+
+T["sia.agent.registry"]["rejects invalid model selections and requirements"] = function()
+  child.lua([[
+    local path = vim.fn.tempname()
+    local registry = require("sia.agent.registry")
+    _G.errors = {}
+    for _, fields in ipairs({
+      { "model:", "  role: vision", "  tier: typo" },
+      { "model:", "  roll: vision" },
+      { "model: false" },
+      { "model:", "  role: false" },
+      { "model:", "  tier: false" },
+      { "requires: image" },
+    }) do
+      local lines = { "---", "description: Test", "tools:", "  - view" }
+      vim.list_extend(lines, fields)
+      vim.list_extend(lines, { "---", "Test agent." })
+      vim.fn.writefile(lines, path)
+      local ok = pcall(registry._parse_agent_file, path, "test")
+      table.insert(_G.errors, not ok)
+    end
+    vim.fn.delete(path)
+  ]])
+  eq({ true, true, true, true, true, true }, child.lua_get("_G.errors"))
 end
 
 return T

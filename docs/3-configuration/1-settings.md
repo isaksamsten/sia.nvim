@@ -20,9 +20,13 @@ require("sia").setup({
 require("sia").setup({
   settings = {
     -- Models
-    model = "openai/gpt-5.2",                              -- Main conversational model
-    fast_model = "openai/gpt-4.1",                          -- Fast model for quick tasks and compaction
-    plan_model = "openai/gpt-5.2",                          -- Model for planning and reasoning
+    model = {
+      default = {
+        default = "openai/gpt-5.2", -- Main conversational model
+        mini = "openai/gpt-4.1",    -- Quick tasks and compaction
+        pro = "openai/gpt-5.4",     -- Demanding agent tasks
+      },
+    },
 
     -- Icon set: "emoji" or a custom table
     icons = "emoji",
@@ -62,7 +66,6 @@ require("sia").setup({
     -- LLM verification for tools that provide a safety prompt
     tool_verifier = {
       enable = false,
-      -- model = "openai/gpt-4.1", -- Defaults to fast_model
     },
 
     -- Globally enabled agents and skills
@@ -121,7 +124,7 @@ global behavior. A project can still override the enabled list in
 `.sia/config.json`.
 
 `tool_verifier` applies globally to tools that provide a verifier prompt. It uses
-`fast_model` unless `model` is set. See
+`model.verify.mini` (falling back to `model.default.mini`) for model selection. See
 [Tool Confirmation](../4-permissions/1-confirmation.md#llm-tool-verification) for
 risk thresholds, semantic action approvals, and persistence.
 
@@ -159,7 +162,7 @@ Sia applies increasingly aggressive strategies:
    `context.tools.preserve` are never dropped.
 
 2. **Compact the conversation** (last resort) — summarizes the conversation
-   history using `fast_model` and replaces old messages with the summary.
+   history using `model.compact.mini` and replaces old messages with the summary.
 
 `prune.to_fraction` controls how far Sia tries to shrink the conversation
 before it stops. `compact.oldest_fraction` controls how much of the oldest
@@ -181,8 +184,9 @@ The chat winbar displays a context budget indicator when the model has a
 The indicator changes color: normal below 85%, warning (`DiagnosticWarn`) at
 85%+, error (`DiagnosticError`) at 95%+.
 
-Compaction uses `fast_model` to generate summaries. Make sure your fast model
-has a large enough context window (e.g., `openai/gpt-4.1` with 1M tokens).
+Compaction uses `model.compact.mini` (falling back to `model.default.mini`) to
+generate summaries. Make sure the selected model has a large enough context
+window (e.g., `openai/gpt-4.1` with 1M tokens).
 
 ### Winbar Customization
 

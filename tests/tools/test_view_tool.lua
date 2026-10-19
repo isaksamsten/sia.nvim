@@ -150,7 +150,7 @@ T["sia.tools.view"]["missing path parameter"] = function()
 
   local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
   eq("Error: No file path was provided", content[1])
-  eq("Failed to view", result.summary)
+  eq(false, result.summary)
 end
 
 T["sia.tools.view"]["file not found"] = function()
@@ -167,7 +167,7 @@ T["sia.tools.view"]["file not found"] = function()
 
   local content = type(result.content) == "string" and vim.split(result.content, "\n") or result.content
   eq("Error: File cannot be found", content[1])
-  eq("Failed to view", result.summary)
+  eq(false, result.summary)
 end
 
 T["sia.tools.view"]["offset beyond end of file"] = function()

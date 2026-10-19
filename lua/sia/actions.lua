@@ -3,12 +3,12 @@ local messages = require("sia.config.messages")
 
 local MAX_INDENT = 2 ^ 31 - 1
 
---- @param model string?
+--- @param model sia.ModelSelection?
 --- @return sia.config.Action
 function M.commit(model)
   --- @type sia.config.Action
   return {
-    model = model,
+    model = model or "commit",
     system = {
       [[You generate git commit messages from staged diffs.
 Output ONLY the raw commit message text — no markdown fences, no

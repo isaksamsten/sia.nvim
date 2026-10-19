@@ -509,9 +509,7 @@ local function create_user_input_handler(
         return
       end
 
-      local model = require("sia.model").resolve(
-        verifier_config.model or require("sia.config").options.settings.fast_model
-      )
+      local model = require("sia.model").resolve_role("verify", "mini")
       local response_format = {
         type = "json_schema",
         json_schema = {

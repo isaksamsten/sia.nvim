@@ -492,43 +492,16 @@ local validate = {
     return true
   end,
 
-  model_field = function(json, field)
-    if json[field] ~= nil then
-      local model_value = json[field]
-      local model_name
-
-      if type(model_value) == "string" then
-        model_name = model_value
-      elseif type(model_value) == "table" then
-        if type(model_value.name) ~= "string" then
-          return false,
-            string.format(
-              "'%s' must be a string or table with 'name' field, got table without valid name",
-              field
-            )
-        end
-        model_name = model_value.name
-      else
-        return false,
-          string.format(
-            "'%s' must be a string or table, got %s",
-            field,
-            type(model_value)
-          )
+  model_field = function(json)
+    local ok, err = pcall(
+      require("sia.config.model").normalize,
+      json.model,
+      function(name)
+        return require("sia.provider").has_model(name)
+          or (json.aliases or {})[name] ~= nil
       end
-
-      local provider = require("sia.provider")
-      local aliases = json.aliases or {}
-      if not provider.has_model(model_name) and not aliases[model_name] then
-        return false,
-          string.format(
-            "'%s' must be one of the allowed models or aliases, got '%s'",
-            field,
-            tostring(model_name)
-          )
-      end
-    end
-    return true
+    )
+    return ok, err
   end,
 
   models_overrides = function(models)
@@ -633,23 +606,6 @@ local validate = {
   end,
 }
 
---- Normalize model config to a consistent table format
---- @param model_value string|table|nil
---- @return {name:string}?
-local function normalize_model_config(model_value)
-  if model_value == nil then
-    return nil
-  end
-
-  if type(model_value) == "string" then
-    return { name = model_value }
-  elseif type(model_value) == "table" then
-    return model_value
-  end
-
-  return nil
-end
-
 --- @param local_config string
 --- @return table?, string?
 local function read_local_config_file(local_config)
@@ -698,9 +654,7 @@ local function validate_local_config_json(json, local_config)
 
   validate_with(validate.skills, json)
   validate_with(validate.agents, json)
-  validate_with(validate.model_field, json, "model")
-  validate_with(validate.model_field, json, "fast_model")
-  validate_with(validate.model_field, json, "plan_model")
+  validate_with(validate.model_field, json)
 
   return not has_failed, error_message
 end
@@ -884,9 +838,7 @@ function M.get_local_config()
     return nil
   end
 
-  merged.model = normalize_model_config(merged.model)
-  merged.fast_model = normalize_model_config(merged.fast_model)
-  merged.plan_model = normalize_model_config(merged.plan_model)
+  merged.model = require("sia.config.model").normalize(merged.model)
 
   config_cache[root] = { mtime = combined_mtime, json = merged }
   return merged

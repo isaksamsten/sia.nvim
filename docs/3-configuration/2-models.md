@@ -3,6 +3,76 @@
 Sia supports multiple LLM providers. Each model is identified by a
 `provider/model-name` string (e.g., `openai/gpt-4.1`, `copilot/claude-sonnet-4.6`).
 
+## Model Roles and Tiers
+
+`settings.model` chooses models by role and tier. Roles are user-defined names,
+like `vision` or `coding`; tiers are always `mini`, `default`, and `pro`.
+
+The minimal configuration is a model name:
+
+```lua
+require("sia").setup({ settings = { model = "openai/gpt-5.2" } })
+```
+
+A string selects that model for every tier of the `default` role. Expand roles
+into tier tables when you need separate choices:
+
+```lua
+require("sia").setup({
+  settings = {
+    model = {
+      default = {
+        default = "openai/gpt-5.2",
+        mini = "openai/gpt-4.1",
+        pro = "openai/gpt-5.4",
+      },
+      vision = "openai/gpt-5.2", -- All three vision tiers use this model
+      coding = {
+        pro = "openai/gpt-5.2-codex",
+      },
+    },
+  },
+})
+```
+
+Model leaves accept a name, a project alias, or `{ name = "...", options = {...} }`.
+The concrete `{ name, options }` format also works as shorthand for an entire role.
+
+Selection falls back from the requested `role.tier` to `default.tier`, then to
+`default.default`. Unknown roles use this fallback; unknown tiers are errors.
+The effective configuration must contain `default.default` (provided by Sia's
+built-in defaults). Missing tiers remain unset until selection, so a role table
+containing only `default` does not implicitly fill its `mini` or `pro` tiers.
+Use a string to assign the same model to every tier in a role.
+
+Project configuration uses the same `model` structure and overrides global
+configuration per role and tier. Replacing a model also replaces its inline
+options. A string overrides all tiers of that role while preserving other roles.
+
+Ordinary conversations use `default.default`. Internal tasks request these roles
+at the `mini` tier:
+
+| Role | Used for |
+| ---- | -------- |
+| `summarize` | Generating conversation titles |
+| `compact` | Summarizing conversation history during compaction |
+| `verify` | Assessing tool operations |
+
+These roles need no configuration: each falls back to `default.mini`, then
+`default.default`. Override them independently, for example with
+`model.compact = "openai/gpt-4.1"` or `model.verify = { mini = "openai/gpt-5.2" }`.
+
+Agents without an explicit selection use `default.mini`. Agents can request
+another role and tier in their frontmatter; see [Agents](../5-features/2-agents.md).
+Capability requirements are checked on the selected model, including when
+selection falls back.
+
+Actions select roles and tiers through `action.model = { role = "...", tier = "..." }`.
+Their default is `default.default`. Actions and agents also accept a role name
+as shorthand: `model = "coding"` selects `coding.default`, regardless of the
+caller's omitted-tier default. The bundled commit action requests
+`commit.default`; configure `model.commit` to override its model independently.
+
 ## Provider Registry
 
 Sia uses a central provider registry that manages model discovery, resolution,
