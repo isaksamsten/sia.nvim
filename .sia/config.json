@@ -1,5 +1,4 @@
 {
-  "model": "copilot/gpt-4.1",
   "models": {
     "copilot": {
       "gpt-5.4": {
