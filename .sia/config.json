@@ -1,35 +1,4 @@
 {
-  "models": {
-    "copilot": {
-      "gpt-5.4": {
-        "reasoning": { "effort": "medium", "summary": "detailed" }
-      }
-    },
-    "openai": {
-      "gpt-5.2": {
-        "reasoning": { "effort": "medium" }
-      },
-      "gpt-5.4": {
-        "reasoning": { "effort": "medium" }
-      }
-    },
-    "codex": {
-      "gpt-5.3-codex": {
-        "reasoning": { "effort": "medium" }
-      }
-    }
-  },
-  "aliases": {
-    "codex-high": {
-      "name": "codex/gpt-5.3-codex",
-      "options": { "reasoning": { "effort": "high" } }
-    },
-    "codex-medium": {
-      "name": "codex/gpt-5.3-codex",
-      "options": { "reasoning": { "effort": "medium" } }
-    }
-  },
-  "auto_continue": true,
   "context": {
     "tools": {
       "max_calls": 250,

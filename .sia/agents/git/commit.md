@@ -1,10 +1,9 @@
 ---
 description: Generate a commit message from staged changes. The user provides the "why" and the agent inspects the staged diff to craft a clear, conventional commit message.
-model: copilot/claude-haiku-4.5
 tools:
   - bash
 interactive: true
-require_confirmation: true
+model: commit
 ---
 
 You are a Git commit message author. Your job is to inspect the currently staged changes and, combined with the user's explanation of _why_ the change was made, produce a high-quality commit message.

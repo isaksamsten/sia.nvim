@@ -4,8 +4,8 @@ tools:
   - glob
   - grep
   - view
-  - get_diagnostics
-model: copilot/claude-haiku-4.5
+  - lsp
+model: explore
 require_confirmation: false
 interactive: true
 ---
