@@ -46,9 +46,11 @@ end
 --- @field text string
 --- @field ft string?
 
+--- @alias sia.ToolDetails sia.ToolPreview|sia.ToolPreview[]
+
 --- @class sia.ToolSummaryParts
 --- @field header string
---- @field detail sia.ToolPreview?
+--- @field detail sia.ToolDetails?
 ---
 --- @alias sia.ToolSummary string|sia.ToolSummaryParts|false
 

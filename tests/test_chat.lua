@@ -1421,6 +1421,40 @@ T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] 
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
+T["strategy.chat"]["multiple detail sections share a fold and retain their fences on redraw"] = function()
+  vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
+  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  conversation:add_system_message("Ok")
+  local turn = conversation:new_turn()
+  local summary = { header = "Ran script…", detail = {
+    { text = "echo hello\necho world", ft = "bash" },
+    { text = "```lua\nhello\n```", ft = "text" },
+  } }
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  strategy:on_tool_status({ { key = "bash", status = "done", summary = summary } })
+  local function check()
+    local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+    local first
+    for i, line in ipairs(lines) do if line == "• Ran script…" then first = i end end
+    eq({ "• Ran script…", "  + Details", "```bash", "echo hello", "echo world", "```", "",
+      "````text", "```lua", "hello", "```", "````" }, vim.list_slice(lines, first, first + 11))
+    eq(first + 1, vim.fn.foldclosed(first + 1))
+    eq(first + 11, vim.fn.foldclosedend(first + 1))
+    eq(true, vim.fn.foldtextresult(first + 1):find("5 lines", 1, true) ~= nil)
+  end
+  check()
+  conversation:add_tool_message(turn, {
+    key = "bash", id = "bash", call_id = "bash", type = "function", name = "bash", arguments = "{}",
+  }, "model payload", { summary = summary })
+  strategy:redraw()
+  check()
+  strategy:redraw()
+  check()
+  ChatStrategy.remove(strategy.buf)
+end
+
 T["strategy.chat"]["tools in consecutive streams use the same compact spacing as batched tools"] = function()
   local conversation = Conversation.new({
     model = require("sia.model").resolve("openai/gpt-4.1"),

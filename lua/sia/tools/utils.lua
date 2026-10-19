@@ -250,7 +250,7 @@ end
 --- @field is_approved (fun(args: any, conversation:sia.Conversation):boolean)|boolean|nil
 --- @field persist_allow (fun(args: any, conversation:sia.Conversation):sia.PermissionAllowCandidate[]?)?
 --- @field summary (fun(args:table):sia.ToolSummary?)?
---- @field preview boolean|(fun(args:any, result:sia.ToolResult):sia.ToolPreview?)|nil
+--- @field preview boolean|(fun(args:any, result:sia.ToolResult):sia.ToolDetails?)|nil
 --- @field instructions string?
 
 --- @class sia.NewToolExecuteUserChoiceOpts

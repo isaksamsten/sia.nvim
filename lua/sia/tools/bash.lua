@@ -1,4 +1,3 @@
-local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
 local tool_names = tool_utils.tool_names
 
@@ -420,9 +419,28 @@ local function build_process_output_view(proc, runtime, offset, limit, stream)
 end
 
 --- @param command string
---- @return string
+--- @return string label
+--- @return boolean shortened
 local function format_command(command)
-  return "`" .. command:gsub("\n", " ") .. "`"
+  local first_line = command:match("^[^\r\n]*") or ""
+  local shortened = #first_line < #command or vim.fn.strchars(first_line) > 80
+  if shortened then
+    first_line = vim.fn.strcharpart(first_line, 0, 79) .. "…"
+  end
+  return "`" .. first_line .. "`", shortened
+end
+
+--- Preserve shortened commands separately from model-facing process instructions.
+local function command_detail(command, text)
+  local _, shortened = format_command(command)
+  if shortened then
+    local sections = { { text = command, ft = "bash" } }
+    if text and text ~= "" then
+      table.insert(sections, { text = text, ft = "text" })
+    end
+    return sections
+  end
+  return text and text ~= "" and { text = text, ft = "text" } or nil
 end
 
 --- Build a display message for the bash process
@@ -454,7 +472,7 @@ local function output_detail(proc, conversation)
       "\n"
     )
     :gsub("%s+$", "")
-  return text ~= "" and { text = text, ft = "text" } or nil
+  return command_detail(proc.command, text)
 end
 
 --- Helper to finalize a completed process and call the callback
@@ -872,9 +890,11 @@ git commit -m "$(cat <<'EOF'
           })
           return
         end
+        local summary = "Started " .. format_command(args.command)
+        local detail = command_detail(args.command)
         callback({
           content = string.format(ASYNC_START_REPLY, proc.id),
-          summary = string.format("Started %s", format_command(args.command)),
+          summary = detail and { header = summary, detail = detail } or summary,
         })
       end)
     else

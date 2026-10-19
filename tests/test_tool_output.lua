@@ -340,4 +340,38 @@ T["hidden results still have visible transient summaries while awaiting approval
   end
 end
 
+T["custom previews support independently typed sections without changing model output"] = function()
+  local tool = require("sia.tools.utils").new_tool({
+    definition = { name = "sections_test", type = "function" },
+    preview = function()
+      return { { text = "echo hello\n", ft = "bash" }, { text = "\27[31mhello\27[0m\n", ft = "text" }, { text = "" } }
+    end,
+  }, function(_, _, callback)
+    callback({ summary = "Ran command", content = "model payload" })
+  end)
+  local result
+  tool.implementation.execute({}, function(res) result = res end, {
+    conversation = { approved_tools = { sections_test = true } },
+  })
+  output.complete(result)
+  eq({ { text = "echo hello", ft = "bash" }, { text = "hello", ft = "text" } }, result.summary.detail)
+  eq("model payload", result.content)
+  eq(nil, result.preview)
+end
+
+T["section previews share one total line budget"] = function()
+  local result = {
+    summary = { header = "Ran command", detail = {
+      { text = table.concat(vim.fn["repeat"]({ "line" }, 200), "\n"), ft = "bash" },
+      { text = "omitted output", ft = "text" },
+    } },
+    content = "unchanged",
+  }
+  output.complete(result)
+  eq(1, #result.summary.detail)
+  eq(201, #vim.split(result.summary.detail[1].text, "\n"))
+  eq(true, result.summary.detail[1].text:find("preview truncated", 1, true) ~= nil)
+  eq("unchanged", result.content)
+end
+
 return T

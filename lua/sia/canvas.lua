@@ -28,27 +28,31 @@ local function trim_trailing_empty(lines)
   return lines
 end
 
---- @param details string
---- @param ft string?
+--- @param detail sia.ToolDetails
 --- @return string[]?
-local function format_tool_detail_lines(details, ft)
-  local lines = trim_trailing_empty(vim.split(details, "\n", { plain = true }))
-  if vim.tbl_isempty(lines) then
-    return nil
-  end
-  -- A longer fence keeps literal fences in command output inside the preview.
-  local length = 3
-  for _, line in ipairs(lines) do
-    for ticks in line:gmatch("`+") do
-      length = math.max(length, #ticks + 1)
+local function format_tool_detail_lines(detail)
+  local lines = { DETAILS_LABEL }
+  for _, section in ipairs(require("sia.tool_output").sections(detail)) do
+    local body = trim_trailing_empty(vim.split(section.text, "\n", { plain = true }))
+    if #body > 0 then
+      -- Choose fences separately so literal backticks remain inside each section.
+      local length = 3
+      for _, line in ipairs(body) do
+        for ticks in line:gmatch("`+") do
+          length = math.max(length, #ticks + 1)
+        end
+      end
+      local fence = string.rep("`", length)
+      local language = (section.ft or "text"):match("^[%w_+%-]+$") or "text"
+      if #lines > 1 then
+        table.insert(lines, "")
+      end
+      table.insert(lines, fence .. language)
+      vim.list_extend(lines, body)
+      table.insert(lines, fence)
     end
   end
-  local fence = string.rep("`", length)
-  local language = (ft or "text"):match("^[%w_+%-]+$") or "text"
-  table.insert(lines, 1, fence .. language)
-  table.insert(lines, 1, DETAILS_LABEL)
-  table.insert(lines, fence)
-  return lines
+  return #lines > 1 and lines or nil
 end
 
 --- @param status "pending"|"done"|"running"
@@ -61,8 +65,7 @@ local function format_tool_summary_lines(status, summary)
     lines[index] = "• " .. line
   end
   if status == "done" and summary.detail then
-    local detail_lines =
-      format_tool_detail_lines(summary.detail.text, summary.detail.ft)
+    local detail_lines = format_tool_detail_lines(summary.detail)
     if detail_lines then
       vim.list_extend(lines, detail_lines)
     end
@@ -187,7 +190,7 @@ function Canvas:highlight_tool(line, end_line, summary)
   if type(summary) ~= "table" or not summary.detail then
     return
   end
-  local details = format_tool_detail_lines(summary.detail.text, summary.detail.ft)
+  local details = format_tool_detail_lines(summary.detail)
   local fence_line = line + header_lines
   if details and fence_line + #details <= end_line then
     vim.api.nvim_buf_set_extmark(self.buf, TOOL_PREVIEW_NS, fence_line, 0, {
@@ -298,12 +301,20 @@ function M.blockquote_foldtext()
 
   local first_line = vim.fn.getline(foldstart)
   if first_line == DETAILS_LABEL then
-    return {
-      {
-        string.format("  + Show details… · %d %s", math.max(0, num_lines - 3), num_lines == 4 and "line" or "lines"),
-        "SiaFolded",
-      },
-    }
+    local body_lines, fence = 0, nil
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(0, foldstart, foldend, false)) do
+      if not fence then
+        fence = line:match("^(```+)[%w_+%-]*$")
+      elseif line == fence then
+        fence = nil
+      else
+        body_lines = body_lines + 1
+      end
+    end
+    return { {
+      string.format("  + Show details… · %d %s", body_lines, body_lines == 1 and "line" or "lines"),
+      "SiaFolded",
+    } }
   end
   local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
   local groups = { "SiaFolded", "SiaReasoning" }

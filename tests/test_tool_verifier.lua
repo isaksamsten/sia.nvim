@@ -110,7 +110,7 @@ T["async approval uses AI description and previews exact command plus risk"] = f
   eq(1, child.lua_get("executions"))
   eq({ true, false }, child.lua_get("confirmation_events"))
   -- Approval assessment is separate from the completed command's chat preview.
-  eq("done", child.lua_get("result.summary.detail.text"))
+  eq({ { text = child.lua_get("command"), ft = "bash" }, { text = "done", ft = "text" } }, child.lua_get("result.summary.detail"))
 end
 
 T["synchronous numbered choices include the assessment preview"] = function()

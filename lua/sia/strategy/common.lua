@@ -1,7 +1,7 @@
 --- @class sia.ToolResult
 --- @field content sia.Content
 --- @field region sia.Region?
---- @field preview sia.ToolPreview?
+--- @field preview sia.ToolDetails?
 --- @field kind "failed"|"cancelled"?
 --- @field summary sia.ToolSummary?
 --- @field ephemeral boolean?

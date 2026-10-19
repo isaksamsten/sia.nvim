@@ -39,20 +39,23 @@ end
 
 --- Bound and sanitize plain text so tool output cannot alter the transcript layout.
 --- @param text string
+--- @param byte_limit integer?
+--- @param line_limit integer?
 --- @return string
-function M.limit(text)
+function M.limit(text, byte_limit, line_limit)
+  byte_limit, line_limit = byte_limit or 32000, line_limit or 200
   text = text:gsub("\27%[[%d;?]*[ -/]*[@-~]", ""):gsub("\r\n", "\n"):gsub("\r", "\n")
   text = text:gsub("[%z\1-\8\11\12\14-\31\127]", "")
-  local clipped = #text > 32000
+  local clipped = #text > byte_limit
   if clipped then
-    text = byte_prefix(text, 32000)
+    text = byte_prefix(text, byte_limit)
   end
   local lines = vim.split(text, "\n", { plain = true })
   while lines[#lines] == "" do
     table.remove(lines)
   end
-  if #lines > 200 then
-    lines = vim.list_slice(lines, 1, 200)
+  if #lines > line_limit then
+    lines = vim.list_slice(lines, 1, line_limit)
     clipped = true
   end
   for i, line in ipairs(lines) do
@@ -85,6 +88,40 @@ function M.from_content(content)
   return { text = table.concat(parts, "\n"), ft = "text" }
 end
 
+--- Accept one fenced section or an ordered list of independently typed sections.
+--- @param detail sia.ToolDetails
+--- @return sia.ToolPreview[]
+function M.sections(detail)
+  return detail.text ~= nil and { detail } or detail
+end
+
+--- Share the existing preview budget across all sections.
+--- @param detail sia.ToolDetails
+--- @return sia.ToolDetails?
+local function normalize_details(detail)
+  local sections = {}
+  local bytes, lines = 32000, 200
+  for _, section in ipairs(M.sections(detail)) do
+    if bytes <= 0 or lines <= 0 then
+      local last = sections[#sections]
+      if last and not last.text:find("… preview truncated", 1, true) then
+        last.text = last.text .. "\n… preview truncated"
+      end
+      break
+    end
+    local text = M.limit(section.text, bytes, lines)
+    if text ~= "" then
+      table.insert(sections, { text = text, ft = section.ft })
+      bytes = bytes - #text
+      lines = lines - #vim.split(text, "\n", { plain = true })
+    end
+  end
+  if #sections == 0 then
+    return nil
+  end
+  return detail.text ~= nil and sections[1] or sections
+end
+
 --- Normalize explicitly supplied previews only. Tools opt in through preview,
 --- result.preview, or summary.detail. Keep this serializable for history/redraw.
 --- @param result sia.ToolResult
@@ -106,13 +143,13 @@ function M.complete(result)
     if result.ephemeral or failed then
       preview = M.from_content(result.content)
     end
-    summary.detail = { text = preview.text, ft = preview.ft or "text" }
+    summary.detail = vim.deepcopy(preview)
+    for _, section in ipairs(M.sections(summary.detail)) do
+      section.ft = section.ft or "text"
+    end
   end
   if summary.detail then
-    summary.detail.text = M.limit(summary.detail.text)
-    if summary.detail.text == "" then
-      summary.detail = nil
-    end
+    summary.detail = normalize_details(summary.detail)
     result.summary = summary
   end
   result.preview = nil
