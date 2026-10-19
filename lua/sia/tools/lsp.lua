@@ -43,17 +43,9 @@ local function is_blank(value)
   return value == nil or value == ""
 end
 
-local function relative_path(path)
-  return vim.fn.fnamemodify(path, ":~:.")
-end
-
-local function line_text(buf, line)
-  local lines = vim.api.nvim_buf_get_lines(buf, line - 1, line, false)
-  return lines[1]
-end
-
 local function find_anchor(buf, line, anchor, occurrence)
-  local text = line_text(buf, line)
+  local lines = vim.api.nvim_buf_get_lines(buf, line - 1, line, false)
+  local text = lines[1]
   if not text then
     return nil, string.format("Line %d does not exist", line)
   end
@@ -229,10 +221,7 @@ end
 local function location_lines(locations)
   local lines = {}
   for _, loc in ipairs(locations) do
-    table.insert(
-      lines,
-      string.format("%s:%d:%d", relative_path(loc.path), loc.line, loc.column)
-    )
+    table.insert(lines, string.format("%s:%d:%d", loc.path, loc.line, loc.column))
   end
   return lines
 end
@@ -240,7 +229,7 @@ end
 local function format_diagnostics(buf, path)
   local diagnostics = vim.diagnostic.get(buf)
   if #diagnostics == 0 then
-    return "No diagnostics found for " .. relative_path(path), 0
+    return "No diagnostics found for " .. path, 0
   end
 
   local severity_names = {
@@ -249,14 +238,14 @@ local function format_diagnostics(buf, path)
     [vim.diagnostic.severity.INFO] = "INFO",
     [vim.diagnostic.severity.HINT] = "HINT",
   }
-  local lines = { "Diagnostics for " .. relative_path(path) .. ":", "" }
+  local lines = { "Diagnostics for " .. path .. ":", "" }
   for _, diagnostic in ipairs(diagnostics) do
     local source = diagnostic.source and (" [" .. diagnostic.source .. "]") or ""
     table.insert(
       lines,
       string.format(
         "%s:%d:%d %s%s: %s",
-        relative_path(path),
+        path,
         diagnostic.lnum + 1,
         diagnostic.col + 1,
         severity_names[diagnostic.severity] or "UNKNOWN",
@@ -288,7 +277,7 @@ local function flatten_symbols(symbols, out, path, depth)
         string.rep("  ", depth),
         name,
         kind,
-        relative_path(symbol_path),
+        symbol_path,
         line,
         col
       )
@@ -371,12 +360,10 @@ local function save_files(files)
   end
 end
 
-local function apply_workspace_edit(edit, client, save)
+local function apply_workspace_edit(edit, client)
   vim.lsp.util.apply_workspace_edit(edit, client_encoding(client))
   local files = collect_workspace_edit_files(edit)
-  if save then
-    save_files(files)
-  end
+  save_files(files)
   return files
 end
 
@@ -404,9 +391,9 @@ local function resolve_code_action(actions, args)
   return nil, "Set index or title to apply a specific code action."
 end
 
-local function apply_code_action(action, client, callback, save)
+local function apply_code_action(action, client, callback)
   if action.edit then
-    local files = apply_workspace_edit(action.edit, client, save)
+    local files = apply_workspace_edit(action.edit, client)
     callback(nil, files)
     return
   end
@@ -501,17 +488,21 @@ local function run_rename(buf, params, args, callback)
       else
         table.insert(lines, "Modified files:")
         for _, file in ipairs(files) do
-          table.insert(lines, "- " .. relative_path(file))
+          table.insert(lines, "- " .. file)
         end
       end
       callback({
         content = table.concat(lines, "\n"),
-        summary = string.format("Previewed rename of '%s' to '%s'", args.anchor, args.new_name),
+        summary = string.format(
+          "Previewed rename of '%s' to '%s'",
+          args.anchor,
+          args.new_name
+        ),
       })
       return
     end
 
-    files = apply_workspace_edit(result, client, args.save ~= false)
+    files = apply_workspace_edit(result, client)
     callback({
       content = string.format(
         "Renamed '%s' to '%s' in %d file%s: %s",
@@ -519,8 +510,7 @@ local function run_rename(buf, params, args, callback)
         args.new_name,
         #files,
         #files == 1 and "" or "s",
-        #files > 0 and table.concat(vim.tbl_map(relative_path, files), ", ")
-          or "unknown"
+        #files > 0 and table.concat(files, ", ") or "unknown"
       ),
       summary = string.format("Renamed '%s' to '%s'", args.anchor, args.new_name),
     })
@@ -651,16 +641,11 @@ local function run_code_actions(buf, params, args, callback)
         content = string.format(
           "Applied code action: %s%s",
           code_action_title(selected),
-          #files > 0
-              and ("\nModified files: " .. table.concat(
-                vim.tbl_map(relative_path, files),
-                ", "
-              ))
-            or ""
+          #files > 0 and ("\nModified files: " .. table.concat(files, ", ")) or ""
         ),
         summary = "Applied code action",
       })
-    end, args.save ~= false)
+    end)
   end)
 end
 
@@ -683,14 +668,12 @@ local function run_format(buf, args, callback)
   end
 
   vim.lsp.buf.format({ bufnr = buf, timeout_ms = args.timeout_ms or 10000 })
-  if args.save ~= false then
-    vim.api.nvim_buf_call(buf, function()
-      pcall(vim.cmd, "noa silent write!")
-    end)
-  end
+  vim.api.nvim_buf_call(buf, function()
+    pcall(vim.cmd, "noa silent write!")
+  end)
   callback({
-    content = "Formatted " .. relative_path(vim.api.nvim_buf_get_name(buf)),
-    summary = "Formatted " .. relative_path(vim.api.nvim_buf_get_name(buf)),
+    content = "Formatted " .. vim.api.nvim_buf_get_name(buf),
+    summary = "Formatted " .. vim.api.nvim_buf_get_name(buf),
   })
 end
 
@@ -836,10 +819,6 @@ local M = tool_utils.new_tool({
         type = "boolean",
         description = "Apply mutating actions. Defaults to false for previews/lists.",
       },
-      save = {
-        type = "boolean",
-        description = "Save modified buffers after applying edits. Defaults to true.",
-      },
       index = {
         type = "integer",
         description = "Code action index to apply after listing code actions",
@@ -876,13 +855,5 @@ For symbol actions, provide path, line, and anchor. The anchor is exact text on 
     return tool_utils.path_allow_rules("path", args.path)
   end,
 }, execute)
-
-M._private = {
-  find_anchor = find_anchor,
-  normalize_locations = normalize_locations,
-  format_diagnostics = format_diagnostics,
-  flatten_symbols = flatten_symbols,
-  collect_workspace_edit_files = collect_workspace_edit_files,
-}
 
 return M
