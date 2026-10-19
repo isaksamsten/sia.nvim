@@ -1,4 +1,3 @@
-
 local diff = require("sia.diff")
 local utils = require("sia.utils")
 local tool_utils = require("sia.tools.utils")
@@ -127,11 +126,8 @@ For small, targeted changes, prefer the edit tool instead.]],
       diff.update_reference(buf)
 
       local action = file_exists and "overwritten" or "created"
-      local display_text = string.format(
-        "%s %s",
-        file_exists and "Overwrote" or "Created",
-        vim.fn.fnamemodify(args.path, ":.")
-      )
+      local display_text =
+        string.format("Edited %s", vim.fn.fnamemodify(args.path, ":."))
       callback({
         content = string.format("Successfully %s buffer for %s", action, args.path),
         region = {
