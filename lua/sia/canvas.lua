@@ -6,8 +6,7 @@ local TEMPORARY_NS = vim.api.nvim_create_namespace("sia_chat_temporary")
 local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local ASSISTANT_TEXT_NS = vim.api.nvim_create_namespace("sia_chat_assistant_text")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
-local REASONING_META_PREFIX = ">| "
-local TOOL_META_PREFIX = ">! "
+local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
 local DETAILS_LABEL = "  + Details"
 
 --- @param summary sia.ToolSummary
@@ -72,52 +71,6 @@ local function format_tool_summary_lines(status, summary)
   return lines
 end
 
---- @param line string
---- @return "reasoning"|"tool"|nil
-local function meta_line_kind(line)
-  if line == ">|" or line:match("^>| ") ~= nil then
-    return "reasoning"
-  end
-  if line == ">!" or line:match("^>! ") ~= nil then
-    return "tool"
-  end
-  return nil
-end
-
---- @param line string
---- @param kind "reasoning"|"tool"
---- @return string
-local function strip_meta_prefix(line, kind)
-  if kind == "reasoning" then
-    return (line:gsub("^>|%s?", ""))
-  end
-  return (line:gsub("^>!%s?", ""))
-end
-
---- @param content string
---- @return string[]?
-local function format_reasoning_lines(content)
-  if type(content) ~= "string" or content == "" then
-    return nil
-  end
-
-  local lines = trim_trailing_empty(vim.split(content, "\n", { plain = true }))
-  if vim.tbl_isempty(lines) then
-    return nil
-  end
-
-  local formatted = {}
-  for _, line in ipairs(lines) do
-    if line == "" then
-      table.insert(formatted, REASONING_META_PREFIX)
-    else
-      table.insert(formatted, REASONING_META_PREFIX .. line)
-    end
-  end
-
-  return formatted
-end
-
 --- @class sia.CanvasOpts
 --- @field temporary_text_hl string?
 
@@ -159,6 +112,40 @@ function Canvas:mark_assistant_text(line)
     right_gravity = true,
     hl_mode = "combine",
   })
+end
+
+--- Track reasoning separately from its Markdown text.
+--- @param first integer Zero-based start row.
+--- @param last integer Exclusive end row.
+--- @param id integer?
+--- @return integer
+function Canvas:mark_reasoning(first, last, id)
+  return vim.api.nvim_buf_set_extmark(self.buf, REASONING_NS, first, 0, {
+    id = id,
+    end_row = last,
+    end_col = 0,
+    right_gravity = true,
+    end_right_gravity = false,
+    hl_group = "SiaReasoning",
+    hl_eol = true,
+    virt_text = { { "· ", "SiaAssistantMarker" } },
+    virt_text_pos = "inline",
+    hl_mode = "combine",
+    priority = 90, -- Keep Markdown syntax highlighting above the background.
+  })
+end
+
+--- @param buf integer
+--- @param row integer
+local function reasoning_range(buf, row)
+  local marks = vim.api.nvim_buf_get_extmarks(buf, REASONING_NS, { row, -1 }, 0, {
+    details = true,
+    limit = 1,
+  })
+  local mark = marks[1]
+  if mark and row < mark[4].end_row then
+    return mark
+  end
 end
 
 function Canvas:update_tool_progress(content)
@@ -295,22 +282,15 @@ function M.blockquote_foldexpr(lnum)
     -- Fold the details label, fences, and body; keep the action header outside.
     return row == mark[2] and ">1" or 1
   end
-  local line = vim.fn.getline(lnum)
-  local prev = lnum > 1 and vim.fn.getline(lnum - 1) or ""
-  local line_kind = meta_line_kind(line)
-  local prev_kind = meta_line_kind(prev)
-
-  if line_kind then
-    if line_kind ~= prev_kind then
-      return ">1"
-    end
-    return 1
+  local reasoning = reasoning_range(0, row)
+  if reasoning then
+    return row == reasoning[2] and ">1" or 1
   end
 
   return 0
 end
 
---- @return [string, string][]
+--- @return table[]
 function M.blockquote_foldtext()
   local foldstart = vim.v.foldstart
   local foldend = vim.v.foldend
@@ -325,14 +305,18 @@ function M.blockquote_foldtext()
       },
     }
   end
-  local kind = meta_line_kind(first_line)
-  local preview = kind and strip_meta_prefix(first_line, kind) or first_line
   local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
-  if #preview > max_width then
-    preview = preview:sub(1, max_width) .. "…"
+  local groups = { "SiaFolded", "SiaReasoning" }
+  local chunks = require("sia.ui.foldtext").render(first_line, max_width, groups)
+  local suffix = string.format("  (%d lines)", num_lines)
+  local last = chunks[#chunks]
+  if last and vim.deep_equal(last[2], groups) then
+    last[1] = last[1] .. suffix
+  else
+    table.insert(chunks, { suffix, groups })
   end
-
-  return { { string.format("%s  (%d lines)", preview, num_lines), "SiaFolded" } }
+  table.insert(chunks, 1, { "· ", { "SiaAssistantMarker", "SiaReasoning" } })
+  return chunks
 end
 
 function Canvas:get_win()
@@ -447,6 +431,7 @@ end
 function Canvas:render_messages(messages, model)
   vim.bo[self.buf].modifiable = true
   local previous_role
+  local previous_reasoning_only = false
   local pending_turn
   local function finish_turn()
     if pending_turn then
@@ -462,6 +447,7 @@ function Canvas:render_messages(messages, model)
       finish_turn()
     end
     local content = message.content
+    local reasoning_only = false
     if message.role == "tool" then
       if not message.summary then
         goto continue
@@ -480,15 +466,21 @@ function Canvas:render_messages(messages, model)
       vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, lines)
       self:highlight_user_query(row, #lines)
     elseif message.role == "assistant" then
-      local reasoning = message.reasoning and format_reasoning_lines(message.reasoning.text)
+      local reasoning
+      if message.reasoning and type(message.reasoning.text) == "string" then
+        local lines = trim_trailing_empty(vim.split(message.reasoning.text, "\n", { plain = true }))
+        reasoning = #lines > 0 and lines or nil
+      end
       local text = type(content) == "string" and content:gsub("^\n+", "") or ""
       if not reasoning and text == "" then
         goto continue
       end
-      local row = self:ensure_placeholder(previous_role ~= "tool")
+      reasoning_only = reasoning ~= nil and text == ""
+      local row = self:ensure_placeholder(previous_role ~= "tool" and not previous_reasoning_only)
       if reasoning then
         vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, reasoning)
-        self:insert_lines_at(self:line_count(), text ~= "" and { "", "" } or { "" })
+        self:mark_reasoning(row, row + #reasoning)
+        self:insert_lines_at(self:line_count(), { "" })
         row = self:line_count() - 1
       end
       if text ~= "" then
@@ -500,6 +492,7 @@ function Canvas:render_messages(messages, model)
       pending_turn = message.turn_id
     end
     previous_role = message.role
+    previous_reasoning_only = reasoning_only
     ::continue::
   end
   finish_turn()
@@ -568,6 +561,7 @@ function Canvas:clear()
   vim.bo[self.buf].modifiable = false
   self:clear_tool_highlights()
   vim.api.nvim_buf_clear_namespace(self.buf, ASSISTANT_TEXT_NS, 0, -1)
+  vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   self:clear_temporary_text()
   vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)
   vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)

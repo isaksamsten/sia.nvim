@@ -9,13 +9,6 @@ local function setup_window()
   vim.opt_local.winhighlight:append({ Folded = "SiaFolded" })
   vim.opt_local.conceallevel = 3
   vim.opt_local.concealcursor = "n"
-
-  for _, m in ipairs(vim.fn.getmatches()) do
-    if m.group == "Conceal" and m.pattern == [[^>|\%( \)\?]] then
-      return
-    end
-  end
-  vim.fn.matchadd("Conceal", [[^>|\%( \)\?]], 10, -1)
 end
 
 setup_window()

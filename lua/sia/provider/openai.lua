@@ -171,6 +171,7 @@ end
 --- @field private response_id integer?
 --- @field private content string
 --- @field private reasoning_summary string?
+--- @field private reasoning_summary_streamed boolean
 --- @field private tool_call_detected boolean
 --- @field private encrypted_reasoning {id: integer, content: string}?
 local OpenAIResponsesStream = {}
@@ -184,8 +185,19 @@ function OpenAIResponsesStream.new(strategy)
   self.pending_tool_calls = {}
   self.content = ""
   self.reasoning_summary = nil
+  self.reasoning_summary_streamed = false
   self.tool_call_detected = false
   return self
+end
+
+--- Keep persisted summary parts separated just like the live stream.
+local function append_reasoning_summary(summary, item)
+  for _, part in ipairs(item.summary or {}) do
+    if part.type == "summary_text" and type(part.text) == "string" and part.text ~= "" then
+      summary = summary and (summary .. "\n\n" .. part.text) or part.text
+    end
+  end
+  return summary
 end
 
 function OpenAIResponsesStream:process_stream_chunk(json)
@@ -193,9 +205,18 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     self.response_id = json.response.id
   end
   if json.type == "response.reasoning_summary_text.done" then
+    if type(json.text) ~= "string" or json.text == "" then
+      return
+    end
+    if self.reasoning_summary_streamed then
+      if not self.strategy:on_stream({ reasoning = { content = "\n\n" } }) then
+        return true
+      end
+    end
     if not self.strategy:on_stream({ reasoning = { content = json.text } }) then
       return true
     end
+    self.reasoning_summary_streamed = true
   elseif json.type == "response.output_text.delta" then
     if not self.strategy:on_stream({ content = json.delta }) then
       return true
@@ -233,13 +254,7 @@ function OpenAIResponsesStream:process_stream_chunk(json)
     elseif item.type == "reasoning" then
       self.encrypted_reasoning =
         { id = item.id, encrypted_content = item.encrypted_content }
-      for _, subitem in ipairs(item.summary) do
-        if subitem.type == "summary_text" then
-          self.reasoning_summary = (self.reasoning_summary or "")
-            .. subitem.text
-            .. "\n"
-        end
-      end
+      self.reasoning_summary = append_reasoning_summary(self.reasoning_summary, item)
     end
   elseif
     json.type == "response.completed"
@@ -274,13 +289,7 @@ function OpenAIResponsesStream:process_stream_chunk(json)
       elseif item.type == "reasoning" and not has_reasoning then
         self.encrypted_reasoning =
           { id = item.id, encrypted_content = item.encrypted_content }
-        for _, subitem in ipairs(item.summary) do
-          if subitem.type == "summary_text" then
-            self.reasoning_summary = (self.reasoning_summary or "")
-              .. subitem.text
-              .. "\n"
-          end
-        end
+        self.reasoning_summary = append_reasoning_summary(self.reasoning_summary, item)
       end
     end
   end

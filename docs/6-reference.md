@@ -25,6 +25,7 @@ precedence.
 | `SiaAssistantMarker` | `Normal` | Small dot before assistant text |
 | `SiaUser`       | `DiffChange` | User queries and `>` markers |
 | `SiaToolResult` | Bold         | Tool result summaries     |
+| `SiaReasoning`  | None         | Reasoning background, including collapsed preview text |
 | `SiaFolded`     | Italic       | Collapsed reasoning and tool output |
 | `SiaProgress`   | `NonText`    | Progress indicators       |
 | `SiaModel`      | `Comment`    | Footer model name         |
@@ -36,6 +37,16 @@ Customize collapsed chat output without changing the global `Folded` highlight:
 ```lua
 vim.api.nvim_set_hl(0, "SiaFolded", { fg = "#888888", italic = true })
 ```
+
+Set a reasoning background while preserving Markdown syntax highlighting:
+
+```lua
+vim.api.nvim_set_hl(0, "SiaReasoning", { bg = "#20242c" })
+```
+
+The background covers expanded reasoning lines to the window edge. Collapsed
+reasoning preview text combines `SiaReasoning` with `SiaFolded` and its Markdown
+formatting; tool-detail folds continue to use `SiaFolded`.
 
 ### Tool Approval
 

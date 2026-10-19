@@ -17,6 +17,7 @@ local highlight_groups = {
   SiaApproveSafe = { link = "StatusLine" },
   SiaApproveWarn = { link = "StatusLine" },
   SiaToolResult = { bold = true },
+  SiaReasoning = { link = "Comment" },
   SiaFolded = { italic = true },
   SiaDiffDelete = { link = "DiffDelete" },
   SiaDiffChange = { link = "DiffChange" },

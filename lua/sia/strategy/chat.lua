@@ -14,6 +14,7 @@ spaces. Only output the name, nothing else.]]
 --- @field buf integer
 --- @field content_writer sia.StreamRenderer
 --- @field reasoning_writer sia.StreamRenderer?
+--- @field reasoning_extmark integer?
 --- @field tool_status table<string, sia.engine.Status>
 --- @field tool_order string[]
 --- @field tool_block_extmark integer?
@@ -68,17 +69,16 @@ function AssistantTurnRenderer:_ensure_reasoning_writer()
   local reuse_placeholder = self.content_writer:is_empty() and current_line == ""
 
   if reuse_placeholder then
-    self.canvas:append_text_at(insert_at, 0, ">| ")
-    self.canvas:insert_lines_at(insert_at + 1, { "", "" })
+    self.canvas:insert_lines_at(insert_at + 1, { "" })
   else
-    self.canvas:insert_lines_at(insert_at, { ">| ", "", "" })
+    self.canvas:insert_lines_at(insert_at, { "" })
   end
 
-  self.content_writer:shift(2)
+  self.content_writer:shift(1)
   self.reasoning_writer = StreamRenderer:new({
     canvas = self.canvas,
     line = insert_at,
-    column = 3,
+    column = 0,
     temporary = false,
   })
   return self.reasoning_writer
@@ -122,11 +122,16 @@ function AssistantTurnRenderer:append_reasoning(content)
     if newline then
       writer:append_newline()
       self.content_writer:shift(1)
-      writer:append_substring(">| ")
     end
 
     index = (newline or #content) + 1
   end
+  self.reasoning_extmark = self.canvas:mark_reasoning(
+    writer.start_line,
+    writer.line + 1,
+    self.reasoning_extmark
+  )
+  self.canvas:refresh_folds()
 end
 
 --- @param key string

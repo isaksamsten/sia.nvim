@@ -350,9 +350,8 @@ T["strategy.chat"]["reasoning rendering"]["inserts folded reasoning into the buf
   assistant.execute_strategy(strategy)
 
   local expected = {
-    ">| Plan the change",
-    ">| Check the edge cases",
-    "",
+    "Plan the change",
+    "Check the edge cases",
     "Done",
     "",
   }
@@ -427,9 +426,8 @@ T["strategy.chat"]["chunked reasoning"]["assembles reasoning from multiple delta
   assistant.execute_strategy(strategy)
 
   local expected = {
-    ">| First chunk",
-    ">| Second line",
-    "",
+    "First chunk",
+    "Second line",
     "Result",
     "",
   }
@@ -475,7 +473,7 @@ T["strategy.chat"]["reasoning only"]["renders reasoning without content"] = func
   assistant.execute_strategy(strategy)
 
   local expected = {
-    ">| I thought about it",
+    "I thought about it",
     "",
   }
   eq(expected, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -518,7 +516,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
 
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   local expected = {
-    ">| Plan the check",
+    "Plan the check",
     "• Ran make test",
     "  + Details",
     "```text",
@@ -583,15 +581,14 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
   })
 
   eq({
-    ">| Plan the check",
-    "",
+    "Plan the check",
     "• Running bash: make test",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   eq({
     {
-      start = 2,
-      finish = 3,
+      start = 1,
+      finish = 2,
       hl_group = "SiaToolResult",
     },
   }, tool_result_ranges(strategy.buf))
@@ -641,8 +638,8 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
 
   eq({
     {
-      start = 2,
-      finish = 3,
+      start = 1,
+      finish = 2,
       hl_group = "SiaToolResult",
     },
   }, tool_result_ranges(strategy.buf))
@@ -659,8 +656,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
   })
 
   eq({
-    ">| Plan the check",
-    "",
+    "Plan the check",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   eq({}, tool_result_ranges(strategy.buf))
@@ -722,8 +718,7 @@ T["strategy.chat"]["redraw skips persisted tool entries without summary"] = func
 
   strategy:redraw()
   eq({
-    ">| Plan the check",
-    "",
+    "Plan the check",
     "All good",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -731,8 +726,7 @@ T["strategy.chat"]["redraw skips persisted tool entries without summary"] = func
 
   strategy:redraw()
   eq({
-    ">| Plan the check",
-    "",
+    "Plan the check",
     "All good",
     "",
   }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
@@ -835,10 +829,8 @@ T["strategy.chat"]["multi-turn reasoning"]["reasoning in second turn after tool 
 
   local lines = child.lua_get("_G._test_lines")
   local expected = {
-    ">| Let me check",
-    "",
-    ">| Now I know",
-    "",
+    "Let me check",
+    "Now I know",
     "The answer",
     "",
   }
@@ -924,12 +916,10 @@ T["strategy.chat"]["multi-turn reasoning"]["content from turn 1 is not corrupted
 
   local lines = child.lua_get("_G._test_lines")
   local expected = {
-    ">| First thought",
-    "",
+    "First thought",
     "First content",
     "",
-    ">| Second thought",
-    "",
+    "Second thought",
     "Second content",
     "",
   }
@@ -1447,15 +1437,98 @@ T["strategy.chat"]["tools in consecutive streams use the same compact spacing as
   ChatStrategy.remove(strategy.buf)
 end
 
+T["strategy.chat"]["reasoning folds track plain Markdown through edits and redraw"] = function()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.bo[buf].filetype = "sia"
+  local canvas = require("sia.canvas").Canvas:new(buf)
+  local entries = {
+    { role = "assistant", reasoning = { text = "Consider **the intent** carefully\nThen check `code`" }, content = "The answer." },
+  }
+  canvas:render_messages(entries)
+  local function check(start)
+    eq(start, vim.fn.foldclosed(start))
+    eq(start + 1, vim.fn.foldclosedend(start))
+    eq("· Consider the intent carefully  (2 lines)", vim.fn.foldtextresult(start))
+    eq(0, require("sia.canvas").blockquote_foldexpr(start + 2))
+    eq(0, require("sia.canvas").blockquote_foldexpr(start + 3))
+  end
+  eq("Consider **the intent** carefully", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+  check(1)
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "An earlier message.", "" })
+  canvas:refresh_folds()
+  check(3)
+  canvas:clear()
+  canvas:render_messages(entries)
+  check(1)
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  vim.cmd("normal! zo")
+  eq(-1, vim.fn.foldclosed(1))
+  eq("Consider **the intent** carefully", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+  canvas:clear()
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ">| ordinary answer text", "Another line" })
+  canvas:refresh_folds()
+  eq(0, require("sia.canvas").blockquote_foldexpr(1))
+  eq(0, require("sia.canvas").blockquote_foldexpr(2))
+end
+
+T["strategy.chat"]["collapsed reasoning displays inline Markdown with its formatting"] = function()
+  local screen = MiniTest.new_child_neovim()
+  screen.start({ "-u", "assets/minimal.lua", "-i", "NONE", "-n" })
+  local ok, err = pcall(function()
+    screen.lua([[
+      local buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "Consider **intent** carefully", "Then check the code", "", "The answer.",
+      })
+      require("sia.canvas").Canvas:new(buf):mark_reasoning(0, 2)
+      vim.api.nvim_set_hl(0, "SiaFolded", { fg = "#abcdef", italic = true })
+      vim.api.nvim_set_hl(0, "SiaReasoning", { bg = "#102030" })
+      vim.api.nvim_set_hl(0, "@markup.strong.markdown_inline", { bold = true })
+      vim.treesitter.start(buf, "markdown")
+      vim.wo.foldmethod = "expr"
+      vim.wo.foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
+      vim.wo.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
+      vim.wo.foldlevel = 0
+      vim.wo.number = false
+      vim.wo.relativenumber = false
+      vim.wo.signcolumn = "no"
+      vim.wo.foldcolumn = "0"
+      vim.cmd("redraw!")
+    ]])
+    local shot = screen.get_screenshot()
+    local line = table.concat(shot.text[1])
+    local first = line:find("Consider intent carefully", 1, true)
+    eq(true, first ~= nil)
+    eq(nil, line:find("**", 1, true))
+    eq(1, select(2, line:gsub("· ", "")))
+    eq(false, shot.attr[1][first] == shot.attr[1][first + 9])
+    eq(1, screen.lua_get("vim.fn.foldclosed(1)"))
+    screen.lua("vim.api.nvim_win_set_cursor(0, { 1, 0 }); vim.cmd('normal! zo'); vim.cmd('redraw!')")
+    local expanded = screen.get_screenshot()
+    eq(1, select(2, table.concat(expanded.text[1]):gsub("· ", "")))
+    local intent = table.concat(expanded.text[1]):find("intent", 1, true)
+    eq(false, expanded.attr[1][1] == expanded.attr[1][intent])
+    -- Background extends through the unused columns and ends with the range.
+    eq(false, expanded.attr[2][60] == expanded.attr[3][60])
+    eq(expanded.attr[3][60], expanded.attr[4][60])
+  end)
+  screen.stop()
+  assert(ok, err)
+end
+
 T["strategy.chat"]["fold text explicitly highlights reasoning and output despite window remapping"] = function()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, buf)
   vim.bo[buf].filetype = "sia"
   local canvas = require("sia.canvas").Canvas:new(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-    ">| Think through it", ">| Check the result", "", "• Ran check",
+    "Think through it", "Check the result", "", "• Ran check",
     "  + Details", "```text", "first", "second", "```", "",
   })
+  canvas:mark_reasoning(0, 2)
   canvas:highlight_tool(3, 9, { header = "Ran check", detail = { text = "first\nsecond" } })
   -- Window options can replace the mapping originally installed by ftplugin.
   vim.wo.winhighlight = "Folded:ErrorMsg"
@@ -1468,7 +1541,7 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
   canvas:refresh_folds()
   local ok, err = pcall(function()
     vim.fn.foldtextresult(1)
-    eq({ { "Think through it  (2 lines)", "SiaFolded" } }, observed)
+    eq({ { "· ", { "SiaAssistantMarker", "SiaReasoning" } }, { "Think through it  (2 lines)", { "SiaFolded", "SiaReasoning" } } }, observed)
     observed = nil
     vim.wo.conceallevel = 3
     eq(3, vim.wo.conceallevel)
@@ -1659,6 +1732,39 @@ T["strategy.chat"]["query blocks and footers keep metadata through redraw withou
       vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
     strategy:redraw()
   end
+  ChatStrategy.remove(strategy.buf)
+end
+
+T["strategy.chat"]["consecutive Responses summary parts keep their spacing on redraw"] = function()
+  vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
+  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-5.2") })
+  conversation:add_system_message("Ok")
+  conversation:add_user_message("Question")
+  local turn = conversation:new_turn()
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy.has_generated_name = true
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  local stream = require("sia.provider.openai").responses.new_stream(strategy)
+  local parts = {
+    "**First section**\n\nCheck the intent.",
+    "**Second section**\n\nCheck the context.",
+  }
+  for index, part in ipairs(parts) do
+    stream:process_stream_chunk({ type = "response.reasoning_summary_text.done", item_id = "rs_1", summary_index = index - 1, text = part })
+  end
+  stream:process_stream_chunk({ type = "response.output_item.done", item = {
+    type = "reasoning", id = "rs_1", encrypted_content = "opaque",
+    summary = { { type = "summary_text", text = parts[1] }, { type = "summary_text", text = parts[2] } },
+  } })
+  stream:process_stream_chunk({ type = "response.output_text.delta", delta = "Answer" })
+  local result = stream:finalize()
+  conversation:add_assistant_message(turn, result.content, result.reasoning)
+  strategy:on_finish({ turn_id = turn, usage = {} })
+  local streamed = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+  eq(true, table.concat(streamed, "\n"):find(parts[1] .. "\n\n" .. parts[2], 1, true) ~= nil)
+  strategy:redraw()
+  eq(streamed, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   ChatStrategy.remove(strategy.buf)
 end
 

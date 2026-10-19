@@ -87,6 +87,15 @@ keys = {
 }
 ```
 
+Reasoning and tool details are folded by default. Use Neovim's `zo` to open the
+fold under the cursor and `zc` to close it. Reasoning stays as ordinary Markdown
+in the buffer; fold ranges are tracked separately from the text. Collapsed
+reasoning previews render inline bold, emphasis, code, and links using the
+`markdown_inline` Tree-sitter parser, with a plain-text fallback if unavailable.
+The preview may be a heading or a sentence; it uses the first line of reasoning.
+Reasoning uses the same dot marker as assistant replies and sits directly above
+the following tool output or reply, without an extra separator row.
+
 ## Tool Approval Keybindings
 
 If you use [async confirmation](../4-permissions/1-confirmation.md), these
