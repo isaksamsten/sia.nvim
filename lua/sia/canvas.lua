@@ -274,7 +274,7 @@ end
 
 --- @param lnum integer
 --- @return string|integer
-function M.blockquote_foldexpr(lnum)
+function M.foldexpr(lnum)
   local row = lnum - 1
   local marks = vim.api.nvim_buf_get_extmarks(0, TOOL_PREVIEW_NS, { row, 0 }, 0, {
     details = true,
@@ -291,43 +291,6 @@ function M.blockquote_foldexpr(lnum)
   end
 
   return 0
-end
-
---- @return table[]
-function M.blockquote_foldtext()
-  local foldstart = vim.v.foldstart
-  local foldend = vim.v.foldend
-  local num_lines = foldend - foldstart + 1
-
-  local first_line = vim.fn.getline(foldstart)
-  if first_line == DETAILS_LABEL then
-    local body_lines, fence = 0, nil
-    for _, line in ipairs(vim.api.nvim_buf_get_lines(0, foldstart, foldend, false)) do
-      if not fence then
-        fence = line:match("^(```+)[%w_+%-]*$")
-      elseif line == fence then
-        fence = nil
-      else
-        body_lines = body_lines + 1
-      end
-    end
-    return { {
-      string.format("  + Show details… · %d %s", body_lines, body_lines == 1 and "line" or "lines"),
-      "SiaFolded",
-    } }
-  end
-  local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
-  local groups = { "SiaFolded", "SiaReasoning" }
-  local chunks = require("sia.ui.foldtext").render(first_line, max_width, groups)
-  local suffix = string.format("  (%d lines)", num_lines)
-  local last = chunks[#chunks]
-  if last and vim.deep_equal(last[2], groups) then
-    last[1] = last[1] .. suffix
-  else
-    table.insert(chunks, { suffix, groups })
-  end
-  table.insert(chunks, 1, { "· ", { "SiaAssistantMarker", "SiaReasoning" } })
-  return chunks
 end
 
 function Canvas:get_win()

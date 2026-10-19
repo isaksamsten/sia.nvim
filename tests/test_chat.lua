@@ -1348,7 +1348,7 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
       if line == "• Ran check" then next_tool = row end
     end
     eq("```", lines[next_tool - 1])
-    local foldexpr = require("sia.canvas").blockquote_foldexpr
+    local foldexpr = require("sia.canvas").foldexpr
     eq(">1", foldexpr(first))
     eq(1, foldexpr(first + 3))
     eq(1, foldexpr(first + 4))
@@ -1394,7 +1394,7 @@ T["strategy.chat"]["updating adjacent tool blocks preserves preceding preview fo
     eq(2, #marks)
     eq({ 1, 5 }, { marks[1][2], marks[1][4].end_row })
     eq({ 6, 10 }, { marks[2][2], marks[2][4].end_row })
-    local expr = require("sia.canvas").blockquote_foldexpr
+    local expr = require("sia.canvas").foldexpr
     eq(">1", expr(2))
     eq(1, expr(4))
     eq(0, expr(6))
@@ -1417,7 +1417,7 @@ T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] 
   eq({ "• Ran command", "  + Details", "````text", "```lua", ">| literal", "```", "end", "````", "" },
     vim.api.nvim_buf_get_lines(buf, 0, -1, false))
   -- Metadata-looking text in the fenced body must not create a reasoning fold.
-  eq(1, require("sia.canvas").blockquote_foldexpr(4))
+  eq(1, require("sia.canvas").foldexpr(4))
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
@@ -1483,9 +1483,9 @@ T["strategy.chat"]["reasoning folds track plain Markdown through edits and redra
   local function check(start)
     eq(start, vim.fn.foldclosed(start))
     eq(start + 1, vim.fn.foldclosedend(start))
-    eq("· Consider the intent carefully  (2 lines)", vim.fn.foldtextresult(start))
-    eq(0, require("sia.canvas").blockquote_foldexpr(start + 2))
-    eq(0, require("sia.canvas").blockquote_foldexpr(start + 3))
+    eq("· Consider the intent carefully · 2 lines", vim.fn.foldtextresult(start))
+    eq(0, require("sia.canvas").foldexpr(start + 2))
+    eq(0, require("sia.canvas").foldexpr(start + 3))
   end
   eq("Consider **the intent** carefully", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
   check(1)
@@ -1504,8 +1504,8 @@ T["strategy.chat"]["reasoning folds track plain Markdown through edits and redra
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ">| ordinary answer text", "Another line" })
   canvas:refresh_folds()
-  eq(0, require("sia.canvas").blockquote_foldexpr(1))
-  eq(0, require("sia.canvas").blockquote_foldexpr(2))
+  eq(0, require("sia.canvas").foldexpr(1))
+  eq(0, require("sia.canvas").foldexpr(2))
 end
 
 T["strategy.chat"]["collapsed reasoning displays inline Markdown with its formatting"] = function()
@@ -1523,8 +1523,8 @@ T["strategy.chat"]["collapsed reasoning displays inline Markdown with its format
       vim.api.nvim_set_hl(0, "@markup.strong.markdown_inline", { bold = true })
       vim.treesitter.start(buf, "markdown")
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
-      vim.wo.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
+      vim.wo.foldexpr = "v:lua.require'sia.canvas'.foldexpr(v:lnum)"
+      vim.wo.foldtext = "v:lua.require'sia.ui.foldtext'.foldtext()"
       vim.wo.foldlevel = 0
       vim.wo.number = false
       vim.wo.relativenumber = false
@@ -1537,7 +1537,7 @@ T["strategy.chat"]["collapsed reasoning displays inline Markdown with its format
     local first = line:find("Consider intent carefully", 1, true)
     eq(true, first ~= nil)
     eq(nil, line:find("**", 1, true))
-    eq(1, select(2, line:gsub("· ", "")))
+    eq(2, select(2, line:gsub("· ", "")))
     eq(false, shot.attr[1][first] == shot.attr[1][first + 9])
     eq(1, screen.lua_get("vim.fn.foldclosed(1)"))
     screen.lua("vim.api.nvim_win_set_cursor(0, { 1, 0 }); vim.cmd('normal! zo'); vim.cmd('redraw!')")
@@ -1568,14 +1568,14 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
   vim.wo.winhighlight = "Folded:ErrorMsg"
   local observed
   _G.SiaTestFoldtext = function()
-    observed = require("sia.canvas").blockquote_foldtext()
+    observed = require("sia.ui.foldtext").foldtext()
     return observed
   end
   vim.wo.foldtext = "v:lua.SiaTestFoldtext()"
   canvas:refresh_folds()
   local ok, err = pcall(function()
     vim.fn.foldtextresult(1)
-    eq({ { "· ", { "SiaAssistantMarker", "SiaReasoning" } }, { "Think through it  (2 lines)", { "SiaFolded", "SiaReasoning" } } }, observed)
+    eq({ { "· ", { "SiaAssistantMarker", "SiaReasoning" } }, { "Think through it · 2 lines", { "SiaFolded", "SiaReasoning" } } }, observed)
     observed = nil
     vim.wo.conceallevel = 3
     eq(3, vim.wo.conceallevel)
@@ -1597,8 +1597,8 @@ T["strategy.chat"]["details fold stays visible when Markdown fences conceal whol
         tool = { status = "done", summary = { header = "Ran check", detail = { text = "output" } } },
       }, { "tool" })
       vim.wo.foldmethod = "expr"
-      vim.wo.foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
-      vim.wo.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
+      vim.wo.foldexpr = "v:lua.require'sia.canvas'.foldexpr(v:lnum)"
+      vim.wo.foldtext = "v:lua.require'sia.ui.foldtext'.foldtext()"
       vim.wo.foldlevel = 0
       vim.wo.concealcursor = "n"
       local ns = vim.api.nvim_create_namespace("test_concealed_fences")

@@ -20,9 +20,9 @@ spaces. Only output the name, nothing else.]]
 --- @field tool_block_extmark integer?
 --- @field tool_block_line_count integer
 --- @field tool_block_reuses_placeholder boolean
-
 --- @field separate_tools boolean
 --- @field has_tool_blocks boolean
+
 local AssistantTurnRenderer = {}
 AssistantTurnRenderer.__index = AssistantTurnRenderer
 
@@ -569,12 +569,6 @@ function ChatStrategy:on_stream(input)
   end
   if input.reasoning then
     local content = input.reasoning.content
-    local first_line = content:match("^([^\n]*)")
-    local header = first_line and first_line:match("^%*%*(.*)%*%*$")
-
-    if header then
-      winbar.update_status(self.buf, { message = header })
-    end
     if content and content ~= "" and self.turn_renderer then
       self.turn_renderer:append_reasoning(content)
     end

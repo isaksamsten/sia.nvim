@@ -2,8 +2,8 @@ pcall(vim.treesitter.start)
 
 local function setup_window()
   vim.opt_local.foldmethod = "expr"
-  vim.opt_local.foldexpr = "v:lua.require'sia.canvas'.blockquote_foldexpr(v:lnum)"
-  vim.opt_local.foldtext = "v:lua.require'sia.canvas'.blockquote_foldtext()"
+  vim.opt_local.foldexpr = "v:lua.require'sia.canvas'.foldexpr(v:lnum)"
+  vim.opt_local.foldtext = "v:lua.require'sia.ui.foldtext'.foldtext()"
   vim.opt_local.foldenable = true
   vim.opt_local.foldlevel = 0
   vim.opt_local.winhighlight:append({ Folded = "SiaFolded" })
