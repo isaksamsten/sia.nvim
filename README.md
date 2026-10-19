@@ -9,13 +9,7 @@ Supports: OpenAI, Codex, Copilot and OpenRouter (both OpenAI Chat Completions an
 
 ## Features
 
-https://github.com/user-attachments/assets/ac11de80-9979-4f30-803f-7ad79991dd13
-
-https://github.com/user-attachments/assets/48cb1bb6-633b-412c-b33c-ae0b6792a485
-
-https://github.com/user-attachments/assets/af327b9d-bbe1-47d6-8489-c8175a090a70
-
-https://github.com/user-attachments/assets/ea037896-89fd-4660-85b6-b058423be2f6
+https://github.com/user-attachments/assets/e2416fb6-0878-4895-8a01-727dd2e2381f
 
 - **Multiple interaction modes** — [chat, insert, and diff](docs/2-usage/1-modes.md) for different workflows
 - **Comprehensive tool system** — [file operations, code search, shell access, LSP, and more](docs/5-features/4-tools.md)
