@@ -347,7 +347,7 @@ M._raw_options = {
       chat = {
         mode = "chat",
         system = {
-          messages.system.adaptive,
+          messages.system.minimal,
         },
         modes = {
           plan = require("sia.modes").plan,
@@ -372,7 +372,6 @@ M._raw_options = {
             tools.view,
             tools.glob,
             tools.agent,
-            tools.diagnostics,
             tools.bash,
             tools.webfetch,
             tools.websearch,
