@@ -144,95 +144,107 @@ return tool_utils.new_tool({
           ephemeral = true,
         })
       end
-      local ok, err = pcall(vim.system, cmd, { text = true, cwd = conversation.workspace }, function(obj)
-        if obj.code ~= 0 then
-          local message = vim.trim(obj.stderr or "")
-          failed(message ~= "" and message or "File search command failed.", obj.code)
-          return
-        end
-
-        local files = vim.split(obj.stdout or "", "\0", { trimempty = true })
-        if #files == 0 then
-          local msg
-          if pattern and path then
-            msg =
-              string.format("No files found matching pattern: %s in %s", pattern, path)
-          elseif pattern then
-            msg = "No files found matching pattern: " .. pattern
-          elseif path then
-            msg = "No files found in " .. path
-          else
-            msg = "No files found."
+      local ok, err = pcall(
+        vim.system,
+        cmd,
+        { text = true, cwd = conversation.workspace },
+        function(obj)
+          if obj.code ~= 0 then
+            local message = vim.trim(obj.stderr or "")
+            failed(message ~= "" and message or "File search command failed.", obj.code)
+            return
           end
-          local summary = "Searched for files"
-          if pattern then summary = summary .. " matching `" .. pattern .. "`" end
-          if path then summary = summary .. " in `" .. path .. "`" end
-          callback({ content = msg, summary = summary })
-          return
-        end
 
-        local limited_files, total_count = utils.limit_files(
-          files,
-          { max_count = MAX_FILES_RESULT, max_sort = MAX_FILES_SORT }
-        )
+          local files = vim.split(obj.stdout or "", "\0", { trimempty = true })
+          if #files == 0 then
+            local msg
+            if pattern and path then
+              msg = string.format(
+                "No files found matching pattern: %s in %s",
+                pattern,
+                path
+              )
+            elseif pattern then
+              msg = "No files found matching pattern: " .. pattern
+            elseif path then
+              msg = "No files found in " .. path
+            else
+              msg = "No files found."
+            end
+            local summary = "Explored "
+            if pattern then
+              summary = summary .. "`" .. pattern .. "`"
+            end
+            if path then
+              summary = summary .. "`" .. path .. "`"
+            end
+            callback({ content = msg, summary = summary })
+            return
+          end
 
-        local preview = build_preview(limited_files)
+          local limited_files, total_count = utils.limit_files(
+            files,
+            { max_count = MAX_FILES_RESULT, max_sort = MAX_FILES_SORT }
+          )
 
-        local header
-        if pattern and path then
-          header = string.format(
-            "Files matching pattern `%s` in `%s` (max %d, newest first):",
-            pattern,
-            path,
-            MAX_FILES_RESULT
-          )
-        elseif pattern then
-          header = string.format(
-            "Files matching pattern `%s` (max %d, newest first):",
-            pattern,
-            MAX_FILES_RESULT
-          )
-        elseif path then
-          header = string.format(
-            "Files in `%s` (max %d, newest first):",
-            path,
-            MAX_FILES_RESULT
-          )
-        else
-          header = string.format(
-            "Files in the current project (max %d, newest first):",
-            MAX_FILES_RESULT
-          )
-        end
-        table.insert(limited_files, 1, header)
+          local preview = build_preview(limited_files)
 
-        if total_count > MAX_FILES_RESULT then
-          table.insert(
-            limited_files,
-            2,
-            string.format(
-              "Showing %d of %d files (limited to most recent %d)",
-              MAX_FILES_RESULT,
-              total_count,
+          local header
+          if pattern and path then
+            header = string.format(
+              "Files matching pattern `%s` in `%s` (max %d, newest first):",
+              pattern,
+              path,
               MAX_FILES_RESULT
             )
-          )
-        end
+          elseif pattern then
+            header = string.format(
+              "Files matching pattern `%s` (max %d, newest first):",
+              pattern,
+              MAX_FILES_RESULT
+            )
+          elseif path then
+            header = string.format(
+              "Files in `%s` (max %d, newest first):",
+              path,
+              MAX_FILES_RESULT
+            )
+          else
+            header = string.format(
+              "Files in the current project (max %d, newest first):",
+              MAX_FILES_RESULT
+            )
+          end
+          table.insert(limited_files, 1, header)
 
-        local display_line = "Searched for files"
-        if pattern then
-          display_line = display_line .. " matching `" .. pattern .. "`"
-        end
-        if path then
-          display_line = display_line .. " in `" .. path .. "`"
-        end
+          if total_count > MAX_FILES_RESULT then
+            table.insert(
+              limited_files,
+              2,
+              string.format(
+                "Showing %d of %d files (limited to most recent %d)",
+                MAX_FILES_RESULT,
+                total_count,
+                MAX_FILES_RESULT
+              )
+            )
+          end
 
-        callback({
-          content = table.concat(limited_files, "\n"),
-          summary = display_line,
-          preview = preview,
-        })
-      end)
+          local display_line = "Explored "
+          if pattern then
+            display_line = display_line .. "`" .. pattern .. "`"
+          end
+          if path then
+            display_line = display_line .. "`" .. path .. "`"
+          end
+
+          callback({
+            content = table.concat(limited_files, "\n"),
+            summary = display_line,
+            preview = preview,
+          })
+        end
+      )
       if not ok then
         failed(tostring(err))
       end

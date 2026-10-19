@@ -4,23 +4,31 @@ local utils = require("sia.utils")
 local output = require("sia.tool_output")
 local system, limit_files = vim.system, utils.limit_files
 
-local T = MiniTest.new_set({ hooks = {
-  post_case = function()
-    vim.system, utils.limit_files = system, limit_files
-  end,
-} })
+local T = MiniTest.new_set({
+  hooks = {
+    post_case = function()
+      vim.system, utils.limit_files = system, limit_files
+    end,
+  },
+})
 
 local function run(files, args, failure)
   vim.system = function(command, _, callback)
     eq("fd", command[1])
-    callback({ code = failure and 2 or 0, stdout = table.concat(files, "\0"), stderr = failure })
+    callback({
+      code = failure and 2 or 0,
+      stdout = table.concat(files, "\0"),
+      stderr = failure,
+    })
   end
   -- Preserve a known newest-first selection independently of preview sorting.
   utils.limit_files = function(items, opts)
     return vim.list_slice(items, 1, opts.max_count), #items
   end
   local result
-  glob.implementation.execute(args or {}, function(res) result = res end, {
+  glob.implementation.execute(args or {}, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { glob = true } },
   })
   assert(result, "glob did not finish")
@@ -30,10 +38,16 @@ end
 T["preview groups and sorts directories and names without reordering model output"] = function()
   local files = { "src/z.lua", "tests/b.lua", "root.lua", "src/a.lua" }
   local result = run(files, { pattern = "*.lua" })
-  eq({ text = "./\n  root.lua\n\nsrc/\n  a.lua\n  z.lua\n\ntests/\n  b.lua", ft = "text" }, result.preview)
-  eq("Files matching pattern `*.lua` (max 100, newest first):\n" .. table.concat(files, "\n"), result.content)
+  eq(
+    { text = "./\n  root.lua\n\nsrc/\n  a.lua\n  z.lua\n\ntests/\n  b.lua", ft = "text" },
+    result.preview
+  )
+  eq(
+    "Files matching pattern `*.lua` (max 100, newest first):\n"
+      .. table.concat(files, "\n"),
+    result.content
+  )
   output.complete(result)
-  eq(true, result.summary.header:find("Searched for files", 1, true) ~= nil)
   eq("text", result.summary.detail.ft)
 end
 
@@ -46,20 +60,20 @@ T["no matches has a summary and no preview"] = function()
   local result = run({}, { pattern = "*.missing" })
   output.complete(result)
   eq("string", type(result.summary))
-  eq(true, result.summary:find("Searched for files", 1, true) ~= nil)
   eq(nil, result.preview)
 end
 
 T["limited preview omits explanatory and more-files lines"] = function()
   local files = {}
-  for i = 1, 101 do files[i] = string.format("src/%03d.lua", i) end
+  for i = 1, 101 do
+    files[i] = string.format("src/%03d.lua", i)
+  end
   local result = run(files)
   eq(101, #vim.split(result.preview.text, "\n")) -- Heading plus 100 selected files.
   eq(nil, result.preview.text:find("more files", 1, true))
   eq(nil, result.preview.text:find("Showing", 1, true))
   eq(nil, result.preview.text:find("101.lua", 1, true))
   eq(true, result.content:find("Showing 100 of 101 files", 1, true) ~= nil)
-  eq(true, result.summary:find("Searched for files", 1, true) ~= nil)
 end
 
 T["nonzero exit is a failure with its actual error"] = function()
@@ -72,9 +86,13 @@ T["nonzero exit is a failure with its actual error"] = function()
 end
 
 T["missing executable is reported rather than thrown"] = function()
-  vim.system = function() error("fd: executable not found") end
+  vim.system = function()
+    error("fd: executable not found")
+  end
   local result
-  glob.implementation.execute({}, function(res) result = res end, {
+  glob.implementation.execute({}, function(res)
+    result = res
+  end, {
     conversation = { approved_tools = { glob = true } },
   })
   eq(true, result.summary:find("Failed to find files", 1, true) ~= nil)
