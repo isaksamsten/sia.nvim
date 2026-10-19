@@ -172,12 +172,18 @@ function AssistantTurnRenderer:update_tool_blocks(statuses)
           position[1] + self.tool_block_line_count
         )
         vim.bo[self.buf].modifiable = true
+        local restore_from, replacement = saved.line, saved.lines
+        if saved.column > 0 then
+          -- The tool block added a newline after existing prose. Delete only
+          -- those added rows so extmarks on the prose (including its dot) survive.
+          restore_from, replacement = saved.line + 1, {}
+        end
         vim.api.nvim_buf_set_lines(
           self.buf,
-          saved.line,
+          restore_from,
           position[1] + self.tool_block_line_count,
           false,
-          saved.lines
+          replacement
         )
         self.canvas:refresh_folds()
       end

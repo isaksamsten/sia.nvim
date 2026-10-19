@@ -1546,6 +1546,36 @@ T["strategy.chat"]["assistant marker appears once while streaming and follows la
   ChatStrategy.remove(strategy.buf)
 end
 
+T["strategy.chat"]["assistant marker survives tools before and after streamed prose"] = function()
+  vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
+  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  conversation:add_system_message("Ok")
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy:on_request_start()
+  strategy:on_stream_start()
+  strategy:on_tool_results({ {
+    key = "search", name = "grep", status = "done", actions = {},
+    summary = { header = "Searched for pattern in file", detail = { text = "matching line" } },
+  } })
+  strategy:on_stream_start()
+  strategy:on_stream({ content = "I'll hide failed file-read and search summaries." })
+  eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
+    assistant_markers(strategy.buf)))
+  for _ = 1, 2 do
+    strategy:on_tool_status({ { key = "edit", name = "edit", status = "running", summary = "Editing file..." } })
+    strategy:on_tool_status({ { key = "edit", name = "edit", status = "running", summary = false } })
+    eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
+      assistant_markers(strategy.buf)))
+  end
+  strategy:on_tool_results({ {
+    key = "edit", name = "edit", status = "done", actions = {},
+    summary = { header = "Edited file", detail = { text = "-old\n+new", ft = "diff" } },
+  } })
+  eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
+    assistant_markers(strategy.buf)))
+  ChatStrategy.remove(strategy.buf)
+end
+
 T["strategy.chat"]["redraw marks assistant blocks but not user messages or tool summaries"] = function()
   local conversation = Conversation.new({
     model = require("sia.model").resolve("openai/gpt-4.1"),
