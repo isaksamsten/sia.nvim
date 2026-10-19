@@ -1,5 +1,5 @@
 *sia.txt*
-                            For Neovim >= 0.11    Last change: 2026 October 18
+                            For Neovim >= 0.11    Last change: 2026 October 19
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -41,6 +41,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Full Settings Reference             |sia-settings-full-settings-reference|
   - Context Management                       |sia-settings-context-management|
 8. Models and Providers                             |sia-models-and-providers|
+  - Model Roles and Tiers     |sia-models-and-providers-model-roles-and-tiers|
   - Provider Registry             |sia-models-and-providers-provider-registry|
   - Overriding Model Parameters|sia-models-and-providers-overriding-model-parameters|
   - Cost Tracking                     |sia-models-and-providers-cost-tracking|
@@ -862,15 +863,15 @@ Inside a chat window (`ft=sia`), you can bind these navigation mappings:
     }
 <
 
-
-Reasoning and tool details are folded by default. Use Neovim's zo to open the
-fold under the cursor and zc to close it. Reasoning stays as ordinary Markdown
-in the buffer; fold ranges are tracked separately from the text. Collapsed
-reasoning previews render inline bold, emphasis, code, and links using the
-markdown_inline Tree-sitter parser, with a plain-text fallback if unavailable.
-The preview may be a heading or a sentence; it uses the first line of reasoning.
-Reasoning uses the same dot marker as assistant replies and sits directly above
-the following tool output or reply, without an extra separator row.
+Reasoning and tool details are folded by default. Use Neovim’s `zo` to open
+the fold under the cursor and `zc` to close it. Reasoning stays as ordinary
+Markdown in the buffer; fold ranges are tracked separately from the text.
+Collapsed reasoning previews render inline bold, emphasis, code, and links
+using the `markdown_inline` Tree-sitter parser, with a plain-text fallback if
+unavailable. The preview may be a heading or a sentence; it uses the first line
+of reasoning. Reasoning uses the same dot marker as assistant replies and sits
+directly above the following tool output or reply, without an extra separator
+row.
 
 
 TOOL APPROVAL KEYBINDINGS          *sia-keybindings-tool-approval-keybindings*
@@ -1019,9 +1020,8 @@ global behavior. A project can still override the enabled list in
 
 `tool_verifier` applies globally to tools that provide a verifier prompt. It
 uses `model.verify.mini` (falling back to `model.default.mini`) for model
-selection. See Tool Confirmation
-|sia-tool-confirmation-llm-tool-verification| for risk thresholds, semantic
-action approvals, and persistence.
+selection. See Tool Confirmation |sia-tool-confirmation-llm-tool-verification|
+for risk thresholds, semantic action approvals, and persistence.
 
 
 CONTEXT MANAGEMENT                           *sia-settings-context-management*
@@ -1130,11 +1130,10 @@ Sia supports multiple LLM providers. Each model is identified by a
 `copilot/claude-sonnet-4.6`).
 
 
-MODEL ROLES AND TIERS ~
+MODEL ROLES AND TIERS         *sia-models-and-providers-model-roles-and-tiers*
 
-`settings.model` chooses models by role and tier. Roles are user-defined
-names, like `vision` or `coding`; tiers are always `mini`, `default`, and
-`pro`.
+`settings.model` chooses models by role and tier. Roles are user-defined names,
+like `vision` or `coding`; tiers are always `mini`, `default`, and `pro`.
 
 The minimal configuration is a model name:
 
@@ -1142,8 +1141,8 @@ The minimal configuration is a model name:
     require("sia").setup({ settings = { model = "openai/gpt-5.2" } })
 <
 
-A string selects that model for every tier of the `default` role. Expand
-roles into tier tables when you need separate choices:
+A string selects that model for every tier of the `default` role. Expand roles
+into tier tables when you need separate choices:
 
 >lua
     require("sia").setup({
@@ -1164,50 +1163,44 @@ roles into tier tables when you need separate choices:
 <
 
 Model leaves accept a name, a project alias, or `{ name = "...", options =
-{...} }`. The concrete `{ name, options }` format also works as shorthand
-for an entire role.
+{...} }`. The concrete `{ name, options }` format also works as shorthand for
+an entire role.
 
-Selection falls back from the requested `role.tier` to `default.tier`, then
-to `default.default`. Unknown roles use this fallback; unknown tiers are
-errors. The effective configuration must contain `default.default` (provided
-by Sia's built-in defaults). Missing tiers remain unset until selection, so
-a role table containing only `default` does not implicitly fill its `mini`
-or `pro` tiers. Use a string to assign the same model to every tier in a
-role.
+Selection falls back from the requested `role.tier` to `default.tier`, then to
+`default.default`. Unknown roles use this fallback; unknown tiers are errors.
+The effective configuration must contain `default.default` (provided by Sia’s
+built-in defaults). Missing tiers remain unset until selection, so a role table
+containing only `default` does not implicitly fill its `mini` or `pro` tiers.
+Use a string to assign the same model to every tier in a role.
 
 Project configuration uses the same `model` structure and overrides global
 configuration per role and tier. Replacing a model also replaces its inline
 options. A string overrides all tiers of that role while preserving other
 roles.
 
-Ordinary conversations use `default.default`. Internal tasks request these roles
-at the `mini` tier:
+Ordinary conversations use `default.default`. Internal tasks request these
+roles at the `mini` tier:
 
-- `summarize`: generating conversation titles.
-- `compact`: summarizing conversation history during compaction.
-- `verify`: assessing tool operations.
-
+  Role        Used for
+  ----------- ----------------------------------------------------
+  summarize   Generating conversation titles
+  compact     Summarizing conversation history during compaction
+  verify      Assessing tool operations
 These roles need no configuration: each falls back to `default.mini`, then
-`default.default`. Override them independently, for example with
-`model.compact = "openai/gpt-4.1"` or
-`model.verify = { mini = "openai/gpt-5.2" }`. Roles remain open to custom names.
+`default.default`. Override them independently, for example with `model.compact
+= "openai/gpt-4.1"` or `model.verify = { mini = "openai/gpt-5.2" }`.
 
 Agents without an explicit selection use `default.mini`. Agents can request
-another role and tier in their frontmatter; see Agents. Capability requirements
-are checked on the selected model, including when selection falls back.
+another role and tier in their frontmatter; see |sia-agents|. Capability
+requirements are checked on the selected model, including when selection falls
+back.
 
-Actions select roles and tiers through
-`action.model = { role = "...", tier = "..." }`. Their default is
-`default.default`. Actions and agents also accept a role name as shorthand:
-`model = "coding"` selects `coding.default`, regardless of the caller's
-omitted-tier default. The bundled commit action requests `commit.default`;
-configure `model.commit` to override its model independently.
+Actions select roles and tiers through `action.model = { role = "...", tier =
+"..." }`. Their default is `default.default`. Actions and agents also accept a
+role name as shorthand: `model = "coding"` selects `coding.default`, regardless
+of the caller’s omitted-tier default. The bundled commit action requests
+`commit.default`; configure `model.commit` to override its model independently.
 
-Invocation model overrides (`:Sia -m`) continue to select concrete models or
-aliases and take precedence over the action's selection.
-
-`fast_model` and `plan_model` have been removed. Configure
-`model.default.mini` and `model.default.pro` instead.
 
 PROVIDER REGISTRY                 *sia-models-and-providers-provider-registry*
 
@@ -1700,10 +1693,11 @@ AVAILABLE OPTIONS                *sia-project-configuration-available-options*
 
 MODEL OVERRIDES ~
 
-- **model** — override model roles and tiers. Accepts a model name for all
-    default tiers, or a table mapping roles to model names or tier tables.
-    Model leaves also accept { "name": "...", "options": {...} }.
-    Local tiers override global tiers; other roles and tiers are preserved.
+- **model** — override |sia-models-and-providers-model-roles-and-tiers|.
+    Accepts a model name for all default tiers, or an object mapping role names to
+    model names or tier objects. Model leaves also accept `{ "name": "...",
+    "options": {...} }`. Local tiers override global tiers; other roles and tiers
+    are preserved.
 - **models** — override parameters for specific models, organized by provider:
 
 >json
@@ -1828,9 +1822,9 @@ globally:
     })
 <
 
-Verification uses `model.verify.mini`, falling back to `model.default.mini`
-and then `model.default.default`. Configure the model through `settings.model`,
-for example `model = { verify = "openai/gpt-4.1" }`.
+Verification uses `model.verify.mini`, falling back to `model.default.mini` and
+then `model.default.default`. Configure the model through `settings.model`, for
+example `model = { verify = "openai/gpt-4.1" }`.
 
 The verifier reports the operation’s intrinsic risk as `minimal`, `low`,
 `medium`, or `high`, together with a reason and a concise description of the
@@ -2337,7 +2331,7 @@ Actions select a configured role and tier rather than a concrete model name:
     model = { role = "coding", tier = "pro" }
 <
 
-A string is shorthand for the named role's default tier:
+A string is shorthand for the named role’s `default` tier:
 
 >lua
     model = "default" -- default.default
@@ -2348,17 +2342,20 @@ A string is shorthand for the named role's default tier:
 Strings always name roles here; they are never resolved as concrete models or
 aliases. Use a table to select another tier.
 
-Both fields are optional. Omitted role uses default; omitted tier uses default.
-Omitting model therefore selects default.default. Missing roles and tiers
-follow the standard fallback rules. Concrete model names and { name, options }
-tables are not accepted in actions.
+Both fields are optional. Omitted `role` uses `default`; omitted `tier` uses
+`default`. Omitting `model` therefore selects `default.default`. Missing roles
+and tiers follow the standard fallback rules
+|sia-models-and-providers-model-roles-and-tiers|. Concrete model names and `{
+name, options }` tables are not accepted in actions.
 
-The bundled commit action requests commit.default, which falls back to the
-main model when unconfigured. Set settings.model.commit = "..." to choose a
-model for it, or pass a role/tier selection to require("sia.actions").commit().
+The bundled commit action requests `commit.default`, which falls back to the
+main model when unconfigured. Set `settings.model.commit = "..."` to choose a
+model for it, or pass a role/tier selection to
+`require("sia.actions").commit()`.
 
-:Sia -m <model> remains a concrete model or alias override for one invocation
-and takes precedence over the action's role and tier.
+`:Sia -m <model>` remains a concrete model or alias override for one invocation
+and takes precedence over the action’s role and tier.
+
 
 MODE-SPECIFIC OPTIONS ~
 
@@ -2755,33 +2752,35 @@ approval before each use.
 
 FRONTMATTER FIELDS ~
 
-  ------------------------------------------------------------------------------------
-  Field         Required   Default      Description
-  ------------- ---------- ------------ ----------------------------------------------
-  description   yes        —            Shown to the AI when listing available agents
+  ---------------------------------------------------------------------------------
+  Field         Required   Default   Description
+  ------------- ---------- --------- ----------------------------------------------
+  description   yes        —         Shown to the AI when listing available agents
 
-  tools         yes        —            Array of tool names; append ! to auto-approve
+  tools         yes        —         Array of tool names; append ! to auto-approve
 
-  model         no         default /    Select a role name or role and tier
-                           mini
+  model         no         default   Role name or model selection with role and
+                           role,     tier
+                           mini tier
 
-  requires      no         —            Required capabilities, such as image
+  requires      no         —         List of capabilities the selected model must
+                                     support, such as image
 
-  interactive   no         false        Open the agent as an interactive chat
-                                        automatically when it starts
-  ------------------------------------------------------------------------------------
+  interactive   no         false     Open the agent as an interactive chat
+                                     automatically when it starts
+  ---------------------------------------------------------------------------------
 
 MODEL SELECTION ~
 
 Agents request a user-configured role and one of the fixed tiers: `mini`,
 `default`, or `pro`. Omitted `role` defaults to `default`; omitted `tier`
-defaults to `mini`. A string is shorthand for the named role's default tier:
-`model: vision` means { role = "vision", tier = "default" }.
-This differs from omitting model, which still selects default.mini.
-Strings always name roles, never concrete models or aliases.
+defaults to `mini`. A string is shorthand for the named role’s **default**
+tier: `model: vision` means `{ role = "vision", tier = "default" }`. This
+differs from omitting `model`, which still selects `default.mini`. Strings
+always name roles, never concrete models or aliases.
 
-Actions use the same shorthand, but their omitted tier defaults to default
-rather than mini. :Sia -m still accepts a concrete model or alias.
+Actions use the same shorthand, but their omitted tier defaults to `default`
+rather than `mini`. `:Sia -m` still accepts a concrete model or alias.
 
 For example, an image description agent can request a vision model:
 
@@ -2793,10 +2792,12 @@ For example, an image description agent can request a vision model:
       - image
 <
 
-Configure it with `settings.model.vision = "openai/gpt-5.2"`, or a tier
-table. Missing roles and tiers use the model fallback rules. If the selected
-model lacks a required capability, launching the agent fails with an error
-identifying the model and capability, before making a request.
+Configure it with `settings.model.vision = "openai/gpt-5.2"`, or a tier table.
+Missing roles and tiers use the model fallback rules
+|sia-models-and-providers-model-roles-and-tiers|. If the selected model lacks a
+required capability, launching the agent fails with an error identifying the
+model and capability, before making a request.
+
 
 NAMING ~
 
@@ -3397,23 +3398,34 @@ CHANGE REVIEW ~
 
 CHAT UI ~
 
-  Group                Default Link   Description
-  -------------------- -------------- -------------------------------------
-  SiaAssistantMarker   Normal         Small dot before assistant text
-  SiaUser              DiffChange     User queries and > markers
-  SiaToolResult        Bold           Tool result summaries
-  SiaFolded            Italic         Collapsed reasoning and tool output
-  SiaProgress          NonText        Progress indicators
-  SiaModel             Comment        Footer model name
-  SiaUsage             Comment        Footer elapsed time
-  SiaStatus            Comment        Footer turn hash
+  ------------------------------------------------------------------------
+  Group                Default Link     Description
+  -------------------- ---------------- ----------------------------------
+  SiaAssistantMarker   Normal           Small dot before assistant text
 
+  SiaUser              DiffChange       User queries and > markers
+
+  SiaToolResult        Bold             Tool result summaries
+
+  SiaReasoning         None             Reasoning background, including
+                                        collapsed preview text
+
+  SiaFolded            Italic           Collapsed reasoning and tool
+                                        output
+
+  SiaProgress          NonText          Progress indicators
+
+  SiaModel             Comment          Footer model name
+
+  SiaUsage             Comment          Footer elapsed time
+
+  SiaStatus            Comment          Footer turn hash
+  ------------------------------------------------------------------------
 Customize collapsed chat output without changing the global `Folded` highlight:
 
 >lua
     vim.api.nvim_set_hl(0, "SiaFolded", { fg = "#888888", italic = true })
 <
-
 
 Set a reasoning background while preserving Markdown syntax highlighting:
 
@@ -3422,8 +3434,8 @@ Set a reasoning background while preserving Markdown syntax highlighting:
 <
 
 The background covers expanded reasoning lines to the window edge. Collapsed
-reasoning preview text combines SiaReasoning with SiaFolded and its Markdown
-formatting; tool-detail folds continue to use SiaFolded.
+reasoning preview text combines `SiaReasoning` with `SiaFolded` and its
+Markdown formatting; tool-detail folds continue to use `SiaFolded`.
 
 
 TOOL APPROVAL ~
