@@ -290,6 +290,7 @@ T["sia.tools.agent"]["wait preserves blocking behavior without user input"] = fu
 
   eq(true, result.content:find("Agent 1 %(code/review%) replied:", 1) ~= nil)
   eq(true, result.content:find("Review complete", 1, true) ~= nil)
+  eq({ header = "Agent code/review replied", detail = { text = "Review complete", ft = "markdown" } }, result.summary)
 end
 
 T["sia.tools.agent"]["wait returns failed agent error"] = function()
@@ -484,6 +485,7 @@ T["sia.tools.agent"]["wait without id returns first pending agent"] = function()
   local result = child.lua_get("_G.result")
   eq(true, result.content:find("Agent 2 %(writer%) replied:", 1) ~= nil)
   eq(true, result.content:find("Done writing", 1, true) ~= nil)
+  eq({ text = "Done writing", ft = "markdown" }, result.summary.detail)
 end
 
 T["sia.tools.agent"]["wait without id returns first failed agent"] = function()
@@ -684,14 +686,20 @@ T["sia.tools.agent"]["settled status remains visible without changing model cont
   child.lua([[
     _G.settled_statuses = {}
     for _, status in ipairs({ "pending", "failed", "cancelled" }) do
-      local agent = { name = "review", status = status, get_preview = function() return "model status" end }
+      local agent = {
+        name = "review", status = status, get_preview = function() return "model status" end,
+        conversation = { get_last_assistant_content = function() return "**Review complete**" end },
+      }
       require("sia.tools.agent").implementation.execute({ command = "status", id = 1 }, function(res)
         _G.settled_statuses[status] = res
       end, { conversation = { approved_tools = { agent = true }, agent_runtime = { get = function() return agent end } } })
     end
   ]])
   local results = child.lua_get("_G.settled_statuses")
-  eq("Agent review replied", results.pending.summary)
+  eq({
+    header = "Agent review replied",
+    detail = { text = "**Review complete**", ft = "markdown" },
+  }, results.pending.summary)
   eq("Agent review failed", results.failed.summary)
   eq("Agent review cancelled", results.cancelled.summary)
   for _, result in pairs(results) do

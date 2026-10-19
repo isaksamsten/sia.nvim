@@ -31,6 +31,17 @@ local function waiting_yield_message(agent)
   )
 end
 
+--- Keep the reply preview separate from model-facing agent instructions.
+--- @param agent sia.agents.Agent
+--- @param reply string?
+--- @return sia.ToolSummaryParts
+local function reply_summary(agent, reply)
+  return {
+    header = string.format("Agent %s replied", agent.name),
+    detail = reply and reply ~= "" and { text = reply, ft = "markdown" } or nil,
+  }
+end
+
 --- @param agent sia.agents.Agent
 --- @param callback fun(result:sia.ToolResult)
 local function return_pending_result(agent, callback)
@@ -47,7 +58,7 @@ local function return_pending_result(agent, callback)
   agent.status = "idle"
   callback({
     content = table.concat(content, "\n"),
-    summary = string.format("Agent %s replied", agent.name),
+    summary = reply_summary(agent, assistant_content),
   })
 end
 
@@ -394,7 +405,7 @@ When NOT to use the agent tool:
 
     local summary = false
     if agent.status == "pending" then
-      summary = string.format("Agent %s replied", agent.name)
+      summary = reply_summary(agent, agent.conversation:get_last_assistant_content())
     elseif agent.status == "failed" then
       summary = string.format("Agent %s failed", agent.name)
     elseif agent.status == "cancelled" then
