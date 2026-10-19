@@ -1,10 +1,9 @@
 local hashline = require("sia.hashline")
 local M = {}
---- Build tagged context and the region that tracks its freshness.
+--- Build tagged context from a text snapshot.
 --- Recovery callers can cap bytes as well as lines without marking omitted rows seen.
-function M.build(conversation, path, buf, opts)
+function M.build_lines(conversation, path, lines, opts)
   opts = opts or {}
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local first = math.max(1, math.min(#lines, opts.first or 1))
   local last = math.min(#lines, first + (opts.limit or 2000) - 1)
   if opts.max_bytes then
@@ -18,7 +17,8 @@ function M.build(conversation, path, buf, opts)
       bytes = bytes + size
     end
   end
-  local rows = hashline.view(conversation, path, lines, first, last, opts.max_length or 2000)
+  local rows =
+    hashline.view(conversation, path, lines, first, last, opts.max_length or 2000)
   if opts.elisions then
     if first > 1 then
       table.insert(rows, 2, "…")
@@ -27,6 +27,23 @@ function M.build(conversation, path, buf, opts)
       rows[#rows + 1] = "…"
     end
   end
+  return {
+    content = table.concat(rows, "\n"),
+    first = first,
+    last = last,
+  }
+end
+
+--- Build buffer context with a region that tracks its freshness.
+function M.build(conversation, path, buf, opts)
+  opts = opts or {}
+  local context = M.build_lines(
+    conversation,
+    path,
+    vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+    opts
+  )
+  local first, last = context.first, context.last
   local span = first == last and ("line " .. first)
     or string.format("lines %d-%d", first, last)
   local pos
@@ -34,7 +51,7 @@ function M.build(conversation, path, buf, opts)
     pos = { first, last }
   end
   return {
-    content = table.concat(rows, "\n"),
+    content = context.content,
     first = first,
     last = last,
     region = {
@@ -42,7 +59,11 @@ function M.build(conversation, path, buf, opts)
       pos = pos,
       idempotent = true,
       stale = {
-        content = string.format("Previously viewed %s from %s - file was modified, use view to get current content", span, path),
+        content = string.format(
+          "Previously viewed %s from %s - file was modified, use view to get current content",
+          span,
+          path
+        ),
         input = opts.stale_input,
       },
     },
