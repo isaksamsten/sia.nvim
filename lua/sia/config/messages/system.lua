@@ -241,8 +241,7 @@ Apply them when the situation matches. Use the skills tool to read the skill.
 - {{ skill.name }}: {{ skill.description }} (basedir: {{ skill.dir }}, file: SKILL.md)
 {% end %}
 {% end %}
-
-{% if has_tool('agent') %}
+{% if has_tool('agent') and #agents > 0 %}
 You have access to these agents that can be started with the `agent` tool.
 {% for agent in agents %}
 - {{agent.name}}: {{agent.description}}
@@ -251,7 +250,6 @@ You have access to these agents that can be started with the `agent` tool.
 {% end %}
 {% end %}
 {% end %}
-
 Guidelines:
 {% if has_tool('bash') and not has_tool('grep') and not has_tool('glob') %}
 - Use bash for file operations like ls, rg, find
