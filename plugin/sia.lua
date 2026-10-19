@@ -221,16 +221,10 @@ end, {
 
     -- Determine the grammar position before the token being completed. The
     -- parser extracts action and mode tokens rather than keeping them positional.
-    local parsed_with_lead = parsed
     if ArgLead ~= "" then
       table.remove(args_before)
     end
     parsed = SIA_PARSER:parse(args_before)
-    for name, value in pairs(parsed_with_lead.flags) do
-      if parsed.flags[name] ~= value then
-        return {}
-      end
-    end
 
     if
       vim.startswith(ArgLead, "/")
