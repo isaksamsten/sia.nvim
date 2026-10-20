@@ -44,7 +44,7 @@ local function run(args)
   assert(result, "grep did not finish")
   if not result.ephemeral then
     eq(
-      string.format("Searched for `%s` in `%s`", args.pattern, args.path or "."),
+      string.format("Searched `%s` in `%s`", args.pattern, args.path or "."),
       result.summary
     )
   end

@@ -49,7 +49,6 @@ T["view provides tag and edits save to disk"] = function()
   eq(vim.api.nvim_buf_get_lines(buf, 0, -1, false), { "one", "changed" })
   local rejected = execute("CUT 1.=1")
   eq(rejected.ephemeral, nil)
-  eq(rejected.summary.header, "Failed to edit " .. path)
   require("sia.tool_output").complete(rejected)
   eq(type(rejected.summary.detail), "table")
   eq(type(rejected.region), "table")
@@ -73,10 +72,13 @@ T["unsaved buffer changes return recovery context"] = function()
 end
 T["saved external changes return fresh context and reset old read coverage"] = function()
   local lines = {}
-  for i = 1, 100 do lines[i] = "line " .. i end
+  for i = 1, 100 do
+    lines[i] = "line " .. i
+  end
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.fn.writefile(lines, path)
-  local original_tag = require("sia.hashline").view(conversation, path, lines, 1, 100)[1]:match("#(%x+)%]")
+  local original_tag =
+    require("sia.hashline").view(conversation, path, lines, 1, 100)[1]:match("#(%x+)%]")
   lines[20] = "partner changed this"
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.fn.writefile(lines, path)
@@ -130,7 +132,9 @@ T["unknown snapshots return current context without applying the request"] = fun
 end
 T["recovery previews bound bytes and leave omitted and truncated lines unseen"] = function()
   local lines = {}
-  for i = 1, 100 do lines[i] = string.rep("x", 2500) end
+  for i = 1, 100 do
+    lines[i] = string.rep("x", 2500)
+  end
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.fn.writefile(lines, path)
   local result = execute("CUT 80.=80")

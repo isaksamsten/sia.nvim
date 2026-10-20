@@ -81,10 +81,6 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
   local function reject_snapshot(reasons)
     local context = file_context.recovery(conversation, path, buf, args.edits)
     callback({
-      summary = {
-        header = "Failed to edit " .. args.target_file,
-        detail = { text = table.concat(reasons, " "), ft = "text" },
-      },
       content = "Edit rejected: "
         .. table.concat(reasons, " ")
         .. " No changes applied. Old line numbers may have shifted."
