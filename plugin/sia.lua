@@ -1,3 +1,14 @@
+vim.api.nvim_create_user_command("SiaConfig", function(args)
+  require("sia.config.command").run(args)
+end, {
+  nargs = "*",
+  bang = true,
+  complete = function(lead, line, cursor)
+    return require("sia.config.command").complete(lead, line, cursor)
+  end,
+  desc = "Set project-local model and context options",
+})
+
 --- @param invocation sia.Invocation
 --- @return sia.config.ActionMode
 local function get_action_mode(invocation)

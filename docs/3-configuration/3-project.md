@@ -3,6 +3,45 @@
 You can customize Sia for a specific project by creating `.sia/config.json` in
 the project root. Local settings override global ones.
 
+## Setting options from Neovim
+
+Use `:SiaConfig` to inspect effective model and context settings, or provide a
+dot-separated path and a scalar value to save a project override:
+
+```vim
+:SiaConfig model codex/gpt-6-sol
+:SiaConfig model.coding.mini codex/gpt-6-luna
+:SiaConfig model.default.default.options.reasoning.effort high
+:SiaConfig context.tools.max_calls 50
+:SiaConfig context.tools.strip_inputs false
+```
+
+A path without a value displays its effective value. `:SiaConfig! <path>` removes
+the generated override. Model names may be quoted as JSON strings. Model option
+values accept strings, numbers, and booleans. Context paths support tool limits,
+input stripping, pruning fractions, and compaction fractions.
+
+Changes are written to `.sia/auto.json`. Model and context precedence is global
+settings, then `config.json`, then `auto.json`. Options-only overrides require
+an inherited model at that exact role/tier. `SiaConfig model <name>` sets all
+tiers of the default role.
+
+### Skills and agents
+
+```vim
+:SiaConfig skill +my-skill
+:SiaConfig skill -my-skill
+:SiaConfig! skill
+:SiaConfig agent +code/review
+```
+
+Skills and agents combine the lists in `config.json` and `auto.json`, without
+duplicates. Adding an enabled entry is a no-op. Removing an entry, or clearing
+the list with `!`, only removes generated entries from `auto.json` so that
+handwritten entries remain enabled. Use `skill` or `agent` without arguments to
+inspect the effective list. Both support the same add, remove, and clear
+syntax.
+
 ## Example
 
 ```json

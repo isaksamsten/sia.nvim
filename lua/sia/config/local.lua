@@ -753,6 +753,34 @@ local function merge_auto_permissions(user_json, auto_json)
   return merged
 end
 
+local function resolve_auto(user_json, auto_json)
+  local merged = merge_auto_permissions(user_json, auto_json)
+  for _, key in ipairs({ "skills", "agents" }) do
+    if auto_json[key] then
+      local values = vim.deepcopy(merged[key] or {})
+      for _, name in ipairs(auto_json[key]) do
+        if not vim.tbl_contains(values, name) then
+          values[#values + 1] = name
+        end
+      end
+      merged[key] = values
+    end
+  end
+  if auto_json.context then
+    merged.context =
+      vim.tbl_deep_extend("force", {}, merged.context or {}, auto_json.context)
+  end
+  if auto_json.model then
+    local models = require("sia.config.model")
+    local base = models.merge(
+      models.normalize(raw_options().settings.model),
+      models.normalize(merged.model)
+    )
+    merged.model = models.merge_auto(base, auto_json.model)
+  end
+  return merged
+end
+
 --- @param mutator fun(json: table)
 --- @return table?, string?
 function M.update_auto_config(mutator)
@@ -761,13 +789,29 @@ function M.update_auto_config(mutator)
   local json = {}
   local stat = vim.uv.fs_stat(auto_path)
   if stat then
-    local existing, _ = read_local_config_file(auto_path)
-    json = existing or {}
+    local existing, err = read_local_config_file(auto_path)
+    if not existing then
+      return nil, err
+    end
+    json = existing
   end
 
   local updated = vim.deepcopy(json)
   mutator(updated)
-  local ok, err = validate_local_config_json(vim.deepcopy(updated), auto_path)
+  local user_path = local_config_path(root)
+  local user_json = {}
+  if vim.uv.fs_stat(user_path) then
+    local existing, read_err = read_local_config_file(user_path)
+    if not existing then
+      return nil, read_err
+    end
+    user_json = existing
+  end
+  local resolved_ok, resolved = pcall(resolve_auto, user_json, updated)
+  if not resolved_ok then
+    return nil, tostring(resolved)
+  end
+  local ok, err = validate_local_config_json(vim.deepcopy(resolved), auto_path)
   if not ok then
     return nil, err
   end
@@ -826,7 +870,12 @@ function M.get_local_config()
 
   local merged
   if auto_json then
-    merged = merge_auto_permissions(user_json, auto_json)
+    local ok, result = pcall(resolve_auto, user_json, auto_json)
+    if not ok then
+      vim.notify("sia: " .. tostring(result), vim.log.levels.ERROR)
+      return nil
+    end
+    merged = result
   else
     merged = user_json or {}
   end

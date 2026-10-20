@@ -19,6 +19,40 @@ local function with_config(settings, local_config, fn)
   end
 end
 
+T["generated model options merge only within the same model"] = function()
+  local base = model_config.normalize({
+    default = {
+      default = {
+        name = "openai/gpt-4.1",
+        options = {
+          reasoning = { effort = "medium", summary = "auto" },
+          temperature = 0.5,
+        },
+      },
+    },
+  })
+  local merged = model_config.merge_auto(
+    base,
+    { default = { default = {
+      options = { reasoning = { effort = "high" } },
+    } } }
+  )
+  eq(merged.default.default.name, "openai/gpt-4.1")
+  eq(merged.default.default.options.reasoning, { effort = "high", summary = "auto" })
+  eq(base.default.default.options.reasoning.effort, "medium")
+  merged = model_config.merge_auto(
+    base,
+    { default = { default = { name = "openai/gpt-5.2" } } }
+  )
+  eq(merged.default.default.options, nil)
+  fails(function()
+    model_config.merge_auto(
+      {},
+      { coding = { mini = { options = { temperature = 0.5 } } } }
+    )
+  end)
+end
+
 T["string shorthands cover every tier"] = function()
   local roles = model_config.normalize("openai/gpt-4.1")
   for tier in pairs(model_config.tiers) do

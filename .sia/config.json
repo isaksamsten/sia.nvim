@@ -7,7 +7,7 @@
     }
   },
   "skills": ["update-docs"],
-  "agents": ["code/review", "code/explore", "git/commit"],
+  "agents": ["code/review", "code/explore"],
   "permission": {
     "deny": {
       "bash": {

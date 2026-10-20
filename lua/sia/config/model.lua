@@ -97,6 +97,49 @@ function M.merge(base, overrides)
   return result
 end
 
+--- Apply generated overrides, allowing options-only model entries.
+function M.merge_auto(base, overrides)
+  local result = vim.deepcopy(base)
+  -- Resolve explicit names first so fallback does not depend on pairs order.
+  for role, tiers in pairs(overrides or {}) do
+    result[role] = result[role] or {}
+    for tier, entry in pairs(tiers) do
+      local name = type(entry) == "string" and entry
+        or (type(entry) == "table" and entry.name)
+      if name and (not result[role][tier] or result[role][tier].name ~= name) then
+        result[role][tier] = { name = name }
+      end
+    end
+  end
+  local fallback = vim.deepcopy(result.default or {})
+  for tier, entry in pairs((overrides or {}).default or {}) do
+    if type(entry) == "table" and fallback[tier] then
+      fallback[tier] = vim.tbl_deep_extend("force", {}, fallback[tier], entry)
+    end
+  end
+  for role, tiers in pairs(overrides or {}) do
+    result[role] = result[role] or {}
+    for tier, entry in pairs(tiers) do
+      if not M.tiers[tier] then
+        error("invalid model tier: " .. tostring(tier), 0)
+      end
+      local previous = result[role][tier] or fallback[tier] or fallback.default
+      if type(entry) == "string" then
+        entry = { name = entry }
+      end
+      if type(entry) ~= "table" then
+        error("model entry must be an object or name", 0)
+      end
+      if previous and (entry.name == nil or entry.name == previous.name) then
+        result[role][tier] = vim.tbl_deep_extend("force", {}, previous, entry)
+      else
+        result[role][tier] = vim.deepcopy(entry)
+      end
+    end
+  end
+  return M.normalize(result)
+end
+
 function M.validate_selection(selection, path)
   path = path or "model"
   if type(selection) == "string" then

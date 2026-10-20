@@ -1,12 +1,11 @@
 ---
 description: Explore a codebase to map entry points, call paths, and data flow with minimal noise, so another agent can implement changes without bloating context.
 tools:
-  - glob
-  - grep
-  - view
-  - lsp
+  - glob!
+  - grep!
+  - view!
+  - lsp!
 model: explore
-require_confirmation: false
 interactive: true
 ---
 

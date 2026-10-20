@@ -13,6 +13,12 @@ end
 
 T["conversation basics"] = MiniTest.new_set()
 
+T["conversation basics"]["empty workspace defaults to the current directory"] = function()
+  local conv = require("sia.conversation").new({ workspace = "", temporary = true })
+  eq(vim.fn.getcwd(), conv.workspace)
+  conv.tracker:destroy()
+end
+
 T["conversation basics"]["add_system_message adds system entry"] = function()
   local conv = require("sia.conversation").new({
     temporary = true,
