@@ -14,6 +14,32 @@ local eq = MiniTest.expect.equality
 
 T["sia.tools.agent"] = MiniTest.new_set()
 
+T["sia.tools.agent"]["start inherits workspace when omitted or empty"] = function()
+  child.lua([[
+    local registry = require("sia.agent.registry")
+    local original_get = registry.get
+    registry.get = function() return {} end
+    _G.workspaces = {}
+    for _, args in ipairs({ {}, { workspace = "" }, { workspace = "/tmp/other" } }) do
+      args.command, args.agent, args.message = "start", "test", "Inspect files"
+      require("sia.tools.agent").implementation.execute(args, function() end, {
+        conversation = {
+          workspace = "/tmp/parent",
+          approved_tools = { agent = true },
+          agent_runtime = {
+            spawn = function(_, _, _, opts)
+              table.insert(_G.workspaces, opts.workspace)
+              return { id = 1 }
+            end,
+          },
+        },
+      })
+    end
+    registry.get = original_get
+  ]])
+  eq({ "/tmp/parent", "/tmp/parent", "/tmp/other" }, child.lua_get("_G.workspaces"))
+end
+
 T["sia.tools.agent"]["start errors when agent parameter missing"] = function()
   child.lua([[
     local agent_tool = require("sia.tools.agent")

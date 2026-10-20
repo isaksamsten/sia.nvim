@@ -384,7 +384,7 @@ Conversation.pending_messages = {}
 --- @return sia.Conversation
 local function new_conversation(opts)
   local obj = setmetatable({}, Conversation)
-  obj.workspace = opts.workspace or vim.fn.getcwd()
+  obj.workspace = opts.workspace ~= "" and opts.workspace or vim.fn.getcwd()
   obj.model = opts.model
   obj.id = new_conversation_id()
   obj.name = string.format("**%d**", obj.id)

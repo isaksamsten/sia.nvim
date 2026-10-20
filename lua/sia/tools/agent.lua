@@ -282,7 +282,7 @@ When NOT to use the agent tool:
     opts.user_input(confirm_message, {
       on_accept = function()
         local agent, err = conversation.agent_runtime:spawn(args.agent, args.message, {
-          workspace = args.workspace,
+          workspace = args.workspace ~= "" and args.workspace or conversation.workspace,
           source = "tool",
         })
 

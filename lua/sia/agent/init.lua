@@ -109,7 +109,7 @@ local function create_conversation(agent_def, agent, workspace)
 
   local system_prompt = require("sia.template").render(
     table.concat(agent_def.system_prompt, "\n"),
-    { workspace = workspace }
+    { workspace = conversation.workspace }
   )
   conversation:add_system_message(system_prompt)
   conversation:add_user_message(agent.task)
