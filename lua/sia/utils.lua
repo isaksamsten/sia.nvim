@@ -186,7 +186,7 @@ function CommandParser:complete_flag(parsed, prefix, candidates)
   end
   for name, values in pairs(candidates) do
     if self._flags[name] then
-      local partial = prefix:match("%-" .. vim.pesc(name) .. "%s+([%w%-_/.]*)$")
+      local partial = prefix:match("%-" .. vim.pesc(name) .. "%s+(%S*)$")
       if partial then
         local filtered = vim.tbl_filter(function(v)
           return vim.startswith(v, partial)
