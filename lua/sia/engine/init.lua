@@ -15,6 +15,7 @@ local M = {}
 --- @field index integer
 --- @field name string?
 --- @field summary sia.ToolSummary?
+--- @field activity sia.ToolSummary? Action description, independent of result visibility.
 --- @field status "pending"|"running"|"done"
 --- @field actions table<string, boolean>?
 --- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
@@ -106,6 +107,7 @@ function M.execute_tools(tool_calls, conversation, opts)
       key = parsed.key,
       index = parsed.index,
       name = parsed.name,
+      activity = parsed.summary,
       summary = false,
       status = "pending",
     }
@@ -167,6 +169,7 @@ function M.execute_tools(tool_calls, conversation, opts)
             key = tool_results[i].tool.key,
             index = tool_results[i].tool.index,
             name = tool_results[i].tool.name,
+            activity = tool_results[i].tool.summary,
             summary = tool_results[i].result.summary,
             status = "done",
             actions = actions,

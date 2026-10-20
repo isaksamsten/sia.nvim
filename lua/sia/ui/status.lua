@@ -176,10 +176,17 @@ end
 --- @return sia.ui.RenderSpec
 local function render_agent(agent, runtime)
   local cfg = AGENT_STATUS[agent.status] or AGENT_STATUS.failed
+  local strategy = agent.view == "open" and agent.foreground or agent.background
+  local activity = agent.status == "running" and strategy and strategy.activity
+  local progress = activity and activity.message or agent.progress
 
   local suffix = ""
-  if agent.status == "running" and agent.progress and #agent.progress > 0 then
-    suffix = "· " .. agent.progress
+  if agent.status == "running" and progress and #progress > 0 then
+    suffix = "· " .. progress:gsub("\n", " ") .. " "
+  end
+
+  if agent.status == "running" and agent.started_at then
+    suffix = suffix .. format_duration(vim.uv.hrtime() / 1e9 - agent.started_at) .. " "
   end
 
   suffix = suffix
@@ -211,6 +218,20 @@ local function render_agent(agent, runtime)
         truncate_preview(agent.conversation:get_last_user_content(), 200)
       if user_preview then
         d:detail("Last prompt", user_preview)
+      end
+
+      if activity then
+        d:detail("Activity", activity.message)
+        if activity.total > 0 then
+          d:detail("Tools", string.format("%d/%d complete, %d running",
+            activity.completed, activity.total, activity.running))
+        end
+        if activity.last_completed then
+          d:detail("Last completed", truncate_preview(activity.last_completed, 200))
+        end
+        if activity.response ~= "" then
+          d:detail("Live response", truncate_preview(activity.response, 400))
+        end
       end
 
       local assistant_preview =

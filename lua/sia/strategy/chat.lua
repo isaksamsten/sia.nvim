@@ -1,5 +1,6 @@
 local common = require("sia.strategy.common")
 local winbar = require("sia.ui.winbar")
+local activity = require("sia.activity")
 
 local StreamRenderer = common.StreamRenderer
 local Strategy = common.Strategy
@@ -319,6 +320,7 @@ function ChatStrategy.new(conversation, options, opts)
   obj.conversation.name = tostring(ChatStrategy.count())
   pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
+  obj.activity = activity.new()
   local messages = conversation.entries
   if opts.render_all then
     obj.canvas:render_messages(messages, obj.conversation.model.name)
@@ -487,6 +489,7 @@ function ChatStrategy:on_request_start()
   vim.bo[self.buf].modifiable = true
   self.canvas:clear_progress()
   winbar.update_status(self.buf, nil)
+  self.activity = activity.new()
   return true
 end
 
@@ -494,6 +497,8 @@ function ChatStrategy:on_round_start()
   if not self:buf_is_loaded() then
     return false
   end
+  activity.round(self.activity)
+  self:_render_activity()
 end
 
 --- @param turn_id string
@@ -533,6 +538,7 @@ function ChatStrategy:on_error(error)
   if not self:buf_is_loaded() then
     return
   end
+  self.canvas:clear_progress()
   winbar.update_status(
     self.buf,
     { message = error or "Internal error", status = "error" }
@@ -567,6 +573,8 @@ function ChatStrategy:on_stream(input)
   if not self:buf_is_loaded() then
     return false
   end
+  activity.stream(self.activity, input)
+  self:_render_activity()
   if input.reasoning then
     local content = input.reasoning.content
     if content and content ~= "" and self.turn_renderer then
@@ -594,6 +602,7 @@ function ChatStrategy:on_cancel()
   if not self:buf_is_loaded() then
     return false
   end
+  self.canvas:clear_progress()
   self.next_mode = nil
   self.conversation:clear_pending_user_messages()
   winbar.update_status(self.buf, {
@@ -605,6 +614,15 @@ function ChatStrategy:on_cancel()
   end
 end
 
+function ChatStrategy:_render_activity()
+  local message = self.activity.message:gsub("\n", " ")
+  if self.activity.phase == "tools" and self.activity.total > 0 then
+    message = message
+      .. string.format(" · %d/%d tools complete", self.activity.completed, self.activity.total)
+  end
+  self.canvas:update_tool_progress({ { { "⠋ " .. message, "SiaProgress" } } })
+end
+
 --- @param statuses sia.engine.Status[]
 function ChatStrategy:on_tool_status(statuses)
   if not self:buf_is_loaded() then
@@ -613,6 +631,8 @@ function ChatStrategy:on_tool_status(statuses)
   if self.turn_renderer then
     self.turn_renderer:update_tool_blocks(statuses)
   end
+  activity.tools(self.activity, statuses)
+  self:_render_activity()
 end
 
 --- @param statuses sia.engine.Status[]

@@ -56,4 +56,22 @@ T["winbar"]["default_left shows pending user message count from conversation"] =
   eq(true, rendered:find(" 2", 1, true) ~= nil)
 end
 
+T["winbar"]["running agent shows name without progress"] = function()
+  local rendered = require("sia.ui.winbar").default_left({
+    conversation = {
+      id = 1,
+      has_tool = function(_, name) return name == "agent" end,
+      pending_user_message_count = function() return 0 end,
+      agent_runtime = {
+        list = function()
+          return { { name = "code/review", status = "running", progress = "Reading files" } }
+        end,
+      },
+    },
+    strategy = { is_busy = false },
+  })
+  eq(rendered:find("code/review", 1, true) ~= nil, true)
+  eq(rendered:find("Reading files", 1, true), nil)
+end
+
 return T

@@ -186,6 +186,28 @@ T["status ui"]["renders expanded agent and running process details inline"] = fu
   eq(true, agent_line ~= nil)
 end
 
+T["status ui"]["interactive agent displays foreground activity"] = function()
+  local activity = require("sia.activity")
+  local foreground = activity.new()
+  foreground.message = "Reading current file"
+  foreground.response = "Live foreground response"
+  local background = activity.new()
+  background.message = "Stale background activity"
+  local conv = make_conversation(110, {
+    make_agent(1, "Review", {
+      view = "open",
+      foreground = { activity = foreground },
+      background = { activity = background },
+    }),
+  }, {}, {})
+  local _, view = require("sia.ui.status")._build(conv)
+  view:expand("agent", 1)
+  local lines = view:render()
+  eq(contains(lines, "    Activity: Reading current file"), true)
+  eq(contains(lines, "    Live response: Live foreground response"), true)
+  eq(table.concat(lines, "\n"):find("Stale background activity", 1, true), nil)
+end
+
 T["status ui"]["renders running process details from runtime output"] = function()
   package.loaded["sia.ui.status"] = nil
   package.loaded["sia.ui.list"] = nil

@@ -1,7 +1,7 @@
 local M = {}
 
 local CHAT_NS = vim.api.nvim_create_namespace("sia_chat")
-local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat")
+local PROGRESS_NS = vim.api.nvim_create_namespace("sia_chat_progress")
 local TEMPORARY_NS = vim.api.nvim_create_namespace("sia_chat_temporary")
 local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local ASSISTANT_TEXT_NS = vim.api.nvim_create_namespace("sia_chat_assistant_text")
@@ -538,6 +538,7 @@ function Canvas:clear()
   vim.api.nvim_buf_clear_namespace(self.buf, REASONING_NS, 0, -1)
   self:clear_temporary_text()
   vim.api.nvim_buf_clear_namespace(self.buf, PROGRESS_NS, 0, -1)
+  self.progress_extmark = nil
   vim.api.nvim_buf_clear_namespace(self.buf, CHAT_NS, 0, -1)
   self.footer_marks = {}
 end
@@ -560,14 +561,16 @@ end
 function Canvas:update_progress_position()
   if self.progress_extmark then
     local new_line_count = vim.api.nvim_buf_line_count(self.buf)
+    local mark = vim.api.nvim_buf_get_extmark_by_id(
+      self.buf, PROGRESS_NS, self.progress_extmark, { details = true }
+    )
+    if not mark[3] then
+      self.progress_extmark = nil
+      return
+    end
     pcall(vim.api.nvim_buf_set_extmark, self.buf, PROGRESS_NS, new_line_count - 1, 0, {
       id = self.progress_extmark,
-      virt_lines = vim.api.nvim_buf_get_extmark_by_id(
-        self.buf,
-        PROGRESS_NS,
-        self.progress_extmark,
-        { details = true }
-      )[3].virt_lines,
+      virt_lines = mark[3].virt_lines,
       virt_lines_above = false,
     })
   end

@@ -1,5 +1,6 @@
 local common = require("sia.strategy.common")
 local icons = require("sia.ui").icons
+local activity = require("sia.activity")
 
 local Strategy = common.Strategy
 
@@ -7,6 +8,8 @@ local Strategy = common.Strategy
 --- @field buf number?
 --- @field conversation sia.Conversation
 --- @field private options sia.config.Hidden
+--- @field activity sia.Activity
+--- @field private last_activity_message string?
 local HiddenStrategy = setmetatable({}, { __index = Strategy })
 HiddenStrategy.__index = HiddenStrategy
 
@@ -19,6 +22,7 @@ function HiddenStrategy.new(buf, conversation, options, cancellable)
   local obj = setmetatable(Strategy.new(conversation, cancellable), HiddenStrategy)
   obj.buf = buf
   obj.options = options
+  obj.activity = activity.new()
   return obj --[[@as sia.HiddenStrategy]]
 end
 
@@ -36,10 +40,24 @@ local function default_notify(msg)
   vim.api.nvim_echo({ { icons.agents .. " " .. msg, "SiaProgress" } }, false, {})
 end
 
-function HiddenStrategy:on_request_start()
+function HiddenStrategy:_notify_activity()
+  if self.last_activity_message == self.activity.message then
+    return
+  end
+  self.last_activity_message = self.activity.message
   local notify = self.options.notify or default_notify
-  notify("Analyzing...")
+  notify(self.activity.message)
+end
+
+function HiddenStrategy:on_request_start()
+  self.activity = activity.new()
+  self.last_activity_message = nil
   return true
+end
+
+function HiddenStrategy:on_round_start()
+  activity.round(self.activity)
+  self:_notify_activity()
 end
 
 function HiddenStrategy:on_tools()
@@ -48,6 +66,8 @@ end
 
 --- @param input sia.StreamDelta
 function HiddenStrategy:on_stream(input)
+  activity.stream(self.activity, input)
+  self:_notify_activity()
   return true
 end
 
@@ -57,16 +77,8 @@ end
 
 --- @param statuses sia.engine.Status[]
 function HiddenStrategy:on_tool_status(statuses)
-  local notify = self.options.notify or default_notify
-  --- @type sia.engine.Status[]
-  local running = vim.tbl_filter(function(s)
-    return s.status == "running"
-  end, statuses)
-  if #running > 0 then
-    local status = running[1]
-    local message = status.summary or ("Using " .. (status.name or "tool") .. "...")
-    notify(message)
-  end
+  activity.tools(self.activity, statuses)
+  self:_notify_activity()
 end
 
 function HiddenStrategy:on_request_end()

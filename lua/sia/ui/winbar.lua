@@ -121,9 +121,6 @@ local function agents_section(conversation)
   if #running == 1 then
     local a = running[1]
     label = a.name
-    if a.progress and #a.progress > 0 then
-      label = label .. " " .. truncate_middle(a.progress, 20)
-    end
   else
     label = tostring(#running)
   end
