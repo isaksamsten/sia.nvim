@@ -708,7 +708,7 @@ T["sia.tools.agent"]["wait without id yields on pending user input"] = function(
   eq(true, result.content:find("Yielding to process user input", 1, true) ~= nil)
 end
 
-T["sia.tools.agent"]["settled status remains visible without changing model content"] = function()
+T["sia.tools.agent"]["settled status stays hidden until wait consumes the reply"] = function()
   child.lua([[
     _G.settled_statuses = {}
     for _, status in ipairs({ "pending", "failed", "cancelled" }) do
@@ -722,13 +722,8 @@ T["sia.tools.agent"]["settled status remains visible without changing model cont
     end
   ]])
   local results = child.lua_get("_G.settled_statuses")
-  eq({
-    header = "Agent review replied",
-    detail = { text = "**Review complete**", ft = "markdown" },
-  }, results.pending.summary)
-  eq("Agent review failed", results.failed.summary)
-  eq("Agent review cancelled", results.cancelled.summary)
   for _, result in pairs(results) do
+    eq(false, result.summary)
     eq("model status", result.content)
     eq(nil, result.preview)
   end

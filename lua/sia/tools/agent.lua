@@ -403,15 +403,7 @@ When NOT to use the agent tool:
       return
     end
 
-    local summary = false
-    if agent.status == "pending" then
-      summary = reply_summary(agent, agent.conversation:get_last_assistant_content())
-    elseif agent.status == "failed" then
-      summary = string.format("Agent %s failed", agent.name)
-    elseif agent.status == "cancelled" then
-      summary = string.format("Agent %s cancelled", agent.name)
-    end
-    callback({ content = agent:get_preview(), summary = summary })
+    callback({ content = agent:get_preview(), summary = false })
   elseif args.command == "wait" then
     if args.id then
       wait_for_agent(args.id, conversation, callback)
