@@ -1,5 +1,5 @@
 *sia.txt*
-                            For Neovim >= 0.11    Last change: 2026 October 20
+                            For Neovim >= 0.11    Last change: 2026 October 21
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -83,6 +83,7 @@ Table of Contents                                      *sia-table-of-contents*
   - Skills vs Agents                             |sia-skills-skills-vs-agents|
 15. Tools                                                          |sia-tools|
   - Core Tools                                          |sia-tools-core-tools|
+  - Debugging with nvim-dap                |sia-tools-debugging-with-nvim-dap|
   - Extra Tools                                        |sia-tools-extra-tools|
   - Tool Parameters for Permissions|sia-tools-tool-parameters-for-permissions|
   - Adding Tools to Actions                |sia-tools-adding-tools-to-actions|
@@ -3194,6 +3195,9 @@ DEVELOPMENT ENVIRONMENT ~
 
   git_worktree   ★         Create, inspect, and clean up tracked git worktrees
 
+  debug          ★         Prepare breakpoints and inspect/control user-started
+                           nvim-dap sessions
+
   diagnostics    ★         Retrieve LSP diagnostics for a file
 
   websearch      ★         Search the web using Google
@@ -3231,6 +3235,19 @@ MEDIA ~
   --------------- --------- ---------------------
   view_image      ★         View image files
   view_document   ★         View document files
+
+DEBUGGING WITH NVIM-DAP                    *sia-tools-debugging-with-nvim-dap*
+
+The `debug` tool is available when optional dependency `mfussenegger/nvim-dap`
+<https://github.com/mfussenegger/nvim-dap> can be loaded.
+
+The assistant can set breakpoints before a debugger is running, ask you to
+start your usual configuration, then wait without blocking Neovim. Those
+breakpoints are pending until an adapter verifies them. Once started, the
+assistant can continue, pause, step over/into/out, and inspect threads, stack
+frames, scopes, and variables. Launch and termination remain under your
+control.
+
 
 EXTRA TOOLS                                            *sia-tools-extra-tools*
 
@@ -3288,6 +3305,10 @@ CORE TOOLS ~
 
   git_worktree    command, branch, base   Worktree action plus branch identity
                                           and optional base ref
+
+  debug           action, session_id,     Debugger operation, target session,
+                  configuration, path,    and breakpoint source/condition
+                  condition
 
   diagnostics     file                    File path to get diagnostics for
 
