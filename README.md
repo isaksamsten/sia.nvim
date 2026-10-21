@@ -11,6 +11,8 @@ Supports: OpenAI, Codex, Copilot and OpenRouter (both OpenAI Chat Completions an
 
 https://github.com/user-attachments/assets/e2416fb6-0878-4895-8a01-727dd2e2381f
 
+https://github.com/user-attachments/assets/f16ef961-e3be-4573-a123-bb86ccf5ebe0
+
 - **Multiple interaction modes** — [chat, insert, and diff](docs/2-usage/1-modes.md) for different workflows
 - **Comprehensive tool system** — [file operations, code search, shell access, LSP, and more](docs/5-features/4-tools.md)
 - **Flexible approval system** — [blocking or async tool approval](docs/4-permissions/1-confirmation.md) with customizable notifications
