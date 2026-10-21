@@ -201,7 +201,6 @@ T["view errors hide summaries without hiding model errors"] = function()
   view.implementation.execute({ path = "missing-sia-preview-test-file" }, function(res)
     result = res
   end, { conversation = { approved_tools = { view = true } } })
-  output.ensure_summary(result, "view")
   output.complete(result)
   eq(false, result.summary)
   eq("Error: File cannot be found", result.content)
@@ -217,7 +216,6 @@ T["search errors hide summaries without hiding model errors"] = function()
     vim.wait(1000, function()
       return result ~= nil
     end)
-    output.ensure_summary(result, "grep")
     output.complete(result)
     eq(false, result.summary)
     eq("string", type(result.content))
@@ -232,26 +230,23 @@ T["explicit omission clears previews without exposing model instructions"] = fun
     content = "Use process 7 to poll",
     preview = { text = "private" },
   }
-  output.ensure_summary(result, "bash")
   output.complete(result)
   eq(false, result.summary)
   eq(nil, result.preview)
   eq("Use process 7 to poll", result.content)
 end
 
-T["missing summaries remain visible without enabling previews"] = function()
+T["missing summaries remain hidden without changing model content"] = function()
   for _, case in ipairs({
     {
       content = "Error: process not found",
-      expected = "Failed bash: process not found",
     },
-    { content = "No references found.", expected = "No references found." },
-    { content = "model-only result", expected = "Completed bash" },
+    { content = "No references found." },
+    { content = "model-only result" },
   }) do
-    local result = { content = case.content }
-    output.ensure_summary(result, "bash")
+    local result = { content = case.content, preview = { text = "private" } }
     output.complete(result)
-    eq(case.expected, result.summary)
+    eq(nil, result.summary)
     eq(case.content, result.content)
     eq(nil, result.preview)
   end

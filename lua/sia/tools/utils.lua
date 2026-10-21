@@ -960,9 +960,6 @@ M.new_tool = function(opts, execute)
           if verdict and result then
             result.verification = vim.deepcopy(verdict)
           end
-          if result then
-            require("sia.tool_output").ensure_summary(result, opts.definition.name)
-          end
           if
             result
             and result.summary
