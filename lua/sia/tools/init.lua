@@ -10,6 +10,7 @@ return {
   write = require("sia.tools.write"),
   bash = require("sia.tools.bash"),
   lsp = require("sia.tools.lsp"),
+  debug = require("sia.tools.debug"),
   git_worktree = require("sia.tools.git_worktree"),
   task = require("sia.tools.agent"),
   diagnostics = require("sia.tools.diagnostics"),

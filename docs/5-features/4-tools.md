@@ -33,6 +33,7 @@ are included in the default chat action.
 | --------------- | ------- | ----------------------------------------------------------------- |
 | **bash**        | ★       | Execute shell commands with persistent sessions and async support |
 | **git_worktree**| ★       | Create, inspect, and clean up tracked git worktrees              |
+| **debug**       | ★       | Prepare breakpoints and inspect/control user-started nvim-dap sessions |
 | **diagnostics** | ★       | Retrieve LSP diagnostics for a file                               |
 | **websearch**   | ★       | Search the web using Google                                       |
 | **webfetch**    | ★       | Fetch and convert web content to markdown                         |
@@ -59,6 +60,18 @@ are included in the default chat action.
 | ----------------- | ------- | ------------------- |
 | **view_image**    | ★       | View image files    |
 | **view_document** | ★       | View document files |
+
+## Debugging with nvim-dap
+
+The `debug` tool is available when optional dependency
+[`mfussenegger/nvim-dap`](https://github.com/mfussenegger/nvim-dap) can be loaded.
+
+The assistant can set breakpoints before a debugger is running, ask you to start
+your usual configuration, then wait without blocking Neovim. Those breakpoints
+are pending until an adapter verifies them. Once started, the assistant can
+continue, pause, step over/into/out, and inspect threads, stack frames, scopes,
+and variables. Launch and termination remain under your control.
+
 
 ## Extra Tools
 
@@ -93,6 +106,7 @@ tool that are useful for permission and risk patterns.
 | **glob**          | **pattern**, **path**                           | File glob and directory to search                                             |
 | **bash**          | **command**, **action**, **async**              | Shell command, lifecycle action (`start`/`status`/`wait`/`kill`), and whether async |
 | **git_worktree**  | **command**, **branch**, **base**               | Worktree action plus branch identity and optional base ref                    |
+| **debug**         | **action**, **session_id**, **configuration**, **path**, **condition** | Debugger operation, target session, and breakpoint source/condition |
 | **diagnostics**   | **file**                                        | File path to get diagnostics for                                              |
 | **websearch**     | **query**                                       | Search query string                                                           |
 | **webfetch**      | **url**                                         | URL to fetch                                                                  |

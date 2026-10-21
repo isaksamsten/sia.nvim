@@ -364,6 +364,7 @@ M._raw_options = {
           local tools = require("sia.tools")
           local all = {
             tools.lsp,
+            tools.debug,
             tools.ask_user,
             tools.grep,
             tools.skills,
