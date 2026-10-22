@@ -18,7 +18,8 @@ local function check_puppeteer_on_arm()
     return
   end
 
-  local browsers = { "chromium", "chromium-browser", "google-chrome", "google-chrome-stable" }
+  local browsers =
+    { "chromium", "chromium-browser", "google-chrome", "google-chrome-stable" }
   local browser
   for _, name in ipairs(browsers) do
     if vim.fn.executable(name) == 1 then
@@ -33,7 +34,8 @@ local function check_puppeteer_on_arm()
     return
   end
 
-  local path_hint = browser or "the path returned by `which chromium` (or `which chromium-browser`)"
+  local path_hint = browser
+    or "the path returned by `which chromium` (or `which chromium-browser`)"
   vim.health.warn(
     "Puppeteer may not provide a compatible browser for ARM systems. "
       .. "Install Chromium, set PUPPETEER_SKIP_DOWNLOAD=true "
@@ -67,6 +69,23 @@ return {
       check_executable(dependency[1], dependency[2], false)
     end
     check_puppeteer_on_arm()
+
+    vim.health.start("Sia MCP")
+    for name, entry in pairs(require("sia.mcp.registry").servers) do
+      check_executable(
+        entry.config.command[1],
+        "required for MCP server " .. name,
+        false
+      )
+      local state = entry.client and entry.client.state or "stopped"
+      vim.health.info(name .. ": " .. state)
+      if entry.client and entry.client.error then
+        vim.health.warn(entry.client.error)
+      end
+      for _, diagnostic in ipairs(entry.diagnostics) do
+        vim.health.warn(diagnostic)
+      end
+    end
 
     local browser_openers = vim.fn.has("win32") == 1 and { "start" }
       or vim.fn.has("mac") == 1 and { "open" }

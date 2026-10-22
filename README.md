@@ -87,4 +87,5 @@ Install using Lazy:
 | [Agents](docs/5-features/2-agents.md) | Custom agents and memory |
 | [Skills](docs/5-features/3-skills.md) | Reusable skill definitions |
 | [Tools](docs/5-features/4-tools.md) | Available tools for the AI assistant |
+| [MCP Servers](docs/6-mcp.md) | MCP Servers |
 | [Reference](docs/6-reference.md) | Highlight groups |

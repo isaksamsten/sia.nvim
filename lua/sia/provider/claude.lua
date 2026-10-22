@@ -644,7 +644,7 @@ messages.prepare_tools = function(data, tools)
       return {
         name = prefix_tool_name(tool.name),
         description = tool.description,
-        input_schema = {
+        input_schema = tool.input_schema or {
           type = "object",
           properties = tool.parameters,
           required = tool.required,

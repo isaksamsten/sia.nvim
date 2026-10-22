@@ -303,7 +303,7 @@ function M.prune_oldest_media(conversation, max_bytes, keep_last)
 end
 
 --- Estimate the number of bytes in tool definitions.
---- Cached on the conversation since tools don't change during its lifetime.
+--- External tool snapshots may change between user requests.
 --- @param conversation sia.Conversation
 --- @return integer bytes
 local function tool_definition_bytes(conversation)
@@ -312,8 +312,8 @@ local function tool_definition_bytes(conversation)
     for _, tool in ipairs(conversation.tool_definitions) do
       bytes = bytes + #(tool.name or "")
       bytes = bytes + #(tool.description or "")
-      if tool.parameters then
-        local ok, json = pcall(vim.json.encode, tool.parameters)
+      if tool.input_schema or tool.parameters then
+        local ok, json = pcall(vim.json.encode, tool.input_schema or tool.parameters)
         if ok then
           bytes = bytes + #json
         end

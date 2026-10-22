@@ -492,6 +492,21 @@ local validate = {
     return true
   end,
 
+  mcp = function(names)
+    if names == nil then
+      return true
+    end
+    if type(names) ~= "table" or not vim.islist(names) then
+      return false, "mcp must be a list of trusted server names"
+    end
+    for _, name in ipairs(names) do
+      if type(name) ~= "string" or not require("sia.mcp.registry").servers[name] then
+        return false, "mcp contains an unknown MCP server: " .. tostring(name)
+      end
+    end
+    return true
+  end,
+
   model_field = function(json)
     local ok, err = pcall(
       require("sia.config.model").normalize,
@@ -649,6 +664,7 @@ local function validate_local_config_json(json, local_config)
   validate_with(validate.risk, json.risk)
   validate_with(validate.context, json.context)
   validate_with(validate.action, json.action)
+  validate_with(validate.mcp, json.mcp)
   validate_with(validate.models_overrides, json.models)
   validate_with(validate.aliases, json.aliases)
 
@@ -755,6 +771,9 @@ end
 
 local function resolve_auto(user_json, auto_json)
   local merged = merge_auto_permissions(user_json, auto_json)
+  if merged.mcp == nil and auto_json.mcp ~= nil then
+    merged.mcp = vim.deepcopy(auto_json.mcp)
+  end
   for _, key in ipairs({ "skills", "agents" }) do
     if auto_json[key] then
       local values = vim.deepcopy(merged[key] or {})

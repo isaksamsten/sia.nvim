@@ -347,6 +347,17 @@ function M.execute_strategy(strategy)
         return
       end
     end
+    if is_initial then
+      require("sia.mcp.registry").prepare(strategy.conversation, function()
+        if strategy.cancellable.is_cancelled then
+          strategy:on_cancel()
+          strategy.is_busy = false
+          return
+        end
+        execute_round(false)
+      end)
+      return
+    end
     strategy:on_round_start()
 
     local context_manager = require("sia.context_manager")

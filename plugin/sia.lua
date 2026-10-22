@@ -9,6 +9,72 @@ end, {
   desc = "Set project-local model and context options",
 })
 
+vim.api.nvim_create_user_command("SiaMcp", function(args)
+  local registry = require("sia.mcp.registry")
+  local action, name = args.fargs[1] or "status", args.fargs[2]
+  if action == "status" then
+    vim.notify(vim.inspect(registry.status()))
+  elseif
+    (action == "enable" or action == "disable")
+    and name
+    and registry.servers[name]
+  then
+    local config = require("sia.config")
+    local updated, err = config.update_auto_config(function(json)
+      local names = json.mcp or {}
+      if action == "enable" then
+        if not vim.tbl_contains(names, name) then
+          names[#names + 1] = name
+        end
+      else
+        names = vim.tbl_filter(function(value)
+          return value ~= name
+        end, names)
+      end
+      json.mcp = names
+    end)
+    if not updated then
+      vim.notify(err, vim.log.levels.ERROR)
+      return
+    end
+    local lc = config.get_local_config()
+    local enabled = vim.tbl_contains(lc and lc.mcp or {}, name)
+    vim.notify(
+      "MCP " .. name .. ": effectively " .. (enabled and "enabled" or "disabled")
+    )
+  elseif
+    (action == "stop" or action == "restart")
+    and name
+    and registry.servers[name]
+  then
+    registry.stop(name)
+    if action == "restart" then
+      registry.ensure(name, function(err)
+        vim.notify(
+          err or ("MCP " .. name .. " ready"),
+          err and vim.log.levels.ERROR or vim.log.levels.INFO
+        )
+      end)
+    end
+  else
+    vim.notify(
+      "Usage: SiaMcp status | enable <server> | disable <server> | stop <server> | restart <server>",
+      vim.log.levels.ERROR
+    )
+  end
+end, {
+  nargs = "*",
+  complete = function(lead, line)
+    local choices = line:match("^SiaMcp%s+%w+%s+")
+        and vim.tbl_keys(require("sia.mcp.registry").servers)
+      or { "status", "enable", "disable", "stop", "restart" }
+    return vim.tbl_filter(function(item)
+      return vim.startswith(item, lead)
+    end, choices)
+  end,
+  desc = "Inspect and control trusted MCP servers",
+})
+
 --- @param invocation sia.Invocation
 --- @return sia.config.ActionMode
 local function get_action_mode(invocation)

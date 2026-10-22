@@ -109,6 +109,7 @@ end
 --- @class sia.tool.FunctionDefinition : sia.tool.BaseDefinition
 --- @field type "function"
 --- @field required string[]
+--- @field input_schema table?
 --- @field parameters table<string, sia.tool.Type>
 
 --- @class sia.tool.CustomDefinition : sia.tool.BaseDefinition
@@ -376,6 +377,8 @@ end
 --- @field modes table<string, sia.config.Mode>?
 --- @field pending_user_messages sia.conversation.PendingUserMessage[]
 --- @field workspace string
+--- @field mcp_servers string[]?
+--- @field project_mcp boolean?
 local Conversation = {}
 
 Conversation.__index = Conversation
@@ -996,6 +999,9 @@ local function fork_conversation(source, turn_id)
   })
   conversation.tool_definitions = vim.deepcopy(source.tool_definitions)
   conversation.tool_implementation = vim.deepcopy(source.tool_implementation)
+  conversation.mcp_servers = vim.deepcopy(source.mcp_servers)
+  conversation.mcp_names = vim.deepcopy(source.mcp_names)
+  conversation.project_mcp = source.project_mcp
 
   for _, entry in ipairs(entries) do
     local entry_copy = vim.deepcopy(entry)
@@ -1080,6 +1086,7 @@ local function from_action(action, invocation, overrides)
     approved_tools = approved,
     modes = action.modes,
   })
+  conversation.project_mcp = action.mode == "chat"
 
   local template = require("sia.template")
   local template_context = new_template_context(

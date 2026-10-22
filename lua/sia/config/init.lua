@@ -86,6 +86,7 @@ local settings_proxy = setmetatable({}, {
 --- @field skills string[]?
 --- @field skills_extras string[]?
 --- @field agents string[]?
+--- @field mcp string[]?
 
 --- @class sia.config.Settings.Ui
 --- @field diff sia.config.Settings.Ui.Diff
@@ -238,6 +239,7 @@ local settings_proxy = setmetatable({}, {
 --- @field models table<string, sia.config.ModelOptions>?
 --- @field actions table<string, sia.config.Action>
 --- @field providers table<string, sia.provider.ProviderSpec|boolean>
+--- @field mcp {servers: table<string, table>}?
 M._raw_options = {
   providers = {},
   --- @type sia.config.Settings
@@ -462,6 +464,7 @@ function M.setup(options)
   M._raw_options.settings.model = roles
   local registry = require("sia.provider")
   registry.bootstrap(M._raw_options.models, M._raw_options.providers)
+  require("sia.mcp.registry").configure(M._raw_options.mcp or {})
 end
 
 return M
