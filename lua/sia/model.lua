@@ -102,13 +102,7 @@ end
 function M.check_support(model, requires)
   for _, capability in ipairs(requires or {}) do
     if not model.support[capability] then
-      error(
-        string.format(
-          "Model '%s' does not support '%s'; configure a suitable model for this role and tier",
-          model.name,
-          capability
-        )
-      )
+      error(string.format("Model '%s' does not support '%s'", model.name, capability))
     end
   end
 end
