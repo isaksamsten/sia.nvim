@@ -7,7 +7,7 @@ local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local ASSISTANT_TEXT_NS = vim.api.nvim_create_namespace("sia_chat_assistant_text")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
-local DETAILS_LABEL = "  + Details"
+local DETAILS_LABEL = "  ▼ Details"
 
 --- @param summary sia.ToolSummary
 --- @return sia.ToolSummaryParts

@@ -91,7 +91,7 @@ function M.foldtext()
   local num_lines = foldend - foldstart + 1
 
   local first_line = vim.fn.getline(foldstart)
-  if first_line == "  + Details" then
+  if first_line == "  ▼ Details" then
     local body_lines, fence = 0, nil
     for _, line in ipairs(vim.api.nvim_buf_get_lines(0, foldstart, foldend, false)) do
       if not fence then
@@ -102,15 +102,22 @@ function M.foldtext()
         body_lines = body_lines + 1
       end
     end
-    return { {
-      string.format("  + Show details… · %d %s", body_lines, body_lines == 1 and "line" or "lines"),
-      "SiaFolded",
-    } }
+    return {
+      {
+        string.format(
+          "  ▶ Details · %d %s",
+          body_lines,
+          body_lines == 1 and "line" or "lines"
+        ),
+        "SiaFolded",
+      },
+    }
   end
   local max_width = math.max(40, vim.api.nvim_win_get_width(0) - 20)
   local groups = { "SiaFolded", "SiaReasoning" }
   local chunks = M.render(first_line, max_width, groups)
-  local suffix = string.format(" · %d %s", num_lines, num_lines == 1 and "line" or "lines")
+  local suffix =
+    string.format(" · %d %s", num_lines, num_lines == 1 and "line" or "lines")
   local last = chunks[#chunks]
   if last and vim.deep_equal(last[2], groups) then
     last[1] = last[1] .. suffix

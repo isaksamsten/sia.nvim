@@ -547,7 +547,7 @@ T["strategy.chat"]["tool summaries render inline and preserve details on redraw"
   local expected = {
     "Plan the check",
     "• Ran make test",
-    "  + Details",
+    "  ▼ Details",
     "```text",
     "Last lines:",
     "- 120 passed",
@@ -1443,7 +1443,7 @@ T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] 
   canvas:update_tool_block({ 0, 0 }, 1, {
     tool = { status = "done", summary = { header = "Ran command", detail = { text = "```lua\n>| literal\n```\nend" } } },
   }, { "tool" })
-  eq({ "• Ran command", "  + Details", "````text", "```lua", ">| literal", "```", "end", "````", "" },
+  eq({ "• Ran command", "  ▼ Details", "````text", "```lua", ">| literal", "```", "end", "````", "" },
     vim.api.nvim_buf_get_lines(buf, 0, -1, false))
   -- Metadata-looking text in the fenced body must not create a reasoning fold.
   eq(1, require("sia.canvas").foldexpr(4))
@@ -1467,7 +1467,7 @@ T["strategy.chat"]["multiple detail sections share a fold and retain their fence
     local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
     local first
     for i, line in ipairs(lines) do if line == "• Ran script…" then first = i end end
-    eq({ "• Ran script…", "  + Details", "```bash", "echo hello", "echo world", "```", "",
+    eq({ "• Ran script…", "  ▼ Details", "```bash", "echo hello", "echo world", "```", "",
       "````text", "```lua", "hello", "```", "````" }, vim.list_slice(lines, first, first + 11))
     eq(first + 1, vim.fn.foldclosed(first + 1))
     eq(first + 11, vim.fn.foldclosedend(first + 1))
@@ -1589,7 +1589,7 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
   local canvas = require("sia.canvas").Canvas:new(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
     "Think through it", "Check the result", "", "• Ran check",
-    "  + Details", "```text", "first", "second", "```", "",
+    "  ▼ Details", "```text", "first", "second", "```", "",
   })
   canvas:mark_reasoning(0, 2)
   canvas:highlight_tool(3, 9, { header = "Ran check", detail = { text = "first\nsecond" } })
@@ -1608,8 +1608,8 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
     observed = nil
     vim.wo.conceallevel = 3
     eq(3, vim.wo.conceallevel)
-    eq(true, vim.fn.foldtextresult(5):find("Show details", 1, true) ~= nil)
-    eq({ { "  + Show details… · 2 lines", "SiaFolded" } }, observed)
+    eq(true, vim.fn.foldtextresult(5):find("▶ Details", 1, true) ~= nil)
+    eq({ { "  ▶ Details · 2 lines", "SiaFolded" } }, observed)
   end)
   _G.SiaTestFoldtext = nil
   vim.api.nvim_buf_delete(buf, { force = true })
@@ -1639,7 +1639,7 @@ T["strategy.chat"]["details fold stays visible when Markdown fences conceal whol
     for _, level in ipairs({ 2, 3 }) do
       screen.lua("vim.wo.conceallevel = " .. level .. "; vim.cmd('redraw!')")
       local shot = screen.get_screenshot()
-      eq(true, table.concat(shot.text[2]):find("+ Show details… · 1 line", 1, true) ~= nil)
+      eq(true, table.concat(shot.text[2]):find("▶ Details · 1 line", 1, true) ~= nil)
       eq(2, screen.lua_get("vim.fn.foldclosed(2)"))
       eq(5, screen.lua_get("vim.fn.foldclosedend(2)"))
     end
