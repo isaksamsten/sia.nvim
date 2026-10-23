@@ -92,4 +92,37 @@ function M.stream(activity, input)
   end
 end
 
+--- @param messages sia.conversation.PendingUserMessage[]
+--- @param next_mode sia.chat.Submit?
+--- @return string[]
+function M.pending(messages, next_mode)
+  local previews, count = {}, 0
+  local function add(message)
+    if message.hide or type(message.content) ~= "string" then
+      return
+    end
+    local text = vim.trim(message.content:gsub("%s+", " "))
+    if text == "" then
+      return
+    end
+    count = count + 1
+    if #previews < 3 then
+      if vim.fn.strchars(text) > 120 then
+        text = vim.fn.strcharpart(text, 0, 119) .. "…"
+      end
+      table.insert(previews, "↳ " .. text)
+    end
+  end
+  for _, message in ipairs(messages) do
+    add(message)
+  end
+  if next_mode then
+    add({ content = next_mode.content })
+  end
+  if count > #previews then
+    table.insert(previews, string.format("+%d more pending", count - #previews))
+  end
+  return previews
+end
+
 return M

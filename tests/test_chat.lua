@@ -184,6 +184,35 @@ T["strategy.chat"]["submit queues hidden skill messages while busy"] = function(
   eq("Queued visible prompt", strategy.conversation.entries[3].content)
 end
 
+T["strategy.chat"]["pending queries appear immediately and disappear when consumed"] = function()
+  local conversation = Conversation.new({
+    model = require("sia.model").resolve("openai/gpt-4.1"),
+  })
+  local strategy = ChatStrategy.new(conversation, { cmd = "split" })
+  strategy.is_busy = true
+  local function progress()
+    local namespace = vim.api.nvim_get_namespaces()["sia_chat_progress"]
+    local marks = vim.api.nvim_buf_get_extmarks(strategy.buf, namespace, 0, -1, { details = true })
+    return marks[1][4].virt_lines
+  end
+
+  strategy:submit({ hidden_messages = { "secret" }, content = "Follow up\nquery" })
+  eq({
+    { { "⠋ Waiting for model…", "SiaProgress" } },
+    { { "  ↳ Follow up query", "SiaUserPending" } },
+  }, progress())
+  strategy:on_stream({ content = "Working" })
+  eq("  ↳ Follow up query", progress()[2][1][1])
+  strategy:on_round_end("turn")
+  eq(1, #progress())
+  strategy:submit({ content = "Another query" })
+  eq(2, #progress())
+  strategy:on_cancel()
+  local namespace = vim.api.nvim_get_namespaces()["sia_chat_progress"]
+  eq({}, vim.api.nvim_buf_get_extmarks(strategy.buf, namespace, 0, -1, {}))
+  eq(0, conversation:pending_user_message_count())
+end
+
 T["strategy.chat"]["is_busy flag management"] = MiniTest.new_set({
   hooks = {
     pre_once = function()

@@ -13,6 +13,7 @@ local highlight_groups = {
   SiaStatus = { link = "NonText" },
   SiaAssistantMarker = { link = "Normal" },
   SiaUser = { link = "DiffChange" },
+  SiaUserPending = { link = "SiaProgress" },
   SiaApproveInfo = { link = "StatusLine" },
   SiaApproveSafe = { link = "StatusLine" },
   SiaApproveWarn = { link = "StatusLine" },

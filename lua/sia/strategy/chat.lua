@@ -425,6 +425,7 @@ function ChatStrategy:submit(submit)
         content = submit.content,
       }
     end
+    self:_render_activity()
     return
   end
 
@@ -448,6 +449,9 @@ function ChatStrategy:redraw()
   end
   self.canvas:clear()
   self.canvas:render_messages(self.conversation.entries, self.conversation.model.name)
+  if self.is_busy then
+    self:_render_activity()
+  end
 end
 
 function ChatStrategy:on_request_end()
@@ -508,6 +512,7 @@ function ChatStrategy:on_round_end(turn_id)
     self.canvas:render_messages(new_entries, self.conversation.model.name)
     self.assistant_extmark = self.canvas:begin_assistant_turn()
   end
+  self:_render_activity()
 end
 
 --- @param message string
@@ -615,12 +620,20 @@ function ChatStrategy:on_cancel()
 end
 
 function ChatStrategy:_render_activity()
+  if not self:buf_is_loaded() then
+    return
+  end
   local message = self.activity.message:gsub("\n", " ")
   if self.activity.phase == "tools" and self.activity.total > 0 then
     message = message
       .. string.format(" · %d/%d tools complete", self.activity.completed, self.activity.total)
   end
-  self.canvas:update_tool_progress({ { { "⠋ " .. message, "SiaProgress" } } })
+  local current = { { "⠋ " .. message, "SiaProgress" } }
+  local lines = { current }
+  for _, preview in ipairs(activity.pending(self.conversation.pending_user_messages, self.next_mode)) do
+    table.insert(lines, { { "  " .. preview, "SiaUserPending" } })
+  end
+  self.canvas:update_tool_progress(lines)
 end
 
 --- @param statuses sia.engine.Status[]
