@@ -70,8 +70,21 @@ end
 
 --- @alias sia.ToolCall sia.FunctionCall|sia.CustomCall
 
---- @class sia.tool.BaseType
---- @field description string
+--- Shared constraints for parameter schemas and partial schemas in alternatives.
+--- @class sia.tool.Schema
+--- @field type string|string[]?
+--- @field title string?
+--- @field description string?
+--- @field ["$ref"] string?
+--- @field ["$defs"] table<string, sia.tool.Schema|boolean>?
+--- @field properties table<string, sia.tool.Schema|boolean>?
+--- @field required string[]?
+--- @field additionalProperties boolean|sia.tool.Schema?
+--- @field anyOf (sia.tool.Schema|boolean)[]?
+--- @field oneOf (sia.tool.Schema|boolean)[]?
+--- @field allOf (sia.tool.Schema|boolean)[]?
+
+--- @class sia.tool.BaseType : sia.tool.Schema
 
 --- @class sia.tool.Number : sia.tool.BaseType
 --- @field type "number"
@@ -109,8 +122,12 @@ end
 --- @class sia.tool.FunctionDefinition : sia.tool.BaseDefinition
 --- @field type "function"
 --- @field required string[]
---- @field input_schema table?
---- @field parameters table<string, sia.tool.Type>
+--- @field parameters table<string, sia.tool.Type|sia.tool.Schema|boolean>
+--- @field additionalProperties boolean|sia.tool.Schema? Defaults to false.
+--- @field defs table<string, sia.tool.Schema|boolean>?
+--- @field anyOf (sia.tool.Schema|boolean)[]?
+--- @field oneOf (sia.tool.Schema|boolean)[]?
+--- @field allOf (sia.tool.Schema|boolean)[]?
 
 --- @class sia.tool.CustomDefinition : sia.tool.BaseDefinition
 --- @field type "custom"

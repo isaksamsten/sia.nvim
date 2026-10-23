@@ -153,7 +153,6 @@ function M.ensure(name, callback)
   entry.client:start(discover)
 end
 
--- Called once at each safe request boundary. Existing requests retain their mappings.
 function M.prepare(conversation, callback)
   local selected = conversation.mcp_servers or {}
   if conversation.project_mcp then

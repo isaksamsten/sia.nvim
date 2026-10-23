@@ -1,5 +1,25 @@
 local M = {}
 
+--- Serialize Sia's shared function definition to JSON Schema.
+--- @param tool sia.tool.FunctionDefinition
+--- @return sia.tool.Schema
+function M.tool_schema(tool)
+  local additional = tool.additionalProperties
+  if additional == nil then
+    additional = false
+  end
+  return {
+    type = "object",
+    properties = tool.parameters or vim.empty_dict(),
+    required = tool.required or {},
+    additionalProperties = additional,
+    ["$defs"] = tool.defs,
+    anyOf = tool.anyOf,
+    oneOf = tool.oneOf,
+    allOf = tool.allOf,
+  }
+end
+
 --- @param message sia.Message
 function M.apply_caching(message)
   if type(message.content) == "string" then

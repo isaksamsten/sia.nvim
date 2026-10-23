@@ -342,17 +342,12 @@ M.messages = {
         :filter(function(tool)
           return tool.type == "function"
         end)
-        --- @param tool sia.tool.Definition
+        --- @param tool sia.tool.FunctionDefinition
         :map(function(tool)
           return {
             name = tool.name,
             description = tool.description,
-            input_schema = tool.input_schema or {
-              type = "object",
-              properties = tool.parameters,
-              required = tool.required,
-              additionalProperties = false,
-            },
+            input_schema = require("sia.provider.common").tool_schema(tool),
           }
         end)
         :totable()

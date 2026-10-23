@@ -134,12 +134,33 @@ T["adapter preserves schemas, stable names and bounded mixed output"] = function
     local first = assert(a.wrap('a_b', remote, {}, {}))
     local second = assert(a.wrap('a', {name='b_find.a', inputSchema=schema}, {}, {}))
     assert(first.definition.name ~= second.definition.name and #first.definition.name <= 64)
-    assert(vim.deep_equal(first.definition.input_schema, schema))
+    assert(vim.deep_equal(first.definition.parameters, schema.properties))
+    assert(vim.deep_equal(first.definition.defs, schema['$defs']))
+    assert(first.definition.additionalProperties == false)
+    assert(first.definition.input_schema == nil)
     assert(not a.wrap('a', {name='bad', inputSchema={type='object', anyOf={}}}, {}, {}))
     local text = a.normalize({content={{type='text',text='p. 4'},{type='image',data='SECRET'}}, structuredContent={page=4}}, 500)
     assert(text:find('p. 4') and text:find('Unsupported MCP content: image') and text:find('Structured content'))
     assert(not text:find('SECRET'))
     assert(a.normalize({content={{type='text',text=string.rep('x',100)}}},10):find('truncated'))
+  ]])
+end
+
+T["adapter accepts FastMCP titles and preserves nested annotations"] = function()
+  child.lua([[
+    local schema = {
+      title = 'searchArguments',
+      type = 'object',
+      properties = {query = {title = 'Query', type = 'string'}},
+      required = {'query'},
+    }
+    local tool = assert(require('sia.mcp.tools').wrap('docs', {
+      name = 'search', inputSchema = schema,
+    }, {}, {}))
+    assert(vim.deep_equal(tool.definition.parameters, schema.properties))
+    assert(tool.definition.parameters ~= schema.properties)
+    assert(tool.definition.parameters.query.title == 'Query')
+    assert(tool.definition.additionalProperties == true)
   ]])
 end
 
@@ -199,11 +220,26 @@ T["project-authorized execution skips confirmation and bounds tool results"] = f
   ]])
 end
 
-T["providers retain complete input schemas"] = function()
+T["providers serialize shared function schemas through JSON round trips"] = function()
   child.lua([[
-    local schema = {type='object', properties={x={type='string',pattern='^a'}},
-      ['$defs']={unused={type='number'}}, additionalProperties={type='integer'}}
-    local tools = {{name='mcp_test',type='function',description='test',input_schema=schema}}
+    local schema = vim.json.decode([=[{
+      "type": "object",
+      "properties": {
+        "x": {"title": "X", "anyOf": [{"$ref": "#/$defs/value"}, {"type": "null"}], "default": null},
+        "empty": {"type": "object", "properties": {}}
+      },
+      "required": [],
+      "$defs": {"value": {"type": "string", "pattern": "^a"}},
+      "anyOf": [{"required": ["x"]}, {"required": ["empty"]}],
+      "oneOf": [{"properties": {"x": {"type": "string"}}}, {"properties": {"x": {"type": "null"}}}],
+      "allOf": [{"properties": {"empty": {"type": "object"}}}],
+      "additionalProperties": {"type": "integer"}
+    }]=])
+    local definition = assert(require('sia.mcp.tools').schema(schema))
+    definition.name = 'mcp_test'
+    definition.type = 'function'
+    definition.description = 'test'
+    local tools = {definition}
     for _, case in ipairs({
       {require('sia.provider.openai').completion, 'completion'},
       {require('sia.provider.openai').responses, 'responses'},
@@ -213,7 +249,15 @@ T["providers retain complete input schemas"] = function()
       case[1].prepare_tools(data, tools)
       local actual = case[2] == 'completion' and data.tools[1]['function'].parameters
         or case[2] == 'responses' and data.tools[1].parameters or data.tools[1].input_schema
-      assert(vim.deep_equal(actual, schema))
+      assert(vim.deep_equal(vim.json.decode(vim.json.encode(actual)), schema))
+    end
+    local common = require('sia.provider.common')
+    assert(common.tool_schema({parameters=vim.empty_dict(),required={}}).additionalProperties == false)
+    for _, additional in ipairs({true, false, {type='integer'}}) do
+      local imported = assert(require('sia.mcp.tools').schema({
+        type='object', additionalProperties=additional,
+      }))
+      assert(vim.deep_equal(common.tool_schema(imported).additionalProperties, additional))
     end
   ]])
 end

@@ -312,8 +312,9 @@ local function tool_definition_bytes(conversation)
     for _, tool in ipairs(conversation.tool_definitions) do
       bytes = bytes + #(tool.name or "")
       bytes = bytes + #(tool.description or "")
-      if tool.input_schema or tool.parameters then
-        local ok, json = pcall(vim.json.encode, tool.input_schema or tool.parameters)
+      if tool.type == "function" and tool.parameters then
+        local schema = require("sia.provider.common").tool_schema(tool)
+        local ok, json = pcall(vim.json.encode, schema)
         if ok then
           bytes = bytes + #json
         end

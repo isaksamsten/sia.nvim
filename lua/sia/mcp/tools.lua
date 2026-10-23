@@ -1,5 +1,9 @@
 local M = {}
 
+--- Import an MCP object schema into Sia's function-schema fields.
+--- @param schema table
+--- @return table? fields
+--- @return string? error
 function M.schema(schema)
   if type(schema) ~= "table" or schema.type ~= "object" then
     return nil, "inputSchema must be an object"
@@ -8,14 +12,18 @@ function M.schema(schema)
   if not encoded or #json > 65536 then
     return nil, "inputSchema exceeds 64 KiB or is not JSON"
   end
-  -- Provider adapters can carry these root keywords without lossy conversion.
+  -- Annotations are harmless; validation keywords must be represented explicitly.
   local allowed = {
     type = true,
     properties = true,
     required = true,
     additionalProperties = true,
+    title = true,
     description = true,
     ["$defs"] = true,
+    anyOf = true,
+    oneOf = true,
+    allOf = true,
   }
   for key in pairs(schema) do
     if not allowed[key] then
@@ -31,7 +39,42 @@ function M.schema(schema)
   then
     return nil, "invalid required"
   end
-  return vim.deepcopy(schema)
+  for _, key in ipairs({ "anyOf", "oneOf", "allOf" }) do
+    local alternatives = schema[key]
+    if alternatives ~= nil then
+      if type(alternatives) ~= "table" or not vim.islist(alternatives) or #alternatives == 0 then
+        return nil, "invalid " .. key
+      end
+      for _, alternative in ipairs(alternatives) do
+        if type(alternative) ~= "table" and type(alternative) ~= "boolean" then
+          return nil, "invalid " .. key .. " schema"
+        end
+      end
+    end
+  end
+  if schema["$defs"] ~= nil and type(schema["$defs"]) ~= "table" then
+    return nil, "invalid $defs"
+  end
+  if schema.additionalProperties ~= nil
+    and type(schema.additionalProperties) ~= "boolean"
+    and type(schema.additionalProperties) ~= "table"
+  then
+    return nil, "invalid additionalProperties"
+  end
+  local fields = {
+    parameters = schema.properties or vim.empty_dict(),
+    required = schema.required or {},
+    defs = schema["$defs"],
+    anyOf = schema.anyOf,
+    oneOf = schema.oneOf,
+    allOf = schema.allOf,
+    additionalProperties = schema.additionalProperties,
+  }
+  -- JSON Schema allows extra properties by default; Sia defaults to forbidding them.
+  if fields.additionalProperties == nil then
+    fields.additionalProperties = true
+  end
+  return vim.deepcopy(fields)
 end
 
 function M.normalize(result, limit)
@@ -100,9 +143,13 @@ function M.wrap(server, remote, client, config)
         .. server
         .. "): "
         .. (remote.description or remote.name),
-      parameters = schema.properties or vim.empty_dict(),
-      required = schema.required or {},
-      input_schema = schema,
+      parameters = schema.parameters,
+      required = schema.required,
+      additionalProperties = schema.additionalProperties,
+      defs = schema.defs,
+      anyOf = schema.anyOf,
+      oneOf = schema.oneOf,
+      allOf = schema.allOf,
     },
     read_only = false,
     summary = function()

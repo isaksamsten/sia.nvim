@@ -193,7 +193,11 @@ end
 --- Keep persisted summary parts separated just like the live stream.
 local function append_reasoning_summary(summary, item)
   for _, part in ipairs(item.summary or {}) do
-    if part.type == "summary_text" and type(part.text) == "string" and part.text ~= "" then
+    if
+      part.type == "summary_text"
+      and type(part.text) == "string"
+      and part.text ~= ""
+    then
       summary = summary and (summary .. "\n\n" .. part.text) or part.text
     end
   end
@@ -379,19 +383,14 @@ local M = {
           :filter(function(def)
             return def.type == "function"
           end)
-          --- @param def sia.tool.Definition
+          --- @param def sia.tool.FunctionDefinition
           :map(function(def)
             return {
               type = "function",
               ["function"] = {
                 name = def.name,
                 description = def.description,
-                parameters = def.input_schema or {
-                  type = "object",
-                  properties = def.parameters,
-                  required = def.required,
-                  additionalProperties = false,
-                },
+                parameters = require("sia.provider.common").tool_schema(def),
               },
             }
           end)
@@ -691,12 +690,7 @@ local M = {
             type = "function",
             name = tool.name,
             description = tool.description,
-            parameters = tool.input_schema or {
-              type = "object",
-              properties = tool.parameters,
-              required = tool.required,
-              additionalProperties = false,
-            },
+            parameters = require("sia.provider.common").tool_schema(tool),
           }
         end)
         :totable()
