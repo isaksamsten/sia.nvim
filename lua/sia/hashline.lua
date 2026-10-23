@@ -1,5 +1,3 @@
--- Core snapshot/range editing adapted from oh-my-pi's hashline design.
--- See THIRD-PARTY-NOTICES.md for attribution and license.
 local M = {}
 local stores = setmetatable({}, { __mode = "k" })
 local registers = {}
@@ -13,8 +11,6 @@ local function digest(lines)
   return vim.fn.sha256(table.concat(lines, "\n"))
 end
 
---- Diagnose snapshot mismatches without recording a new read.
---- Content digests, rather than buffer change ticks, determine validity.
 function M.validate_snapshot(conversation, path, lines, tag)
   path = vim.fn.fnamemodify(path, ":p")
   local snapshot = stores[conversation] and stores[conversation][path]
@@ -23,7 +19,8 @@ function M.validate_snapshot(conversation, path, lines, tag)
     reasons[#reasons + 1] = "No recorded snapshot exists for this file."
   else
     if type(tag) ~= "string" or tag:upper() ~= snapshot.digest:sub(1, 4):upper() then
-      reasons[#reasons + 1] = "The supplied tag does not match the latest recorded snapshot."
+      reasons[#reasons + 1] =
+        "The supplied tag does not match the latest recorded snapshot."
     end
     if digest(lines) ~= snapshot.digest then
       reasons[#reasons + 1] = "Buffer contents changed since the recorded snapshot."
@@ -45,7 +42,7 @@ function M.view(conversation, path, lines, first, last, max_length)
   local hash = digest(lines)
   local snapshot = store[path]
   if not snapshot or snapshot.digest ~= hash then
-    -- Bound retained snapshot metadata per conversation.
+    -- Max 256 file snapshots per conversation
     if vim.tbl_count(store) >= 256 then
       store[next(store)] = nil
     end
