@@ -483,9 +483,18 @@ local validate = {
           string.format("action.%s must be a string, got %s", field, type(value))
       end
 
-      if not raw_options().actions[value] then
+      local agent
+      if field == "chat" then
+        local registry = require("sia.agent.registry")
+        registry.scan()
+        if registry.errors()[value] then
+          return false, "invalid chat agent: " .. value
+        end
+        agent = registry.get(value)
+      end
+      if not agent and not raw_options().actions[value] then
         return false,
-          string.format("action.%s, %s is no a defined action", field, value)
+          string.format("action.%s, %s is not a defined action or agent", field, tostring(value))
       end
     end
 
@@ -788,6 +797,10 @@ local function resolve_auto(user_json, auto_json)
   if auto_json.context then
     merged.context =
       vim.tbl_deep_extend("force", {}, merged.context or {}, auto_json.context)
+  end
+  if auto_json.action then
+    merged.action =
+      vim.tbl_deep_extend("force", {}, merged.action or {}, auto_json.action)
   end
   if auto_json.model then
     local models = require("sia.config.model")

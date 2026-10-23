@@ -14,6 +14,7 @@ dot-separated path and a scalar value to save a project override:
 :SiaConfig model.default.default.options.reasoning.effort high
 :SiaConfig context.tools.max_calls 50
 :SiaConfig context.tools.strip_inputs false
+:SiaConfig action.chat code/assistant
 ```
 
 A path without a value displays its effective value. `:SiaConfig! <path>` removes
@@ -25,6 +26,11 @@ Changes are written to `.sia/auto.json`. Model and context precedence is global
 settings, then `config.json`, then `auto.json`. Options-only overrides require
 an inherited model at that exact role/tier. `SiaConfig model <name>` sets all
 tiers of the default role.
+
+`SiaConfig action.chat <name>` selects an existing agent or globally configured
+Lua action for the default chat, with completion for both. Use
+`:SiaConfig action.chat` to inspect the selection and `:SiaConfig! action.chat`
+to remove the generated override.
 
 ### Skills and agents
 
@@ -151,6 +157,23 @@ syntax.
 
   Each field should reference an action name defined in your global
   configuration. See [Actions](../5-features/1-actions.md).
+
+### Chat Agent
+
+Set **action.chat** to an existing agent name to use its system prompt, tools,
+tool approvals, model selection, and capability requirements for the default chat:
+
+```json
+{
+  "action": { "chat": "code/assistant" }
+}
+```
+
+The agent is loaded from the existing global or project-local `agents/`
+directories. Agent definitions take precedence over globally configured Lua
+actions with the same name. Chat UI settings and initial user context are
+retained from the default action. If no matching agent exists, the name selects
+a globally configured Lua action.
 
 ### Context Settings
 

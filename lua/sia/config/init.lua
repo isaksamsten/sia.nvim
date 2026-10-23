@@ -8,10 +8,39 @@ local model_config = require("sia.config.model")
 local action_proxy = setmetatable({}, {
   __index = function(_, mode)
     local lc = M.get_local_config()
-    if lc and lc.action and lc.action[mode] then
-      return M._raw_options.actions[lc.action[mode]]
+    local name = lc and lc.action and lc.action[mode]
+    local action = M._raw_options.settings.actions[mode]
+    if not name then
+      return action
     end
-    return M._raw_options.settings.actions[mode]
+    if mode ~= "chat" then
+      return M._raw_options.actions[name]
+    end
+
+    local registry = require("sia.agent.registry")
+    registry.scan()
+    local agent = registry.get(name)
+    if not agent then
+      if registry.errors()[name] then
+        error("sia: invalid chat agent: " .. name)
+      end
+      return M._raw_options.actions[name]
+    end
+    action = vim.deepcopy(action)
+    action.system = { table.concat(agent.system_prompt, "\n") }
+    action.model = agent.model
+    action.requires = agent.requires
+    action.tools = function()
+      local tools = require("sia.tools")
+      local selected = {}
+      for _, name in ipairs(agent.tools) do
+        if tools[name] then
+          table.insert(selected, tools[name])
+        end
+      end
+      return selected, agent.auto_approve
+    end
+    return action
   end,
 })
 
@@ -159,6 +188,7 @@ local settings_proxy = setmetatable({}, {
 --- @field user sia.config.UserMessage[]
 --- @field tools (fun(model: sia.Model):sia.Tool[],true|table<string, true>?)?
 --- @field model sia.ModelSelection?
+--- @field requires string[]? Required model capabilities
 --- @field input sia.config.ActionInput?
 --- @field enabled ((fun():boolean)|boolean)?
 --- @field capture (fun(arg: sia.Invocation):sia.Capture?)?

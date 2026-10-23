@@ -1062,6 +1062,7 @@ local function new_template_context(conversation, agents, skills)
 
   return {
     today = os.date("%Y-%m-%d"),
+    workspace = conversation.workspace,
     tools = conversation.tool_definitions,
     agents = require("sia.agent.registry").filter(function(agent)
       return agents[agent.name]
@@ -1092,7 +1093,7 @@ local function from_action(action, invocation, overrides)
     "action.model"
   )
   local model = overrides.model and models.resolve(overrides.model)
-    or models.resolve_role(selection.role, selection.tier)
+    or models.resolve_role(selection.role, selection.tier, action.requires)
   local tools, approved
   if action.tools then
     tools, approved = action.tools(model)

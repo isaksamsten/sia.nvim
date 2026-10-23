@@ -127,13 +127,13 @@ local function scan_dir(base_dir)
       seen[filepath] = true
       local name = name_from_path(base_dir, filepath)
       local ok, agent = pcall(parse_agent_file, filepath, name)
-      if ok then
+      if ok and agent then
         agents[name] = { definition = agent }
       else
         agents[name] = {
           error = {
             path = filepath,
-            message = agent --[[@as string]],
+            message = agent or "Invalid frontmatter or missing system prompt",
           },
         }
       end
@@ -142,6 +142,7 @@ local function scan_dir(base_dir)
 end
 
 function M.scan()
+  agents = {}
   local local_dir = get_project_agents_dir()
   local global_dir = M._get_default_agents_dir()
   if global_dir then

@@ -19,6 +19,9 @@ local function path_parts(path)
   if context_paths[path] then
     return parts, context_paths[path]
   end
+  if path == "action.chat" then
+    return parts, "string"
+  end
   if parts[1] ~= "model" then
     error("unsupported configuration path: " .. path, 0)
   end
@@ -100,6 +103,9 @@ function M.run(args)
     local parts, expected = path_parts(path)
     if not text and not args.bang then
       local value = require("sia.config").options.settings
+      if parts[1] == "action" then
+        value = require("sia.config").get_local_config() or {}
+      end
       for _, part in ipairs(parts) do
         value = type(value) == "table" and value[part] or nil
       end
@@ -122,7 +128,7 @@ function M.run(args)
       end
       if expected == "string" then
         if type(value) ~= "string" then
-          error("expected a model name", 0)
+          error("expected a string", 0)
         end
       elseif expected == "scalar" then
         if
@@ -206,6 +212,29 @@ end
 
 function M.complete(lead, line, cursor)
   local before = line and line:sub(1, cursor or #line) or ""
+  if before:match("SiaConfig!?%s+action%.chat%s+[^%s]*$") then
+    local registry = require("sia.agent.registry")
+    registry.scan()
+    local names = {}
+    for name in pairs(require("sia.config").options.actions) do
+      names[name] = true
+    end
+    for _, agent in
+      ipairs(registry.filter(function()
+        return true
+      end))
+    do
+      names[agent.name] = true
+    end
+    local candidates = {}
+    for name in pairs(names) do
+      if vim.startswith(name, lead) then
+        candidates[#candidates + 1] = name
+      end
+    end
+    table.sort(candidates)
+    return candidates
+  end
   local kind = before:match("SiaConfig!?%s+(skill)%s+[^%s]*$")
     or before:match("SiaConfig!?%s+(agent)%s+[^%s]*$")
   if kind then
@@ -232,7 +261,7 @@ function M.complete(lead, line, cursor)
     table.sort(candidates)
     return candidates
   end
-  local paths = { "model", "skill", "agent" }
+  local paths = { "model", "skill", "agent", "action.chat" }
   for path in pairs(context_paths) do
     paths[#paths + 1] = path
   end
