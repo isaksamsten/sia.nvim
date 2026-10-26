@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">sia.nvim</h1>
 
-An LLM assistant for Neovim.
+An AI assistant for Neovim.
 
 Supports: OpenAI, Codex, Copilot and OpenRouter (both OpenAI Chat Completions and Responses), Anthropic (native API), Gemini and ZAI.
 
