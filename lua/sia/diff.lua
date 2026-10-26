@@ -885,7 +885,7 @@ function M.get_all_hunks_for_quickfix(buf)
       local line_count = vim.api.nvim_buf_line_count(buf)
 
       for i, hunk in ipairs(diff_state.reference_hunks) do
-        if hunk.new_start > 0 and hunk.new_start <= line_count then
+        if hunk.new_start >= 0 and hunk.new_start <= line_count then
           local hunk_type = hunk.type == "add" and "Added"
             or (hunk.type == "delete" and "Deleted" or "Changed")
           local text = string.format(
@@ -899,7 +899,7 @@ function M.get_all_hunks_for_quickfix(buf)
 
           table.insert(quickfix_items, {
             filename = bufname,
-            lnum = hunk.new_start,
+            lnum = math.max(1, hunk.new_start),
             col = 1,
             text = text,
             type = "I",
@@ -914,7 +914,7 @@ function M.get_all_hunks_for_quickfix(buf)
         local line_count = vim.api.nvim_buf_line_count(buffer_id)
 
         for i, hunk in ipairs(diff_state.reference_hunks) do
-          if hunk.new_start > 0 and hunk.new_start <= line_count then
+          if hunk.new_start >= 0 and hunk.new_start <= line_count then
             local hunk_type = hunk.type == "add" and "Added"
               or (hunk.type == "delete" and "Deleted" or "Changed")
             local text = string.format(
@@ -928,7 +928,7 @@ function M.get_all_hunks_for_quickfix(buf)
 
             table.insert(quickfix_items, {
               filename = bufname,
-              lnum = hunk.new_start,
+              lnum = math.max(1, hunk.new_start),
               col = 1,
               text = text,
               type = "I",
