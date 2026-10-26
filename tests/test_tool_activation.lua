@@ -133,4 +133,66 @@ T["the entire detail range is actionable without stealing adjacent blocks"] = fu
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
+T["edit activation opens current file hunks and focuses the first change"] = function()
+  local diff = require("sia.diff")
+  local path = vim.fn.tempname() .. " with spaces"
+  vim.fn.writefile({ "first", "second", "third", "fourth" }, path)
+  local buf = vim.fn.bufadd(path)
+  vim.fn.bufload(buf)
+  diff.update_baseline(buf)
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { "first", "changed", "third", "changed again" }
+  )
+  diff.update_reference(buf)
+  local chat_win = vim.api.nvim_get_current_win()
+  local chat_buf = vim.api.nvim_get_current_buf()
+  local activate = require("sia.tools.activation").edit_file(buf)
+  activate()
+  eq(buf, vim.api.nvim_get_current_buf())
+  eq(2, vim.api.nvim_win_get_cursor(0)[1])
+  eq(chat_buf, vim.api.nvim_win_get_buf(chat_win))
+  eq(1, vim.fn.getqflist({ winid = 0 }).winid > 0 and 1 or 0)
+  local items = vim.fn.getqflist()
+  eq(2, #items)
+  eq(2, items[1].lnum)
+  eq(4, items[2].lnum)
+  eq(buf, items[1].bufnr)
+  vim.cmd("cclose")
+  vim.cmd("close")
+  diff.accept_diff(buf)
+  local wins = vim.api.nvim_list_wins()
+  activate()
+  eq(wins, vim.api.nvim_list_wins())
+  eq(items, vim.fn.getqflist())
+  vim.api.nvim_buf_delete(buf, { force = true })
+  activate()
+  eq(wins, vim.api.nvim_list_wins())
+  vim.fn.delete(path)
+end
+
+T["edit activation includes deletions at the start of a file"] = function()
+  local diff = require("sia.diff")
+  local path = vim.fn.tempname()
+  vim.fn.writefile({ "remove", "keep", "last" }, path)
+  local buf = vim.fn.bufadd(path)
+  vim.fn.bufload(buf)
+  diff.update_baseline(buf)
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, {})
+  diff.update_reference(buf)
+  require("sia.tools.activation").edit_file(buf)()
+  eq(buf, vim.api.nvim_get_current_buf())
+  eq(1, vim.api.nvim_win_get_cursor(0)[1])
+  eq(1, #vim.fn.getqflist())
+  eq(1, vim.fn.getqflist()[1].lnum)
+  vim.cmd("cclose")
+  vim.cmd("close")
+  diff.accept_diff(buf)
+  vim.api.nvim_buf_delete(buf, { force = true })
+  vim.fn.delete(path)
+end
+
 return T

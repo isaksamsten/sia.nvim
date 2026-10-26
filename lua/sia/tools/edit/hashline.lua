@@ -159,7 +159,7 @@ Cross-file move: `CUT 1.=3 @fn` in source, then `PUT <1 @fn` in a separate desti
         ),
         summary = {
           header = "Edited " .. args.target_file,
-          on_activate = require("sia.tools.activation").open_file(path),
+          on_activate = require("sia.tools.activation").edit_file(buf),
         },
         region = {
           buf = buf,
