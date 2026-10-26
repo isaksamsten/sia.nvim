@@ -116,6 +116,7 @@ end
 --- @field kind "input"|"choice"
 --- @field level sia.RiskLevel
 --- @field supports_always boolean
+--- @field is_approved (fun():boolean)?
 --- @field on_ready fun(idx: integer, choice:"accept"|"always"|"decline"|"prompt"|"preview")
 --- @field clear_preview fun()?
 
@@ -916,7 +917,7 @@ end
 --- Show a pending confirmation notification to the user
 --- @param conversation sia.Conversation The conversation requesting confirmation
 --- @param prompt string The prompt to show to the user
---- @param opts { level: sia.RiskLevel, on_accept: fun(), on_always: fun()?, on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
+--- @param opts { level: sia.RiskLevel, on_accept: fun(), on_always: fun()?, is_approved: (fun():boolean)?, on_cancel: fun(), on_prompt:fun(), on_preview: (fun():fun())?, tool_name:string?, kind:("input"|"choice")? }
 --- @return {accept:fun(), update:fun(new_prompt:string)}
 function M.show(conversation, prompt, opts)
   next_confirm_id = next_confirm_id + 1
@@ -929,6 +930,7 @@ function M.show(conversation, prompt, opts)
     kind = opts.kind or "input",
     level = opts.level,
     supports_always = type(opts.on_always) == "function",
+    is_approved = opts.is_approved,
   }
 
   confirm.on_ready = function(idx, choice)
@@ -970,6 +972,24 @@ function M.show(conversation, prompt, opts)
       refresh_ui()
     end,
   }
+end
+
+--- Recheck queued requests after an approval changes. Snapshot IDs because
+--- accepting a request may synchronously mutate the queue.
+--- @param conversation sia.Conversation
+function M.recheck(conversation)
+  local ids = {}
+  for _, pending in ipairs(pending_confirms) do
+    if pending.conversation == conversation and pending.is_approved then
+      table.insert(ids, pending.id)
+    end
+  end
+  for _, id in ipairs(ids) do
+    local idx = find_confirm_index(id)
+    if idx and pending_confirms[idx].is_approved() then
+      trigger_confirm(idx, "accept")
+    end
+  end
 end
 
 --- @param id integer

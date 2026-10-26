@@ -408,6 +408,11 @@ local function persist_always_approval(
   persist_allow,
   on_done
 )
+  local accept = on_done
+  on_done = function()
+    require("sia.ui.confirm").recheck(conversation)
+    accept()
+  end
   if not persist_allow then
     conversation.approved_tools[tool_name] = true
     on_done()
@@ -459,7 +464,8 @@ local function create_user_input_handler(
   permission,
   persist_allow,
   verification,
-  on_confirmation
+  on_confirmation,
+  resolve_permission
 )
   local confirm_conf = require("sia.config").options.settings.ui.confirm
   return function(prompt, input_args)
@@ -474,6 +480,13 @@ local function create_user_input_handler(
     if risk.allows_auto_confirm(resolved_level) and ignore_confirm then
       input_args.on_accept()
       return
+    end
+
+    local function is_approved()
+      local current = resolve_permission(args, conversation)
+      return risk.allows_auto_confirm(
+        risk.get_risk_level(tool_name, args, default_level)
+      ) and current ~= nil and current.auto_allow == true
     end
 
     prompt = prompt or ("Execute " .. tool_name)
@@ -781,6 +794,7 @@ local function create_user_input_handler(
         kind = "input",
         on_accept = input_args.on_accept,
         on_always = on_always,
+        is_approved = is_approved,
         on_cancel = function()
           callback(cancellation_result(tool_name))
         end,
@@ -996,7 +1010,8 @@ M.new_tool = function(opts, execute)
           permission,
           opts.persist_allow,
           verification,
-          on_confirmation
+          on_confirmation,
+          resolve_permission
         )
         local user_choice = create_user_choice_handler(
           opts.definition.name,
