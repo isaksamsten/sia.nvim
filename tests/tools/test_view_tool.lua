@@ -85,7 +85,8 @@ T["sia.tools.view"]["view text file basic"] = function()
   eq("1:line 1", content[2])
   eq("2:line 2", content[3])
   eq("3:line 3", content[4])
-  eq("Read test.txt", result.summary)
+  eq("Read test.txt", result.summary.header)
+  eq("function", type(result.summary.on_activate))
 
   restore_file_loader()
   restore_tracker()
@@ -104,7 +105,7 @@ T["sia.tools.view"]["skill files use the normal file summary"] = function()
 
   view_tool.implementation.execute({ path = skill_path }, callback, create_execution_context())
 
-  eq("Read .sia/skills/example/SKILL.md", result.summary)
+  eq("Read .sia/skills/example/SKILL.md", result.summary.header)
 
   restore_file_loader()
   restore_tracker()
@@ -132,7 +133,7 @@ T["sia.tools.view"]["view text file with offset and limit"] = function()
   eq(3, #content)
   eq("2:line 2", content[2])
   eq("3:line 3", content[3])
-  eq("Read test.txt:2-3", result.summary)
+  eq("Read test.txt:2-3", result.summary.header)
 
   restore_file_loader()
   restore_tracker()

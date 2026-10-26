@@ -51,6 +51,7 @@ end
 --- @class sia.ToolSummaryParts
 --- @field header string
 --- @field detail sia.ToolDetails?
+--- @field on_activate fun()? Live canvas action, invoked with <CR>.
 ---
 --- @alias sia.ToolSummary string|sia.ToolSummaryParts|false
 

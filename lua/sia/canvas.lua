@@ -7,6 +7,8 @@ local TOOL_PREVIEW_NS = vim.api.nvim_create_namespace("sia_chat_tool_preview")
 local ASSISTANT_TEXT_NS = vim.api.nvim_create_namespace("sia_chat_assistant_text")
 local TOOL_RESULT_NS = vim.api.nvim_create_namespace("sia_chat_tool_result")
 local REASONING_NS = vim.api.nvim_create_namespace("sia_chat_reasoning")
+local TOOL_ACTION_NS = vim.api.nvim_create_namespace("sia_chat_tool_action")
+local TOOL_ACTION_HINT_NS = vim.api.nvim_create_namespace("sia_chat_tool_action_hint")
 local DETAILS_LABEL = "  ▼ Details"
 
 --- @param summary sia.ToolSummary
@@ -86,6 +88,8 @@ end
 --- @field footer_marks table<string, integer>
 --- @field turn_usage table<string, sia.Usage>
 --- @field opts sia.CanvasOpts
+--- @field tool_actions table<integer, fun()>
+--- @field tool_actions_attached boolean?
 local Canvas = {}
 Canvas.__index = Canvas
 
@@ -101,9 +105,74 @@ function Canvas:new(buf, opts)
     opts = opts or {},
     footer_marks = {},
     turn_usage = {},
+    tool_actions = {},
   }
   setmetatable(obj, self)
   return obj
+end
+
+--- @param row integer Zero-based buffer row.
+--- @return function?
+function Canvas:tool_action_at(row)
+  local marks = vim.api.nvim_buf_get_extmarks(
+    self.buf,
+    TOOL_ACTION_NS,
+    { row, -1 },
+    0,
+    {
+      details = true,
+      limit = 1,
+    }
+  )
+  local mark = marks[1]
+  if mark and row < mark[4].end_row then
+    return self.tool_actions[mark[1]]
+  end
+end
+
+function Canvas:update_tool_action_hint()
+  vim.api.nvim_buf_clear_namespace(self.buf, TOOL_ACTION_HINT_NS, 0, -1)
+  if vim.api.nvim_get_current_buf() ~= self.buf then
+    return
+  end
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+  if self:tool_action_at(row) then
+    vim.api.nvim_buf_set_extmark(self.buf, TOOL_ACTION_HINT_NS, row, 0, {
+      virt_text = { { " ↗ <CR>", "Special" } },
+      virt_text_pos = "eol",
+    })
+  end
+end
+
+--- Register only actions rendered in the live tool block, not history.
+function Canvas:mark_tool_action(first, last, callback)
+  if not self.tool_actions_attached then
+    self.tool_actions_attached = true
+    vim.keymap.set("n", "<CR>", function()
+      local action = self:tool_action_at(vim.api.nvim_win_get_cursor(0)[1] - 1)
+      if action then
+        action()
+      end
+    end, { buffer = self.buf, silent = true, desc = "Activate tool result" })
+    vim.api.nvim_create_autocmd({ "CursorMoved", "BufEnter", "WinEnter" }, {
+      buffer = self.buf,
+      callback = function()
+        self:update_tool_action_hint()
+      end,
+    })
+    vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
+      buffer = self.buf,
+      callback = function()
+        vim.api.nvim_buf_clear_namespace(self.buf, TOOL_ACTION_HINT_NS, 0, -1)
+      end,
+    })
+  end
+  local id = vim.api.nvim_buf_set_extmark(self.buf, TOOL_ACTION_NS, first, 0, {
+    end_row = last,
+    right_gravity = true,
+    end_right_gravity = false,
+  })
+  self.tool_actions[id] = callback
 end
 
 --- Mark the start of an assistant text block without altering Markdown content.
@@ -234,9 +303,12 @@ end
 --- @param start_line integer?
 --- @param end_line integer?
 function Canvas:clear_tool_highlights(start_line, end_line)
-  for _, namespace in ipairs({ TOOL_PREVIEW_NS, TOOL_RESULT_NS }) do
+  for _, namespace in ipairs({ TOOL_PREVIEW_NS, TOOL_RESULT_NS, TOOL_ACTION_NS }) do
     if start_line == nil and end_line == nil then
       vim.api.nvim_buf_clear_namespace(self.buf, namespace, 0, -1)
+      if namespace == TOOL_ACTION_NS then
+        self.tool_actions = {}
+      end
     else
       -- Namespace range clearing also removes ranges that end at the start
       -- boundary. Adjacent tool blocks must retain those preceding marks.
@@ -244,10 +316,14 @@ function Canvas:clear_tool_highlights(start_line, end_line)
       for _, mark in ipairs(marks) do
         if mark[2] >= (start_line or 0) and (not end_line or end_line == -1 or mark[2] < end_line) then
           vim.api.nvim_buf_del_extmark(self.buf, namespace, mark[1])
+          if namespace == TOOL_ACTION_NS then
+            self.tool_actions[mark[1]] = nil
+          end
         end
       end
     end
   end
+  vim.api.nvim_buf_clear_namespace(self.buf, TOOL_ACTION_HINT_NS, 0, -1)
 end
 
 -- Text changes can evaluate foldexpr before preview extmarks exist. Invalidate
@@ -515,8 +591,16 @@ function Canvas:update_tool_block(
       line + highlight.finish,
       highlight.summary
     )
+    if type(highlight.summary) == "table" and highlight.summary.on_activate then
+      self:mark_tool_action(
+        line + highlight.start,
+        line + highlight.finish,
+        highlight.summary.on_activate
+      )
+    end
   end
   self:refresh_folds()
+  self:update_tool_action_hint()
   return #lines
 end
 

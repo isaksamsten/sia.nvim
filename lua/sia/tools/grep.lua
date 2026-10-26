@@ -160,16 +160,21 @@ Usage:
     return conversation.approved_tools["grep"]
   end,
 }, function(args, conversation, callback, opts)
+  local command = { "rg", "--no-heading", "--no-follow", "--color=never" }
   local result_callback = callback
   callback = function(result)
     if result.summary and not result.ephemeral then
-      result.summary =
-        string.format("Searched `%s` in `%s`", args.pattern, args.path or ".")
+      result.summary = {
+        header = string.format("Searched `%s` in `%s`", args.pattern, args.path or "."),
+        on_activate = require("sia.tools.activation").grep(
+          command,
+          conversation.workspace
+        ),
+      }
     end
     result_callback(result)
   end
   local output_mode = args.output_mode or "content"
-  local command = { "rg", "--no-heading", "--no-follow", "--color=never" }
 
   if output_mode == "files_with_matches" then
     table.insert(command, "-l")

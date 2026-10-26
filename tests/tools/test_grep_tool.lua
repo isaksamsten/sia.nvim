@@ -45,8 +45,9 @@ local function run(args)
   if not result.ephemeral then
     eq(
       string.format("Searched `%s` in `%s`", args.pattern, args.path or "."),
-      result.summary
+      result.summary.header
     )
+    eq("function", type(result.summary.on_activate))
   end
   return result
 end

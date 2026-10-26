@@ -131,7 +131,13 @@ Truncated lines cannot be edited; read the complete lines before editing them.]]
       callback({
         content = context.content,
         region = context.region,
-        summary = summary,
+        summary = {
+          header = summary,
+          on_activate = require("sia.tools.activation").open_file(
+            resolved_path,
+            start_line
+          ),
+        },
       })
     end,
   })
