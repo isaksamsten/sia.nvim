@@ -74,7 +74,7 @@ T["winbar"]["running agent shows name without progress"] = function()
   eq(rendered:find("Reading files", 1, true), nil)
 end
 
-T["winbar"]["default_left shows active and pending modes but hides default"] = function()
+T["winbar"]["default_left shows highlighted active and pending mode names"] = function()
   local conversation = require("sia.conversation").new({ temporary = true })
   local strategy = { is_busy = false }
   local data = { conversation = conversation, strategy = strategy, total_usage = 0 }
@@ -83,10 +83,13 @@ T["winbar"]["default_left shows active and pending modes but hides default"] = f
   conversation.active_mode = { name = "plan" }
   strategy.next_mode = { mode = "code" }
   local rendered = winbar.default_left(data)
-  eq(true, rendered:find("@plan", 1, true) ~= nil)
-  eq(true, rendered:find("→ @code", 1, true) ~= nil)
+  eq(true, rendered:find("%#SiaMode# plan", 1, true) ~= nil)
+  eq(true, rendered:find("%#NonText# code", 1, true) ~= nil)
   conversation.active_mode = { name = "default" }
   strategy.next_mode = nil
+  local default = winbar.default_left(data)
+  eq(true, default:find("%#SiaMode# default", 1, true) ~= nil)
+  conversation.active_mode = nil
   eq(baseline, winbar.default_left(data))
 end
 

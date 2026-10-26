@@ -56,10 +56,11 @@ T["directory entries retain their trailing slash"] = function()
   eq("./\n  src/\n\nsrc/\n  nested/\n\nsrc/nested/\n  file.lua", result.preview.text)
 end
 
-T["no matches has a summary and no preview"] = function()
+T["no matches reports model content without a summary or preview"] = function()
   local result = run({}, { pattern = "*.missing" })
   output.complete(result)
-  eq("string", type(result.summary))
+  eq(nil, result.summary)
+  eq("No files found matching pattern: *.missing", result.content)
   eq(nil, result.preview)
 end
 
@@ -78,11 +79,12 @@ end
 
 T["nonzero exit is a failure with its actual error"] = function()
   local result = run({}, { path = "missing" }, "fd: missing: No such directory\n")
-  eq("Failed glob: fd: missing: No such directory", result.summary)
+  eq(nil, result.summary)
+  eq(true, result.ephemeral)
   eq("Error: fd: missing: No such directory", result.content)
-  eq(nil, result.summary:find("No files found", 1, true))
+  eq(nil, result.content:find("No files found", 1, true))
   output.complete(result)
-  eq("Failed glob: fd: missing: No such directory", result.summary)
+  eq(nil, result.summary)
   eq(nil, result.preview)
 end
 
@@ -96,7 +98,8 @@ T["missing executable is reported rather than thrown"] = function()
   end, {
     conversation = { approved_tools = { glob = true } },
   })
-  eq(true, result.summary:find("Failed glob:", 1, true) ~= nil)
+  eq(nil, result.summary)
+  eq(true, result.ephemeral)
   eq(true, result.content:find("executable not found", 1, true) ~= nil)
 end
 

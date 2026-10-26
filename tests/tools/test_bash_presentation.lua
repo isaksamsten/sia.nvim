@@ -62,13 +62,20 @@ T["pause and stop details contain only output"] = function()
   end
 end
 
-T["invalid process operations remain visible"] = function()
+T["invalid process operations report failure content with optional summaries"] = function()
   for _, action in ipairs({ "status", "view", "wait", "kill" }) do
     for _, id in ipairs({ 0, 2 }) do
       local result = run({ action = action, id = id ~= 0 and id or nil })
-      eq("table", type(result.summary))
-      eq(true, result.summary.header:find("Failed", 1, true) ~= nil)
-      eq(true, result.summary.detail.text:find("Error:", 1, true) ~= nil)
+      eq("failed", result.kind)
+      eq(true, result.content:find("Error:", 1, true) ~= nil)
+      if action == "wait" or (action == "status" and id == 2) then
+        eq(nil, result.summary)
+        eq(nil, result.preview)
+      else
+        eq("table", type(result.summary))
+        eq(true, result.summary.header:find("Failed", 1, true) ~= nil)
+        eq(result.content, result.summary.detail.text)
+      end
     end
   end
 end
