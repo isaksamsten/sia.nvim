@@ -1,12 +1,12 @@
 local common = require("sia.strategy.common")
 
 local StreamRenderer = common.StreamRenderer
-local Strategy = common.Strategy
+local Strategy = require("sia.strategy.inline")
 local Canvas = require("sia.canvas").Canvas
 
 local INSERT_NS = vim.api.nvim_create_namespace("SiaInsertStrategy")
 
---- @class sia.InsertStrategy : sia.Strategy
+--- @class sia.InsertStrategy : sia.InlineStrategy
 --- @field cursor integer[]
 --- @field buf number
 --- @field pos [integer, integer]
@@ -31,12 +31,12 @@ function InsertStrategy.new(buf, pos, cursor, conversation, options)
   return obj
 end
 
-function InsertStrategy:is_buf_loaded()
+function InsertStrategy:buf_is_loaded()
   return vim.api.nvim_buf_is_loaded(self.buf)
 end
 
 function InsertStrategy:on_request_start()
-  if not self:is_buf_loaded() then
+  if not self:buf_is_loaded() then
     return false
   end
 
@@ -56,20 +56,10 @@ function InsertStrategy:on_request_start()
     self.start_col =
       #vim.api.nvim_buf_get_lines(self.buf, start_row - 1, start_row, false)[1]
   end
-  local message = self.options.message or { "Generating response...", "SiaProgress" }
-  vim.api.nvim_buf_set_extmark(
-    self.buf,
-    INSERT_NS,
-    math.max(self.start_row - 1, 0),
-    0,
-    {
-      virt_lines = { { { "🤖 ", "Normal" }, message } },
-      virt_lines_above = self.start_row - 1 > 0,
-    }
-  )
+  self:start_activity(self.buf, math.max(self.start_row - 1, 0), self.options.message)
   self.writer = StreamRenderer:new({
     line = math.max(0, self.start_row - 2),
-    col = self.start_col,
+    column = self.start_col,
     canvas = Canvas:new(self.buf, { temporary_text_hl = "SiaInsert" }),
     temporary = true,
   })
@@ -79,51 +69,26 @@ function InsertStrategy:on_request_start()
 end
 
 function InsertStrategy:on_stream_start()
-  if not self:is_buf_loaded() then
+  if not self:buf_is_loaded() then
     return false
   end
-  vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
   return true
 end
 
-function InsertStrategy:on_error()
-  if not self:is_buf_loaded() then
-    return false
+function InsertStrategy:on_error(error)
+  self:clear_activity()
+  self:del_abort_keymap(self.buf)
+  if self:buf_is_loaded() then
+    vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
   end
-  vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
-  self.writer.canvas:clear_temporary_text()
+  self.conversation:untrack_messages()
+  if error then
+    vim.notify(error, vim.log.levels.ERROR)
+  end
 end
 
 function InsertStrategy:on_cancel()
   self:on_error()
-end
-
---- @param input sia.StreamDelta
-function InsertStrategy:on_stream(input)
-  if not self:is_buf_loaded() then
-    return false
-  end
-  vim.api.nvim_buf_call(self.buf, function()
-    pcall(vim.cmd.undojoin)
-  end)
-  if input.content then
-    self.writer:append(input.content)
-  end
-  return true
-end
-
---- @param statuses sia.engine.Status[]
-function InsertStrategy:on_tool_results(statuses)
-  for _, status in ipairs(statuses) do
-    if status.summary then
-      self.writer:append_newline()
-      self.writer:append(status.summary)
-      self.writer:append_newline()
-    end
-  end
-  if not self.writer:is_empty() then
-    self.writer:append_newline()
-  end
 end
 
 function InsertStrategy:on_round_end()
@@ -134,14 +99,16 @@ end
 
 --- @param ctx sia.FinishContext
 function InsertStrategy:on_finish(ctx)
-  if not self:is_buf_loaded() or not ctx.content then
+  self:clear_activity()
+  self:del_abort_keymap(self.buf)
+  if self:buf_is_loaded() then
+    vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
+  end
+  if not self:buf_is_loaded() or not ctx.content then
     self.conversation:untrack_messages()
     return
   end
 
-  self:del_abort_keymap(self.buf)
-  self.writer.canvas:clear_temporary_text()
-  vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
   if self.padding_direction == "below" or self.padding_direction == "above" then
     vim.api.nvim_buf_set_lines(
       self.buf,
@@ -161,7 +128,7 @@ function InsertStrategy:on_finish(ctx)
     content
   )
   local end_row = self.start_row + #content - 1
-  local end_col = #content[#content]
+  local end_col = #content == 1 and self.start_col + #content[1] or #content[#content]
   vim.api.nvim_buf_set_extmark(
     self.buf,
     INSERT_NS,
@@ -176,7 +143,7 @@ function InsertStrategy:on_finish(ctx)
   self:post_process(content, self.start_row - 1, self.start_col, end_row - 1, end_col)
   self.writer = nil
   vim.defer_fn(function()
-    if not self:is_buf_loaded() then
+    if not self:buf_is_loaded() then
       return
     end
     vim.api.nvim_buf_clear_namespace(self.buf, INSERT_NS, 0, -1)
@@ -187,7 +154,7 @@ end
 --- @private
 function InsertStrategy:post_process(lines, srow, scol, erow, ecol)
   local post_process = self.options and self.options.post_process
-  if not (post_process and self:is_buf_loaded()) then
+  if not (post_process and self:buf_is_loaded()) then
     return
   end
   local ok, new_lines = pcall(post_process, {
