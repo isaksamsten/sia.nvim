@@ -250,7 +250,6 @@ local settings_proxy = setmetatable({}, {
 --- @field ui sia.config.Settings.Ui?
 --- @field shell sia.config.Shell?
 --- @field tool_verifier {enable:boolean?}?
---- @field history { enable: boolean? }?
 
 --- @class sia.config.Shell
 --- @field command string?
@@ -276,7 +275,6 @@ M._raw_options = {
   settings = {
     model = { default = { default = "openai/gpt-5.2", mini = "openai/gpt-4.1" } },
     icons = "emoji",
-    history = { enable = true },
     context = {
       tools = {
         max_calls = 200,

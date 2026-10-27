@@ -389,7 +389,6 @@ end
 --- @field usage_history sia.Usage[]
 --- @field process_runtime sia.process.Runtime
 --- @field agent_runtime sia.agents.Runtime
---- @field logger sia.history.HistoryLogger
 --- @field tracker sia.Tracker
 --- @field active_mode sia.ActiveMode?
 --- @field modes table<string, sia.config.Mode>?
@@ -410,10 +409,6 @@ local function new_conversation(opts)
   obj.id = new_conversation_id()
   obj.name = string.format("**%d**", obj.id)
   obj.uuid = require("sia.utils").new_uuid()
-  obj.logger = require("sia.history").new(opts.temporary ~= true and obj.uuid or nil)
-  if obj.model then
-    obj.logger:created(obj.model)
-  end
   obj.tracker = require("sia.tracker").new()
 
   obj.entries = {}
@@ -813,7 +808,6 @@ function Conversation:destroy()
   self.process_runtime:destroy()
   self.agent_runtime:destroy()
   require("sia.ui.confirm").clear(self.id)
-  self.logger:destroyed()
   require("sia.utils").trigger("ConversationDestroyed", {
     conversation_id = self.id,
     workspace = self.workspace,
@@ -908,7 +902,6 @@ end
 --- @param usage sia.Usage
 function Conversation:add_usage(usage)
   table.insert(self.usage_history, usage)
-  self.logger:usage_created(usage)
 end
 
 --- Get cumulative usage across all requests in this conversation
