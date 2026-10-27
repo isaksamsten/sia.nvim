@@ -187,6 +187,7 @@ end
 --- @class sia.UserMessage
 --- @field role "user"
 --- @field content sia.Content
+--- @field hide boolean?
 
 --- @class sia.AssistantMessage
 --- @field role "assistant"
@@ -198,6 +199,7 @@ end
 --- @field role "tool"
 --- @field content sia.Content
 --- @field tool_call sia.ToolCall
+--- @field summary sia.ToolSummary?
 
 --- @alias sia.Message sia.UserMessage|sia.AssistantMessage|sia.ToolMessage|sia.SystemMessage
 
@@ -376,6 +378,8 @@ end
 
 --- @class sia.Conversation
 --- @field uuid string
+--- @field created_at integer
+--- @field temporary boolean
 --- @field id integer
 --- @field entries sia.Entry[]
 --- @field tool_definitions sia.tool.Definition[]
@@ -409,6 +413,8 @@ local function new_conversation(opts)
   obj.id = new_conversation_id()
   obj.name = string.format("**%d**", obj.id)
   obj.uuid = require("sia.utils").new_uuid()
+  obj.created_at = os.time()
+  obj.temporary = opts.temporary == true
   obj.tracker = require("sia.tracker").new()
 
   obj.entries = {}
@@ -928,22 +934,23 @@ function Conversation:get_cumulative_usage()
   return cumulative
 end
 
---- Persist the current state of the conversation into a new round.
---- Called once per round.
+--- @param opts {read_only: boolean?}?
 --- @return sia.Message[]
-function Conversation:serialize()
+function Conversation:serialize(opts)
+  opts = opts or {}
   --- @type sia.Message[]
   local messages = {}
 
   for _, entry in ipairs(self.entries) do
-    if not entry.dropped then
-      if entry.ephemeral then
+    if not entry.dropped and not (opts.read_only and entry.ephemeral) then
+      if entry.ephemeral and not opts.read_only then
         entry.dropped = true
       end
       if entry.role == "system" then
         table.insert(messages, { role = "system", content = entry.content })
       elseif entry.role == "user" and entry.content then
-        local message = { role = "user", content = entry.content }
+        local message =
+          { role = "user", content = entry.content, hide = entry.hide or nil }
         if entry.region and self:is_stale(entry.region) then
           message.content = string.format(
             "System Note: History pruned. %s",
@@ -960,7 +967,11 @@ function Conversation:serialize()
         table.insert(messages, message)
       elseif entry.role == "tool" and entry.content then
         local assistant_message = { role = "assistant" }
-        local tool_message = { role = "tool", tool_call = entry.tool_call }
+        local tool_message = {
+          role = "tool",
+          tool_call = entry.tool_call,
+          summary = entry.summary,
+        }
         local stale = entry.region and self:is_stale(entry.region)
         if stale then
           tool_message.content = string.format(

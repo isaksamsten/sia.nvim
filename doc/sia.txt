@@ -1,5 +1,5 @@
 *sia.txt*
-                            For Neovim >= 0.11    Last change: 2026 October 23
+                            For Neovim >= 0.11    Last change: 2026 October 27
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -623,6 +623,14 @@ CONVERSATION MANAGEMENT                 *sia-commands-conversation-management*
   ------------------------------------------------------------------------------
   Command                     Description
   --------------------------- --------------------------------------------------
+  :SiaHistory                 Browse saved conversations for the current
+                              workspace
+
+  :SiaHistory!                Browse saved conversations across all workspaces
+
+  :SiaHistory <uuid>          Resume a saved conversation (UUID tab-completion
+                              available)
+
   :SiaFork <prompt>           Fork before the last turn into a new chat and
                               execute the prompt
 
@@ -642,6 +650,9 @@ When a prompt is provided, `:SiaFork` immediately starts a new assistant turn.
 Without a prompt, the forked chat opens with the copied history ready for
 input. `-t <turn_id>` specifies which turn to fork from (keeps messages before
 that turn). Tab-completion is available for turn IDs.
+
+`:SiaHistory` uses `vim.ui.select`, so your preferred UI override also handles
+history selection. Items show the title, last updated time, and workspace.
 
 
 SHELL PROCESS MANAGEMENT               *sia-commands-shell-process-management*
@@ -963,6 +974,11 @@ FULL SETTINGS REFERENCE                 *sia-settings-full-settings-reference*
         -- LLM verification for tools that provide a safety prompt
         tool_verifier = {
           enable = false,
+        },
+
+        -- Save interactive chat transcripts globally
+        persistence = {
+          enable = true,
         },
 
         -- Globally enabled agents and skills

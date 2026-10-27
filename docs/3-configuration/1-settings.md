@@ -68,6 +68,11 @@ require("sia").setup({
       enable = false,
     },
 
+    -- Save interactive chat transcripts globally
+    persistence = {
+      enable = true,
+    },
+
     -- Globally enabled agents and skills
     agents = { "code/review", "code/explore" },
     skills = { "update-docs" },

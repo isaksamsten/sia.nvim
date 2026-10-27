@@ -317,7 +317,9 @@ function ChatStrategy.new(conversation, options, opts)
   ChatStrategy._buffers[obj.buf] = obj
   ChatStrategy._order[#ChatStrategy._order + 1] = obj.buf
 
-  obj.conversation.name = tostring(ChatStrategy.count())
+  if not opts.render_all then
+    obj.conversation.name = tostring(ChatStrategy.count())
+  end
   pcall(vim.api.nvim_buf_set_name, buf, "*sia " .. obj.conversation.name .. "*")
   obj.canvas = require("sia.canvas").Canvas:new(obj.buf)
   obj.activity = activity.new()

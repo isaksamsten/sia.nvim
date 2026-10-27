@@ -4,6 +4,21 @@ local utils = require("sia.utils")
 local ERROR_API_KEY_MISSING = -100
 local MAX_RETRIES = 1
 
+--- @param strategy sia.Strategy
+local function save_chat(strategy)
+  local chat = require("sia.strategy.chat")
+  if
+    getmetatable(strategy) ~= chat
+    or not require("sia.config").options.settings.persistence.enable
+  then
+    return
+  end
+  local ok, err = require("sia.persistence").save(strategy.conversation)
+  if not ok then
+    vim.notify("Failed to save conversation: " .. err, vim.log.levels.WARN)
+  end
+end
+
 --- Feed complete lines from Neovim's buffered job callbacks to a consumer.
 --- Neovim keeps the unfinished line as both the last item of one callback and
 --- the first item of the next callback, so only callback boundaries need to be
@@ -167,6 +182,7 @@ function M.execute_strategy(strategy)
       provider.prepare_parameters(data, model)
     end
     local messages = strategy.conversation:serialize()
+    save_chat(strategy)
     provider.prepare_tools(data, strategy.conversation.tool_definitions)
     provider.prepare_messages(data, model.api_name, messages)
 
@@ -312,6 +328,7 @@ function M.execute_strategy(strategy)
             end,
           })
         else
+          save_chat(strategy)
           strategy:on_finish({
             usage = usage,
             content = round and round.content or nil,

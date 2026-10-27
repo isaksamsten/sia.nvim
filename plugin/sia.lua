@@ -1,3 +1,14 @@
+vim.api.nvim_create_user_command("SiaHistory", function(args)
+  require("sia.history_command").run(args)
+end, {
+  nargs = "?",
+  bang = true,
+  complete = function(lead)
+    return require("sia.history_command").complete(lead)
+  end,
+  desc = "Browse and resume saved conversations",
+})
+
 vim.api.nvim_create_user_command("SiaConfig", function(args)
   require("sia.config.command").run(args)
 end, {

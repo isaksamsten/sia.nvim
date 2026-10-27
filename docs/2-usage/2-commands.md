@@ -78,6 +78,9 @@ system.
 
 | Command                     | Description                                                       |
 | --------------------------- | ----------------------------------------------------------------- |
+| `:SiaHistory`               | Browse saved conversations for the current workspace              |
+| `:SiaHistory!`              | Browse saved conversations across all workspaces                  |
+| `:SiaHistory <uuid>`        | Resume a saved conversation (UUID tab-completion available)        |
 | `:SiaFork <prompt>`         | Fork before the last turn into a new chat and execute the prompt  |
 | `:SiaFork -t <id> <prompt>` | Fork before the given turn into a new chat and execute the prompt |
 | `:SiaFork -t <id>`          | Fork before the given turn into a new chat without executing      |
@@ -88,6 +91,9 @@ When a prompt is provided, `:SiaFork` immediately starts a new assistant turn.
 Without a prompt, the forked chat opens with the copied history ready for input.
 `-t <turn_id>` specifies which turn to fork from (keeps messages before that
 turn). Tab-completion is available for turn IDs.
+
+`:SiaHistory` uses `vim.ui.select`, so your preferred UI override also handles
+history selection. Items show the title, last updated time, and workspace.
 
 ## Shell Process Management
 
