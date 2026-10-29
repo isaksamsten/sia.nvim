@@ -14,10 +14,15 @@ function M.configure(options)
     type(options) == "table" and type(options.servers or {}) == "table",
     "mcp.servers must be a table"
   )
-  assert(
-    vim.tbl_count(options.servers or {}) <= 16,
-    "At most 16 trusted MCP servers are supported"
-  )
+  local original = vim.deepcopy(options)
+  options = vim.deepcopy(options)
+  local stored = require("sia.mcp.store").load()
+  options.servers = vim.tbl_extend("force", stored.servers, options.servers or {})
+  for name, trusted in pairs(stored.trust) do
+    if options.servers[name] and options.servers[name].trust == nil then
+      options.servers[name].trust = trusted
+    end
+  end
   local configs = {}
   for name, raw in pairs(options.servers or {}) do
     assert(
@@ -37,13 +42,22 @@ function M.configure(options)
     if c.command[1]:find("/", 1, true) then
       c.command[1] = vim.fn.fnamemodify(vim.fn.expand(c.command[1]), ":p")
     end
-    assert(
-      type(c.tools) == "table" and vim.islist(c.tools) and #c.tools > 0,
-      "MCP requires a nonempty tool allowlist"
-    )
-    for _, tool in ipairs(c.tools) do
-      assert(type(tool) == "string" and tool ~= "", "Invalid MCP tool allowlist")
+    for _, field in ipairs({ "tools", "exclude" }) do
+      if c[field] == nil then
+        c[field] = {}
+      end
+      assert(
+        type(c[field]) == "table" and vim.islist(c[field]),
+        "Invalid MCP " .. field
+      )
+      for _, tool in ipairs(c[field]) do
+        assert(
+          type(tool) == "string" and tool ~= "",
+          "Invalid MCP " .. field .. " entry"
+        )
+      end
     end
+    assert(c.trust == nil or type(c.trust) == "boolean", "Invalid MCP trust")
     assert(c.cwd == nil or type(c.cwd) == "string", "Invalid MCP cwd")
     c.cwd = vim.fn.fnamemodify(vim.fn.expand(c.cwd or vim.fn.getcwd()), ":p")
     assert(vim.fn.isdirectory(c.cwd) == 1, "MCP cwd is not a directory")
@@ -62,6 +76,11 @@ function M.configure(options)
     c.max_output_bytes = positive(c.max_output_bytes, 65536, 1048576)
     configs[name] = c
   end
+  for name, raw in pairs(original.servers or {}) do
+    original.servers[name] = vim.deepcopy(configs[name])
+    original.servers[name].trust = raw.trust
+  end
+  M.options = original
   local previous = M.servers
   for name, entry in pairs(previous) do
     if not vim.deep_equal(entry.config, configs[name]) then
@@ -80,7 +99,7 @@ end
 function M.ensure(name, callback)
   local entry = M.servers[name]
   if not entry then
-    callback("Unknown trusted MCP server: " .. tostring(name))
+    callback("Unknown MCP server: " .. tostring(name))
     return
   end
   if entry.waiters then
@@ -126,7 +145,13 @@ function M.ensure(name, callback)
             list_err = "Invalid MCP tool definition"
             break
           end
-          if vim.tbl_contains(entry.config.tools, remote.name) then
+          if
+            (
+              #entry.config.tools == 0
+              or vim.tbl_contains(entry.config.tools, remote.name)
+            )
+            and not vim.tbl_contains(entry.config.exclude, remote.name)
+          then
             local tool, adapter_err =
               require("sia.mcp.tools").wrap(name, remote, entry.client, entry.config)
             if tool and not seen[tool.definition.name] then
@@ -196,7 +221,7 @@ function M.prepare(conversation, callback)
   for _, name in ipairs(selected) do
     M.ensure(name, function(err, entry)
       if err then
-        vim.notify("Sia MCP " .. name .. ": " .. err, vim.log.levels.WARN)
+        vim.notify("sia: " .. name .. ": " .. err, vim.log.levels.WARN)
       else
         prepared[name] = entry.exposed
       end
@@ -228,6 +253,7 @@ function M.status()
     end
     result[name] = {
       state = entry.client and entry.client.state or "stopped",
+      trust = entry.config.trust == true,
       discovered = discovered,
       exposed = exposed,
       diagnostics = entry.diagnostics,

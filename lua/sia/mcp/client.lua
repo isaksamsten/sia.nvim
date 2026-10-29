@@ -59,7 +59,7 @@ function M.new(config)
           "notifications/cancelled",
           { requestId = id, reason = "User cancelled" }
         )
-        self:finish(id, "MCP request cancelled; server side effects may still occur")
+        self:finish(id, "MCP request cancelled. Server side effects may still occur.")
       end
     end
   end
@@ -116,7 +116,7 @@ function M.new(config)
         return
       end
       if type(result) ~= "table" or not M.VERSIONS[result.protocolVersion] then
-        self:fail("Unsupported MCP protocol version; supported: 2025-06-18, 2024-11-05")
+        self:fail("Unsupported MCP protocol version")
         transport:stop()
         callback(self.error)
         return

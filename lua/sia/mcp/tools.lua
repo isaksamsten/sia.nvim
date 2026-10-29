@@ -166,32 +166,48 @@ function M.wrap(server, remote, client, config)
       })
       return
     end
-    local done, cancel = false, nil
-    local function poll()
-      if done then
-        return
-      end
+    local function execute()
       if opts.cancellable and opts.cancellable.is_cancelled then
-        if cancel ~= nil then
-          cancel()
-        end
+        callback({ content = "MCP call cancelled" })
         return
       end
-      vim.defer_fn(poll, 50)
-    end
-    cancel = client:request(
-      "tools/call",
-      { name = remote.name, arguments = next(args) and args or vim.empty_dict() },
-      function(call_err, result)
-        done = true
-        local text = call_err or M.normalize(result, config.max_output_bytes)
-        callback({
-          content = text,
-          summary = "Called " .. remote.name .. " on " .. server,
-        })
+      local done, cancel = false, nil
+      local function poll()
+        if done then
+          return
+        end
+        if opts.cancellable and opts.cancellable.is_cancelled then
+          if cancel ~= nil then
+            cancel()
+          end
+          return
+        end
+        vim.defer_fn(poll, 50)
       end
-    )
-    poll()
+      cancel = client:request(
+        "tools/call",
+        { name = remote.name, arguments = next(args) and args or vim.empty_dict() },
+        function(call_err, result)
+          done = true
+          local text = call_err or M.normalize(result, config.max_output_bytes)
+          callback({
+            content = text,
+            summary = "Called " .. remote.name .. " on " .. server,
+          })
+        end
+      )
+      poll()
+    end
+    if config.trust == true then
+      execute()
+    else
+      opts.user_input("Call " .. remote.name .. " on MCP server " .. server .. "?", {
+        preview = function(buf)
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(vim.inspect(args), "\n"))
+        end,
+        on_accept = execute,
+      })
+    end
   end)
 end
 return M

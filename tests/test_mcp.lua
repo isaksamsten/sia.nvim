@@ -4,6 +4,15 @@ local T = MiniTest.new_set({
   hooks = {
     pre_case = function()
       child.restart({ "-u", "assets/minimal.lua" })
+      child.lua([[
+        local path = vim.fn.tempname() .. '/mcp.json'
+        require('sia.mcp.store').path = function() return path end
+      ]])
+    end,
+    post_case = function()
+      child.lua(
+        [[vim.fn.delete(vim.fn.fnamemodify(require('sia.mcp.store').path(), ':h'), 'rf')]]
+      )
     end,
     post_once = function()
       child.stop()
@@ -20,6 +29,54 @@ local setup = [[
   registry.ensure('docs', function(err, entry) _G.ready = {err = err, ok = entry ~= nil} end)
   assert(vim.wait(4000, function() return _G.ready ~= nil end))
 ]]
+
+T["remove deletes persisted registration and trust and stops the process"] = function()
+  child.lua([[
+    local registry = require('sia.mcp.registry')
+    local store = require('sia.mcp.store')
+    local command = require('sia.mcp.command')
+    store.save({servers={docs={command={'echo'}}},trust={docs=true}})
+    registry.configure({})
+    local stopped = false
+    registry.servers.docs.client = {stop=function() stopped=true end}
+    command.run({fargs={'remove','docs'}})
+    assert(stopped and registry.servers.docs == nil)
+    local stored = store.load()
+    assert(stored.servers.docs == nil and stored.trust.docs == nil)
+    -- Lua-owned definitions cannot be removed by this command.
+    store.save({servers={docs={command={'echo'}}},trust={docs=true}})
+    registry.configure({servers={docs={command={'echo'}}}})
+    command.run({fargs={'remove','docs'}})
+    assert(registry.servers.docs and store.load().servers.docs)
+    assert(vim.tbl_contains(command.complete('rem', 'SiaMcp rem'), 'remove'))
+  ]])
+end
+
+T["restart reloads persisted definitions before launching"] = function()
+  child.lua([[
+    local registry = require('sia.mcp.registry')
+    local store = require('sia.mcp.store')
+    store.save({servers={docs={command={'echo', '--stdin'}}},trust={}})
+    registry.configure({})
+    store.save({servers={docs={command={'echo', 'serve'},env={LOCAL='true'}}},trust={docs=true}})
+    local launched = false
+    registry.ensure = function(name, cb)
+      local config = registry.servers[name].config
+      assert(vim.deep_equal(config.command, {'echo', 'serve'}))
+      assert(config.env.LOCAL == 'true' and config.trust == true)
+      launched = true
+      cb(nil)
+    end
+    require('sia.mcp.command').run({fargs={'restart','docs'}})
+    assert(launched)
+    -- Invalid edits must not replace the last valid configuration or launch.
+    launched = false
+    store.save({servers={docs={command='invalid'}},trust={}})
+    require('sia.mcp.command').run({fargs={'restart','docs'}})
+    assert(not launched)
+    assert(vim.deep_equal(registry.servers.docs.config.command, {'echo', 'serve'}))
+  ]])
+end
 
 T["project selection and commands honor config.json precedence"] = function()
   child.lua([[
@@ -168,7 +225,8 @@ T["untrusted local config and annotations cannot authorize or launch"] = functio
   child.lua([[
     local r = require('sia.mcp.registry')
     assert(not pcall(r.configure, {servers={bad={command='sh -c evil',tools={'x'}}}}))
-    assert(not pcall(r.configure, {servers={bad={command={'echo'},tools={}}}}))
+    assert(not pcall(r.configure, {servers={bad={command={'echo'},trust='yes'}}}))
+    assert(not pcall(r.configure, {servers={bad={command={'echo'},exclude='search'}}}))
     require('sia.config').get_local_config = function() return {mcp={servers={evil={command={'false'},tools={'x'}}}}} end
     r.configure({})
     assert(next(r.servers) == nil)
@@ -184,7 +242,7 @@ T["untrusted local config and annotations cannot authorize or launch"] = functio
   ]])
 end
 
-T["project-authorized execution skips confirmation and bounds tool results"] = function()
+T["trusted execution skips confirmation and bounds tool results"] = function()
   child.lua([[
     local config = require('sia.config')
     config.options.settings.ui.confirm.async.enable = false
@@ -202,7 +260,7 @@ T["project-authorized execution skips confirmation and bounds tool results"] = f
     end}
     local tool = assert(require('sia.mcp.tools').wrap('docs',{
       name='search',inputSchema={type='object',properties={query={type='string'}}}
-    },client,{max_output_bytes=32}))
+    },client,{max_output_bytes=32,trust=true}))
     tool.implementation.execute({query='needle'},function(result) outcome=result end,{
       conversation={approved_tools={}},turn_id='test'
     })
@@ -217,6 +275,89 @@ T["project-authorized execution skips confirmation and bounds tool results"] = f
       conversation={approved_tools={}},turn_id='test'
     })
     assert(not sent and outcome.content:find('unavailable'))
+  ]])
+end
+
+T["empty tool selection exposes all and exclude wins"] = function()
+  child.lua([[
+    local r = require('sia.mcp.registry')
+    local function discover(tools, exclude, expected)
+      r.configure({servers={docs={
+        command={'python3','-u','tests/fixtures/mcp_server.py','normal'},
+        tools=tools, exclude=exclude, startup_timeout_ms=2000,
+      }}})
+      local ready = false
+      r.ensure('docs', function(err, entry)
+        assert(not err, err)
+        assert(#entry.exposed == expected)
+        ready = true
+      end)
+      assert(vim.wait(4000, function() return ready end))
+    end
+    discover(nil, nil, 2)
+    discover({}, nil, 2)
+    discover({}, {'search'}, 1)
+    discover({'search'}, {'search'}, 0)
+  ]])
+end
+
+T["untrusted calls ask and respect permission denial"] = function()
+  child.lua([[
+    local config = require('sia.config')
+    config.options.settings.ui.confirm.async.enable = false
+    config.options.settings.ui.confirm.use_vim_ui = true
+    config.options.settings.ui.confirm.show_preview = false
+    local prompts, calls = 0, 0
+    vim.ui.input = function(_, cb) prompts = prompts + 1; cb('y') end
+    local client = {state='ready', request=function(_, _, _, cb)
+      calls = calls + 1
+      cb(nil, {content={{type='text',text='ok'}}})
+      return function() end
+    end}
+    local permissions = require('sia.permissions')
+    permissions.resolve_permissions = function() return {ask=true} end
+    for _, settings in ipairs({{}, {trust=false}, {trust=true}}) do
+      local tool = assert(require('sia.mcp.tools').wrap('docs', {
+        name='search', inputSchema={type='object'},
+      }, client, vim.tbl_extend('force', {max_output_bytes=100}, settings)))
+      tool.implementation.execute({}, function() end, {conversation={approved_tools={}},turn_id='test'})
+    end
+    assert(prompts == 2 and calls == 3)
+    permissions.resolve_permissions = function() return {deny=true} end
+    local tool = assert(require('sia.mcp.tools').wrap('docs', {
+      name='search', inputSchema={type='object'},
+    }, client, {max_output_bytes=100,trust=true}))
+    tool.implementation.execute({}, function(result) assert(result.content:find('denied')) end,
+      {conversation={approved_tools={}},turn_id='test'})
+    assert(calls == 3)
+  ]])
+end
+
+T["add and trust persist globally while bang only enables selection"] = function()
+  child.lua([[
+    local root = vim.fn.tempname()
+    vim.fn.mkdir(root, 'p')
+    local plugin = vim.fn.getcwd() .. '/plugin/sia.lua'
+    vim.cmd.cd(root)
+    dofile(plugin)
+    vim.cmd('SiaMcp add documents -- mcp --stdio')
+    local r = require('sia.mcp.registry')
+    assert(vim.deep_equal(r.servers.documents.config.command, {'mcp','--stdio'}))
+    assert(not r.servers.documents.config.trust)
+    assert(r.servers.documents.client == nil)
+    vim.cmd('SiaMcp trust documents')
+    assert(r.servers.documents.config.trust == true)
+    r.configure({})
+    assert(r.servers.documents.config.trust == true)
+    vim.cmd('SiaMcp untrust documents')
+    assert(r.servers.documents.config.trust == false)
+    vim.cmd('SiaMcp! add another -- other-mcp --stdio')
+    assert(vim.deep_equal(require('sia.config').get_local_config().mcp, {'another'}))
+    assert(not r.servers.another.config.trust and r.servers.another.client == nil)
+    r.configure({servers={documents={command={'override'},trust=false}}})
+    assert(r.servers.documents.config.command[1] == 'override')
+    assert(r.servers.documents.config.trust == false)
+    vim.fn.delete(root, 'rf')
   ]])
 end
 
