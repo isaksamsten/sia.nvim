@@ -512,19 +512,19 @@ end
 
 warn_group_action = function(group)
   vim.notify(
-    string.format("sia: %s groups require item-level actions", group.tool_name),
+    string.format("sia: select an individual %s request", group.tool_name),
     vim.log.levels.WARN
   )
 end
 
 local function warn_always_item_action()
-  vim.notify("sia: selected request does not support always-allow", vim.log.levels.WARN)
+  vim.notify("sia: cannot always allow this request", vim.log.levels.WARN)
 end
 
 local function warn_always_group_action(group)
   vim.notify(
     string.format(
-      "sia: %s groups require item-level always-allow actions",
+      "sia: select an individual %s request to always allow",
       group.tool_name
     ),
     vim.log.levels.WARN
