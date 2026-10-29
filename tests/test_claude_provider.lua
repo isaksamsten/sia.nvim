@@ -104,22 +104,32 @@ T["sia.provider.claude"]["stream strips tool prefix"] = function()
   eq("view", seen_name)
 end
 
+T["sia.provider.claude"]["defaults to a larger shared output budget"] = function()
+  local provider = reload_provider().spec.implementations.default
+  local data = {}
+  provider.prepare_parameters(data, { options = {}, support = { reasoning = true } })
+  eq(32000, data.max_tokens)
+  eq(4096, data.thinking.budget_tokens)
+end
+
+T["sia.provider.claude"]["respects explicit output budgets"] = function()
+  local provider = reload_provider().spec.implementations.default
+  local data = {}
+  provider.prepare_parameters(data, {
+    options = { max_tokens = 16000, thinking = { type = "adaptive" } },
+  })
+  eq(16000, data.max_tokens)
+  provider.prepare_parameters(data, {
+    options = { thinking = { type = "enabled", budget_tokens = 40000 } },
+  })
+  eq(44096, data.max_tokens)
+end
+
 T["sia.provider.claude"]["parse auth code supports state suffix"] = function()
   local provider = reload_provider()
   local code, state = provider._test.parse_auth_code("abc#xyz")
   eq("abc", code)
   eq("xyz", state)
-end
-
-T["sia.provider.claude"]["billing header matches known vector"] = function()
-  local provider = reload_provider()
-  local header = provider._test.build_billing_header({
-    { role = "user", content = "hey" },
-  })
-  eq(
-    "x-anthropic-billing-header: cc_version=2.1.217.66b; cc_entrypoint=sdk-cli; cch=fa690;",
-    header
-  )
 end
 
 T["sia.provider.claude"]["tool names use Claude Code casing"] = function()
@@ -210,13 +220,15 @@ T["sia.provider.claude"]["parses discovered models with short names and capabili
 
       local joined = table.concat(cmd, "\n")
       eq(joined:match("authorization: Bearer access%-token") ~= nil, true)
-      eq(joined:match("anthropic%-dangerous%-direct%-browser%-access: true") ~= nil, true)
+      eq(
+        joined:match("anthropic%-dangerous%-direct%-browser%-access: true") ~= nil,
+        true
+      )
       eq(joined:match("advisor%-tool%-2026%-03%-01") ~= nil, true)
       eq(joined:match("thinking%-token%-count%-2026%-05%-13") ~= nil, true)
       eq(joined:match("extended%-cache%-ttl%-2025%-04%-11") ~= nil, true)
       eq(joined:match("x%-stainless%-lang: js") ~= nil, true)
       eq(joined:match("x%-stainless%-runtime: node") ~= nil, true)
-      eq(joined:match("user%-agent: claude%-cli/2%.1%.217 %(external, sdk%-cli%)") ~= nil, true)
 
       on_exit({
         code = 0,

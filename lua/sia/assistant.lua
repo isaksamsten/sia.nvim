@@ -298,6 +298,13 @@ function M.execute_strategy(strategy)
           )
         end
 
+        if round.error then
+          save_chat(strategy)
+          strategy:on_error(round.error)
+          strategy.is_busy = false
+          return
+        end
+
         if start_time then
           local total_time = (vim.uv.hrtime() - start_time) / 1000000 / 1000
           if not usage then

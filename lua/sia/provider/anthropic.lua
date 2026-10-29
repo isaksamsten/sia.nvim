@@ -160,6 +160,7 @@ end
 --- @field reasoning_blocks sia.anthropic.ReasoningBlock[]
 --- @field reasoning_text string
 --- @field current_block_kind "thinking"|"redacted_thinking"|"text"|"tool_use"|nil
+--- @field stop_reason string?
 local AnthropicStream = {}
 AnthropicStream.__index = AnthropicStream
 setmetatable(AnthropicStream, { __index = common.ProviderStream })
@@ -238,6 +239,8 @@ function AnthropicStream:process_stream_chunk(obj)
     end
   elseif obj.type == "content_block_stop" then
     self.current_block_kind = nil
+  elseif obj.type == "message_delta" and obj.delta then
+    self.stop_reason = obj.delta.stop_reason
   end
 end
 
@@ -262,6 +265,9 @@ function AnthropicStream:finalize()
     content = content,
     reasoning = reasoning,
     tool_calls = self.pending_tool_calls,
+    error = self.stop_reason == "max_tokens"
+        and "Claude reached the output-token limit (max_tokens); the response was truncated. No tool calls were executed. Increase max_tokens or request a smaller write."
+      or nil,
   }
 end
 

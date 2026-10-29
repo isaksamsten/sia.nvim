@@ -332,7 +332,8 @@ local function token_request(params)
   end
 
   local now = os.time() * 1000
-  local expires = type(json.expires_at) == "number" and math.floor(json.expires_at) or nil
+  local expires = type(json.expires_at) == "number" and math.floor(json.expires_at)
+    or nil
   if not expires or expires <= now then
     expires = now + ((json.expires_in or 36000) * 1000)
   end
@@ -629,6 +630,12 @@ messages.api_key = function()
     return nil
   end
   return token
+end
+messages.prepare_parameters = function(data, model)
+  anthropic.messages.prepare_parameters(data, model)
+  if not model.options.max_tokens then
+    data.max_tokens = math.max(data.max_tokens, 32000)
+  end
 end
 messages.prepare_tools = function(data, tools)
   if not tools then

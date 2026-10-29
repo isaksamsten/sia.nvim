@@ -117,6 +117,7 @@ end
 --- @field content string?
 --- @field reasoning sia.Reasoning?
 --- @field tool_calls sia.ToolCall[]
+--- @field error string?
 
 --- @class sia.StreamReasoning
 --- @field content string

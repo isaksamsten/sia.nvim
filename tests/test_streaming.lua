@@ -419,4 +419,53 @@ T["assistant.streaming"]["standalone newline deltas"]["are passed through as con
   eq(true, vim.tbl_contains(strategy.contents, "Line 3"))
 end
 
+T["assistant.streaming"]["truncated Claude write is not executed"] = function()
+  local strategy = TestStrategy.new()
+  strategy.conversation.model.provider =
+    require("sia.provider.claude").spec.implementations.default
+  -- Avoid OAuth/network access; only exercise the stream and round handling.
+  strategy.conversation.model.provider =
+    vim.tbl_extend("force", strategy.conversation.model.provider, {
+      api_key = function()
+        return "test"
+      end,
+      get_headers = function()
+        return {}
+      end,
+    })
+  mock.mock_fn_jobstart({
+    { type = "content_block_start", content_block = { type = "text" } },
+    {
+      type = "content_block_delta",
+      delta = { type = "text_delta", text = "Writing now" },
+    },
+    { type = "content_block_stop" },
+    {
+      type = "content_block_start",
+      content_block = { type = "tool_use", id = "toolu_1", name = "mcp_Write" },
+    },
+    {
+      type = "content_block_delta",
+      delta = {
+        type = "input_json_delta",
+        partial_json = '{"path":"test.lua","content":"unfinished',
+      },
+    },
+    { type = "content_block_stop" },
+    { type = "message_delta", delta = { stop_reason = "max_tokens" } },
+  })
+  local ok, err = pcall(assistant.execute_strategy, strategy)
+  mock.unmock_assistant()
+  if not ok then
+    error(err)
+  end
+
+  eq(true, strategy.error)
+  eq(false, strategy.is_busy)
+  eq(nil, strategy.completed)
+  local entries = strategy.conversation.entries
+  eq("assistant", entries[#entries].role)
+  eq("Writing now", entries[#entries].content)
+end
+
 return T
