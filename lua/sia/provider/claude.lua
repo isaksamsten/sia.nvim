@@ -17,7 +17,7 @@ local DEFAULT_BETAS = {
   "extended-cache-ttl-2025-04-11",
 }
 local BILLING_SALT = "59cf53e54c78"
-local DEFAULT_CLI_VERSION = "2.1.217"
+local DEFAULT_CLI_VERSION = "2.1.280"
 local DEFAULT_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 local DEFAULT_AUTH_URL = "https://claude.ai/oauth/authorize"
 local DEFAULT_TOKEN_URL = "https://claude.ai/v1/oauth/token"
