@@ -453,9 +453,6 @@ end
 ---@param name string
 ---@return string
 local function prefix_tool_name(name)
-  if vim.startswith(name, TOOL_PREFIX) then
-    return name
-  end
   return TOOL_PREFIX .. name:sub(1, 1):upper() .. name:sub(2)
 end
 

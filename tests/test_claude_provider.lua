@@ -104,6 +104,44 @@ T["sia.provider.claude"]["stream strips tool prefix"] = function()
   eq("view", seen_name)
 end
 
+T["sia.provider.claude"]["MCP tool names round-trip through definitions streams and history"] = function()
+  local provider = reload_provider().spec.implementations.default
+  local tool = require("sia.mcp.tools").wrap("Example", {
+    name = "Search",
+    inputSchema = { type = "object", properties = {} },
+  }, {}, {})
+  local name = tool.definition.name
+  local data = {}
+  provider.prepare_tools(data, { tool.definition })
+  local wire_name = data.tools[1].name
+  eq("mcp_M" .. name:sub(2), wire_name)
+
+  local stream = provider.new_stream({
+    on_tools = function()
+      return true
+    end,
+    on_stream = function()
+      return true
+    end,
+  })
+  stream:process_stream_chunk({
+    type = "content_block_start",
+    content_block = { type = "tool_use", id = "toolu_mcp", name = wire_name },
+  })
+  local returned_name = stream.pending_tool_calls[1].name
+  eq(name, returned_name)
+  eq(tool, ({ [name] = tool })[returned_name])
+
+  provider.prepare_messages(data, "claude-4.5-sonnet", {
+    { role = "user", content = "Search" },
+    {
+      role = "assistant",
+      tool_call = { id = "toolu_mcp", name = returned_name, arguments = "{}" },
+    },
+  })
+  eq(wire_name, data.messages[2].content[1].name)
+end
+
 T["sia.provider.claude"]["defaults to a larger shared output budget"] = function()
   local provider = reload_provider().spec.implementations.default
   local data = {}
