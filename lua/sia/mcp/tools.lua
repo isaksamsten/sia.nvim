@@ -42,7 +42,11 @@ function M.schema(schema)
   for _, key in ipairs({ "anyOf", "oneOf", "allOf" }) do
     local alternatives = schema[key]
     if alternatives ~= nil then
-      if type(alternatives) ~= "table" or not vim.islist(alternatives) or #alternatives == 0 then
+      if
+        type(alternatives) ~= "table"
+        or not vim.islist(alternatives)
+        or #alternatives == 0
+      then
         return nil, "invalid " .. key
       end
       for _, alternative in ipairs(alternatives) do
@@ -55,7 +59,8 @@ function M.schema(schema)
   if schema["$defs"] ~= nil and type(schema["$defs"]) ~= "table" then
     return nil, "invalid $defs"
   end
-  if schema.additionalProperties ~= nil
+  if
+    schema.additionalProperties ~= nil
     and type(schema.additionalProperties) ~= "boolean"
     and type(schema.additionalProperties) ~= "table"
   then
@@ -117,6 +122,72 @@ function M.normalize(result, limit)
   return text, result.isError == true
 end
 
+--- Pretty-print tool arguments as JSON for previews and summaries.
+--- @param args table
+--- @return string
+function M.format_args(args)
+  local value = next(args) and args or vim.empty_dict()
+  local ok, json = pcall(vim.json.encode, value, { indent = "  ", sort_keys = true })
+  if not ok then
+    ok, json = pcall(vim.json.encode, value)
+  end
+  return ok and json or vim.inspect(args)
+end
+
+--- Describe a pending call (server, tool, arguments) as JSON in a stable key order.
+--- @param server string
+--- @param tool string
+--- @param args table
+--- @return string
+function M.format_call(server, tool, args)
+  local arguments = M.format_args(args):gsub("\n", "\n  ")
+  return table.concat({
+    "{",
+    '  "server": ' .. vim.json.encode(server) .. ",",
+    '  "tool": ' .. vim.json.encode(tool) .. ",",
+    '  "arguments": ' .. arguments,
+    "}",
+  }, "\n")
+end
+
+--- Build a transcript summary with the call arguments and the returned output.
+--- @param server string
+--- @param tool string
+--- @param args table
+--- @param text string
+--- @param is_error boolean
+--- @return sia.ToolSummary
+function M.result_summary(server, tool, args, text, is_error)
+  local detail = {}
+  if next(args) then
+    table.insert(detail, { text = M.format_args(args), ft = "json" })
+  end
+  if type(text) == "string" and text ~= "" then
+    local section = { text = text, ft = "text" }
+    if text:match("^%s*[%[{]") then
+      local ok, decoded = pcall(vim.json.decode, text)
+      local pretty_ok, pretty = false, nil
+      if ok then
+        pretty_ok, pretty =
+          pcall(vim.json.encode, decoded, { indent = "  ", sort_keys = true })
+      end
+      if pretty_ok then
+        section = { text = pretty, ft = "json" }
+      end
+    end
+    table.insert(detail, section)
+  end
+  return {
+    header = string.format(
+      "%s `%s` on `%s`",
+      is_error and "Failed calling" or "Called",
+      tool,
+      server
+    ),
+    detail = #detail > 0 and detail or nil,
+  }
+end
+
 function M.wrap(server, remote, client, config)
   local schema, err = M.schema(remote.inputSchema)
   if not schema then
@@ -153,7 +224,7 @@ function M.wrap(server, remote, client, config)
     },
     read_only = false,
     summary = function()
-      return "Calling " .. remote.name .. " on " .. server
+      return string.format("Calling `%s` on `%s`...", remote.name, server)
     end,
   }, function(args, _, callback, opts)
     if opts.cancellable and opts.cancellable.is_cancelled then
@@ -189,10 +260,13 @@ function M.wrap(server, remote, client, config)
         { name = remote.name, arguments = next(args) and args or vim.empty_dict() },
         function(call_err, result)
           done = true
-          local text = call_err or M.normalize(result, config.max_output_bytes)
+          local text, is_error = call_err, call_err ~= nil
+          if not call_err then
+            text, is_error = M.normalize(result, config.max_output_bytes)
+          end
           callback({
             content = text,
-            summary = "Called " .. remote.name .. " on " .. server,
+            summary = M.result_summary(server, remote.name, args, text, is_error),
           })
         end
       )
@@ -203,7 +277,14 @@ function M.wrap(server, remote, client, config)
     else
       opts.user_input("Call " .. remote.name .. " on MCP server " .. server .. "?", {
         preview = function(buf)
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(vim.inspect(args), "\n"))
+          vim.api.nvim_buf_set_lines(
+            buf,
+            0,
+            -1,
+            false,
+            vim.split(M.format_call(server, remote.name, args), "\n")
+          )
+          vim.bo[buf].filetype = "json"
         end,
         on_accept = execute,
       })
