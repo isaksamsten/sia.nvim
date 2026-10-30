@@ -111,7 +111,7 @@ local function normalize_details(detail)
     end
     local text = M.limit(section.text, bytes, lines)
     if text ~= "" then
-      table.insert(sections, { text = text, ft = section.ft })
+      table.insert(sections, { text = text, ft = section.ft, image = section.image })
       bytes = bytes - #text
       lines = lines - #vim.split(text, "\n", { plain = true })
     end

@@ -61,6 +61,13 @@ are included in the default chat action.
 | **view_image**    | ★       | View image files    |
 | **view_document** | ★       | View document files |
 
+On Neovim versions with `vim.ui.img`, `view_image` also displays PNG images below
+the tool's Details preview when the terminal supports Kitty graphics. Images are
+hidden when folded or not fully visible, and follow scrolling and window changes.
+Other formats and unsupported Neovim/terminal versions keep a text-only preview;
+the image sent to the model is unchanged. Restored previews use the original file
+path, so the local image must still exist.
+
 ## Debugging with nvim-dap
 
 The `debug` tool is available when optional dependency

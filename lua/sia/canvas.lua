@@ -32,8 +32,10 @@ end
 
 --- @param detail sia.ToolDetails
 --- @return string[]?
+--- @return { row: integer, path: string }[]
 local function format_tool_detail_lines(detail)
   local lines = { DETAILS_LABEL }
+  local images = {}
   for _, section in ipairs(require("sia.tool_output").sections(detail)) do
     local body = trim_trailing_empty(vim.split(section.text, "\n", { plain = true }))
     if #body > 0 then
@@ -52,9 +54,15 @@ local function format_tool_detail_lines(detail)
       table.insert(lines, fence .. language)
       vim.list_extend(lines, body)
       table.insert(lines, fence)
+      if section.image and require("sia.ui.images").available() then
+        table.insert(images, { row = #lines, path = section.image })
+        for _ = 1, require("sia.ui.images").height do
+          table.insert(lines, "")
+        end
+      end
     end
   end
-  return #lines > 1 and lines or nil
+  return #lines > 1 and lines or nil, images
 end
 
 --- @param status "pending"|"done"|"running"
@@ -259,7 +267,7 @@ function Canvas:highlight_tool(line, end_line, summary)
   if type(summary) ~= "table" or not summary.detail then
     return
   end
-  local details = format_tool_detail_lines(summary.detail)
+  local details, images = format_tool_detail_lines(summary.detail)
   local fence_line = line + header_lines
   if details and fence_line + #details <= end_line then
     vim.api.nvim_buf_set_extmark(self.buf, TOOL_PREVIEW_NS, fence_line, 0, {
@@ -267,6 +275,9 @@ function Canvas:highlight_tool(line, end_line, summary)
       end_right_gravity = false,
       right_gravity = false,
     })
+    for _, image in ipairs(images) do
+      require("sia.ui.images").add(self.buf, fence_line + image.row, image.path)
+    end
   end
 end
 
@@ -303,6 +314,7 @@ end
 --- @param start_line integer?
 --- @param end_line integer?
 function Canvas:clear_tool_highlights(start_line, end_line)
+  require("sia.ui.images").clear(self.buf, start_line, end_line)
   for _, namespace in ipairs({ TOOL_PREVIEW_NS, TOOL_RESULT_NS, TOOL_ACTION_NS }) do
     if start_line == nil and end_line == nil then
       vim.api.nvim_buf_clear_namespace(self.buf, namespace, 0, -1)

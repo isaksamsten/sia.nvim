@@ -45,6 +45,7 @@ end
 --- @class sia.ToolPreview
 --- @field text string
 --- @field ft string?
+--- @field image string?
 
 --- @alias sia.ToolDetails sia.ToolPreview|sia.ToolPreview[]
 
