@@ -71,21 +71,21 @@ Install using Lazy:
 
 ## Documentation
 
-| Document | Description |
-| ---------------------------------------- | --------------------------------------------------------- |
-| [Getting Started](docs/1-getting-started.md) | Installation, authentication, first commands |
-| [Modes](docs/2-usage/1-modes.md) | Chat, insert, and diff interaction modes |
-| [Commands](docs/2-usage/2-commands.md) | Command reference |
+| Document                                                 | Description                                        |
+| -------------------------------------------------------- | -------------------------------------------------- |
+| [Getting Started](docs/1-getting-started.md)             | Installation, authentication, first commands       |
+| [Modes](docs/2-usage/1-modes.md)                         | Chat, insert, and diff interaction modes           |
+| [Commands](docs/2-usage/2-commands.md)                   | Command reference                                  |
 | [Reviewing Changes](docs/2-usage/3-reviewing-changes.md) | Inline diff workflow for accepting/rejecting edits |
-| [Keybindings](docs/2-usage/4-keybindings.md) | Suggested keybindings |
-| [Settings](docs/3-configuration/1-settings.md) | Global settings and context management |
-| [Models](docs/3-configuration/2-models.md) | Model definitions, providers, pricing |
-| [Project Config](docs/3-configuration/3-project.md) | Per-project `.sia/config.json` reference |
-| [Confirmation](docs/4-permissions/1-confirmation.md) | Blocking and async tool approval |
-| [Permission Rules](docs/4-permissions/2-rules.md) | Allow/deny/ask rules and risk levels |
-| [Actions](docs/5-features/1-actions.md) | Built-in and custom actions |
-| [Agents](docs/5-features/2-agents.md) | Custom agents and memory |
-| [Skills](docs/5-features/3-skills.md) | Reusable skill definitions |
-| [Tools](docs/5-features/4-tools.md) | Available tools for the AI assistant |
-| [MCP Servers](docs/6-mcp.md) | MCP Servers |
-| [Reference](docs/6-reference.md) | Highlight groups |
+| [Keybindings](docs/2-usage/4-keybindings.md)             | Suggested keybindings                              |
+| [Settings](docs/3-configuration/1-settings.md)           | Global settings and context management             |
+| [Models](docs/3-configuration/2-models.md)               | Model definitions, providers, pricing              |
+| [Project Config](docs/3-configuration/3-project.md)      | Per-project `.sia/config.json` reference           |
+| [Confirmation](docs/4-permissions/1-confirmation.md)     | Blocking and async tool approval                   |
+| [Permission Rules](docs/4-permissions/2-rules.md)        | Allow/deny/ask rules and risk levels               |
+| [Actions](docs/5-features/1-actions.md)                  | Built-in and custom actions                        |
+| [Agents](docs/5-features/2-agents.md)                    | Custom agents and memory                           |
+| [Skills](docs/5-features/3-skills.md)                    | Reusable skill definitions                         |
+| [Tools](docs/5-features/4-tools.md)                      | Available tools for the AI assistant               |
+| [MCP Servers](docs/6-mcp.md)                             | MCP Servers                                        |
+| [Reference](docs/6-reference.md)                         | Highlight groups                                   |

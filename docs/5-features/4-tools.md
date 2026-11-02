@@ -10,15 +10,15 @@ are included in the default chat action.
 
 ### File Operations
 
-| Tool           | Default | Description                                                               |
-| -------------- | ------- | ------------------------------------------------------------------------- |
-| **view**       | ★       | View file contents with optional line offset and limit (up to 2000 lines) |
-| **skills**     | ★       | Read a named skill definition with metadata and markdown body              |
-| **write**      | ★       | Write complete file contents (create new or overwrite)                    |
-| **str_replace** |         | Legacy search-and-replace edits |
-| **edit**       | ★       | Hashline edits using snapshot tags and line ranges                     |
-| **insert**     |         | Insert text at a specific line (1-based, before the line)                 |
-| **apply_diff** |         | Apply patches in Codex format (available for custom tool lists)               |
+| Tool            | Default | Description                                                               |
+| --------------- | ------- | ------------------------------------------------------------------------- |
+| **view**        | ★       | View file contents with optional line offset and limit (up to 2000 lines) |
+| **skills**      | ★       | Read a named skill definition with metadata and markdown body             |
+| **write**       | ★       | Write complete file contents (create new or overwrite)                    |
+| **str_replace** |         | Legacy search-and-replace edits                                           |
+| **edit**        | ★       | Hashline edits using snapshot tags and line ranges                        |
+| **insert**      |         | Insert text at a specific line (1-based, before the line)                 |
+| **apply_diff**  |         | Apply patches in Codex format (available for custom tool lists)           |
 
 ### Code Search
 
@@ -29,15 +29,15 @@ are included in the default chat action.
 
 ### Development Environment
 
-| Tool            | Default | Description                                                       |
-| --------------- | ------- | ----------------------------------------------------------------- |
-| **bash**        | ★       | Execute shell commands with persistent sessions and async support |
-| **git_worktree**| ★       | Create, inspect, and clean up tracked git worktrees              |
-| **debug**       | ★       | Prepare breakpoints and inspect/control user-started nvim-dap sessions |
-| **diagnostics** | ★       | Retrieve LSP diagnostics for a file                               |
-| **websearch**   | ★       | Search the web using Google                                       |
-| **webfetch**    | ★       | Fetch and convert web content to markdown                         |
-| **memory**      | ★       | Manage persistent memory in `.sia/memory/`                        |
+| Tool             | Default | Description                                                            |
+| ---------------- | ------- | ---------------------------------------------------------------------- |
+| **bash**         | ★       | Execute shell commands with persistent sessions and async support      |
+| **git_worktree** | ★       | Create, inspect, and clean up tracked git worktrees                    |
+| **debug**        | ★       | Prepare breakpoints and inspect/control user-started nvim-dap sessions |
+| **diagnostics**  | ★       | Retrieve LSP diagnostics for a file                                    |
+| **websearch**    | ★       | Search the web using Google                                            |
+| **webfetch**     | ★       | Fetch and convert web content to markdown                              |
+| **memory**       | ★       | Manage persistent memory in `.sia/memory/`                             |
 
 ### Task Management
 
@@ -61,12 +61,8 @@ are included in the default chat action.
 | **view_image**    | ★       | View image files    |
 | **view_document** | ★       | View document files |
 
-On Neovim versions with `vim.ui.img`, `view_image` also displays PNG images below
-the tool's Details preview when the terminal supports Kitty graphics. Images are
-hidden when folded or not fully visible, and follow scrolling and window changes.
-Other formats and unsupported Neovim/terminal versions keep a text-only preview;
-the image sent to the model is unchanged. Restored previews use the original file
-path, so the local image must still exist.
+On Neovim versions with `vim.ui.img`, `view_image` also displays images below
+the tool's Details preview when the terminal supports Kitty graphics.
 
 ## Debugging with nvim-dap
 
@@ -78,7 +74,6 @@ your usual configuration, then wait without blocking Neovim. Those breakpoints
 are pending until an adapter verifies them. Once started, the assistant can
 continue, pause, step over/into/out, and inspect threads, stack frames, scopes,
 and variables. Launch and termination remain under your control.
-
 
 ## Extra Tools
 
@@ -101,25 +96,25 @@ tool that are useful for permission and risk patterns.
 
 ### Core Tools
 
-| Tool              | Key arguments                                   | Description                                                                   |
-| ----------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| **view**          | **path**                                        | File path to read                                                             |
-| **skills**        | **name**                                        | Skill name to resolve and read                                                |
-| **write**         | **path**                                        | File path to write                                                            |
-| **edit**          | **target_file**, **tag**, **edits** | File to modify, snapshot tag, and hashline operations                                       |
-| **str_replace**   | **target_file**, **old_string**, **new_string** | Legacy string replacements; optional **replace_all** |
-| **insert**        | **target_file**, **text**                       | File to modify and the text to insert                                         |
-| **grep**          | **pattern**, **path**, **glob**                 | Search pattern, directory, and file glob                                      |
-| **glob**          | **pattern**, **path**                           | File glob and directory to search                                             |
-| **bash**          | **command**, **action**, **async**              | Shell command, lifecycle action (`start`/`status`/`wait`/`kill`), and whether async |
-| **git_worktree**  | **command**, **branch**, **base**               | Worktree action plus branch identity and optional base ref                    |
-| **debug**         | **action**, **session_id**, **configuration**, **path**, **condition** | Debugger operation, target session, and breakpoint source/condition |
-| **diagnostics**   | **file**                                        | File path to get diagnostics for                                              |
-| **websearch**     | **query**                                       | Search query string                                                           |
-| **webfetch**      | **url**                                         | URL to fetch                                                                  |
-| **view_image**    | **path**                                        | Image file path                                                               |
-| **view_document** | **path**                                        | Document file path                                                            |
-| **agent**         | **command**, **agent**, **id**, **message**, **workspace** | Session command plus agent name, session ID, follow-up message, and optional worktree path |
+| Tool              | Key arguments                                                          | Description                                                                                |
+| ----------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **view**          | **path**                                                               | File path to read                                                                          |
+| **skills**        | **name**                                                               | Skill name to resolve and read                                                             |
+| **write**         | **path**                                                               | File path to write                                                                         |
+| **edit**          | **target_file**, **tag**, **edits**                                    | File to modify, snapshot tag, and hashline operations                                      |
+| **str_replace**   | **target_file**, **old_string**, **new_string**                        | Legacy string replacements; optional **replace_all**                                       |
+| **insert**        | **target_file**, **text**                                              | File to modify and the text to insert                                                      |
+| **grep**          | **pattern**, **path**, **glob**                                        | Search pattern, directory, and file glob                                                   |
+| **glob**          | **pattern**, **path**                                                  | File glob and directory to search                                                          |
+| **bash**          | **command**, **action**, **async**                                     | Shell command, lifecycle action (`start`/`status`/`wait`/`kill`), and whether async        |
+| **git_worktree**  | **command**, **branch**, **base**                                      | Worktree action plus branch identity and optional base ref                                 |
+| **debug**         | **action**, **session_id**, **configuration**, **path**, **condition** | Debugger operation, target session, and breakpoint source/condition                        |
+| **diagnostics**   | **file**                                                               | File path to get diagnostics for                                                           |
+| **websearch**     | **query**                                                              | Search query string                                                                        |
+| **webfetch**      | **url**                                                                | URL to fetch                                                                               |
+| **view_image**    | **path**                                                               | Image file path                                                                            |
+| **view_document** | **path**                                                               | Document file path                                                                         |
+| **agent**         | **command**, **agent**, **id**, **message**, **workspace**             | Session command plus agent name, session ID, follow-up message, and optional worktree path |
 
 `git_worktree` keeps per-conversation records for worktrees it creates. Closing a
 conversation automatically detaches those worktree directories while preserving the

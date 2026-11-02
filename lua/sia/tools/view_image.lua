@@ -153,7 +153,7 @@ as base64-encoded data that you can directly interpret.]],
         preview = {
           text = string.format("Image: %s (%s)", filename, mime_type),
           ft = "text",
-          image = mime_type == "image/png" and vim.fn.fnamemodify(args.path, ":p") or nil,
+          image = vim.fn.fnamemodify(args.path, ":p"),
         },
       })
     end,
