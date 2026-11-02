@@ -1,5 +1,5 @@
 *sia.txt*
-                            For Neovim >= 0.11    Last change: 2026 October 27
+                           For Neovim >= 0.11    Last change: 2026 November 02
 
 ==============================================================================
 Table of Contents                                      *sia-table-of-contents*
@@ -3193,9 +3193,9 @@ are included in the default chat action.
 
 FILE OPERATIONS ~
 
-  -------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   Tool          Default   Description
-  ------------- --------- -------------------------------------------------------
+  ------------- --------- ------------------------------------------------------
   view          ★         View file contents with optional line offset and limit
                           (up to 2000 lines)
 
@@ -3213,7 +3213,7 @@ FILE OPERATIONS ~
 
   apply_diff              Apply patches in Codex format (available for custom
                           tool lists)
-  -------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
 
 CODE SEARCH ~
 
@@ -3276,6 +3276,9 @@ MEDIA ~
   --------------- --------- ---------------------
   view_image      ★         View image files
   view_document   ★         View document files
+On Neovim versions with `vim.ui.img`, `view_image` also displays images below
+the tool’s Details preview when the terminal supports Kitty graphics.
+
 
 DEBUGGING WITH NVIM-DAP                    *sia-tools-debugging-with-nvim-dap*
 
@@ -3318,53 +3321,54 @@ risk patterns.
 
 CORE TOOLS ~
 
-  ------------------------------------------------------------------------------
-  Tool            Key arguments           Description
-  --------------- ----------------------- --------------------------------------
-  view            path                    File path to read
+  ---------------------------------------------------------------------------------
+  Tool            Key arguments                Description
+  --------------- ---------------------------- ------------------------------------
+  view            path                         File path to read
 
-  skills          name                    Skill name to resolve and read
+  skills          name                         Skill name to resolve and read
 
-  write           path                    File path to write
+  write           path                         File path to write
 
-  edit            target_file, tag, edits File to modify, snapshot tag, and
-                                          hashline operations
+  edit            target_file, tag, edits      File to modify, snapshot tag, and
+                                               hashline operations
 
-  str_replace     target_file,            Legacy string replacements; optional
-                  old_string, new_string  replace_all
+  str_replace     target_file, old_string,     Legacy string replacements; optional
+                  new_string                   replace_all
 
-  insert          target_file, text       File to modify and the text to insert
+  insert          target_file, text            File to modify and the text to
+                                               insert
 
-  grep            pattern, path, glob     Search pattern, directory, and file
-                                          glob
+  grep            pattern, path, glob          Search pattern, directory, and file
+                                               glob
 
-  glob            pattern, path           File glob and directory to search
+  glob            pattern, path                File glob and directory to search
 
-  bash            command, action, async  Shell command, lifecycle action
-                                          (start/status/wait/kill), and whether
-                                          async
+  bash            command, action, async       Shell command, lifecycle action
+                                               (start/status/wait/kill), and
+                                               whether async
 
-  git_worktree    command, branch, base   Worktree action plus branch identity
-                                          and optional base ref
+  git_worktree    command, branch, base        Worktree action plus branch identity
+                                               and optional base ref
 
-  debug           action, session_id,     Debugger operation, target session,
-                  configuration, path,    and breakpoint source/condition
+  debug           action, session_id,          Debugger operation, target session,
+                  configuration, path,         and breakpoint source/condition
                   condition
 
-  diagnostics     file                    File path to get diagnostics for
+  diagnostics     file                         File path to get diagnostics for
 
-  websearch       query                   Search query string
+  websearch       query                        Search query string
 
-  webfetch        url                     URL to fetch
+  webfetch        url                          URL to fetch
 
-  view_image      path                    Image file path
+  view_image      path                         Image file path
 
-  view_document   path                    Document file path
+  view_document   path                         Document file path
 
-  agent           command, agent, id,     Session command plus agent name,
-                  message, workspace      session ID, follow-up message, and
-                                          optional worktree path
-  ------------------------------------------------------------------------------
+  agent           command, agent, id, message, Session command plus agent name,
+                  workspace                    session ID, follow-up message, and
+                                               optional worktree path
+  ---------------------------------------------------------------------------------
 `git_worktree` keeps per-conversation records for worktrees it creates. Closing
 a conversation automatically detaches those worktree directories while
 preserving the branches, so the work remains available to merge or inspect
