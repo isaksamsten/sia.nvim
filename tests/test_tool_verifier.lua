@@ -13,15 +13,18 @@ local T = MiniTest.new_set({ hooks = {
       local permissions = require("sia.permissions")
       permissions.resolve_permissions = function() return nil end
       permissions.resolve_verifier_level = function() return _G.test_threshold end
-      permissions.resolve_verifier_actions = function() return {} end
+      permissions.resolve_verifier_actions = function() return _G.test_approved_actions or {} end
       _G.test_verdict = {
         level = "medium", action = "Check the project workspace",
-        reason = "Executes project code and may create generated files.", matches_approved_action = false,
+        reason = "Executes project code and may create generated files.", authorized = false,
       }
       _G.executions, _G.previews, _G.cleared = 0, {}, 0
       _G.confirmation_events = {}
+      _G.verification_events = {}
       require("sia.assistant").fetch_response = function(conversation, opts)
         _G.assessed_model = conversation.model.name
+        _G.assessed_input = vim.json.decode(conversation:get_last_user_content())
+        _G.assessed_schema = opts.response_format.json_schema.schema
         opts.on_complete(_G.verifier_response or vim.json.encode(_G.test_verdict))
       end
       require("sia.ui.confirm").show = function(_, prompt, opts)
@@ -59,17 +62,42 @@ local T = MiniTest.new_set({ hooks = {
           get = function() return proc end,
           get_output = function() return { stdout = "done", stderr = "" } end,
         }
+        local conversation = _G.test_conversation or require("sia.conversation").new({})
+        conversation.process_runtime = runtime
         require("sia.tools.bash").implementation.execute({
           command = _G.command, description = "Run shell checks",
         }, function(result) _G.result = result end, {
-          conversation = { approved_tools = {}, process_runtime = runtime },
+          conversation = conversation,
           on_confirmation = function(waiting) table.insert(_G.confirmation_events, waiting) end,
+          on_verification = function(active) table.insert(_G.verification_events, active) end,
         })
       end
     ]])
   end,
   post_case = function() child.stop() end,
 } })
+
+T["verification reports transient activity without requesting confirmation"] = function()
+  child.lua([[
+    require("sia.assistant").fetch_response = function(_, opts)
+      _G.finish_assessment = opts.on_complete
+    end
+    start_bash()
+  ]])
+  eq({ true }, child.lua_get("verification_events"))
+  eq({}, child.lua_get("confirmation_events"))
+  eq(0, child.lua_get("executions"))
+  child.lua("test_verdict.authorized = true; finish_assessment(vim.json.encode(test_verdict))")
+  eq({ true, false }, child.lua_get("verification_events"))
+  eq({}, child.lua_get("confirmation_events"))
+  eq(1, child.lua_get("executions"))
+end
+
+T["malformed verification clears transient activity before prompting"] = function()
+  child.lua("verifier_response = 'invalid'; start_bash()")
+  eq({ true, false }, child.lua_get("verification_events"))
+  eq({ true }, child.lua_get("confirmation_events"))
+end
 
 T["verification uses the verify role model"] = function()
   child.lua([[
@@ -91,6 +119,87 @@ T["unconfigured verification role falls back to the default mini tier"] = functi
     start_bash()
   ]])
   eq("openai/gpt-4.1", child.lua_get("assessed_model"))
+end
+
+T["verification receives the latest user query"] = function()
+  child.lua([[
+    test_conversation = require("sia.conversation").new({})
+    test_conversation:add_user_message("Run all tests")
+    test_conversation:add_user_message("Only run the shell checks")
+    test_conversation:add_assistant_message("I will run those checks.")
+    start_bash()
+  ]])
+  eq("Only run the shell checks", child.lua_get("assessed_input.user_query"))
+  eq(child.lua_get("command"), child.lua_get("vim.json.decode(assessed_input.tool_input).command"))
+end
+
+T["verification handles conversations without a user query"] = function()
+  child.lua("start_bash()")
+  eq("", child.lua_get("assessed_input.user_query"))
+end
+
+T["verification extracts text from the latest multipart user query"] = function()
+  child.lua([[
+    test_conversation = require("sia.conversation").new({})
+    test_conversation:add_user_message({
+      { type = "text", text = "Run shell checks" },
+      { type = "text", text = "without changing files" },
+    })
+    local dropped = test_conversation:add_user_message("Run everything")
+    dropped.dropped = true
+    start_bash()
+  ]])
+  eq("Run shell checks\nwithout changing files", child.lua_get("assessed_input.user_query"))
+end
+
+for _, async in ipairs({ true, false }) do
+  local mode = async and "async" or "synchronous"
+  T[mode .. " authorized operations skip prompts even at high risk"] = function()
+    child.lua(string.format([[
+      require("sia.config").options.settings.ui.confirm.async.enable = %s
+      test_threshold = "low"
+      test_verdict.level = "high"
+      test_verdict.authorized = true
+      test_conversation = require("sia.conversation").new({})
+      test_conversation:add_user_message("Run shell checks")
+      start_bash()
+    ]], tostring(async)))
+    eq(1, child.lua_get("executions"))
+    eq({}, child.lua_get("confirmation_events"))
+    eq(0, child.lua_get("#previews"))
+    eq(true, child.lua_get("result.verification.authorized"))
+    eq("high", child.lua_get("result.verification.level"))
+  end
+
+  T[mode .. " approved actions use the same authorization decision"] = function()
+    child.lua(string.format([[
+      require("sia.config").options.settings.ui.confirm.async.enable = %s
+      test_approved_actions = { "Run shell checks" }
+      test_verdict.authorized = true
+      start_bash()
+    ]], tostring(async)))
+    eq({ "Run shell checks" }, child.lua_get("assessed_input.approved_actions"))
+    eq(1, child.lua_get("executions"))
+    eq({}, child.lua_get("confirmation_events"))
+  end
+
+  T[mode .. " missing authorization falls back to manual approval"] = function()
+    child.lua(string.format([[
+      require("sia.config").options.settings.ui.confirm.async.enable = %s
+      test_threshold = "high"
+      test_verdict.authorized = nil
+      start_bash()
+    ]], tostring(async)))
+    eq(0, child.lua_get("executions"))
+    eq({ true }, child.lua_get("confirmation_events"))
+  end
+end
+
+T["verifier schema requires a single authorization boolean"] = function()
+  child.lua("start_bash()")
+  eq({ type = "boolean" }, child.lua_get("assessed_schema.properties.authorized"))
+  eq(true, child.lua_get("vim.tbl_contains(assessed_schema.required, 'authorized')"))
+  eq(true, child.lua_get("assessed_schema.properties.matches_approved_action == nil"))
 end
 
 T["async approval uses AI description and previews exact command plus risk"] = function()

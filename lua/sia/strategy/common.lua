@@ -6,7 +6,7 @@
 --- @field summary sia.ToolSummary?
 --- @field ephemeral boolean?
 --- @field actions sia.ToolAction[]?
---- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean}?
 
 --- Write text to a buffer via a canvas.
 --- @class sia.StreamRenderer

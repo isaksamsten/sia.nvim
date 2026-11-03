@@ -636,7 +636,7 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
       verification = {
         level = "low",
         action = "run tests",
-        matches_approved_action = false,
+        authorized = false,
         reason = "Only runs the test suite",
       },
     },

@@ -305,7 +305,7 @@ end
 --- @field region sia.TrackedRegion?
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean
---- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean}?
 local ToolEntry = setmetatable({}, { __index = BaseEntry })
 ToolEntry.__index = ToolEntry
 
@@ -314,7 +314,7 @@ ToolEntry.__index = ToolEntry
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean?
 --- @field region sia.TrackedRegion?
---- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean}?
 
 --- @param content sia.Content?
 --- @param summary sia.ToolSummary?
@@ -870,7 +870,7 @@ end
 
 --- @param name string
 --- @param arguments table
---- @param opts {cancellable: sia.Cancellable?, callback:  fun(opts: sia.ToolResult?), turn_id: string?, on_confirmation: (fun(waiting:boolean))? }
+--- @param opts {cancellable: sia.Cancellable?, callback: fun(opts: sia.ToolResult?), turn_id: string?, on_confirmation: (fun(waiting:boolean))?, on_verification: (fun(active:boolean))? }
 --- @return string[]?
 function Conversation:execute_tool(name, arguments, opts)
   if self:has_tool(name) then
@@ -880,6 +880,7 @@ function Conversation:execute_tool(name, arguments, opts)
         turn_id = opts.turn_id,
         conversation = self,
         on_confirmation = opts.on_confirmation,
+        on_verification = opts.on_verification,
       })
     if not ok then
       print(vim.inspect(err))

@@ -42,7 +42,7 @@ end
 --- @param activity sia.Activity
 --- @param statuses sia.engine.Status[]
 function M.tools(activity, statuses)
-  local completed, running, first = 0, 0, nil
+  local completed, running, first, verifying = 0, 0, nil, nil
   for index, status in ipairs(statuses) do
     if status.status == "done" then
       completed = completed + 1
@@ -54,6 +54,9 @@ function M.tools(activity, statuses)
     elseif status.status == "running" then
       running = running + 1
       first = first or status
+      if status.verifying then
+        verifying = verifying or status
+      end
     end
   end
   activity.completed = completed
@@ -61,7 +64,8 @@ function M.tools(activity, statuses)
   activity.running = running
   if first then
     activity.phase = "tools"
-    activity.message = header(first.activity)
+    activity.message = verifying and ("Verifying " .. (verifying.name or "tool") .. "…")
+      or header(first.activity)
       or ("Using " .. (first.name or "tool") .. "…")
     if running > 1 then
       activity.message = activity.message

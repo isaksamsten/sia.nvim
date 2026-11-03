@@ -36,5 +36,32 @@ T["pending mode queries are visible without exposing hidden messages"] = functio
   eq({}, activity.pending({}))
 end
 
+T["verification uses the existing activity line and restores normal progress"] = function()
+  local state = activity.new()
+  local statuses = {
+    { name = "bash", status = "running", verifying = true, activity = { header = "Run checks" } },
+  }
+  activity.tools(state, statuses)
+  eq("Verifying bash…", state.message)
+  eq("tools", state.phase)
+  eq(0, state.completed)
+  statuses[1].verifying = false
+  activity.tools(state, statuses)
+  eq("Run checks", state.message)
+  statuses[1].status = "done"
+  activity.tools(state, statuses)
+  eq("Waiting for model…", state.message)
+  eq(1, state.completed)
+end
+
+T["verification stays visible alongside other running tools"] = function()
+  local state = activity.new()
+  activity.tools(state, {
+    { name = "grep", status = "running" },
+    { name = "bash", status = "running", verifying = true },
+  })
+  eq("Verifying bash… (+1 running)", state.message)
+end
+
 return T
 

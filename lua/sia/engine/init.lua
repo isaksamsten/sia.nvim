@@ -17,8 +17,9 @@ local M = {}
 --- @field summary sia.ToolSummary?
 --- @field activity sia.ToolSummary? Action description, independent of result visibility.
 --- @field status "pending"|"running"|"done"
+--- @field verifying boolean? Whether automatic safety verification is in progress.
 --- @field actions table<string, boolean>?
---- @field verification {level:string, action:string, reason:string, matches_approved_action:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean}?
 
 --- @class sia.engine.Entry
 --- @field tool sia.engine.ToolCall
@@ -201,6 +202,12 @@ function M.execute_tools(tool_calls, conversation, opts)
       conversation:execute_tool(parsed.name, parsed.args, {
         cancellable = opts.cancellable,
         turn_id = opts.turn_id,
+        on_verification = function(active)
+          all_statuses[parsed.index].verifying = active
+          if opts.on_status then
+            opts.on_status(all_statuses)
+          end
+        end,
         on_confirmation = function(waiting)
           local summary = false
           if waiting then
