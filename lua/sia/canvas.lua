@@ -31,11 +31,16 @@ local function trim_trailing_empty(lines)
 end
 
 --- @param detail sia.ToolDetails
+--- @param verification table?
 --- @return string[]?
 --- @return { row: integer, path: string }[]
-local function format_tool_detail_lines(detail)
+local function format_tool_detail_lines(detail, verification)
   local lines = { DETAILS_LABEL }
   local images = {}
+  if verification then
+    table.insert(lines, "  Auto-approved: " .. (verification.approval_reason or "Approved by automatic verification"):gsub("%s+", " "))
+    table.insert(lines, "  Intent: " .. (verification.action or ""):gsub("%s+", " "))
+  end
   for _, section in ipairs(require("sia.tool_output").sections(detail)) do
     local body = trim_trailing_empty(vim.split(section.text, "\n", { plain = true }))
     if #body > 0 then
@@ -67,15 +72,16 @@ end
 
 --- @param status "pending"|"done"|"running"
 --- @param summary sia.ToolSummary
+--- @param verification table?
 --- @return string[]?
-local function format_tool_summary_lines(status, summary)
+local function format_tool_summary_lines(status, summary, verification)
   summary = normalize_tool_summary(summary)
   local lines = vim.split(summary.header, "\n", { plain = true })
   for index, line in ipairs(lines) do
     lines[index] = "• " .. line
   end
-  if status == "done" and summary.detail then
-    local detail_lines = format_tool_detail_lines(summary.detail)
+  if status == "done" and (summary.detail or verification) then
+    local detail_lines = format_tool_detail_lines(summary.detail or { text = "" }, verification)
     if detail_lines then
       vim.list_extend(lines, detail_lines)
     end
@@ -251,7 +257,8 @@ end
 --- @param line integer
 --- @param end_line integer
 --- @param summary sia.ToolSummary?
-function Canvas:highlight_tool(line, end_line, summary)
+--- @param verification table?
+function Canvas:highlight_tool(line, end_line, summary, verification)
   local header_lines = summary
       and #vim.split(normalize_tool_summary(summary).header, "\n", { plain = true })
     or end_line - line
@@ -263,15 +270,26 @@ function Canvas:highlight_tool(line, end_line, summary)
     hl_mode = "combine",
     hl_eol = true,
     hl_group = "SiaToolResult",
+    virt_text = verification and { { "  ✓ auto-approved", "SiaApproveAuto" } } or nil,
+    virt_text_pos = "eol",
   })
-  if type(summary) ~= "table" or not summary.detail then
+  if verification and end_line > line + header_lines then
+    vim.api.nvim_buf_set_extmark(self.buf, TOOL_RESULT_NS, line + header_lines + 1, 0, {
+      end_row = line + header_lines + 3,
+      end_right_gravity = false,
+      hl_group = "Comment",
+      priority = 110,
+    })
+  end
+  if not summary or (type(summary) ~= "table" and not verification) then
     return
   end
-  local details, images = format_tool_detail_lines(summary.detail)
+  local detail = type(summary) == "table" and summary.detail or nil
+  local details, images = format_tool_detail_lines(detail or { text = "" }, verification)
   local fence_line = line + header_lines
   if details and fence_line + #details <= end_line then
     vim.api.nvim_buf_set_extmark(self.buf, TOOL_PREVIEW_NS, fence_line, 0, {
-      end_row = fence_line + #details,
+      end_row = verification and end_line or fence_line + #details,
       end_right_gravity = false,
       right_gravity = false,
     })
@@ -291,7 +309,7 @@ local function build_tool_block(tool_renders, tool_order)
   for _, key in ipairs(tool_order) do
     local render = tool_renders[key]
     if render and render.summary then
-      local block_lines = format_tool_summary_lines(render.status, render.summary)
+      local block_lines = format_tool_summary_lines(render.status, render.summary, render.verification)
       if block_lines then
         local start = #lines
         vim.list_extend(lines, block_lines)
@@ -299,6 +317,7 @@ local function build_tool_block(tool_renders, tool_order)
           start = start,
           finish = #lines,
           summary = render.summary,
+          verification = render.verification,
         })
       end
     end
@@ -514,10 +533,10 @@ function Canvas:render_messages(messages, model)
       if not message.summary then
         goto continue
       end
-      local lines = format_tool_summary_lines("done", message.summary)
+      local lines = format_tool_summary_lines("done", message.summary, message.verification)
       local row = self:ensure_placeholder(previous_role == "user")
       vim.api.nvim_buf_set_lines(self.buf, row, row + 1, false, lines)
-      self:highlight_tool(row, row + #lines, message.summary)
+      self:highlight_tool(row, row + #lines, message.summary, message.verification)
       self:insert_lines_at(self:line_count(), { "" })
     elseif message.role == "user" then
       if type(content) ~= "string" or content == "" then
@@ -601,7 +620,8 @@ function Canvas:update_tool_block(
     self:highlight_tool(
       line + highlight.start,
       line + highlight.finish,
-      highlight.summary
+      highlight.summary,
+      highlight.verification
     )
     if type(highlight.summary) == "table" and highlight.summary.on_activate then
       self:mark_tool_action(

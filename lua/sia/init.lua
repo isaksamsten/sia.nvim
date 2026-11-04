@@ -41,6 +41,7 @@ local highlight_groups = {
   SiaStatusPath = { link = "Directory" },
   SiaStatusCode = { link = "String" },
   SiaMode = { link = "DiagnosticInfo" },
+  SiaApproveAuto = { link = "NonText" },
 }
 
 local function set_highlight_groups()

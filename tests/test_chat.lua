@@ -102,10 +102,7 @@ T["strategy.chat"]["simple message"]["test correct output"] = function()
   assistant.execute_strategy(strategy)
   local messages = strategy.conversation:serialize()
   eq("Hello World", messages[2].content)
-  eq(
-    { "Hello World", "" },
-    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  )
+  eq({ "Hello World", "" }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
 end
 
 T["strategy.chat"]["simple message"]["test tracking context"] = function()
@@ -192,7 +189,8 @@ T["strategy.chat"]["pending queries appear immediately and disappear when consum
   strategy.is_busy = true
   local function progress()
     local namespace = vim.api.nvim_get_namespaces()["sia_chat_progress"]
-    local marks = vim.api.nvim_buf_get_extmarks(strategy.buf, namespace, 0, -1, { details = true })
+    local marks =
+      vim.api.nvim_buf_get_extmarks(strategy.buf, namespace, 0, -1, { details = true })
     return marks[1][4].virt_lines
   end
 
@@ -638,19 +636,21 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
         action = "run tests",
         authorized = false,
         reason = "Only runs the test suite",
+        approval_reason = "User explicitly requested these checks",
       },
     },
   })
+  local result_ns = vim.api.nvim_get_namespaces()["sia_chat_tool_result"]
+  local verified_marks =
+    vim.api.nvim_buf_get_extmarks(strategy.buf, result_ns, 0, -1, { details = true })
+  eq({ { "  ✓ auto-approved", "SiaApproveAuto" } }, verified_marks[1][4].virt_text)
+  eq("eol", verified_marks[1][4].virt_text_pos)
 
-  eq(
-    false,
-    vim
-      .iter(vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
-      :any(function(line)
-        return line
-          == ">! Automatically verified (low risk): Only runs the test suite"
-      end)
-  )
+  local preview_ns = vim.api.nvim_get_namespaces()["sia_chat_tool_preview"]
+  local preview_marks = vim.api.nvim_buf_get_extmarks(strategy.buf, preview_ns, 0, -1, { details = true })
+  local preview_start = preview_marks[1][2]
+  eq({ "  ▼ Details", "  Auto-approved: User explicitly requested these checks", "  Intent: run tests" },
+    vim.api.nvim_buf_get_lines(strategy.buf, preview_start, preview_start + 3, false))
 
   strategy:on_tool_status({
     {
@@ -672,6 +672,9 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
       hl_group = "SiaToolResult",
     },
   }, tool_result_ranges(strategy.buf))
+  local unverified_marks =
+    vim.api.nvim_buf_get_extmarks(strategy.buf, result_ns, 0, -1, { details = true })
+  eq(nil, unverified_marks[1][4].virt_text)
 
   strategy:on_tool_results({
     {
@@ -694,7 +697,8 @@ T["strategy.chat"]["tool summaries render inline while running and hide when com
 end
 
 T["strategy.chat"]["hidden tools restore spacing and allow subsequent tool rendering"] = function()
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   strategy:on_request_start()
@@ -710,7 +714,9 @@ T["strategy.chat"]["hidden tools restore spacing and allow subsequent tool rende
     eq(before, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
     eq({}, tool_result_ranges(strategy.buf))
   end
-  strategy:on_tool_results({ { key = "success", status = "done", summary = "Edited file", actions = {} } })
+  strategy:on_tool_results({
+    { key = "success", status = "done", summary = "Edited file", actions = {} },
+  })
   eq(1, #tool_result_ranges(strategy.buf))
   ChatStrategy.remove(strategy.buf)
 end
@@ -1185,10 +1191,7 @@ T["strategy.chat"]["empty deltas rendering"]["empty delta between content does n
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
-  eq(
-    { "Hello World", "" },
-    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  )
+  eq({ "Hello World", "" }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   ChatStrategy.remove(strategy.buf)
 end
 
@@ -1242,10 +1245,7 @@ T["strategy.chat"]["empty deltas with newlines"]["no extra empty lines between c
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   assistant.execute_strategy(strategy)
-  eq(
-    { "Line 1", "Line 2", "" },
-    vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  )
+  eq({ "Line 1", "Line 2", "" }, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   ChatStrategy.remove(strategy.buf)
 end
 
@@ -1344,7 +1344,9 @@ T["strategy.chat"]["partial tool updates preserve earlier tools and their highli
   strategy:on_request_start()
   strategy:on_stream_start()
   strategy:on_tool_status({ { key = "one", status = "done", summary = "First tool" } })
-  strategy:on_tool_status({ { key = "two", status = "running", summary = "Second tool" } })
+  strategy:on_tool_status({
+    { key = "two", status = "running", summary = "Second tool" },
+  })
   local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
   eq({ "• First tool", "• Second tool", "" }, vim.list_slice(lines, #lines - 2))
   eq(2, #tool_result_ranges(strategy.buf))
@@ -1359,7 +1361,10 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
   local turn = conversation:new_turn()
   local summary = {
     header = "Edited file",
-    detail = { text = "--- orig/file\n+++ ai/file\n@@ -1 +1 @@\n-old\n+new", ft = "diff" },
+    detail = {
+      text = "--- orig/file\n+++ ai/file\n@@ -1 +1 @@\n-old\n+new",
+      ft = "diff",
+    },
   }
   local second = { header = "Ran check", detail = { text = "one" } }
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -1373,8 +1378,12 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
     local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
     local first, next_tool
     for row, line in ipairs(lines) do
-      if line == "```diff" then first = row - 1 end
-      if line == "• Ran check" then next_tool = row end
+      if line == "```diff" then
+        first = row - 1
+      end
+      if line == "• Ran check" then
+        next_tool = row
+      end
     end
     eq("```", lines[next_tool - 1])
     local foldexpr = require("sia.canvas").foldexpr
@@ -1400,7 +1409,12 @@ T["strategy.chat"]["fenced previews keep folds separate and survive redraw"] = f
   check()
   for index, item in ipairs(statuses) do
     conversation:add_tool_message(turn, {
-      key = item.key, id = item.key, call_id = item.key, type = "function", name = "edit", arguments = "{}",
+      key = item.key,
+      id = item.key,
+      call_id = item.key,
+      type = "function",
+      name = "edit",
+      arguments = "{}",
     }, "Done", { summary = item.summary })
   end
   strategy:redraw()
@@ -1414,8 +1428,14 @@ T["strategy.chat"]["updating adjacent tool blocks preserves preceding preview fo
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_current_buf(buf)
   local canvas = require("sia.canvas").Canvas:new(buf)
-  local first = { status = "done", summary = { header = "First", detail = { text = "first output" } } }
-  local second = { status = "done", summary = { header = "Second", detail = { text = "second output" } } }
+  local first = {
+    status = "done",
+    summary = { header = "First", detail = { text = "first output" } },
+  }
+  local second = {
+    status = "done",
+    summary = { header = "Second", detail = { text = "second output" } },
+  }
   canvas:update_tool_block({ 0, 0 }, 1, { first = first }, { "first" })
   local function check()
     local ns = vim.api.nvim_get_namespaces().sia_chat_tool_preview
@@ -1441,10 +1461,28 @@ T["strategy.chat"]["literal fences and metadata prefixes stay inside previews"] 
   vim.api.nvim_win_set_buf(0, buf)
   local canvas = require("sia.canvas").Canvas:new(buf)
   canvas:update_tool_block({ 0, 0 }, 1, {
-    tool = { status = "done", summary = { header = "Ran command", detail = { text = "```lua\n>| literal\n```\nend" } } },
+    tool = {
+      status = "done",
+      summary = {
+        header = "Ran command",
+        detail = { text = "```lua\n>| literal\n```\nend" },
+      },
+    },
   }, { "tool" })
-  eq({ "• Ran command", "  ▼ Details", "````text", "```lua", ">| literal", "```", "end", "````", "" },
-    vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+  eq(
+    {
+      "• Ran command",
+      "  ▼ Details",
+      "````text",
+      "```lua",
+      ">| literal",
+      "```",
+      "end",
+      "````",
+      "",
+    },
+    vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  )
   -- Metadata-looking text in the fenced body must not create a reasoning fold.
   eq(1, require("sia.canvas").foldexpr(4))
   vim.api.nvim_buf_delete(buf, { force = true })
@@ -1452,13 +1490,17 @@ end
 
 T["strategy.chat"]["multiple detail sections share a fold and retain their fences on redraw"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   local turn = conversation:new_turn()
-  local summary = { header = "Ran script…", detail = {
-    { text = "echo hello\necho world", ft = "bash" },
-    { text = "```lua\nhello\n```", ft = "text" },
-  } }
+  local summary = {
+    header = "Ran script…",
+    detail = {
+      { text = "echo hello\necho world", ft = "bash" },
+      { text = "```lua\nhello\n```", ft = "text" },
+    },
+  }
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   strategy:on_request_start()
   strategy:on_stream_start()
@@ -1466,16 +1508,40 @@ T["strategy.chat"]["multiple detail sections share a fold and retain their fence
   local function check()
     local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
     local first
-    for i, line in ipairs(lines) do if line == "• Ran script…" then first = i end end
-    eq({ "• Ran script…", "  ▼ Details", "```bash", "echo hello", "echo world", "```", "",
-      "````text", "```lua", "hello", "```", "````" }, vim.list_slice(lines, first, first + 11))
+    for i, line in ipairs(lines) do
+      if line == "• Ran script…" then
+        first = i
+      end
+    end
+    eq(
+      {
+        "• Ran script…",
+        "  ▼ Details",
+        "```bash",
+        "echo hello",
+        "echo world",
+        "```",
+        "",
+        "````text",
+        "```lua",
+        "hello",
+        "```",
+        "````",
+      },
+      vim.list_slice(lines, first, first + 11)
+    )
     eq(first + 1, vim.fn.foldclosed(first + 1))
     eq(first + 11, vim.fn.foldclosedend(first + 1))
     eq(true, vim.fn.foldtextresult(first + 1):find("5 lines", 1, true) ~= nil)
   end
   check()
   conversation:add_tool_message(turn, {
-    key = "bash", id = "bash", call_id = "bash", type = "function", name = "bash", arguments = "{}",
+    key = "bash",
+    id = "bash",
+    call_id = "bash",
+    type = "function",
+    name = "bash",
+    arguments = "{}",
   }, "model payload", { summary = summary })
   strategy:redraw()
   check()
@@ -1494,7 +1560,9 @@ T["strategy.chat"]["tools in consecutive streams use the same compact spacing as
   strategy:on_stream_start()
   strategy:on_tool_status({ { key = "first", status = "done", summary = "Ran first" } })
   strategy:on_stream_start()
-  strategy:on_tool_status({ { key = "second", status = "done", summary = "Ran second" } })
+  strategy:on_tool_status({
+    { key = "second", status = "done", summary = "Ran second" },
+  })
   local lines = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
   eq({ "• Ran first", "• Ran second", "" }, vim.list_slice(lines, #lines - 2))
   ChatStrategy.remove(strategy.buf)
@@ -1506,7 +1574,11 @@ T["strategy.chat"]["reasoning folds track plain Markdown through edits and redra
   vim.bo[buf].filetype = "sia"
   local canvas = require("sia.canvas").Canvas:new(buf)
   local entries = {
-    { role = "assistant", reasoning = { text = "Consider **the intent** carefully\nThen check `code`" }, content = "The answer." },
+    {
+      role = "assistant",
+      reasoning = { text = "Consider **the intent** carefully\nThen check `code`" },
+      content = "The answer.",
+    },
   }
   canvas:render_messages(entries)
   local function check(start)
@@ -1516,7 +1588,10 @@ T["strategy.chat"]["reasoning folds track plain Markdown through edits and redra
     eq(0, require("sia.canvas").foldexpr(start + 2))
     eq(0, require("sia.canvas").foldexpr(start + 3))
   end
-  eq("Consider **the intent** carefully", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+  eq(
+    "Consider **the intent** carefully",
+    vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+  )
   check(1)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "An earlier message.", "" })
@@ -1528,10 +1603,19 @@ T["strategy.chat"]["reasoning folds track plain Markdown through edits and redra
   vim.api.nvim_win_set_cursor(0, { 1, 0 })
   vim.cmd("normal! zo")
   eq(-1, vim.fn.foldclosed(1))
-  eq("Consider **the intent** carefully", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+  eq(
+    "Consider **the intent** carefully",
+    vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+  )
   canvas:clear()
   vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ">| ordinary answer text", "Another line" })
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    { ">| ordinary answer text", "Another line" }
+  )
   canvas:refresh_folds()
   eq(0, require("sia.canvas").foldexpr(1))
   eq(0, require("sia.canvas").foldexpr(2))
@@ -1569,7 +1653,9 @@ T["strategy.chat"]["collapsed reasoning displays inline Markdown with its format
     eq(2, select(2, line:gsub("· ", "")))
     eq(false, shot.attr[1][first] == shot.attr[1][first + 9])
     eq(1, screen.lua_get("vim.fn.foldclosed(1)"))
-    screen.lua("vim.api.nvim_win_set_cursor(0, { 1, 0 }); vim.cmd('normal! zo'); vim.cmd('redraw!')")
+    screen.lua(
+      "vim.api.nvim_win_set_cursor(0, { 1, 0 }); vim.cmd('normal! zo'); vim.cmd('redraw!')"
+    )
     local expanded = screen.get_screenshot()
     eq(1, select(2, table.concat(expanded.text[1]):gsub("· ", "")))
     local intent = table.concat(expanded.text[1]):find("intent", 1, true)
@@ -1588,11 +1674,23 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
   vim.bo[buf].filetype = "sia"
   local canvas = require("sia.canvas").Canvas:new(buf)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-    "Think through it", "Check the result", "", "• Ran check",
-    "  ▼ Details", "```text", "first", "second", "```", "",
+    "Think through it",
+    "Check the result",
+    "",
+    "• Ran check",
+    "  ▼ Details",
+    "```text",
+    "first",
+    "second",
+    "```",
+    "",
   })
   canvas:mark_reasoning(0, 2)
-  canvas:highlight_tool(3, 9, { header = "Ran check", detail = { text = "first\nsecond" } })
+  canvas:highlight_tool(
+    3,
+    9,
+    { header = "Ran check", detail = { text = "first\nsecond" } }
+  )
   -- Window options can replace the mapping originally installed by ftplugin.
   vim.wo.winhighlight = "Folded:ErrorMsg"
   local observed
@@ -1604,7 +1702,13 @@ T["strategy.chat"]["fold text explicitly highlights reasoning and output despite
   canvas:refresh_folds()
   local ok, err = pcall(function()
     vim.fn.foldtextresult(1)
-    eq({ { "· ", { "SiaAssistantMarker", "SiaReasoning" } }, { "Think through it · 2 lines", { "SiaFolded", "SiaReasoning" } } }, observed)
+    eq(
+      {
+        { "· ", { "SiaAssistantMarker", "SiaReasoning" } },
+        { "Think through it · 2 lines", { "SiaFolded", "SiaReasoning" } },
+      },
+      observed
+    )
     observed = nil
     vim.wo.conceallevel = 3
     eq(3, vim.wo.conceallevel)
@@ -1672,41 +1776,79 @@ T["strategy.chat"]["assistant marker appears once while streaming and follows la
   strategy:on_stream({ content = "# Heading" })
   strategy:on_stream({ content = "\nMore text" })
   strategy:on_stream({ reasoning = { content = "Late reasoning" } })
-  eq({ {
-    line = "# Heading",
-    text = { { "· ", "SiaAssistantMarker" } },
-    position = "inline",
-  } }, assistant_markers(strategy.buf))
+  eq(
+    {
+      {
+        line = "# Heading",
+        text = { { "· ", "SiaAssistantMarker" } },
+        position = "inline",
+      },
+    },
+    assistant_markers(strategy.buf)
+  )
   ChatStrategy.remove(strategy.buf)
 end
 
 T["strategy.chat"]["assistant marker survives tools before and after streamed prose"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   strategy:on_request_start()
   strategy:on_stream_start()
-  strategy:on_tool_results({ {
-    key = "search", name = "grep", status = "done", actions = {},
-    summary = { header = "Searched for pattern in file", detail = { text = "matching line" } },
-  } })
+  strategy:on_tool_results({
+    {
+      key = "search",
+      name = "grep",
+      status = "done",
+      actions = {},
+      summary = {
+        header = "Searched for pattern in file",
+        detail = { text = "matching line" },
+      },
+    },
+  })
   strategy:on_stream_start()
   strategy:on_stream({ content = "I'll hide failed file-read and search summaries." })
-  eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
-    assistant_markers(strategy.buf)))
+  eq(
+    { "I'll hide failed file-read and search summaries." },
+    vim.tbl_map(function(mark)
+      return mark.line
+    end, assistant_markers(strategy.buf))
+  )
   for _ = 1, 2 do
-    strategy:on_tool_status({ { key = "edit", name = "edit", status = "running", summary = "Editing file..." } })
-    strategy:on_tool_status({ { key = "edit", name = "edit", status = "running", summary = false } })
-    eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
-      assistant_markers(strategy.buf)))
+    strategy:on_tool_status({
+      { key = "edit", name = "edit", status = "running", summary = "Editing file..." },
+    })
+    strategy:on_tool_status({
+      { key = "edit", name = "edit", status = "running", summary = false },
+    })
+    eq(
+      { "I'll hide failed file-read and search summaries." },
+      vim.tbl_map(function(mark)
+        return mark.line
+      end, assistant_markers(strategy.buf))
+    )
   end
-  strategy:on_tool_results({ {
-    key = "edit", name = "edit", status = "done", actions = {},
-    summary = { header = "Edited file", detail = { text = "-old\n+new", ft = "diff" } },
-  } })
-  eq({ "I'll hide failed file-read and search summaries." }, vim.tbl_map(function(mark) return mark.line end,
-    assistant_markers(strategy.buf)))
+  strategy:on_tool_results({
+    {
+      key = "edit",
+      name = "edit",
+      status = "done",
+      actions = {},
+      summary = {
+        header = "Edited file",
+        detail = { text = "-old\n+new", ft = "diff" },
+      },
+    },
+  })
+  eq(
+    { "I'll hide failed file-read and search summaries." },
+    vim.tbl_map(function(mark)
+      return mark.line
+    end, assistant_markers(strategy.buf))
+  )
   ChatStrategy.remove(strategy.buf)
 end
 
@@ -1719,14 +1861,26 @@ T["strategy.chat"]["redraw marks assistant blocks but not user messages or tool 
   local turn = conversation:new_turn()
   conversation:add_assistant_message(turn, "# Plan\nCheck file")
   conversation:add_tool_message(turn, {
-    key = "view", id = "view", call_id = "view", type = "function", name = "view", arguments = "{}",
+    key = "view",
+    id = "view",
+    call_id = "view",
+    type = "function",
+    name = "view",
+    arguments = "{}",
   }, "Contents", { summary = "Read file" })
-  conversation:add_assistant_message(turn, "The file contains code.\n```lua\nreturn 42\n```")
+  conversation:add_assistant_message(
+    turn,
+    "The file contains code.\n```lua\nreturn 42\n```"
+  )
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   for _ = 1, 2 do
     strategy:redraw()
-    eq({ "# Plan", "The file contains code." }, vim.tbl_map(function(mark) return mark.line end,
-      assistant_markers(strategy.buf)))
+    eq(
+      { "# Plan", "The file contains code." },
+      vim.tbl_map(function(mark)
+        return mark.line
+      end, assistant_markers(strategy.buf))
+    )
   end
   ChatStrategy.remove(strategy.buf)
 end
@@ -1742,7 +1896,10 @@ T["strategy.chat"]["assistant dot renders smaller beside tool bullets without ch
     ]])
     local shot = screen.get_screenshot()
     eq(true, table.concat(shot.text[1]):find("• Read file", 1, true) ~= nil)
-    eq(true, table.concat(shot.text[2]):find("· The file contains code.", 1, true) ~= nil)
+    eq(
+      true,
+      table.concat(shot.text[2]):find("· The file contains code.", 1, true) ~= nil
+    )
     eq("The file contains code.", screen.api.nvim_buf_get_lines(0, 1, 2, false)[1])
   end)
   screen.stop()
@@ -1751,31 +1908,45 @@ end
 
 T["strategy.chat"]["query blocks and footers keep metadata through redraw without duplicate labels"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   conversation:add_user_message("Explain the file.\nKeep it brief.")
   local turn = conversation:new_turn()
   conversation:add_tool_message(turn, {
-    key = "read", id = "read", call_id = "read", type = "function", name = "view", arguments = "{}",
+    key = "read",
+    id = "read",
+    call_id = "read",
+    type = "function",
+    name = "view",
+    arguments = "{}",
   }, "Contents", { summary = "Read file" })
   conversation:add_assistant_message(turn, "The file contains code.")
   local strategy = ChatStrategy.new(conversation, { cmd = "split" })
   strategy:redraw()
   local footer_ns = vim.api.nvim_get_namespaces()["sia_chat"]
   local initial_footer = vim.api.nvim_buf_get_extmark_by_id(
-    strategy.buf, footer_ns, strategy.canvas.footer_marks[turn], { details = true }
+    strategy.buf,
+    footer_ns,
+    strategy.canvas.footer_marks[turn],
+    { details = true }
   )
   eq({ { "  #" .. turn:sub(1, 6), "SiaStatus" } }, initial_footer[3].virt_text)
   strategy.canvas:update_assistant_footer(nil, {
-    model = conversation.model.name, turn_id = turn, usage = { total_time = 2.4 },
+    model = conversation.model.name,
+    turn_id = turn,
+    usage = { total_time = 2.4 },
   })
   local ns = vim.api.nvim_get_namespaces()["sia_chat"]
   for _ = 1, 2 do
-    local marks = vim.api.nvim_buf_get_extmarks(strategy.buf, ns, 0, -1, { details = true })
+    local marks =
+      vim.api.nvim_buf_get_extmarks(strategy.buf, ns, 0, -1, { details = true })
     local queries, footers, ranges = {}, {}, {}
     for _, mark in ipairs(marks) do
       local details = mark[4]
-      if details.hl_group == "SiaUser" then table.insert(ranges, mark) end
+      if details.hl_group == "SiaUser" then
+        table.insert(ranges, mark)
+      end
       if details.virt_text and details.virt_text[1][1] == "> " then
         table.insert(queries, mark[2])
       elseif details.virt_text then
@@ -1791,8 +1962,17 @@ T["strategy.chat"]["query blocks and footers keep metadata through redraw withou
       { " · #" .. turn:sub(1, 6), "SiaStatus" },
     }, footers[1][4].virt_text)
     eq(vim.api.nvim_buf_line_count(strategy.buf) - 1, footers[1][2])
-    eq({ "Explain the file.", "Keep it brief.", "", "• Read file", "The file contains code.", "" },
-      vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
+    eq(
+      {
+        "Explain the file.",
+        "Keep it brief.",
+        "",
+        "• Read file",
+        "The file contains code.",
+        "",
+      },
+      vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
+    )
     strategy:redraw()
   end
   ChatStrategy.remove(strategy.buf)
@@ -1800,7 +1980,8 @@ end
 
 T["strategy.chat"]["consecutive Responses summary parts keep their spacing on redraw"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-5.2") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-5.2") })
   conversation:add_system_message("Ok")
   conversation:add_user_message("Question")
   local turn = conversation:new_turn()
@@ -1814,18 +1995,34 @@ T["strategy.chat"]["consecutive Responses summary parts keep their spacing on re
     "**Second section**\n\nCheck the context.",
   }
   for index, part in ipairs(parts) do
-    stream:process_stream_chunk({ type = "response.reasoning_summary_text.done", item_id = "rs_1", summary_index = index - 1, text = part })
+    stream:process_stream_chunk({
+      type = "response.reasoning_summary_text.done",
+      item_id = "rs_1",
+      summary_index = index - 1,
+      text = part,
+    })
   end
-  stream:process_stream_chunk({ type = "response.output_item.done", item = {
-    type = "reasoning", id = "rs_1", encrypted_content = "opaque",
-    summary = { { type = "summary_text", text = parts[1] }, { type = "summary_text", text = parts[2] } },
-  } })
+  stream:process_stream_chunk({
+    type = "response.output_item.done",
+    item = {
+      type = "reasoning",
+      id = "rs_1",
+      encrypted_content = "opaque",
+      summary = {
+        { type = "summary_text", text = parts[1] },
+        { type = "summary_text", text = parts[2] },
+      },
+    },
+  })
   stream:process_stream_chunk({ type = "response.output_text.delta", delta = "Answer" })
   local result = stream:finalize()
   conversation:add_assistant_message(turn, result.content, result.reasoning)
   strategy:on_finish({ turn_id = turn, usage = {} })
   local streamed = vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false)
-  eq(true, table.concat(streamed, "\n"):find(parts[1] .. "\n\n" .. parts[2], 1, true) ~= nil)
+  eq(
+    true,
+    table.concat(streamed, "\n"):find(parts[1] .. "\n\n" .. parts[2], 1, true) ~= nil
+  )
   strategy:redraw()
   eq(streamed, vim.api.nvim_buf_get_lines(strategy.buf, 0, -1, false))
   ChatStrategy.remove(strategy.buf)
@@ -1844,7 +2041,8 @@ T["strategy.chat"]["conversation naming uses the summarize role model"] = functi
   end
   local ok, err = pcall(function()
     vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-    local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+    local conversation =
+      Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
     conversation:add_user_message("Question")
     local turn = conversation:new_turn()
     local strategy = ChatStrategy.new(conversation, { cmd = "split" })
@@ -1857,12 +2055,15 @@ T["strategy.chat"]["conversation naming uses the summarize role model"] = functi
   end)
   config.options.settings.model = old_model
   assistant.fetch_response = old_fetch
-  if not ok then error(err) end
+  if not ok then
+    error(err)
+  end
 end
 
 T["strategy.chat"]["completed streaming metadata matches its redrawn footer"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   conversation:add_user_message("Question")
   local turn = conversation:new_turn()
@@ -1875,7 +2076,12 @@ T["strategy.chat"]["completed streaming metadata matches its redrawn footer"] = 
   strategy:on_finish({ turn_id = turn, usage = { total_time = 1.5 } })
   local ns = vim.api.nvim_get_namespaces()["sia_chat"]
   local function footer()
-    local mark = vim.api.nvim_buf_get_extmark_by_id(strategy.buf, ns, strategy.canvas.footer_marks[turn], { details = true })
+    local mark = vim.api.nvim_buf_get_extmark_by_id(
+      strategy.buf,
+      ns,
+      strategy.canvas.footer_marks[turn],
+      { details = true }
+    )
     return { row = mark[1], text = mark[3].virt_text }
   end
   local live = footer()
@@ -1905,7 +2111,12 @@ T["strategy.chat"]["query markers and footer are visible without role header bar
       strategy.canvas:update_assistant_footer(nil, { model = "model", turn_id = turn, usage = { total_time = 2.4 } })
     ]])
     local shot = screen.get_screenshot()
-    local text = table.concat(vim.tbl_map(function(row) return table.concat(row) end, shot.text), "\n")
+    local text = table.concat(
+      vim.tbl_map(function(row)
+        return table.concat(row)
+      end, shot.text),
+      "\n"
+    )
     eq(true, text:find("> Explain this file.", 1, true) ~= nil)
     eq(true, text:find("· The file contains code.", 1, true) ~= nil)
     eq(true, text:find("Worked for 2s · #", 1, true) ~= nil)
@@ -1918,7 +2129,8 @@ end
 
 T["strategy.chat"]["new queries preserve existing footers even after trailing blank lines"] = function()
   vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
-  local conversation = Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
+  local conversation =
+    Conversation.new({ model = require("sia.model").resolve("openai/gpt-4.1") })
   conversation:add_system_message("Ok")
   conversation:add_user_message("First question")
   local turn = conversation:new_turn()
@@ -1929,12 +2141,18 @@ T["strategy.chat"]["new queries preserve existing footers even after trailing bl
   local mark = strategy.canvas.footer_marks[turn]
   local before = vim.api.nvim_buf_get_extmark_by_id(strategy.buf, ns, mark, {})
   conversation:add_user_message("Second question")
-  strategy.canvas:render_messages({ conversation:get_last_entry() }, conversation.model.name)
+  strategy.canvas:render_messages(
+    { conversation:get_last_entry() },
+    conversation.model.name
+  )
   eq(before, vim.api.nvim_buf_get_extmark_by_id(strategy.buf, ns, mark, {}))
   eq("", vim.api.nvim_buf_get_lines(strategy.buf, before[1], before[1] + 1, false)[1])
   local last = vim.api.nvim_buf_line_count(strategy.buf) - 1
   eq(true, last > before[1] + 1)
-  eq("Second question", vim.api.nvim_buf_get_lines(strategy.buf, last, last + 1, false)[1])
+  eq(
+    "Second question",
+    vim.api.nvim_buf_get_lines(strategy.buf, last, last + 1, false)[1]
+  )
   ChatStrategy.remove(strategy.buf)
 end
 

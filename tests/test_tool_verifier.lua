@@ -17,6 +17,7 @@ local T = MiniTest.new_set({ hooks = {
       _G.test_verdict = {
         level = "medium", action = "Check the project workspace",
         reason = "Executes project code and may create generated files.", authorized = false,
+        approval_reason = "User explicitly requested these checks",
       }
       _G.executions, _G.previews, _G.cleared = 0, {}, 0
       _G.confirmation_events = {}
@@ -97,6 +98,21 @@ T["malformed verification clears transient activity before prompting"] = functio
   child.lua("verifier_response = 'invalid'; start_bash()")
   eq({ true, false }, child.lua_get("verification_events"))
   eq({ true }, child.lua_get("confirmation_events"))
+end
+
+T["verification includes older visible prompts and current restrictions"] = function()
+  child.lua([[
+    test_conversation = require("sia.conversation").new({})
+    test_conversation:add_user_message("Run all tests")
+    test_conversation:add_user_message("Do not modify files")
+    test_conversation:add_user_message("hidden context", nil, { hide = true })
+    local dropped = test_conversation:add_user_message("obsolete request")
+    dropped.dropped = true
+    test_threshold = "low"
+    start_bash()
+  ]])
+  eq({ "Run all tests", "Do not modify files" }, child.lua_get("assessed_input.user_queries"))
+  eq("low", child.lua_get("assessed_input.risk_threshold"))
 end
 
 T["verification uses the verify role model"] = function()

@@ -305,7 +305,7 @@ end
 --- @field region sia.TrackedRegion?
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean
---- @field verification {level:string, action:string, reason:string, authorized:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean, approval_reason:string?}?
 local ToolEntry = setmetatable({}, { __index = BaseEntry })
 ToolEntry.__index = ToolEntry
 
@@ -314,7 +314,7 @@ ToolEntry.__index = ToolEntry
 --- @field tool_call sia.ToolCall
 --- @field ephemeral boolean?
 --- @field region sia.TrackedRegion?
---- @field verification {level:string, action:string, reason:string, authorized:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean, approval_reason:string?}?
 
 --- @param content sia.Content?
 --- @param summary sia.ToolSummary?

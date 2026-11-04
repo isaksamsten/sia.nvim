@@ -19,7 +19,7 @@ local M = {}
 --- @field status "pending"|"running"|"done"
 --- @field verifying boolean? Whether automatic safety verification is in progress.
 --- @field actions table<string, boolean>?
---- @field verification {level:string, action:string, reason:string, authorized:boolean}?
+--- @field verification {level:string, action:string, reason:string, authorized:boolean, approval_reason:string?}?
 
 --- @class sia.engine.Entry
 --- @field tool sia.engine.ToolCall
